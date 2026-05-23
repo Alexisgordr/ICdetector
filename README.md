@@ -17,7 +17,7 @@
 
 
 
-# 📡 miniIC — Anti-IMSI Catcher & Cellular Auditor
+# 📡 ICdetection — Anti-IMSI Catcher & Cellular Auditor
 
 A powerful, open-source Android tool designed for real-time mobile network forensics, infrastructure auditing, and heuristical IMSI-catcher (Stingray) detection.
 
