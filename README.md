@@ -6,35 +6,43 @@ A powerful, open-source Android tool designed for real-time mobile network foren
 
 ## 🔒 Project Overview
 
-This application continuously monitors your device's cellular baseband connections, analyzing signal signaling parameters and cross-referencing active base stations with global registries to flag anomalies and protect your digital sovereignty.
+This application continuously monitors your device's cellular baseband connections, analyzing radio signaling parameters and cross-referencing active base stations with global registries to flag anomalies and protect your digital sovereignty.
 
-> ⚠️ **Disclaimer / Warning:** This application uses heuristics to evaluate cellular environments. It is a proof-of-concept tool and **you can get false positives** due to legitimate carrier configurations or network anomalies. Use with an auditing mindset.
+> ⚠️ **Disclaimer / Warning:** This application uses advanced heuristics to evaluate cellular environments. It is a proof-of-concept tool and **you can get false positives** due to legitimate carrier configurations, terrain topography, or network maintenance. Use with an auditing mindset.
 
 ---
 
 ## 🚀 Core Features
 
 ### 1. 📊 Real-Time Monitoring & Telemetry
-* **Continuous Network Polling:** Active 2-second polling of cellular parameters, including Cell ID (CID), MNC, TAC, and signal strength (dBm).
-* **Advanced 5G NR Detection:** Accurately distinguishes between 5G NR NSA (Non-Standalone) and SA (Standalone) connections, even when the OS incorrectly reports LTE.
-* **Graphical Signal Dashboard:** Real-time visual comparison chart of the active cell versus surrounding neighbors for physical anomaly verification.
+1. **Continuous Network Polling:** Active 2-second polling of cellular parameters, including Cell ID (CID), MNC, TAC, and signal strength (dBm).
+2. **Advanced 5G NR Detection:** Accurately distinguishes between 5G NR NSA (Non-Standalone) and SA (Standalone) connections, even when the OS incorrectly reports LTE.
+3. **Graphical Signal Dashboard:** Real-time visual comparison chart of the active cell versus surrounding neighbors for physical anomaly verification.
 
 ### 2. 🛡️ Heuristic IMSI Catcher Analysis
-* **Isolated Cell Detection:** Alerts when a strong tower has no visible neighbors (classic rogue base station behavior).
-* **Signal Gap Analysis:** Flags anomalous power jumps (`>35dB`) between the active cell and neighbors.
-* **MCC Inconsistency:** Detects spoofed towers broadcasting incorrect Mobile Country Codes.
-* **Multi-MNC Spoofing Alert:** Identifies suspicious environments where more than 3 distinct operator codes (MNC) are detected simultaneously.
+4. **Isolated Cell Detection:** Alerts when a strong tower has no visible neighbors (classic rogue base station behavior designed to trap devices).
+5. **Signal Gap Analysis:** Flags anomalous power jumps (`>35dB`) between the active cell and its reported neighbors.
+6. **MCC Inconsistency:** Detects spoofed towers broadcasting incorrect Mobile Country Codes (MCC).
+7. **Multi-MNC Spoofing Alert:** Identifies suspicious environments where more than 3 distinct operator codes (MNC) are detected simultaneously.
 
-### 3. 🌐 Verification & Countermeasures
-* **Global Database Verification:** Seamless integration with the **OpenCellID API** to verify the legitimacy of towers against a global registry using your personal API token.
-* **Automated Security Countermeasures:** Optional automatic "Airplane Mode" fallback when insecure or legacy networks (2G/3G) are detected.
-* **Audio Alert System:** Instant acoustic notifications for critical threats and dangerously high power levels (potential proximity to an active active cell interceptor).
+### 3. 🔬 Advanced Baseband Heuristics & Deep Scanning
+8. **Downgrade Attack Prevention (Anti-Jamming):** Tracks network state transitions and signal history. If the device drops abruptly from 4G/5G to legacy 2G/3G networks while having an excellent prior signal (`>-85 dBm`), the system flags it as an active selective jamming or forced downgrade attack.
+9. **Timing Advance (TA) Physical Distance Audit:** Extracts the Timing Advance parameter directly from the cellular signal layer (available in LTE and GSM bands). If the TA reports an extremely low value (0 or 1, indicating physical proximity under 150 meters) but the base station fails the OpenCellID global database verification, it elevates the threat level to a *Physical Proximity Rogue Cell Alert*.
+10. **Neighboring Null Check (Ghost Cell Detection):** Performs deep parsing of the neighbor cell lists broadcasted by the active tower. If the main base station claims to have active neighboring towers but persistent spectrum monitoring returns zero signal or null structures for those specific channels while the device has strong coverage, the app flags a "Ghost Neighbors Signature"—a classic behavior of tactical IMSI-catchers forcing cell entrapment.
 
-### 4. 💾 Logging, Forensics & Performance
-* **Persistent Connection History:** Local SQLite database that logs every tower transition with full metadata (Timestamp, Network Type, CID, MNC, TAC, and Verification Status).
-* **Forensic CSV Export:** One-click tool to export all recorded history to a CSV file for external audit and detailed signal mapping.
-* **Intelligent Background Service:** Adaptive polling system (10-second intervals when the screen is off) designed to maintain monitoring while minimizing battery consumption.
-* **Professional Dark Interface:** High-contrast, minimalist cybersecurity aesthetic designed for professional auditing and 24/7 technical monitoring.
+### 4. 🌐 Verification & Countermeasures
+11. **Global Database Verification:** Seamless integration with the **OpenCellID API** to verify the legitimacy of towers against a global registry using your personal API token.
+12. **Automated Security Countermeasures:** Optional automatic "Airplane Mode" fallback triggered instantly when insecure, legacy networks (2G/3G) or active downgrade attacks are detected.
+13. **Audio Alert System:** Instant acoustic notifications for critical threats and dangerously high power levels (potential physical proximity to an active cell interceptor / Stingray).
+
+### 5. 💾 Logging, Forensics & Performance
+14. **Persistent Connection History:** Local SQLite database that logs every tower transition with full metadata (Timestamp, Network Type, CID, MNC, TAC, and Verification Status) keeping your forensic data 100% private.
+15. **Forensic CSV Export:** One-click tool to export all recorded history to a CSV file for external audit, log analysis, and detailed signal mapping.
+16. **Intelligent Background Service:** Adaptive polling system (10-second intervals when the screen is off) designed to maintain monitoring while minimizing battery consumption.
+17. **Professional Dark Interface:** High-contrast, minimalist cybersecurity aesthetic designed for professional auditing and 24/7 technical monitoring.
+
+### 6. 🛠️ Event-Driven Low-Level Architecture (Android 12+)
+18. **Native TelephonyCallback Integration:** Migrated from basic loop polling to the modern Android `TelephonyCallback` event listener ecosystem. The application no longer actively wakes the CPU every 2 seconds; instead, the OS native radio layer architecture signals the application backend within milliseconds of any raw signaling or radio state mutation. This guarantees instant alert response while maintaining near-zero battery drain when stationary.
 
 ---
 
@@ -44,4 +52,4 @@ This application continuously monitors your device's cellular baseband connectio
 To unlock full tower verification capabilities, this app allows you to query the OpenCellID database in real-time:
 1. Get your free or commercial personal API token at [OpenCellID.org](https://opencellid.org/).
 2. Paste your token into the app settings menu.
-3. The app will automatically cross-check the active cell's geographic parameters to ensure it matches the official registry.
+3. The app will automatically cross-check the active cell's geographic parameters to ensure it matches the official carrier registry.
