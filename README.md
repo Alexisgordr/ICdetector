@@ -44,25 +44,34 @@ This application continuously monitors your device's cellular baseband connectio
 5. **Signal Gap Analysis:** Flags anomalous power jumps (`>35dB`) between the active cell and its reported neighbors.
 6. **MCC Inconsistency:** Detects spoofed towers broadcasting incorrect Mobile Country Codes (MCC).
 7. **Multi-MNC Spoofing Alert:** Identifies suspicious environments where more than 3 distinct operator codes (MNC) are detected simultaneously.
+8. **TAC Regional Deviation Audit:** Cross-checks the Tracking Area Code (TAC) of the active cell against its adjacent neighbors, raising flags if the main tower broadcasts a generic or structural mismatch compared to the localized network grid.
 
 ### 3. 🔬 Advanced Baseband Heuristics & Deep Scanning
-8. **Downgrade Attack Prevention (Anti-Jamming):** Tracks network state transitions and signal history. If the device drops abruptly from 4G/5G to legacy 2G/3G networks while having an excellent prior signal (`>-85 dBm`), the system flags it as an active selective jamming or forced downgrade attack.
-9. **Timing Advance (TA) Physical Distance Audit:** Extracts the Timing Advance parameter directly from the cellular signal layer (available in LTE and GSM bands). If the TA reports an extremely low value (0 or 1, indicating physical proximity under 150 meters) but the base station fails the OpenCellID global database verification, it elevates the threat level to a *Physical Proximity Rogue Cell Alert*.
-10. **Neighboring Null Check (Ghost Cell Detection):** Performs deep parsing of the neighbor cell lists broadcasted by the active tower. If the main base station claims to have active neighboring towers but persistent spectrum monitoring returns zero signal or null structures for those specific channels while the device has strong coverage, the app flags a "Ghost Neighbors Signature"—a classic behavior of tactical IMSI-catchers forcing cell entrapment.
+9. **Downgrade Attack Prevention (Anti-Jamming):** Tracks network state transitions and signal history. If the device drops abruptly from 4G/5G to legacy 2G/3G networks while having an excellent prior signal (`>-85 dBm`), the system flags it as an active selective jamming or forced downgrade attack.
+10. **Timing Advance (TA) Physical Distance Audit:** Extracts the Timing Advance parameter directly from the cellular signal layer (available in LTE and GSM bands). If the TA reports an extremely low value (0 or 1, indicating physical proximity under 150 meters) but the base station fails the OpenCellID global database verification, it elevates the threat level to a *Physical Proximity Rogue Cell Alert*.
+11. **Neighboring Null Check (Ghost Cell Detection):** Performs deep parsing of the neighbor cell lists broadcasted by the active tower. If the main base station claims to have active neighboring towers but persistent spectrum monitoring returns zero signal or null structures for those specific channels while the device has strong coverage, the app flags a "Ghost Neighbors Signature"—a classic behavior of tactical IMSI-catchers forcing cell entrapment.
+12. **Cell Reselection Loop Detection (Anti-Ping-Pong):** Tracks cellular transition speed and frequency. If the baseband chip is caught in a rapid, repetitive swap loop between identical cell IDs within a tight temporal window (e.g., 3 swaps in 10 seconds), it signals tactical interference or an ongoing cell-entrapment race condition.
+13. 13. **Real-Time Ciphering Status Monitoring (Android 14+):** Leverages the native `CipheringStatusListener` to audit network encryption parameters in real time. The system triggers an instant emergency alert if the cellular link drops encryption entirely (falling back to a vulnerable A5/0 plain-text transmitting state), which is a clear signature of tactical over-the-air interception.
+14. **Cellular Identifier Disclosure Protection (Android 14+):** Integrates the native `CellularIdentifierDisclosureListener` to track raw hardware signaling requests. It immediately flags and logs any unencrypted or suspicious transmission demands where a rogue base station forces the device to disclose sensitive hardware identity flags (such as the IMSI or IMEI numbers) outside standard carrier protocols.
 
 ### 4. 🌐 Verification & Countermeasures
-11. **Global Database Verification:** Seamless integration with the **OpenCellID API** to verify the legitimacy of towers against a global registry using your personal API token.
-12. **Automated Security Countermeasures:** Optional automatic "Airplane Mode" fallback triggered instantly when insecure, legacy networks (2G/3G) or active downgrade attacks are detected.
-13. **Audio Alert System:** Instant acoustic notifications for critical threats and dangerously high power levels (potential physical proximity to an active cell interceptor / Stingray).
+14. **Global Database Verification:** Seamless integration with the **OpenCellID API** to verify the legitimacy of towers against a global registry using your personal API token.
+15. **Automated Security Countermeasures:** Optional automatic "Airplane Mode" fallback triggered instantly when insecure, legacy networks (2G/3G) or active downgrade attacks are detected.
+16. **Audio Alert System:** Instant acoustic notifications for critical threats and dangerously high power levels (potential physical proximity to an active cell interceptor / Stingray).
+17. **Anonymous Tor Routing (SOCKS5 Proxy Support):** Features optional integration with local SOCKS5 proxy architectures (e.g., Orbot running on port 9050). This completely detaches your active public IP address from outbound OpenCellID API validation requests, preventing geolocation correlation by third-party network infrastructure.
 
 ### 5. 💾 Logging, Forensics & Performance
-14. **Persistent Connection History:** Local SQLite database that logs every tower transition with full metadata (Timestamp, Network Type, CID, MNC, TAC, and Verification Status) keeping your forensic data 100% private.
-15. **Forensic CSV Export:** One-click tool to export all recorded history to a CSV file for external audit, log analysis, and detailed signal mapping.
-16. **Intelligent Background Service:** Adaptive polling system (10-second intervals when the screen is off) designed to maintain monitoring while minimizing battery consumption.
-17. **Professional Dark Interface:** High-contrast, minimalist cybersecurity aesthetic designed for professional auditing and 24/7 technical monitoring.
+18. **Persistent Connection History:** Local SQLite database that logs every tower transition with full metadata (Timestamp, Network Type, CID, MNC, TAC, and Verification Status) keeping your forensic data 100% private.
+19. **Thread-Safe Memory Caching:** Utilizes a highly concurrent memory caching layer (`ConcurrentHashMap`) to entirely decouple volatile real-time radio streams from persistent database pipelines, avoiding database locks or concurrent transaction race conditions.
+20. **Asynchronous Non-Blocking I/O:** Powered by native Kotlin Coroutines (`Dispatchers.IO`) to process all background SQLite operations completely off the main rendering thread, ensuring a silky-smooth UI with zero frame drops.
+21. **Forensic CSV Export:** One-click tool to export all recorded history to a CSV file for external audit, log analysis, and detailed signal mapping.
+22. **Intelligent Background Service:** Adaptive polling system designed to maintain monitoring while minimizing battery consumption, safely dropping from a 2-second rate to a conservative 10-second sweep when the device screen is off.
+23. **Professional Dark Interface:** High-contrast, minimalist cybersecurity aesthetic designed for professional auditing and 24/7 technical monitoring.
 
-### 6. 🛠️ Event-Driven Low-Level Architecture (Android 12+)
-18. **Native TelephonyCallback Integration:** Migrated from basic loop polling to the modern Android `TelephonyCallback` event listener ecosystem. The application no longer actively wakes the CPU every 2 seconds; instead, the OS native radio layer architecture signals the application backend within milliseconds of any raw signaling or radio state mutation. This guarantees instant alert response while maintaining near-zero battery drain when stationary.
+### 6. 🛠️ Event-Driven Low-Level Architecture & Reactivity
+24. **Native TelephonyCallback Integration:** Migrated from basic loop polling to the modern Android `TelephonyCallback` event listener ecosystem (Android 12+). The application no longer actively wakes the CPU every 2 seconds; instead, the OS native radio layer architecture signals the application backend within milliseconds of any raw signaling or radio state mutation.
+25. **Reactive State-Bound UI Architecture:** Built natively using a strict state-bound lifecycle (`by mutableStateOf`) in MainActivity. This ensures that the Jetpack Compose frontend instantly and seamlessly recomposes the millisecond the background radio service binds, resolving classic first-launch permission synchronization freezes entirely.
+26. **Native Multi-SDK TelephonyCallback Architecture:** Migrated from primitive execution polling loops to a highly reactive `TelephonyCallback` ecosystem. The application layer scales dynamically based on the host environment: operating as a solid background monitor on Android 12 and 13, and upgrading automatically to an advanced multi-interface listener on Android 14+. By implementing low-level framework hooks natively, the engine processes critical baseband signaling changes within milliseconds without polling overhead, maintaining a near-zero battery consumption footprint.
 
 ---
 
@@ -79,3 +88,9 @@ To unlock full tower verification capabilities, this app allows you to query the
 >  🔒 **Privacy & Network Transparency:** Although this application requires the **Network** permission, it is strictly and exclusively used to perform outbound HTTP queries to the official OpenCellID API for cell verification. This application contains **zero telemetry, zero analytics trackers, and zero background data collection**. All your cellular history, logs, and forensic data are stored 100% locally in your device's SQLite database and never leave your phone. You are fully encouraged to audit the source code to verify this network behavior.
 
 * **No GPS/IP Tracking:** To ensure absolute location privacy, this application strictly avoids using the device's GPS hardware or external IP geolocation APIs. Rogue cell detection relies entirely on low-level radio signaling heuristics and mathematical parameters (like Timing Advance), ensuring the user's physical movements are never recorded or exposed.
+
+---
+
+## ⚖️ License
+
+This project is open-source software licensed under the **GNU General Public License v3.0** — see the [LICENSE](LICENSE) file for details.
