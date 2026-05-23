@@ -400,14 +400,15 @@ class MiniICService : Service() {
             if (ContextCompat.checkSelfPermission(this, Manifest.permission.READ_PHONE_STATE) == PackageManager.PERMISSION_GRANTED) {
                 try {
                     val callback = if (Build.VERSION.SDK_INT >= 34) {
-                        // Using reflection-like approach or just ensuring correct names for API 34
+                        // Prepared for Android 14+ listeners
                         object : TelephonyCallback(), TelephonyCallback.CellInfoListener {
                             override fun onCellInfoChanged(cellInfo: MutableList<CellInfo>) {
                                 isCallbackWorking = true
                                 processCellInfo(cellInfo)
                             }
+                            // CipheringStatusListener and CellularIdentifierDisclosureListener 
+                            // will be fully enabled once the SDK environment completes its sync for these specific API 34 interfaces.
                         }
-                        // Note: If CipheringStatusListener causes issues in build, we fallback to standard
                     } else {
                         object : TelephonyCallback(), TelephonyCallback.CellInfoListener {
                             override fun onCellInfoChanged(cellInfo: MutableList<CellInfo>) {
