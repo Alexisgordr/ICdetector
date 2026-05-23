@@ -119,6 +119,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -146,6 +147,8 @@ import org.json.JSONObject
 import java.io.File
 import java.io.FileWriter
 import java.io.IOException
+import java.net.InetSocketAddress
+import java.net.Proxy
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -311,6 +314,7 @@ class MiniICService : Service() {
     var alarmThreshold = -50f
     var isStrongSignalAlarmEnabled = true
     var is3gAirplaneModeEnabled = true
+    var isProxyEnabled = false
 
     // Tracking states
     private var prevCid: String? = null
@@ -318,6 +322,7 @@ class MiniICService : Service() {
     private var prevDbm: Int? = null
     private var isCallbackWorking = false
     private var connectionRetryCount = 0
+    private val cellChangeHistory = mutableListOf<Pair<String, Long>>()
 
     inner class LocalBinder : Binder() {
         fun getService(): MiniICService = this@MiniICService
@@ -334,9 +339,10 @@ class MiniICService : Service() {
         telephonyManager = getSystemService(TELEPHONY_SERVICE) as TelephonyManager
         dbHelper = CellDbHelper(this)
         
-        // Load API Key from preferences
+        // Load API Key and Proxy from preferences
         val prefs = getSharedPreferences("miniic_prefs", MODE_PRIVATE)
         openCellIdKey = prefs.getString("opencellid_key", "") ?: ""
+        isProxyEnabled = prefs.getBoolean("proxy_enabled", false)
 
         try {
             toneGenerator = ToneGenerator(AudioManager.STREAM_ALARM, 100)
@@ -393,12 +399,24 @@ class MiniICService : Service() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
             if (ContextCompat.checkSelfPermission(this, Manifest.permission.READ_PHONE_STATE) == PackageManager.PERMISSION_GRANTED) {
                 try {
-                    telephonyCallback = object : TelephonyCallback(), TelephonyCallback.CellInfoListener {
-                        override fun onCellInfoChanged(cellInfo: MutableList<CellInfo>) {
-                            isCallbackWorking = true
-                            processCellInfo(cellInfo)
+                    val callback = if (Build.VERSION.SDK_INT >= 34) {
+                        // Using reflection-like approach or just ensuring correct names for API 34
+                        object : TelephonyCallback(), TelephonyCallback.CellInfoListener {
+                            override fun onCellInfoChanged(cellInfo: MutableList<CellInfo>) {
+                                isCallbackWorking = true
+                                processCellInfo(cellInfo)
+                            }
+                        }
+                        // Note: If CipheringStatusListener causes issues in build, we fallback to standard
+                    } else {
+                        object : TelephonyCallback(), TelephonyCallback.CellInfoListener {
+                            override fun onCellInfoChanged(cellInfo: MutableList<CellInfo>) {
+                                isCallbackWorking = true
+                                processCellInfo(cellInfo)
+                            }
                         }
                     }
+                    telephonyCallback = callback
                     telephonyCallback?.let {
                         telephonyManager.registerTelephonyCallback(mainExecutor, it)
                     }
@@ -593,6 +611,15 @@ class MiniICService : Service() {
             reasons.add("Demasiados MNCs detectados (>3)")
         }
 
+        // 7. TAC Deviation Audit
+        if (neighbors.isNotEmpty() && active.tac != "N/A") {
+            val neighborTacs = neighbors.map { it.tac }.filter { it != "N/A" }
+            if (neighborTacs.isNotEmpty() && !neighborTacs.contains(active.tac)) {
+                suspicious = true
+                reasons.add("Desviación de TAC regional")
+            }
+        }
+
         // 5. Timing Advance Audit (Heuristic: Low TA with high power vs database)
         // If TA is 0 or 1, antenna is physically < 150m away. 
         // If the signal is extremely strong but verification is not "VERIFIED", it's risky.
@@ -628,10 +655,18 @@ class MiniICService : Service() {
             return
         }
 
+        val currentClient = if (isProxyEnabled) {
+            client.newBuilder()
+                .proxy(Proxy(Proxy.Type.SOCKS, InetSocketAddress("127.0.0.1", 9050)))
+                .build()
+        } else {
+            client
+        }
+
         val url = "https://opencellid.org/cell/get?key=$openCellIdKey&mcc=${cell.mcc}&mnc=${cell.mnc}&lac=${cell.tac}&cellid=${cell.cellId}&format=json"
         
         val request = Request.Builder().url(url).build()
-        client.newCall(request).enqueue(object : Callback {
+        currentClient.newCall(request).enqueue(object : Callback {
             override fun onFailure(call: Call, e: IOException) {
                 Log.e("MiniIC", "API Request Failure: ${e.message}")
                 verificationCache[cacheKey] = VerificationStatus.ERROR
@@ -665,8 +700,17 @@ class MiniICService : Service() {
         val dbm = cell.dbm
         val net = cell.networkType
 
-        // 1. Log Connection on Cell ID change
+        // 1. Log Connection and Ping-Pong Detection
         if (cid != prevCid) {
+            val currentTime = System.currentTimeMillis()
+            cellChangeHistory.add(Pair(cid, currentTime))
+            cellChangeHistory.removeAll { currentTime - it.second > 10000L }
+
+            if (cellChangeHistory.size >= 3) {
+                toneGenerator?.startTone(ToneGenerator.TONE_CDMA_PIP, 300)
+                Log.e("MiniIC", "ANOMALÍA: Efecto Ping-Pong detectado.")
+            }
+
             if (prevCid != null) {
                 scope.launch(Dispatchers.IO) {
                     dbHelper.logConnection(net, cid, cell.mnc, cell.tac, dbm, cell.verified)
@@ -1252,6 +1296,7 @@ fun SettingsPanel(service: MiniICService?, onSave: () -> Unit) {
     val context = LocalContext.current
     val prefs = remember { context.getSharedPreferences("miniic_prefs", Context.MODE_PRIVATE) }
     var token by remember { mutableStateOf(prefs.getString("opencellid_key", "") ?: "") }
+    var proxyEnabled by remember { mutableStateOf(prefs.getBoolean("proxy_enabled", false)) }
 
     Card(
         modifier = Modifier.fillMaxWidth(),
@@ -1269,19 +1314,37 @@ fun SettingsPanel(service: MiniICService?, onSave: () -> Unit) {
                 modifier = Modifier.fillMaxWidth(),
                 textStyle = LocalTextStyle.current.copy(color = Color.White, fontFamily = FontFamily.Monospace, fontSize = 12.sp),
                 placeholder = { Text("pk.xxxxxxxxxxxxxxxx", color = Color(0xFF444444), fontSize = 12.sp) },
+                visualTransformation = PasswordVisualTransformation(),
                 colors = OutlinedTextFieldDefaults.colors(
                     focusedBorderColor = Color(0xFF4CAF50),
                     unfocusedBorderColor = Color(0xFF333333),
                     cursorColor = Color.White
                 )
             )
+
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                Column {
+                    Text("Proxy Tor (Orbot)", color = Color.White, fontSize = 14.sp, fontFamily = FontFamily.Monospace)
+                    Text("Enruta API por Tor (SOCKS5 9050)", color = Color(0xFF666666), fontSize = 10.sp, fontFamily = FontFamily.Monospace)
+                }
+                Switch(
+                    checked = proxyEnabled,
+                    onCheckedChange = { proxyEnabled = it },
+                    colors = SwitchDefaults.colors(
+                        checkedThumbColor = Color.White,
+                        checkedTrackColor = Color(0xFF4CAF50)
+                    )
+                )
+            }
             
                 Button(
                     onClick = {
                         prefs.edit {
                             putString("opencellid_key", token)
+                            putBoolean("proxy_enabled", proxyEnabled)
                         }
                         service?.openCellIdKey = token
+                        service?.isProxyEnabled = proxyEnabled
                         onSave() // Volver a la pantalla principal
                     },
                 modifier = Modifier.fillMaxWidth(),
