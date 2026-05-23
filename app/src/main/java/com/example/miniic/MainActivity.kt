@@ -1,3 +1,21 @@
+/*
+ * ICdetection - IMSI-Catcher Detection Tool
+ * Copyright (C) 2026 Alexis Gómez Rodríguez
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
+ */
+
 package com.example.miniic
 
 import android.Manifest
@@ -159,7 +177,7 @@ class CellDbHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME, 
                     "$COLUMN_MNC TEXT, " +
                     "$COLUMN_TAC TEXT, " +
                     "$COLUMN_DBM INTEGER, " +
-                    "$COLUMN_VERIFIED TEXT)"
+                    "$COLUMN_VERIFIED TEXT)",
         )
     }
 
@@ -416,7 +434,7 @@ class MiniICService : Service() {
     private fun requestFreshCellInfo() {
         // En lugar de machacar los callbacks cada 2 segundos, esperamos 4 ciclos (8 segundos)
         // para dar tiempo a que los listeners se asienten y el sistema operativo procese los permisos
-        if (!isCallbackWorking && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+        if (!isCallbackWorking && (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S)) {
             connectionRetryCount++
             if (connectionRetryCount >= 4) {
                 connectionRetryCount = 0
