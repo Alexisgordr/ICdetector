@@ -251,7 +251,9 @@ data class CellData(
     val mcc: String = "N/A",
     val verified: VerificationStatus = VerificationStatus.PENDING,
     val isSuspicious: Boolean = false,
-    val suspiciousReason: String? = null
+    val suspiciousReason: String? = null,
+    val timingAdvance: Int? = null,
+    val arfcn: Int? = null
 )
 
 enum class VerificationStatus {
@@ -289,6 +291,7 @@ class MiniICService : Service() {
     // Tracking states
     private var prevCid: String? = null
     private var prevNetType: String? = null
+    private var prevDbm: Int? = null
 
     inner class LocalBinder : Binder() {
         fun getService(): MiniICService = this@MiniICService
@@ -524,6 +527,23 @@ class MiniICService : Service() {
             reasons.add("Demasiados MNCs detectados (>3)")
         }
 
+        // 5. Timing Advance Audit (Heuristic: Low TA with high power vs database)
+        // If TA is 0 or 1, antenna is physically < 150m away. 
+        // If the signal is extremely strong but verification is not "VERIFIED", it's risky.
+        active.timingAdvance?.let { ta ->
+            if (ta <= 1 && active.dbm >= -60 && active.verified != VerificationStatus.VERIFIED) {
+                suspicious = true
+                reasons.add("Proximidad física anómala (TA=$ta)")
+            }
+        }
+
+        // 6. Neighboring Null Check (Ghost Cells)
+        // If neighbors report ARFCNs but active cell dbm is high and neighbors are all N/A or extremely low
+        if (active.dbm >= -70 && neighbors.isNotEmpty() && neighbors.all { it.dbm <= -120 }) {
+            suspicious = true
+            reasons.add("Lista de vecinos fantasma")
+        }
+
         return active.copy(
             isSuspicious = suspicious,
             suspiciousReason = if (reasons.isNotEmpty()) reasons.joinToString(", ") else null
@@ -589,18 +609,31 @@ class MiniICService : Service() {
             Log.w("MiniIC", "Warning: High power signal detected: $dbm dBm")
         }
 
+        // 3. Downgrade Attack Prevention (Advanced)
+        // Detect sudden transition from 4G/5G with good signal to 2G/3G
+        if (prevNetType != null && prevDbm != null) {
+            val isPrevSecure = prevNetType!!.contains("4G") || prevNetType!!.contains("5G")
+            val isCurrentInsecure = net.contains("2G") || net.contains("3G")
+            if (isPrevSecure && isCurrentInsecure && prevDbm!! >= -85) {
+                toneGenerator?.startTone(ToneGenerator.TONE_SUP_ERROR, 500)
+                Log.e("MiniIC", "CRITICAL: Downgrade attack detected! Pre-transition signal: $prevDbm dBm")
+                triggerAirplaneMode() // Automatic countermeasure
+            }
+        }
+
         // 5. Threat analysis alert
         if (cell.isSuspicious) {
             toneGenerator?.startTone(ToneGenerator.TONE_CDMA_SOFT_ERROR_LITE, 200)
             Log.e("MiniIC", "THREAT DETECTED: ${cell.suspiciousReason}")
         }
 
-        // 4. Fallback to 3G/2G Airplane Mode trigger
+        // 4. Fallback to 3G/2G Airplane Mode trigger (generic check)
         if (is3gAirplaneModeEnabled && (net.contains("3G") || net.contains("2G"))) {
             triggerAirplaneMode()
         }
 
         prevNetType = net
+        prevDbm = dbm
     }
 
     private fun triggerAirplaneMode() {
@@ -697,22 +730,25 @@ class MiniICService : Service() {
             is CellInfoLte -> {
                 val id = info.cellIdentity
                 val dbm = info.cellSignalStrength.dbm
-                CellData(reg, networkTypeString, id.ci.valOrNa(), id.mncString ?: "N/A", id.tac.valOrNa(), dbm, id.mccString ?: "N/A")
+                val ta = info.cellSignalStrength.timingAdvance.let { if (it == Int.MAX_VALUE) null else it }
+                CellData(reg, networkTypeString, id.ci.valOrNa(), id.mncString ?: "N/A", id.tac.valOrNa(), dbm, id.mccString ?: "N/A", timingAdvance = ta, arfcn = id.earfcn)
             }
             is CellInfoNr -> {
                 val id = info.cellIdentity as CellIdentityNr
                 val dbm = (info.cellSignalStrength as CellSignalStrengthNr).ssRsrp
-                CellData(reg, networkTypeString, id.nci.valOrNa(), id.mncString ?: "N/A", id.tac.valOrNa(), dbm, id.mccString ?: "N/A")
+                // NR TA is not directly available in standard API, but we keep the structure
+                CellData(reg, networkTypeString, id.nci.valOrNa(), id.mncString ?: "N/A", id.tac.valOrNa(), dbm, id.mccString ?: "N/A", arfcn = id.nrarfcn)
             }
             is CellInfoWcdma -> {
                 val id = info.cellIdentity
                 val dbm = info.cellSignalStrength.dbm
-                CellData(reg, networkTypeString, id.cid.valOrNa(), id.mncString ?: "N/A", id.lac.valOrNa(), dbm, id.mccString ?: "N/A")
+                CellData(reg, networkTypeString, id.cid.valOrNa(), id.mncString ?: "N/A", id.lac.valOrNa(), dbm, id.mccString ?: "N/A", arfcn = id.uarfcn)
             }
             is CellInfoGsm -> {
                 val id = info.cellIdentity
                 val dbm = info.cellSignalStrength.dbm
-                CellData(reg, networkTypeString, id.cid.valOrNa(), id.mncString ?: "N/A", id.lac.valOrNa(), dbm, id.mccString ?: "N/A")
+                val ta = info.cellSignalStrength.timingAdvance.let { if (it == Int.MAX_VALUE) null else it }
+                CellData(reg, networkTypeString, id.cid.valOrNa(), id.mncString ?: "N/A", id.lac.valOrNa(), dbm, id.mccString ?: "N/A", timingAdvance = ta, arfcn = id.arfcn)
             }
             else -> null
         }
