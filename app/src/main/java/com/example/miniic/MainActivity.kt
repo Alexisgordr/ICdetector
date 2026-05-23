@@ -274,6 +274,7 @@ class MiniICService : Service() {
     private var displayInfoCallback: TelephonyCallback? = null
     private var lastDisplayInfo: TelephonyDisplayInfo? = null
     private var isScreenOn = true
+    private var isServiceRunning = false
 
     // OpenCellID API key (User should replace this)
     var openCellIdKey: String = ""
@@ -300,6 +301,7 @@ class MiniICService : Service() {
 
     override fun onCreate() {
         super.onCreate()
+        isServiceRunning = true
         telephonyManager = getSystemService(TELEPHONY_SERVICE) as TelephonyManager
         dbHelper = CellDbHelper(this)
         
@@ -322,7 +324,7 @@ class MiniICService : Service() {
 
         // Adaptive polling: slower when screen is off to save battery
         scope.launch(Dispatchers.Default) {
-            while (isActive) {
+            while (isActive && isServiceRunning) {
                 val delayTime = if (isScreenOn) 2000L else 10000L
                 requestFreshCellInfo()
                 delay(delayTime)
@@ -425,6 +427,7 @@ class MiniICService : Service() {
 
     override fun onDestroy() {
         super.onDestroy()
+        isServiceRunning = false
         scope.cancel()
         toneGenerator?.release()
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
