@@ -74,3 +74,5 @@ To unlock full tower verification capabilities, this app allows you to query the
 3. The app will automatically cross-check the active cell's geographic parameters to ensure it matches the official carrier registry.
 
 > 💡 **GrapheneOS / Hardened OS Note:** This application strictly requires the **Network** permission to cross-reference cellular infrastructure with the OpenCellID API. Revoking network permissions via the OS sandbox will intentionally cause the application to terminate (Fail-Fast architecture), as real-time global registry validation is a core dependency of its security model.
+
+>  🔒 **Privacy & Network Transparency:** Although this application requires the **Network** permission, it is strictly and exclusively used to perform outbound HTTP queries to the official OpenCellID API for cell verification. This application contains **zero telemetry, zero analytics trackers, and zero background data collection**. All your cellular history, logs, and forensic data are stored 100% locally in your device's SQLite database and never leave your phone. You are fully encouraged to audit the source code to verify this network behavior.
