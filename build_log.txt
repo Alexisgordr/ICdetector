@@ -1,1 +1,0 @@
-/bin/bash: gradle: command not found
