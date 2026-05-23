@@ -1,3 +1,4 @@
+
 <table>
   <tr>
     <td width="60%" valign="top">
@@ -10,7 +11,7 @@
       </ul>
     </td>
     <td width="40%" align="center">
-      <img src="https://github.com/user-attachments/assets/6d78f8a6-d9ad-4cb2-aee9-4d3f5af47bb5" alt="miniIC Screenshot" width="260" />
+      <img src="https://github.com/user-attachments/assets/d05aa704-e1bf-49f2-9c10-7257f04151d6" alt="miniIC Screenshot" width="260" />
     </td>
   </tr>
 </table>
