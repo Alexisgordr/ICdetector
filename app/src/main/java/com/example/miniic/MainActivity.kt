@@ -184,6 +184,15 @@ class CellDbHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME, 
         db.close()
     }
 
+    fun updateVerificationStatus(mnc: String, tac: String, cid: String, status: VerificationStatus) {
+        val db = this.writableDatabase
+        val values = ContentValues().apply {
+            put(COLUMN_VERIFIED, status.name)
+        }
+        db.update(TABLE_HISTORY, values, "$COLUMN_CID=? AND $COLUMN_MNC=? AND $COLUMN_TAC=? AND $COLUMN_VERIFIED='PENDING'", arrayOf(cid, mnc, tac))
+        db.close()
+    }
+
     fun getRecords(): List<HistoryRecord> {
         val list = mutableListOf<HistoryRecord>()
         val db = this.readableDatabase
@@ -577,14 +586,18 @@ class MiniICService : Service() {
                     val json = JSONObject(body)
                     if (json.has("lat")) {
                         verificationCache[cacheKey] = VerificationStatus.VERIFIED
+                        dbHelper.updateVerificationStatus(cell.mnc, cell.tac, cell.cellId, VerificationStatus.VERIFIED)
                     } else {
                         verificationCache[cacheKey] = VerificationStatus.NOT_FOUND
+                        dbHelper.updateVerificationStatus(cell.mnc, cell.tac, cell.cellId, VerificationStatus.NOT_FOUND)
                     }
                 } else if (response.code == 401 || response.code == 403) {
                     Log.e("MiniIC", "API Token Error: ${response.code}")
                     verificationCache[cacheKey] = VerificationStatus.ERROR
+                    dbHelper.updateVerificationStatus(cell.mnc, cell.tac, cell.cellId, VerificationStatus.ERROR)
                 } else {
                     verificationCache[cacheKey] = VerificationStatus.NOT_FOUND
+                    dbHelper.updateVerificationStatus(cell.mnc, cell.tac, cell.cellId, VerificationStatus.NOT_FOUND)
                 }
             }
         })
