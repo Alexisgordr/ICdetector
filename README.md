@@ -1,4 +1,22 @@
-<img width="1050" height="2199" alt="1215" src="https://github.com/user-attachments/assets/6d78f8a6-d9ad-4cb2-aee9-4d3f5af47bb5" />
+<table>
+  <tr>
+    <td width="60%" valign="top">
+      <h3>📱 Forensic User Interface</h3>
+      <p>The application features a high-contrast, minimalist dark aesthetic designed for 24/7 technical monitoring and physical anomaly verification.</p>
+      <ul>
+        <li>Real-time visual graphs of neighboring cells.</li>
+        <li>Instant security threat level status color-coding.</li>
+        <li>Quick access to automated countermeasures and SQLite connection logs.</li>
+      </ul>
+    </td>
+    <td width="40%" align="center">
+      <img src="https://github.com/user-attachments/assets/6d78f8a6-d9ad-4cb2-aee9-4d3f5af47bb5" alt="miniIC Screenshot" width="260" />
+    </td>
+  </tr>
+</table>
+
+
+
 # 📡 miniIC — Anti-IMSI Catcher & Cellular Auditor
 
 A powerful, open-source Android tool designed for real-time mobile network forensics, infrastructure auditing, and heuristical IMSI-catcher (Stingray) detection.
