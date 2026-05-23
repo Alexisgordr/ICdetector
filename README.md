@@ -1,3 +1,4 @@
+<img width="1050" height="2199" alt="1215" src="https://github.com/user-attachments/assets/6d78f8a6-d9ad-4cb2-aee9-4d3f5af47bb5" />
 # 📡 miniIC — Anti-IMSI Catcher & Cellular Auditor
 
 A powerful, open-source Android tool designed for real-time mobile network forensics, infrastructure auditing, and heuristical IMSI-catcher (Stingray) detection.
