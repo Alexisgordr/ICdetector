@@ -81,6 +81,9 @@ import androidx.compose.material.ExperimentalMaterialApi
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Favorite
+import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.KeyboardArrowUp
+import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.Warning
@@ -158,7 +161,7 @@ import java.util.concurrent.ConcurrentHashMap
 class CellDbHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME, null, DATABASE_VERSION) {
     companion object {
         private const val DATABASE_NAME = "miniic_history.db"
-        private const val DATABASE_VERSION = 2
+        private const val DATABASE_VERSION = 3
         const val TABLE_HISTORY = "history"
         const val COLUMN_ID = "id"
         const val COLUMN_TIMESTAMP = "timestamp"
@@ -166,6 +169,7 @@ class CellDbHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME, 
         const val COLUMN_CID = "cid"
         const val COLUMN_MNC = "mnc"
         const val COLUMN_TAC = "tac"
+        const val COLUMN_MCC = "mcc"
         const val COLUMN_DBM = "dbm"
         const val COLUMN_VERIFIED = "verified"
     }
@@ -179,6 +183,7 @@ class CellDbHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME, 
                     "$COLUMN_CID TEXT, " +
                     "$COLUMN_MNC TEXT, " +
                     "$COLUMN_TAC TEXT, " +
+                    "$COLUMN_MCC TEXT, " +
                     "$COLUMN_DBM INTEGER, " +
                     "$COLUMN_VERIFIED TEXT)",
         )
@@ -188,9 +193,12 @@ class CellDbHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME, 
         if (oldVersion < 2) {
             db.execSQL("ALTER TABLE $TABLE_HISTORY ADD COLUMN $COLUMN_VERIFIED TEXT DEFAULT 'PENDING'")
         }
+        if (oldVersion < 3) {
+            db.execSQL("ALTER TABLE $TABLE_HISTORY ADD COLUMN $COLUMN_MCC TEXT DEFAULT 'N/A'")
+        }
     }
 
-    fun logConnection(netType: String, cid: String, mnc: String, tac: String, dbm: Int, verified: VerificationStatus = VerificationStatus.PENDING) {
+    fun logConnection(netType: String, cid: String, mnc: String, tac: String, mcc: String, dbm: Int, verified: VerificationStatus = VerificationStatus.PENDING) {
         val db = this.writableDatabase
         val values = ContentValues().apply {
             val sdf = SimpleDateFormat("HH:mm:ss", Locale.getDefault())
@@ -199,6 +207,7 @@ class CellDbHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME, 
             put(COLUMN_CID, cid)
             put(COLUMN_MNC, mnc)
             put(COLUMN_TAC, tac)
+            put(COLUMN_MCC, mcc)
             put(COLUMN_DBM, dbm)
             put(COLUMN_VERIFIED, verified.name)
         }
@@ -226,6 +235,7 @@ class CellDbHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME, 
                         cid = cursor.getString(cursor.getColumnIndexOrThrow(COLUMN_CID)),
                         mnc = cursor.getString(cursor.getColumnIndexOrThrow(COLUMN_MNC)),
                         tac = cursor.getString(cursor.getColumnIndexOrThrow(COLUMN_TAC)),
+                        mcc = cursor.getString(cursor.getColumnIndexOrThrow(COLUMN_MCC)),
                         dbm = cursor.getInt(cursor.getColumnIndexOrThrow(COLUMN_DBM)),
                         verified = try { 
                             VerificationStatus.valueOf(cursor.getString(cursor.getColumnIndexOrThrow(COLUMN_VERIFIED))) 
@@ -263,6 +273,7 @@ data class HistoryRecord(
     val cid: String,
     val mnc: String,
     val tac: String,
+    val mcc: String,
     val dbm: Int,
     val verified: VerificationStatus = VerificationStatus.PENDING
 )
@@ -714,7 +725,7 @@ class MiniICService : Service() {
 
             if (prevCid != null) {
                 scope.launch(Dispatchers.IO) {
-                    dbHelper.logConnection(net, cid, cell.mnc, cell.tac, dbm, cell.verified)
+                    dbHelper.logConnection(net, cid, cell.mnc, cell.tac, cell.mcc, dbm, cell.verified)
                 }
             }
             prevCid = cid
@@ -848,26 +859,51 @@ class MiniICService : Service() {
                 val id = info.cellIdentity
                 val dbm = info.cellSignalStrength.dbm
                 val ta = info.cellSignalStrength.timingAdvance.let { if (it == Int.MAX_VALUE) null else it }
-                CellData(reg, networkTypeString, id.ci.valOrNa(), id.mncString ?: "N/A", id.tac.valOrNa(), dbm, id.mccString ?: "N/A", timingAdvance = ta, arfcn = id.earfcn)
+                val mcc = id.mccString ?: getNetworkOperatorMcc()
+                val mnc = id.mncString ?: getNetworkOperatorMnc()
+                CellData(reg, networkTypeString, id.ci.valOrNa(), mnc, id.tac.valOrNa(), dbm, mcc, timingAdvance = ta, arfcn = id.earfcn)
             }
             is CellInfoNr -> {
                 val id = info.cellIdentity as CellIdentityNr
                 val dbm = (info.cellSignalStrength as CellSignalStrengthNr).ssRsrp
-                // NR TA is not directly available in standard API, but we keep the structure
-                CellData(reg, networkTypeString, id.nci.valOrNa(), id.mncString ?: "N/A", id.tac.valOrNa(), dbm, id.mccString ?: "N/A", arfcn = id.nrarfcn)
+                val mcc = id.mccString ?: getNetworkOperatorMcc()
+                val mnc = id.mncString ?: getNetworkOperatorMnc()
+                CellData(reg, networkTypeString, id.nci.valOrNa(), mnc, id.tac.valOrNa(), dbm, mcc, arfcn = id.nrarfcn)
             }
             is CellInfoWcdma -> {
                 val id = info.cellIdentity
                 val dbm = info.cellSignalStrength.dbm
-                CellData(reg, networkTypeString, id.cid.valOrNa(), id.mncString ?: "N/A", id.lac.valOrNa(), dbm, id.mccString ?: "N/A", arfcn = id.uarfcn)
+                val mcc = id.mccString ?: getNetworkOperatorMcc()
+                val mnc = id.mncString ?: getNetworkOperatorMnc()
+                CellData(reg, networkTypeString, id.cid.valOrNa(), mnc, id.lac.valOrNa(), dbm, mcc, arfcn = id.uarfcn)
             }
             is CellInfoGsm -> {
                 val id = info.cellIdentity
                 val dbm = info.cellSignalStrength.dbm
                 val ta = info.cellSignalStrength.timingAdvance.let { if (it == Int.MAX_VALUE) null else it }
-                CellData(reg, networkTypeString, id.cid.valOrNa(), id.mncString ?: "N/A", id.lac.valOrNa(), dbm, id.mccString ?: "N/A", timingAdvance = ta, arfcn = id.arfcn)
+                val mcc = id.mccString ?: getNetworkOperatorMcc()
+                val mnc = id.mncString ?: getNetworkOperatorMnc()
+                CellData(reg, networkTypeString, id.cid.valOrNa(), mnc, id.lac.valOrNa(), dbm, mcc, timingAdvance = ta, arfcn = id.arfcn)
             }
             else -> null
+        }
+    }
+
+    private fun getNetworkOperatorMcc(): String {
+        val operator = telephonyManager.networkOperator
+        return if (operator != null && operator.length >= 3) {
+            operator.substring(0, 3)
+        } else {
+            "N/A"
+        }
+    }
+
+    private fun getNetworkOperatorMnc(): String {
+        val operator = telephonyManager.networkOperator
+        return if (operator != null && operator.length > 3) {
+            operator.substring(3)
+        } else {
+            "N/A"
         }
     }
 
@@ -1431,9 +1467,9 @@ fun exportToCsv(context: Context, items: List<HistoryRecord>) {
     
     try {
         val writer = FileWriter(file)
-        writer.append("Timestamp,NetType,CID,MNC,TAC,DBM,Verified\n")
+        writer.append("Timestamp,NetType,CID,MNC,TAC,MCC,DBM,Verified\n")
         items.forEach { item ->
-            writer.append("${item.timestamp},${item.netType},${item.cid},${item.mnc},${item.tac},${item.dbm},${item.verified.name}\n")
+            writer.append("${item.timestamp},${item.netType},${item.cid},${item.mnc},${item.tac},${item.mcc},${item.dbm},${item.verified.name}\n")
         }
         writer.flush()
         writer.close()
@@ -1492,6 +1528,21 @@ fun HistoryPanel(dbHelper: CellDbHelper, onBack: () -> Unit) {
         }
     }
 
+    val groupedItems = remember(items) {
+        val groups = mutableMapOf<String, MutableList<HistoryRecord>>()
+        val orderedCids = mutableListOf<String>()
+        items.forEach { record ->
+            if (!groups.containsKey(record.cid)) {
+                orderedCids.add(record.cid)
+                groups[record.cid] = mutableListOf()
+            }
+            groups[record.cid]!!.add(record)
+        }
+        orderedCids.map { cid -> cid to groups[cid]!! }
+    }
+
+    var expandedCids by remember { mutableStateOf(setOf<String>()) }
+
     Column(modifier = Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Row(
             modifier = Modifier.fillMaxWidth(),
@@ -1535,25 +1586,114 @@ fun HistoryPanel(dbHelper: CellDbHelper, onBack: () -> Unit) {
                     Text("EXPORTAR CSV", fontFamily = FontFamily.Monospace, fontSize = 11.sp)
                 }
             }
-            LazyColumn(modifier = Modifier.fillMaxWidth().weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                items(items) { item ->
+            LazyColumn(modifier = Modifier.fillMaxWidth().weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                items(groupedItems) { (cid, records) ->
+                    val isExpanded = expandedCids.contains(cid)
+                    val first = records.first()
+                    
                     Card(
                         modifier = Modifier.fillMaxWidth(),
                         colors = CardDefaults.cardColors(containerColor = Color(0xFF111111)),
-                        shape = RoundedCornerShape(2.dp)
+                        shape = RoundedCornerShape(4.dp),
+                        onClick = {
+                            expandedCids = if (isExpanded) expandedCids - cid else expandedCids + cid
+                        }
                     ) {
-                        Column(modifier = Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                                Text(item.timestamp, color = Color(0xFF666666), fontSize = 11.sp, fontFamily = FontFamily.Monospace)
-                                VerificationBadge(item.verified)
+                        Column(modifier = Modifier.padding(12.dp)) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Column {
+                                    Text("CELL ID: $cid", color = Color.White, fontSize = 13.sp, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Bold)
+                                    Text("CONEXIONES: ${records.size}", color = Color(0xFF888888), fontSize = 10.sp, fontFamily = FontFamily.Monospace)
+                                }
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    VerificationBadge(first.verified)
+                                    Spacer(Modifier.width(8.dp))
+                                    Icon(
+                                        imageVector = if (isExpanded) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
+                                        contentDescription = null,
+                                        tint = Color(0xFF666666)
+                                    )
+                                }
                             }
-                            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                                Text("${item.dbm} dBm (${item.netType})", color = Color.White, fontSize = 11.sp, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Bold)
-                                Text("MNC: ${item.mnc}", color = Color(0xFF888888), fontSize = 11.sp, fontFamily = FontFamily.Monospace)
-                            }
-                            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                                Text("CID: ${item.cid}", color = Color.White, fontSize = 11.sp, fontFamily = FontFamily.Monospace)
-                                Text("TAC: ${item.tac}", color = Color(0xFF888888), fontSize = 11.sp, fontFamily = FontFamily.Monospace)
+
+                            if (isExpanded) {
+                                Spacer(Modifier.height(12.dp))
+                                
+                                // Botón de Ver en Mapa (Solo para verificadas)
+                                if (first.verified == VerificationStatus.VERIFIED) {
+                                    val context = LocalContext.current
+                                    // Buscamos un MCC válido en el grupo por si el primero es "N/A"
+                                    val validMcc = records.firstOrNull { it.mcc != "N/A" }?.mcc ?: first.mcc
+                                    val validMnc = records.firstOrNull { it.mnc != "N/A" }?.mnc ?: first.mnc
+                                    
+                                    TextButton(
+                                        onClick = {
+                                            val prefs = context.getSharedPreferences("miniic_prefs", Context.MODE_PRIVATE)
+                                            val token = prefs.getString("opencellid_key", "") ?: ""
+                                            
+                                            // Paso 1: Consultar la API para obtener las coordenadas exactas
+                                            val apiUrl = "https://opencellid.org/cell/get?key=$token&mcc=$validMcc&mnc=$validMnc&lac=${first.tac}&cellid=${first.cid}&format=json"
+                                            
+                                            val client = OkHttpClient()
+                                            val request = Request.Builder().url(apiUrl).build()
+                                            
+                                            client.newCall(request).enqueue(object : Callback {
+                                                override fun onFailure(call: Call, e: IOException) {
+                                                    // Si falla la API, abrimos la home como respaldo
+                                                    val intent = Intent(Intent.ACTION_VIEW, "https://opencellid.org".toUri())
+                                                    context.startActivity(intent)
+                                                }
+
+                                                override fun onResponse(call: Call, response: Response) {
+                                                    val body = response.body?.string()
+                                                    if (response.isSuccessful && body != null) {
+                                                        val json = JSONObject(body)
+                                                        if (json.has("lat") && json.has("lon")) {
+                                                            val lat = json.getDouble("lat")
+                                                            val lon = json.getDouble("lon")
+                                                            // Paso 2: Abrir el MAPA real centrado en las coordenadas
+                                                            val mapUrl = "https://opencellid.org/#zoom=16&lat=$lat&lon=$lon"
+                                                            val intent = Intent(Intent.ACTION_VIEW, mapUrl.toUri())
+                                                            context.startActivity(intent)
+                                                            return
+                                                        }
+                                                    }
+                                                    // Fallback si no hay coordenadas
+                                                    val intent = Intent(Intent.ACTION_VIEW, "https://opencellid.org".toUri())
+                                                    context.startActivity(intent)
+                                                }
+                                            })
+                                        },
+                                        modifier = Modifier.fillMaxWidth().height(32.dp),
+                                        colors = ButtonDefaults.textButtonColors(contentColor = Color(0xFF4CAF50))
+                                    ) {
+                                        Icon(Icons.Default.LocationOn, contentDescription = null, modifier = Modifier.size(14.dp))
+                                        Spacer(Modifier.width(6.dp))
+                                        Text("VER EN MAPA (OPENCELLID)", fontSize = 10.sp, fontFamily = FontFamily.Monospace)
+                                    }
+                                    Spacer(Modifier.height(8.dp))
+                                }
+
+                                HorizontalDivider(color = Color(0xFF222222))
+                                records.forEach { record ->
+                                    Column(modifier = Modifier.padding(vertical = 8.dp)) {
+                                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                                            Text(record.timestamp, color = Color(0xFF666666), fontSize = 11.sp, fontFamily = FontFamily.Monospace)
+                                            Text("${record.dbm} dBm (${record.netType})", color = Color.White, fontSize = 11.sp, fontFamily = FontFamily.Monospace)
+                                        }
+                                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                                            Text("MNC: ${record.mnc}", color = Color(0xFF888888), fontSize = 11.sp, fontFamily = FontFamily.Monospace)
+                                            Text("TAC: ${record.tac}", color = Color(0xFF888888), fontSize = 11.sp, fontFamily = FontFamily.Monospace)
+                                        }
+                                    }
+                                    if (record != records.last()) {
+                                        HorizontalDivider(color = Color(0xFF1A1A1A), thickness = 0.5.dp)
+                                    }
+                                }
                             }
                         }
                     }
