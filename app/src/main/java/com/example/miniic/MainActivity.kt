@@ -181,7 +181,6 @@ class CellDbHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME, 
             put(COLUMN_VERIFIED, verified.name)
         }
         db.insert(TABLE_HISTORY, null, values)
-        db.close()
     }
 
     fun updateVerificationStatus(mnc: String, tac: String, cid: String, status: VerificationStatus) {
@@ -190,7 +189,6 @@ class CellDbHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME, 
             put(COLUMN_VERIFIED, status.name)
         }
         db.update(TABLE_HISTORY, values, "$COLUMN_CID=? AND $COLUMN_MNC=? AND $COLUMN_TAC=? AND $COLUMN_VERIFIED='PENDING'", arrayOf(cid, mnc, tac))
-        db.close()
     }
 
     fun getRecords(): List<HistoryRecord> {
@@ -217,14 +215,12 @@ class CellDbHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME, 
             } while (cursor.moveToNext())
         }
         cursor.close()
-        db.close()
         return list
     }
 
     fun clear() {
         val db = this.writableDatabase
         db.execSQL("DELETE FROM $TABLE_HISTORY")
-        db.close()
     }
 
     fun isCellVerified(mnc: String, tac: String, cid: String): Boolean {
@@ -235,7 +231,6 @@ class CellDbHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME, 
         )
         val exists = cursor.count > 0
         cursor.close()
-        db.close()
         return exists
     }
 }
@@ -283,6 +278,7 @@ class MiniICService : Service() {
     private var toneGenerator: ToneGenerator? = null
     private var telephonyCallback: TelephonyCallback? = null
     private var displayInfoCallback: TelephonyCallback? = null
+    private var screenReceiver: BroadcastReceiver? = null
     private var lastDisplayInfo: TelephonyDisplayInfo? = null
     private var isScreenOn = true
     private var isServiceRunning = false
@@ -349,11 +345,12 @@ class MiniICService : Service() {
             addAction(Intent.ACTION_SCREEN_ON)
             addAction(Intent.ACTION_SCREEN_OFF)
         }
-        registerReceiver(object : BroadcastReceiver() {
+        screenReceiver = object : BroadcastReceiver() {
             override fun onReceive(context: Context?, intent: Intent?) {
                 isScreenOn = intent?.action == Intent.ACTION_SCREEN_ON
             }
-        }, filter)
+        }
+        registerReceiver(screenReceiver, filter)
     }
 
     private fun registerTelephonyCallback() {
@@ -386,7 +383,7 @@ class MiniICService : Service() {
                             requestFreshCellInfo()
                         }
                     }
-                    telephonyCallback?.let {
+                    displayInfoCallback?.let {
                         telephonyManager.registerTelephonyCallback(mainExecutor, it)
                     }
                 } catch (e: SecurityException) {
@@ -442,6 +439,7 @@ class MiniICService : Service() {
         isServiceRunning = false
         scope.cancel()
         toneGenerator?.release()
+        screenReceiver?.let { unregisterReceiver(it) }
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
             telephonyCallback?.let {
                 telephonyManager.unregisterTelephonyCallback(it)
@@ -611,7 +609,9 @@ class MiniICService : Service() {
         // 1. Log Connection on Cell ID change
         if (cid != prevCid) {
             if (prevCid != null) {
-                dbHelper.logConnection(net, cid, cell.mnc, cell.tac, dbm, cell.verified)
+                scope.launch(Dispatchers.IO) {
+                    dbHelper.logConnection(net, cid, cell.mnc, cell.tac, dbm, cell.verified)
+                }
             }
             prevCid = cid
         }
