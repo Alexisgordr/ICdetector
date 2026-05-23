@@ -98,6 +98,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -297,6 +298,8 @@ class MiniICService : Service() {
     private var prevCid: String? = null
     private var prevNetType: String? = null
     private var prevDbm: Int? = null
+    private var isCallbackWorking = false
+    private var connectionRetryCount = 0
 
     inner class LocalBinder : Binder() {
         fun getService(): MiniICService = this@MiniICService
@@ -334,7 +337,22 @@ class MiniICService : Service() {
         scope.launch(Dispatchers.Default) {
             while (isActive && isServiceRunning) {
                 val delayTime = if (isScreenOn) 2000L else 10000L
-                requestFreshCellInfo()
+                
+                // 1. Comprobamos si el usuario ha activado el Modo Avión
+                val isAirplaneModeOn = Settings.Global.getInt(
+                    contentResolver, 
+                    Settings.Global.AIRPLANE_MODE_ON, 0
+                ) != 0
+
+                if (isAirplaneModeOn) {
+                    // 2. Si está activo, forzamos la limpieza de la pantalla y la notificación
+                    _cellFlow.value = emptyList()
+                    updateNotificationText("Sin señal / Modo Avión")
+                } else {
+                    // 3. Si no está activo, solicitamos datos de antenas de forma normal
+                    requestFreshCellInfo()
+                }
+
                 delay(delayTime)
             }
         }
@@ -359,6 +377,7 @@ class MiniICService : Service() {
                 try {
                     telephonyCallback = object : TelephonyCallback(), TelephonyCallback.CellInfoListener {
                         override fun onCellInfoChanged(cellInfo: MutableList<CellInfo>) {
+                            isCallbackWorking = true
                             processCellInfo(cellInfo)
                         }
                     }
@@ -378,6 +397,7 @@ class MiniICService : Service() {
                 try {
                     displayInfoCallback = object : TelephonyCallback(), TelephonyCallback.DisplayInfoListener {
                         override fun onDisplayInfoChanged(displayInfo: TelephonyDisplayInfo) {
+                            isCallbackWorking = true
                             lastDisplayInfo = displayInfo
                             // Force refresh when network type or icon changes
                             requestFreshCellInfo()
@@ -394,6 +414,26 @@ class MiniICService : Service() {
     }
 
     private fun requestFreshCellInfo() {
+        // En lugar de machacar los callbacks cada 2 segundos, esperamos 4 ciclos (8 segundos)
+        // para dar tiempo a que los listeners se asienten y el sistema operativo procese los permisos
+        if (!isCallbackWorking && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            connectionRetryCount++
+            if (connectionRetryCount >= 4) {
+                connectionRetryCount = 0
+                Log.w("MiniIC", "Primer arranque o pérdida de señal detectada. Re-instanciando componentes de radio.")
+                try {
+                    // Forzamos la recarga del servicio del sistema para refrescar el token de permisos
+                    telephonyManager = getSystemService(TELEPHONY_SERVICE) as TelephonyManager
+
+                    telephonyCallback?.let { telephonyManager.unregisterTelephonyCallback(it) }
+                    displayInfoCallback?.let { telephonyManager.unregisterTelephonyCallback(it) }
+                } catch (_: Exception) {}
+
+                registerTelephonyCallback()
+                registerDisplayInfoCallback()
+            }
+        }
+
         if (telephonyCallback == null && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
             registerTelephonyCallback()
         }
@@ -408,19 +448,14 @@ class MiniICService : Service() {
                         processCellInfo(cellInfo)
                     }
                     override fun onError(errorCode: Int, detail: Throwable?) {
-                        // Fallback to allCellInfo
                         if (ContextCompat.checkSelfPermission(this@MiniICService, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED) {
                             try {
                                 processCellInfo(telephonyManager.allCellInfo)
-                            } catch (e: SecurityException) {
-                                e.printStackTrace()
-                            }
+                            } catch (e: SecurityException) { e.printStackTrace() }
                         }
                     }
                 })
-            } catch (e: SecurityException) {
-                e.printStackTrace()
-            }
+            } catch (e: SecurityException) { e.printStackTrace() }
         }
     }
 
@@ -452,6 +487,12 @@ class MiniICService : Service() {
 
     private fun processCellInfo(infoList: List<CellInfo>?) {
         try {
+            // SI LLEGAN DATOS VÁLIDOS, EL CANAL FUNCIONA. Bloqueamos el bucle de reenganche.
+            if (!infoList.isNullOrEmpty()) {
+                isCallbackWorking = true
+                connectionRetryCount = 0
+            }
+
             val list = mutableListOf<CellData>()
             infoList?.forEach { info ->
                 val parsed = parseCell(info)
@@ -804,7 +845,7 @@ class MiniICService : Service() {
 
 // Activity Class
 class MainActivity : ComponentActivity() {
-    private var service: MiniICService? = null
+    private var service by mutableStateOf<MiniICService?>(null)
     private var isBound = false
     private lateinit var dbHelper: CellDbHelper
 
@@ -971,13 +1012,22 @@ fun MainScreenContent(dbHelper: CellDbHelper, service: MiniICService?) {
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Text(
-                "ICdetection //",
-                fontFamily = FontFamily.Monospace,
-                fontWeight = FontWeight.Bold,
-                fontSize = 18.sp,
-                color = Color.White
-            )
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    "ICdetection",
+                    fontFamily = FontFamily.Monospace,
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 18.sp,
+                    color = Color.White
+                )
+                Spacer(Modifier.width(8.dp))
+                Icon(
+                    painter = painterResource(id = R.drawable.ic_launcher_foreground),
+                    contentDescription = null,
+                    tint = Color.Unspecified,
+                    modifier = Modifier.size(24.dp)
+                )
+            }
             
             Row {
                 IconButton(onClick = { showSettings = !showSettings; showHistory = false }) {
