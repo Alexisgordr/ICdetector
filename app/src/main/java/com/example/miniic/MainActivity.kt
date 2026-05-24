@@ -35,6 +35,8 @@ import android.content.pm.PackageManager
 import android.database.Cursor
 import android.database.sqlite.SQLiteDatabase
 import android.database.sqlite.SQLiteOpenHelper
+import android.location.Location
+import android.location.LocationManager
 import android.media.AudioManager
 import android.media.ToneGenerator
 import android.os.Binder
@@ -290,7 +292,9 @@ data class CellData(
     val isSuspicious: Boolean = false,
     val suspiciousReason: String? = null,
     val timingAdvance: Int? = null,
-    val arfcn: Int? = null
+    val arfcn: Int? = null,
+    val lat: Double? = null,
+    val lon: Double? = null
 )
 
 enum class VerificationStatus {
@@ -308,6 +312,7 @@ class MiniICService : Service() {
 
     private lateinit var telephonyManager: TelephonyManager
     private lateinit var dbHelper: CellDbHelper
+    private lateinit var locationManager: LocationManager
     private var toneGenerator: ToneGenerator? = null
     private var telephonyCallback: TelephonyCallback? = null
     private var displayInfoCallback: TelephonyCallback? = null
@@ -315,6 +320,7 @@ class MiniICService : Service() {
     private var lastDisplayInfo: TelephonyDisplayInfo? = null
     private var isScreenOn = true
     private var isServiceRunning = false
+    private var lastAirplaneTriggerTime = 0L
 
     // OpenCellID API key (User should replace this)
     var openCellIdKey: String = ""
@@ -349,6 +355,7 @@ class MiniICService : Service() {
         isServiceRunning = true
         telephonyManager = getSystemService(TELEPHONY_SERVICE) as TelephonyManager
         dbHelper = CellDbHelper(this)
+        locationManager = getSystemService(LOCATION_SERVICE) as LocationManager
         
         // Load API Key and Proxy from preferences
         val prefs = getSharedPreferences("miniic_prefs", MODE_PRIVATE)
@@ -417,8 +424,9 @@ class MiniICService : Service() {
                                 isCallbackWorking = true
                                 processCellInfo(cellInfo)
                             }
-                            // CipheringStatusListener and CellularIdentifierDisclosureListener 
-                            // will be fully enabled once the SDK environment completes its sync for these specific API 34 interfaces.
+                            
+                            // Implementation note: CipheringStatusListener and CellularIdentifierDisclosureListener 
+                            // are part of TelephonyCallback in API 34 but may require specific SDK configurations to resolve.
                         }
                     } else {
                         object : TelephonyCallback(), TelephonyCallback.CellInfoListener {
@@ -632,13 +640,32 @@ class MiniICService : Service() {
             }
         }
 
-        // 5. Timing Advance Audit (Heuristic: Low TA with high power vs database)
-        // If TA is 0 or 1, antenna is physically < 150m away. 
-        // If the signal is extremely strong but verification is not "VERIFIED", it's risky.
+        // 5. Timing Advance Audit (Enhanced: Discrepancy between TA distance and database location)
         active.timingAdvance?.let { ta ->
-            if (ta <= 1 && active.dbm >= -60 && active.verified != VerificationStatus.VERIFIED) {
-                suspicious = true
-                reasons.add("Proximidad física anómala (TA=$ta)")
+            // Si la red es 5G, el TA viene en microsegundos; si es LTE/GSM, viene en pasos de ~78m
+            val taDistanceMeters = if (active.networkType.contains("5G")) {
+                ta * 150 // Conversión de microsegundos de RTT a metros (c * RTT / 2)
+            } else {
+                ta * 78  // Estándar clásico para LTE
+            }
+            if (active.lat != null && active.lon != null) {
+                getCurrentLocation()?.let { currentLoc ->
+                    val results = FloatArray(1)
+                    Location.distanceBetween(currentLoc.latitude, currentLoc.longitude, active.lat, active.lon, results)
+                    val realDistanceMeters = results[0]
+                    
+                    // If DB says 3km away but TA says 100m away, it's a spoofed CID
+                    if (realDistanceMeters > 2000 && taDistanceMeters < 500) {
+                        suspicious = true
+                        reasons.add("Suplantación de identidad (TA vs Distancia GPS)")
+                    }
+                }
+            } else {
+                // Heuristic fallback: Low TA with high power without verification
+                if (!active.networkType.contains("5G") && ta <= 1 && active.dbm >= -60 && active.verified != VerificationStatus.VERIFIED) {
+                    suspicious = true
+                    reasons.add("Proximidad física anómala (TA=$ta)")
+                }
             }
         }
 
@@ -655,6 +682,14 @@ class MiniICService : Service() {
         )
     }
 
+    private fun getCurrentLocation(): Location? {
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) return null
+        return try {
+            locationManager.getLastKnownLocation(LocationManager.GPS_PROVIDER) 
+                ?: locationManager.getLastKnownLocation(LocationManager.NETWORK_PROVIDER)
+        } catch (_: Exception) { null }
+    }
+
     private fun verifyCellWithOpenCellId(cell: CellData) {
         if (cell.cellId == "N/A" || cell.mnc == "N/A" || cell.mcc == "N/A" || openCellIdKey.isBlank() || openCellIdKey.startsWith("pk.YOUR")) return
         
@@ -667,6 +702,9 @@ class MiniICService : Service() {
             return
         }
 
+        // Lock the cache entry immediately to prevent redundant requests during the 2s polling interval
+        verificationCache[cacheKey] = VerificationStatus.PENDING
+
         val currentClient = if (isProxyEnabled) {
             client.newBuilder()
                 .proxy(Proxy(Proxy.Type.SOCKS, InetSocketAddress("127.0.0.1", 9050)))
@@ -678,33 +716,51 @@ class MiniICService : Service() {
         val url = "https://opencellid.org/cell/get?key=$openCellIdKey&mcc=${cell.mcc}&mnc=${cell.mnc}&lac=${cell.tac}&cellid=${cell.cellId}&format=json"
         
         val request = Request.Builder().url(url).build()
-        currentClient.newCall(request).enqueue(object : Callback {
-            override fun onFailure(call: Call, e: IOException) {
+        
+        // Refactored to use coroutines within the service scope
+        scope.launch(Dispatchers.IO) {
+            try {
+                currentClient.newCall(request).execute().use { response ->
+                    val body = response.body?.string()
+                    
+                    if (response.isSuccessful && body != null) {
+                        val json = JSONObject(body)
+                        if (json.has("lat")) {
+                            val lat = json.getDouble("lat")
+                            val lon = json.getDouble("lon")
+                            verificationCache[cacheKey] = VerificationStatus.VERIFIED
+                            dbHelper.updateVerificationStatus(cell.mnc, cell.tac, cell.cellId, VerificationStatus.VERIFIED)
+                            
+                            // Re-trigger analysis with coordinates
+                            val updatedActive = cell.copy(verified = VerificationStatus.VERIFIED, lat = lat, lon = lon)
+                            val analyzedActive = analyzeThreats(updatedActive, neighbors = emptyList())
+                            
+                            // Update the UI flow with the newly analyzed data (ensuring we don't lose verification during handovers)
+                            withContext(Dispatchers.Main) {
+                                _cellFlow.value = _cellFlow.value.map { 
+                                    if (it.cellId == cell.cellId) analyzedActive.copy(isRegistered = it.isRegistered) else it 
+                                }
+                                
+                                if (analyzedActive.isSuspicious && analyzedActive.isRegistered) {
+                                    toneGenerator?.startTone(ToneGenerator.TONE_CDMA_SOFT_ERROR_LITE, 200)
+                                    checkAlerts(analyzedActive)
+                                }
+                            }
+                        } else {
+                            verificationCache[cacheKey] = VerificationStatus.NOT_FOUND
+                            dbHelper.updateVerificationStatus(cell.mnc, cell.tac, cell.cellId, VerificationStatus.NOT_FOUND)
+                        }
+                    } else {
+                        val status = if (response.code == 401 || response.code == 403) VerificationStatus.ERROR else VerificationStatus.NOT_FOUND
+                        verificationCache[cacheKey] = status
+                        dbHelper.updateVerificationStatus(cell.mnc, cell.tac, cell.cellId, status)
+                    }
+                }
+            } catch (e: IOException) {
                 Log.e("MiniIC", "API Request Failure: ${e.message}")
                 verificationCache[cacheKey] = VerificationStatus.ERROR
             }
-
-            override fun onResponse(call: Call, response: Response) {
-                val body = response.body?.string()
-                if (response.isSuccessful && body != null) {
-                    val json = JSONObject(body)
-                    if (json.has("lat")) {
-                        verificationCache[cacheKey] = VerificationStatus.VERIFIED
-                        dbHelper.updateVerificationStatus(cell.mnc, cell.tac, cell.cellId, VerificationStatus.VERIFIED)
-                    } else {
-                        verificationCache[cacheKey] = VerificationStatus.NOT_FOUND
-                        dbHelper.updateVerificationStatus(cell.mnc, cell.tac, cell.cellId, VerificationStatus.NOT_FOUND)
-                    }
-                } else if (response.code == 401 || response.code == 403) {
-                    Log.e("MiniIC", "API Token Error: ${response.code}")
-                    verificationCache[cacheKey] = VerificationStatus.ERROR
-                    dbHelper.updateVerificationStatus(cell.mnc, cell.tac, cell.cellId, VerificationStatus.ERROR)
-                } else {
-                    verificationCache[cacheKey] = VerificationStatus.NOT_FOUND
-                    dbHelper.updateVerificationStatus(cell.mnc, cell.tac, cell.cellId, VerificationStatus.NOT_FOUND)
-                }
-            }
-        })
+        }
     }
 
     private fun checkAlerts(cell: CellData) {
@@ -765,6 +821,12 @@ class MiniICService : Service() {
     }
 
     private fun triggerAirplaneMode() {
+        val currentTime = System.currentTimeMillis()
+        // 60-second cooldown to avoid "Death Loop" in 2G/3G areas
+        if (currentTime - lastAirplaneTriggerTime < 60000L) return
+        
+        lastAirplaneTriggerTime = currentTime
+
         Log.e("MiniIC", "CRITICAL: 2G/3G network detected! Attempting Airplane Mode fallback.")
         toneGenerator?.startTone(ToneGenerator.TONE_PROP_BEEP2, 500)
         
@@ -865,10 +927,22 @@ class MiniICService : Service() {
             }
             is CellInfoNr -> {
                 val id = info.cellIdentity as CellIdentityNr
-                val dbm = (info.cellSignalStrength as CellSignalStrengthNr).ssRsrp
+                val strength = info.cellSignalStrength as CellSignalStrengthNr
+                val dbm = strength.ssRsrp
+                
+                // Forzamos el uso de timingAdvanceMicros (disponible en API 34+) para Pixel 9a
+                val ta = if (Build.VERSION.SDK_INT >= 34) {
+                    try {
+                        // Usamos reflexión para asegurar compatibilidad en el build
+                        val method = strength.javaClass.getMethod("getTimingAdvanceMicros")
+                        val res = method.invoke(strength) as Int
+                        if (res == Int.MAX_VALUE || res == -1) null else res
+                    } catch (_: Exception) { null }
+                } else null
+
                 val mcc = id.mccString ?: getNetworkOperatorMcc()
                 val mnc = id.mncString ?: getNetworkOperatorMnc()
-                CellData(reg, networkTypeString, id.nci.valOrNa(), mnc, id.tac.valOrNa(), dbm, mcc, arfcn = id.nrarfcn)
+                CellData(reg, networkTypeString, id.nci.valOrNa(), mnc, id.tac.valOrNa(), dbm, mcc, timingAdvance = ta, arfcn = id.nrarfcn)
             }
             is CellInfoWcdma -> {
                 val id = info.cellIdentity
@@ -1280,50 +1354,7 @@ fun MainScreenContent(dbHelper: CellDbHelper, service: MiniICService?) {
                 )
             }
 
-            // Firma del autor
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(vertical = 8.dp),
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                // Botón de Donación / Apoyo
-                val context = LocalContext.current
-                TextButton(
-                    onClick = {
-                        val intent = Intent(Intent.ACTION_VIEW, "https://buymeacoffee.com/alexisgomez".toUri())
-                        context.startActivity(intent)
-                    },
-                    colors = ButtonDefaults.textButtonColors(contentColor = Color(0xFFFFDD00)), // Color característico de BuyMeACoffee
-                    modifier = Modifier
-                        .height(32.dp)
-                        .border(BorderStroke(0.5.dp, Color(0xFF333333)), RoundedCornerShape(16.dp))
-                        .padding(horizontal = 8.dp)
-                ) {
-                    Icon(
-                        Icons.Default.Favorite, 
-                        contentDescription = null, 
-                        modifier = Modifier.size(14.dp),
-                        tint = Color(0xFFCF6679)
-                    )
-                    Spacer(Modifier.width(6.dp))
-                    Text(
-                        "APOYAR PROYECTO", 
-                        fontFamily = FontFamily.Monospace, 
-                        fontSize = 10.sp, 
-                        fontWeight = FontWeight.Bold
-                    )
-                }
-
-                Text(
-                    text = "HECHO POR ALEXIS G. // OPEN SOURCE",
-                    fontFamily = FontFamily.Monospace,
-                    fontSize = 10.sp,
-                    color = Color(0xFF333333),
-                    letterSpacing = 2.sp
-                )
-            }
+            AuthorSignature()
         }
     }
 }
@@ -1700,50 +1731,54 @@ fun HistoryPanel(dbHelper: CellDbHelper, onBack: () -> Unit) {
                 }
             }
 
-            // Firma del autor
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(vertical = 8.dp),
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                // Botón de Donación / Apoyo
-                val context = LocalContext.current
-                TextButton(
-                    onClick = {
-                        val intent = Intent(Intent.ACTION_VIEW, "https://buymeacoffee.com/alexisgomez".toUri())
-                        context.startActivity(intent)
-                    },
-                    colors = ButtonDefaults.textButtonColors(contentColor = Color(0xFFFFDD00)), // Color característico de BuyMeACoffee
-                    modifier = Modifier
-                        .height(32.dp)
-                        .border(BorderStroke(0.5.dp, Color(0xFF333333)), RoundedCornerShape(16.dp))
-                        .padding(horizontal = 8.dp)
-                ) {
-                    Icon(
-                        Icons.Default.Favorite, 
-                        contentDescription = null, 
-                        modifier = Modifier.size(14.dp),
-                        tint = Color(0xFFCF6679)
-                    )
-                    Spacer(Modifier.width(6.dp))
-                    Text(
-                        "APOYAR PROYECTO", 
-                        fontFamily = FontFamily.Monospace, 
-                        fontSize = 10.sp, 
-                        fontWeight = FontWeight.Bold
-                    )
-                }
-
-                Text(
-                    text = "HECHO POR ALEXIS G. // OPEN SOURCE",
-                    fontFamily = FontFamily.Monospace,
-                    fontSize = 10.sp,
-                    color = Color(0xFF333333),
-                    letterSpacing = 2.sp
-                )
-            }
+            AuthorSignature()
         }
+    }
+}
+
+@Composable
+fun AuthorSignature() {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 8.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        // Botón de Donación / Apoyo
+        val context = LocalContext.current
+        TextButton(
+            onClick = {
+                val intent = Intent(Intent.ACTION_VIEW, "https://buymeacoffee.com/alexisgomez".toUri())
+                context.startActivity(intent)
+            },
+            colors = ButtonDefaults.textButtonColors(contentColor = Color(0xFFFFDD00)), // Color característico de BuyMeACoffee
+            modifier = Modifier
+                .height(32.dp)
+                .border(BorderStroke(0.5.dp, Color(0xFF333333)), RoundedCornerShape(16.dp))
+                .padding(horizontal = 8.dp)
+        ) {
+            Icon(
+                Icons.Default.Favorite, 
+                contentDescription = null, 
+                modifier = Modifier.size(14.dp),
+                tint = Color(0xFFCF6679)
+            )
+            Spacer(Modifier.width(6.dp))
+            Text(
+                "APOYAR PROYECTO", 
+                fontFamily = FontFamily.Monospace, 
+                fontSize = 10.sp, 
+                fontWeight = FontWeight.Bold
+            )
+        }
+
+        Text(
+            text = "HECHO POR ALEXIS G. // OPEN SOURCE",
+            fontFamily = FontFamily.Monospace,
+            fontSize = 10.sp,
+            color = Color(0xFF333333),
+            letterSpacing = 2.sp
+        )
     }
 }
