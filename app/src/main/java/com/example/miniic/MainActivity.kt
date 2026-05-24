@@ -67,7 +67,6 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -1220,6 +1219,36 @@ fun MainScreenContent(dbHelper: CellDbHelper, service: MiniICService?) {
         } else if (showHistory) {
             HistoryPanel(dbHelper = dbHelper) { showHistory = false }
         } else {
+            // Define visual security states
+            val (statusText, statusColor) = when {
+                active == null -> "BUSCANDO SEÑAL..." to Color(0xFF888888)
+                active.isSuspicious -> "SISTEMA EN COMPROMISO" to Color(0xFFCF6679)
+                active.verified == VerificationStatus.VERIFIED -> "ENTORNO SEGURO" to Color(0xFF4CAF50)
+                else -> "MONITORIZANDO RED" to Color(0xFFFFA000)
+            }
+
+            // Radar Style Header
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.cardColors(containerColor = statusColor.copy(alpha = 0.08f)),
+                border = BorderStroke(1.dp, statusColor.copy(alpha = 0.3f)),
+                shape = RoundedCornerShape(4.dp)
+            ) {
+                Row(
+                    modifier = Modifier.padding(16.dp).fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column {
+                        Text("ESTADO DEL SECTOR", color = Color(0xFF666666), fontFamily = FontFamily.Monospace, fontSize = 10.sp)
+                        Text(statusText, color = statusColor, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Bold, fontSize = 16.sp, letterSpacing = 1.sp)
+                    }
+                    if (active?.isSuspicious == true) {
+                        Icon(Icons.Default.Warning, contentDescription = null, tint = Color.Red, modifier = Modifier.size(24.dp))
+                    }
+                }
+            }
+
             // Monitor parameters
             Box(
                 modifier = Modifier
@@ -1233,39 +1262,38 @@ fun MainScreenContent(dbHelper: CellDbHelper, service: MiniICService?) {
                         .verticalScroll(rememberScrollState()),
                     verticalArrangement = Arrangement.spacedBy(16.dp)
                 ) {
-                    // Main reading
+                    // Main Grid Card
                     Card(
                         modifier = Modifier.fillMaxWidth(),
                         colors = CardDefaults.cardColors(containerColor = Color(0xFF111111)),
+                        border = BorderStroke(0.5.dp, Color(0xFF222222)),
                         shape = RoundedCornerShape(4.dp)
                     ) {
-                        Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                                Text("RED", color = Color(0xFF666666), fontFamily = FontFamily.Monospace, fontSize = 12.sp)
-                                Text(active?.networkType ?: "BUSCANDO...", color = Color.White, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Bold)
-                            }
-                            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                                Text("CELL ID", color = Color(0xFF666666), fontFamily = FontFamily.Monospace, fontSize = 12.sp)
-                                Text(active?.cellId ?: "N/A", color = Color.White, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Bold)
-                            }
-                            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                                Text("TAC", color = Color(0xFF666666), fontFamily = FontFamily.Monospace, fontSize = 12.sp)
-                                Text(active?.tac ?: "N/A", color = Color.White, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Bold)
-                            }
-                            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                                Text("MNC", color = Color(0xFF666666), fontFamily = FontFamily.Monospace, fontSize = 12.sp)
-                                Text(active?.mnc ?: "N/A", color = Color.White, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Bold)
-                            }
-                            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                                Text("POTENCIA", color = Color(0xFF666666), fontFamily = FontFamily.Monospace, fontSize = 12.sp)
-                                Text(if (active == null) "N/A" else "${active.dbm} dBm", color = Color.White, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Bold)
+                        Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                            // Row 1: Tech and Power
+                            Row(modifier = Modifier.fillMaxWidth()) {
+                                DataBox(modifier = Modifier.weight(1f), label = "TECNOLOGÍA", value = active?.networkType ?: "N/A")
+                                DataBox(modifier = Modifier.weight(1f), label = "POTENCIA", value = if (active == null) "N/A" else "${active.dbm} dBm")
                             }
                             
-                            HorizontalDivider(color = Color(0xFF222222), thickness = 1.dp)
+                            HorizontalDivider(color = Color(0xFF1A1A1A))
 
-                            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                                Text("VERIFICACIÓN", color = Color(0xFF666666), fontFamily = FontFamily.Monospace, fontSize = 12.sp)
-                                VerificationBadge(active?.verified ?: VerificationStatus.PENDING)
+                            // Row 2: Cell ID and TAC
+                            Row(modifier = Modifier.fillMaxWidth()) {
+                                DataBox(modifier = Modifier.weight(1f), label = "CELL ID", value = active?.cellId ?: "N/A", highlight = true)
+                                DataBox(modifier = Modifier.weight(1f), label = "TAC / LAC", value = active?.tac ?: "N/A")
+                            }
+
+                            HorizontalDivider(color = Color(0xFF1A1A1A))
+
+                            // Row 3: MNC and Verification
+                            Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                                DataBox(modifier = Modifier.weight(1f), label = "OPERADOR (MNC)", value = active?.mnc ?: "N/A")
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text("VERIFICACIÓN", color = Color(0xFF555555), fontFamily = FontFamily.Monospace, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                                    Spacer(Modifier.height(4.dp))
+                                    VerificationBadge(active?.verified ?: VerificationStatus.PENDING)
+                                }
                             }
 
                             if (active != null) {
@@ -1308,6 +1336,7 @@ fun MainScreenContent(dbHelper: CellDbHelper, service: MiniICService?) {
                         Card(
                             modifier = Modifier.fillMaxWidth(),
                             colors = CardDefaults.cardColors(containerColor = Color(0xFF111111)),
+                            border = BorderStroke(0.5.dp, Color(0xFF222222)),
                             shape = RoundedCornerShape(4.dp)
                         ) {
                             Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
@@ -1319,10 +1348,11 @@ fun MainScreenContent(dbHelper: CellDbHelper, service: MiniICService?) {
                                         checked = service.isStrongSignalAlarmEnabled,
                                         onCheckedChange = { service.isStrongSignalAlarmEnabled = it },
                                         colors = SwitchDefaults.colors(
-                                            checkedThumbColor = Color.White,
+                                            checkedThumbColor = Color.Black,
                                             checkedTrackColor = Color(0xFF4CAF50),
-                                            uncheckedThumbColor = Color(0xFF888888),
-                                            uncheckedTrackColor = Color(0xFF333333)
+                                            uncheckedThumbColor = Color(0xFF444444),
+                                            uncheckedTrackColor = Color(0xFF141414),
+                                            uncheckedBorderColor = Color(0xFF333333)
                                         )
                                     )
                                 }
@@ -1333,10 +1363,11 @@ fun MainScreenContent(dbHelper: CellDbHelper, service: MiniICService?) {
                                         checked = service.is3gAirplaneModeEnabled,
                                         onCheckedChange = { service.is3gAirplaneModeEnabled = it },
                                         colors = SwitchDefaults.colors(
-                                            checkedThumbColor = Color.White,
+                                            checkedThumbColor = Color.Black,
                                             checkedTrackColor = Color(0xFF4CAF50),
-                                            uncheckedThumbColor = Color(0xFF888888),
-                                            uncheckedTrackColor = Color(0xFF333333)
+                                            uncheckedThumbColor = Color(0xFF444444),
+                                            uncheckedTrackColor = Color(0xFF141414),
+                                            uncheckedBorderColor = Color(0xFF333333)
                                         )
                                     )
                                 }
@@ -1434,6 +1465,68 @@ fun SettingsPanel(service: MiniICService?, onSave: () -> Unit) {
 }
 
 @Composable
+fun AuthorSignature() {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 8.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        // Botón de Donación / Apoyo
+        val context = LocalContext.current
+        TextButton(
+            onClick = {
+                val intent = Intent(Intent.ACTION_VIEW, "https://buymeacoffee.com/alexisgomez".toUri())
+                context.startActivity(intent)
+            },
+            colors = ButtonDefaults.textButtonColors(contentColor = Color(0xFFFFDD00)), // Color característico de BuyMeACoffee
+            modifier = Modifier
+                .height(32.dp)
+                .border(BorderStroke(0.5.dp, Color(0xFF333333)), RoundedCornerShape(16.dp))
+                .padding(horizontal = 8.dp)
+        ) {
+            Icon(
+                Icons.Default.Favorite, 
+                contentDescription = null, 
+                modifier = Modifier.size(14.dp),
+                tint = Color(0xFFCF6679)
+            )
+            Spacer(Modifier.width(6.dp))
+            Text(
+                "APOYAR PROYECTO", 
+                fontFamily = FontFamily.Monospace, 
+                fontSize = 10.sp, 
+                fontWeight = FontWeight.Bold
+            )
+        }
+
+        Text(
+            text = "HECHO POR ALEXIS G. // OPEN SOURCE",
+            fontFamily = FontFamily.Monospace,
+            fontSize = 10.sp,
+            color = Color(0xFF333333),
+            letterSpacing = 2.sp
+        )
+    }
+}
+
+@Composable
+fun DataBox(modifier: Modifier, label: String, value: String, highlight: Boolean = false) {
+    Column(modifier = modifier) {
+        Text(label, color = Color(0xFF555555), fontFamily = FontFamily.Monospace, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+        Spacer(Modifier.height(4.dp))
+        Text(
+            text = value, 
+            color = if (highlight) Color(0xFFE0E0E0) else Color.White, 
+            fontFamily = FontFamily.Monospace, 
+            fontSize = 14.sp, 
+            fontWeight = FontWeight.SemiBold
+        )
+    }
+}
+
+@Composable
 fun SignalVisualizer(active: CellData, neighbors: List<CellData>) {
     Column(
         modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
@@ -1442,7 +1535,7 @@ fun SignalVisualizer(active: CellData, neighbors: List<CellData>) {
         Text("COMPARATIVA DE SEÑAL", color = Color(0xFF444444), fontFamily = FontFamily.Monospace, fontSize = 10.sp, fontWeight = FontWeight.Bold)
         
         // Active Cell Bar
-        SignalBar(
+        SignalBarSegmented(
             label = "ACTIVA (${active.networkType})", 
             dbm = active.dbm, 
             isMain = true,
@@ -1451,7 +1544,7 @@ fun SignalVisualizer(active: CellData, neighbors: List<CellData>) {
         
         // Neighbors (Top 3 strongest)
         neighbors.sortedByDescending { it.dbm }.take(3).forEach { neighbor ->
-            SignalBar(
+            SignalBarSegmented(
                 label = "VECINA (${neighbor.cellId})", 
                 dbm = neighbor.dbm, 
                 isMain = false,
@@ -1462,32 +1555,36 @@ fun SignalVisualizer(active: CellData, neighbors: List<CellData>) {
 }
 
 @Composable
-fun SignalBar(label: String, dbm: Int, isMain: Boolean, isSuspicious: Boolean) {
-    val progress = ((dbm + 140).coerceIn(0, 100).toFloat() / 100f)
+fun SignalBarSegmented(label: String, dbm: Int, isMain: Boolean, isSuspicious: Boolean) {
+    // Normalizar la señal de 0 a 10 bloques
+    val totalBlocks = 10
+    val activeBlocks = ((dbm + 140).coerceIn(0, 100).toFloat() / 100f * totalBlocks).toInt()
     
-    val barColor = when {
+    val blockColor = when {
         isSuspicious -> Color.Red
         isMain -> Color(0xFF4CAF50)
         else -> Color(0xFF888888)
     }
-    
-    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+
+    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-            Text(label, color = Color(0xFF888888), fontSize = 9.sp, fontFamily = FontFamily.Monospace)
+            Text(label, color = Color(0xFF666666), fontSize = 9.sp, fontFamily = FontFamily.Monospace)
             Text("$dbm dBm", color = Color.White, fontSize = 9.sp, fontFamily = FontFamily.Monospace)
         }
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(4.dp)
-                .background(Color(0xFF222222))
+        
+        // Fila de bloques
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(3.dp) // Espaciado entre segmentos
         ) {
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth(progress)
-                    .fillMaxHeight()
-                    .background(barColor)
-            )
+            for (i in 0 until totalBlocks) {
+                Box(
+                    modifier = Modifier
+                        .weight(1f)
+                        .height(6.dp)
+                        .background(if (i < activeBlocks) blockColor else Color(0xFF1A1A1A), RoundedCornerShape(1.dp))
+                )
+            }
         }
     }
 }
@@ -1733,52 +1830,5 @@ fun HistoryPanel(dbHelper: CellDbHelper, onBack: () -> Unit) {
 
             AuthorSignature()
         }
-    }
-}
-
-@Composable
-fun AuthorSignature() {
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(vertical = 8.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(8.dp)
-    ) {
-        // Botón de Donación / Apoyo
-        val context = LocalContext.current
-        TextButton(
-            onClick = {
-                val intent = Intent(Intent.ACTION_VIEW, "https://buymeacoffee.com/alexisgomez".toUri())
-                context.startActivity(intent)
-            },
-            colors = ButtonDefaults.textButtonColors(contentColor = Color(0xFFFFDD00)), // Color característico de BuyMeACoffee
-            modifier = Modifier
-                .height(32.dp)
-                .border(BorderStroke(0.5.dp, Color(0xFF333333)), RoundedCornerShape(16.dp))
-                .padding(horizontal = 8.dp)
-        ) {
-            Icon(
-                Icons.Default.Favorite, 
-                contentDescription = null, 
-                modifier = Modifier.size(14.dp),
-                tint = Color(0xFFCF6679)
-            )
-            Spacer(Modifier.width(6.dp))
-            Text(
-                "APOYAR PROYECTO", 
-                fontFamily = FontFamily.Monospace, 
-                fontSize = 10.sp, 
-                fontWeight = FontWeight.Bold
-            )
-        }
-
-        Text(
-            text = "HECHO POR ALEXIS G. // OPEN SOURCE",
-            fontFamily = FontFamily.Monospace,
-            fontSize = 10.sp,
-            color = Color(0xFF333333),
-            letterSpacing = 2.sp
-        )
     }
 }
