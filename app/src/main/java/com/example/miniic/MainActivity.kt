@@ -795,7 +795,7 @@ class MiniICService : Service() {
         }
 
         val credentials = okhttp3.Credentials.basic(wigleApiName, wigleApiToken)
-        val url = "https://api.wigle.net/api/v2/cell/search?mcc=${cell.mcc}&mnc=${cell.mnc}&lac=${cell.tac}&cellid=${cell.cellId}"
+        val url = "https://api.wigle.net/api/v2/cell/search?cell_net=${cell.mcc}&cell_op=${cell.mnc}&cell_lac=${cell.tac}&cell_id=${cell.cellId}"
         val request = Request.Builder().url(url).header("Authorization", credentials).build()
         
         return try {
