@@ -84,7 +84,6 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
-import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.Warning
@@ -142,11 +141,8 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import okhttp3.Call
-import okhttp3.Callback
 import okhttp3.OkHttpClient
 import okhttp3.Request
-import okhttp3.Response
 import org.json.JSONObject
 import java.io.File
 import java.io.FileWriter
@@ -697,29 +693,44 @@ class MiniICService : Service() {
         if (cell.cellId == "N/A" || cell.mnc == "N/A" || cell.mcc == "N/A") return
         
         val cacheKey = "${cell.mcc}-${cell.mnc}-${cell.tac}-${cell.cellId}"
-        if (verificationCache.containsKey(cacheKey) && verificationCache[cacheKey] != VerificationStatus.PENDING) return
         
-        // Persistent cache check
+        // 🛡️ CORTAFUEGOS 1: Si la celda ya existe en la caché, se corta la ejecución.
+        if (verificationCache.containsKey(cacheKey)) {
+            return 
+        }
+        
+        // 🛡️ CORTAFUEGOS 2: Comprobación previa en la persistencia local SQLite
         if (dbHelper.isCellVerified(cell.mnc, cell.tac, cell.cellId)) {
             verificationCache[cacheKey] = VerificationStatus.VERIFIED
             return
         }
 
-        if (openCellIdKey.isNotBlank() && !openCellIdKey.startsWith("pk.YOUR")) {
-            verifyCellWithOpenCellId(cell)
-        }
-        
-        if (wigleApiName.isNotBlank() && wigleApiToken.isNotBlank()) {
-            verifyCellWithWigle(cell)
+        // Marcamos como PENDING inmediatamente para bloquear ráfagas
+        verificationCache[cacheKey] = VerificationStatus.PENDING
+
+        // 🛡️ MOTOR DE SINCRONIZACIÓN: Ejecución secuencial en hilo de fondo
+        scope.launch(Dispatchers.IO) {
+            var found = false
+            
+            // 1. Intentar con WiGLE primero (si está configurado)
+            if (wigleApiName.isNotBlank() && wigleApiToken.isNotBlank()) {
+                found = tryWigleSync(cell, cacheKey)
+            }
+            
+            // 2. Si no se encontró en WiGLE, intentamos con OpenCellId
+            if (!found && openCellIdKey.isNotBlank() && !openCellIdKey.startsWith("pk.YOUR")) {
+                found = tryOpenCellIdSync(cell, cacheKey)
+            }
+            
+            // 3. Si ninguno encontró nada, marcamos como NOT_FOUND definitivamente
+            if (!found) {
+                verificationCache[cacheKey] = VerificationStatus.NOT_FOUND
+                dbHelper.updateVerificationStatus(cell.mnc, cell.tac, cell.cellId, VerificationStatus.NOT_FOUND)
+            }
         }
     }
 
-    private fun verifyCellWithOpenCellId(cell: CellData) {
-        val cacheKey = "${cell.mcc}-${cell.mnc}-${cell.tac}-${cell.cellId}"
-        
-        // Lock the cache entry immediately
-        verificationCache[cacheKey] = VerificationStatus.PENDING
-
+    private fun tryOpenCellIdSync(cell: CellData, cacheKey: String): Boolean {
         val currentClient = if (isProxyEnabled) {
             client.newBuilder()
                 .proxy(Proxy(Proxy.Type.SOCKS, InetSocketAddress("127.0.0.1", 9050)))
@@ -729,27 +740,25 @@ class MiniICService : Service() {
         }
 
         val url = "https://opencellid.org/cell/get?key=$openCellIdKey&mcc=${cell.mcc}&mnc=${cell.mnc}&lac=${cell.tac}&cellid=${cell.cellId}&format=json"
-        
         val request = Request.Builder().url(url).build()
         
-        scope.launch(Dispatchers.IO) {
-            try {
-                currentClient.newCall(request).execute().use { response ->
-                    handleApiResponse(response, cell, cacheKey)
-                }
-            } catch (e: IOException) {
-                Log.e("MiniIC", "OpenCellID Request Failure: ${e.message}")
-                verificationCache[cacheKey] = VerificationStatus.ERROR
+        return try {
+            currentClient.newCall(request).execute().use { response ->
+                val body = response.body?.string()
+                if (response.isSuccessful && body != null) {
+                    val json = JSONObject(body)
+                    if (json.has("lat")) {
+                        processSuccessfulVerification(json.getDouble("lat"), json.getDouble("lon"), cell, cacheKey)
+                        true
+                    } else false
+                } else false
             }
+        } catch (_: IOException) {
+            false
         }
     }
 
-    private fun verifyCellWithWigle(cell: CellData) {
-        val cacheKey = "${cell.mcc}-${cell.mnc}-${cell.tac}-${cell.cellId}"
-        
-        // If already verified or being verified, we might still want to try WiGLE if first failed
-        if (verificationCache[cacheKey] == VerificationStatus.VERIFIED) return
-
+    private fun tryWigleSync(cell: CellData, cacheKey: String): Boolean {
         val currentClient = if (isProxyEnabled) {
             client.newBuilder()
                 .proxy(Proxy(Proxy.Type.SOCKS, InetSocketAddress("127.0.0.1", 9050)))
@@ -758,77 +767,39 @@ class MiniICService : Service() {
             client
         }
 
-        // Basic Auth for WiGLE
         val credentials = okhttp3.Credentials.basic(wigleApiName, wigleApiToken)
-        
         val url = "https://api.wigle.net/api/v2/cell/search?mcc=${cell.mcc}&mnc=${cell.mnc}&lac=${cell.tac}&cellid=${cell.cellId}"
+        val request = Request.Builder().url(url).header("Authorization", credentials).build()
         
-        val request = Request.Builder()
-            .url(url)
-            .header("Authorization", credentials)
-            .build()
-        
-        scope.launch(Dispatchers.IO) {
-            try {
-                currentClient.newCall(request).execute().use { response ->
-                    handleWigleResponse(response, cell, cacheKey)
-                }
-            } catch (e: IOException) {
-                Log.e("MiniIC", "WiGLE Request Failure: ${e.message}")
-                if (verificationCache[cacheKey] == VerificationStatus.PENDING) {
-                    verificationCache[cacheKey] = VerificationStatus.ERROR
-                }
+        return try {
+            currentClient.newCall(request).execute().use { response ->
+                val body = response.body?.string()
+                if (response.isSuccessful && body != null) {
+                    val json = JSONObject(body)
+                    if (json.has("success") && json.getBoolean("success") && json.has("results")) {
+                        val results = json.getJSONArray("results")
+                        if (results.length() > 0) {
+                            val first = results.getJSONObject(0)
+                            val lat = first.optDouble("trilat", first.optDouble("lat", 0.0))
+                            val lon = first.optDouble("trilong", first.optDouble("lon", 0.0))
+                            processSuccessfulVerification(lat, lon, cell, cacheKey)
+                            true
+                        } else false
+                    } else false
+                } else false
             }
-        }
-    }
-
-    private fun handleApiResponse(response: Response, cell: CellData, cacheKey: String) {
-        val body = response.body?.string()
-        if (response.isSuccessful && body != null) {
-            val json = JSONObject(body)
-            if (json.has("lat")) {
-                processSuccessfulVerification(json.getDouble("lat"), json.getDouble("lon"), cell, cacheKey)
-            } else {
-                verificationCache[cacheKey] = VerificationStatus.NOT_FOUND
-                dbHelper.updateVerificationStatus(cell.mnc, cell.tac, cell.cellId, VerificationStatus.NOT_FOUND)
-            }
-        } else {
-            val status = if (response.code == 401 || response.code == 403) VerificationStatus.ERROR else VerificationStatus.NOT_FOUND
-            verificationCache[cacheKey] = status
-            dbHelper.updateVerificationStatus(cell.mnc, cell.tac, cell.cellId, status)
-        }
-    }
-
-    private fun handleWigleResponse(response: Response, cell: CellData, cacheKey: String) {
-        val body = response.body?.string()
-        if (response.isSuccessful && body != null) {
-            val json = JSONObject(body)
-            if (json.has("success") && json.getBoolean("success") && json.has("results")) {
-                val results = json.getJSONArray("results")
-                if (results.length() > 0) {
-                    val first = results.getJSONObject(0)
-                    val lat = first.optDouble("trilat", first.optDouble("lat", 0.0))
-                    val lon = first.optDouble("trilong", first.optDouble("lon", 0.0))
-                    processSuccessfulVerification(lat, lon, cell, cacheKey)
-                } else {
-                    if (verificationCache[cacheKey] == VerificationStatus.PENDING) {
-                        verificationCache[cacheKey] = VerificationStatus.NOT_FOUND
-                        dbHelper.updateVerificationStatus(cell.mnc, cell.tac, cell.cellId, VerificationStatus.NOT_FOUND)
-                    }
-                }
-            }
-        } else {
-             if (verificationCache[cacheKey] == VerificationStatus.PENDING) {
-                val status = if (response.code == 401 || response.code == 403) VerificationStatus.ERROR else VerificationStatus.NOT_FOUND
-                verificationCache[cacheKey] = status
-                dbHelper.updateVerificationStatus(cell.mnc, cell.tac, cell.cellId, status)
-             }
+        } catch (_: IOException) {
+            false
         }
     }
 
     private fun processSuccessfulVerification(lat: Double, lon: Double, cell: CellData, cacheKey: String) {
         verificationCache[cacheKey] = VerificationStatus.VERIFIED
-        dbHelper.updateVerificationStatus(cell.mnc, cell.tac, cell.cellId, VerificationStatus.VERIFIED)
+        dbHelper.updateVerificationStatus(
+            cell.mnc,
+            cell.tac,
+            cell.cellId,
+            VerificationStatus.VERIFIED)
         
         // Re-trigger analysis with coordinates
         val updatedActive = cell.copy(verified = VerificationStatus.VERIFIED, lat = lat, lon = lon)
@@ -1196,7 +1167,9 @@ fun MainLayout(context: Context, dbHelper: CellDbHelper, service: MiniICService?
     }
 
     if (!hasLoc || !hasPhone || !hasNotif) {
-        Box(modifier = Modifier.fillMaxSize().padding(32.dp), contentAlignment = Alignment.Center) {
+        Box(modifier = Modifier
+            .fillMaxSize()
+            .padding(32.dp), contentAlignment = Alignment.Center) {
             Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(16.dp)) {
                 Text(
                     "ICdetection requiere permisos de localización, teléfono y notificaciones para funcionar.",
@@ -1320,7 +1293,9 @@ fun MainScreenContent(dbHelper: CellDbHelper, service: MiniICService?) {
                 shape = RoundedCornerShape(4.dp)
             ) {
                 Row(
-                    modifier = Modifier.padding(16.dp).fillMaxWidth(),
+                    modifier = Modifier
+                        .padding(16.dp)
+                        .fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
@@ -1499,8 +1474,10 @@ fun SettingsPanel(service: MiniICService?, onSave: () -> Unit) {
         ) {
             Text("CONFIGURACIÓN", color = Color(0xFF666666), fontFamily = FontFamily.Monospace, fontSize = 12.sp)
             
+            Text("APIS", color = Color.White, fontSize = 14.sp, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Bold)
+            
             // OpenCellID Section
-            Text("OpenCellID API Token", color = Color.White, fontSize = 14.sp, fontFamily = FontFamily.Monospace)
+            Text("OpenCellID Token", color = Color(0xFF888888), fontSize = 11.sp, fontFamily = FontFamily.Monospace)
             OutlinedTextField(
                 value = token,
                 onValueChange = { token = it },
@@ -1515,12 +1492,10 @@ fun SettingsPanel(service: MiniICService?, onSave: () -> Unit) {
                 )
             )
 
-            HorizontalDivider(color = Color(0xFF222222), modifier = Modifier.padding(vertical = 4.dp))
+            HorizontalDivider(color = Color(0xFF1A1A1A), modifier = Modifier.padding(vertical = 4.dp))
 
             // WiGLE Section
-            Text("WiGLE API Credentials", color = Color.White, fontSize = 14.sp, fontFamily = FontFamily.Monospace)
-            
-            Text("API Name", color = Color(0xFF888888), fontSize = 11.sp, fontFamily = FontFamily.Monospace)
+            Text("WiGLE API Name", color = Color(0xFF888888), fontSize = 11.sp, fontFamily = FontFamily.Monospace)
             OutlinedTextField(
                 value = wigleName,
                 onValueChange = { wigleName = it },
@@ -1534,7 +1509,7 @@ fun SettingsPanel(service: MiniICService?, onSave: () -> Unit) {
                 )
             )
 
-            Text("API Token", color = Color(0xFF888888), fontSize = 11.sp, fontFamily = FontFamily.Monospace)
+            Text("WiGLE API Token", color = Color(0xFF888888), fontSize = 11.sp, fontFamily = FontFamily.Monospace)
             OutlinedTextField(
                 value = wigleToken,
                 onValueChange = { wigleToken = it },
@@ -1588,7 +1563,7 @@ fun SettingsPanel(service: MiniICService?, onSave: () -> Unit) {
             }
             
             Text(
-                "Configura OpenCellID o WiGLE para habilitar la verificación de antenas. Los datos se consultan de forma segura.",
+                "Configura tus APIS para habilitar la verificación de antenas. Los datos se consultan de forma segura.",
                 color = Color(0xFF888888),
                 fontSize = 10.sp,
                 fontFamily = FontFamily.Monospace,
@@ -1663,7 +1638,9 @@ fun DataBox(modifier: Modifier, label: String, value: String, highlight: Boolean
 @Composable
 fun SignalVisualizer(active: CellData, neighbors: List<CellData>) {
     Column(
-        modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(top = 8.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
         Text("COMPARATIVA DE SEÑAL", color = Color(0xFF444444), fontFamily = FontFamily.Monospace, fontSize = 10.sp, fontWeight = FontWeight.Bold)
@@ -1716,7 +1693,10 @@ fun SignalBarSegmented(label: String, dbm: Int, isMain: Boolean, isSuspicious: B
                     modifier = Modifier
                         .weight(1f)
                         .height(6.dp)
-                        .background(if (i < activeBlocks) blockColor else Color(0xFF1A1A1A), RoundedCornerShape(1.dp))
+                        .background(
+                            if (i < activeBlocks) blockColor else Color(0xFF1A1A1A),
+                            RoundedCornerShape(1.dp)
+                        )
                 )
             }
         }
@@ -1831,7 +1811,9 @@ fun HistoryPanel(dbHelper: CellDbHelper, onBack: () -> Unit) {
         }
 
         if (items.isEmpty()) {
-            Box(modifier = Modifier.fillMaxWidth().weight(1f), contentAlignment = Alignment.Center) {
+            Box(modifier = Modifier
+                .fillMaxWidth()
+                .weight(1f), contentAlignment = Alignment.Center) {
                 Text("HISTORIAL VACÍO", color = Color(0xFF444444), fontFamily = FontFamily.Monospace, fontSize = 12.sp)
             }
         } else {
@@ -1848,7 +1830,9 @@ fun HistoryPanel(dbHelper: CellDbHelper, onBack: () -> Unit) {
                     Text("EXPORTAR CSV", fontFamily = FontFamily.Monospace, fontSize = 11.sp)
                 }
             }
-            LazyColumn(modifier = Modifier.fillMaxWidth().weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            LazyColumn(modifier = Modifier
+                .fillMaxWidth()
+                .weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 items(groupedItems) { (cid, records) ->
                     val isExpanded = expandedCids.contains(cid)
                     val first = records.first()
@@ -1885,61 +1869,6 @@ fun HistoryPanel(dbHelper: CellDbHelper, onBack: () -> Unit) {
                             if (isExpanded) {
                                 Spacer(Modifier.height(12.dp))
                                 
-                                // Botón de Ver en Mapa (Solo para verificadas)
-                                if (first.verified == VerificationStatus.VERIFIED) {
-                                    val context = LocalContext.current
-                                    // Buscamos un MCC válido en el grupo por si el primero es "N/A"
-                                    val validMcc = records.firstOrNull { it.mcc != "N/A" }?.mcc ?: first.mcc
-                                    val validMnc = records.firstOrNull { it.mnc != "N/A" }?.mnc ?: first.mnc
-                                    
-                                    TextButton(
-                                        onClick = {
-                                            val prefs = context.getSharedPreferences("miniic_prefs", Context.MODE_PRIVATE)
-                                            val token = prefs.getString("opencellid_key", "") ?: ""
-                                            
-                                            // Paso 1: Consultar la API para obtener las coordenadas exactas
-                                            val apiUrl = "https://opencellid.org/cell/get?key=$token&mcc=$validMcc&mnc=$validMnc&lac=${first.tac}&cellid=${first.cid}&format=json"
-                                            
-                                            val client = OkHttpClient()
-                                            val request = Request.Builder().url(apiUrl).build()
-                                            
-                                            client.newCall(request).enqueue(object : Callback {
-                                                override fun onFailure(call: Call, e: IOException) {
-                                                    // Si falla la API, abrimos la home como respaldo
-                                                    val intent = Intent(Intent.ACTION_VIEW, "https://opencellid.org".toUri())
-                                                    context.startActivity(intent)
-                                                }
-
-                                                override fun onResponse(call: Call, response: Response) {
-                                                    val body = response.body?.string()
-                                                    if (response.isSuccessful && body != null) {
-                                                        val json = JSONObject(body)
-                                                        if (json.has("lat") && json.has("lon")) {
-                                                            val lat = json.getDouble("lat")
-                                                            val lon = json.getDouble("lon")
-                                                            // Paso 2: Abrir el MAPA real centrado en las coordenadas
-                                                            val mapUrl = "https://opencellid.org/#zoom=16&lat=$lat&lon=$lon"
-                                                            val intent = Intent(Intent.ACTION_VIEW, mapUrl.toUri())
-                                                            context.startActivity(intent)
-                                                            return
-                                                        }
-                                                    }
-                                                    // Fallback si no hay coordenadas
-                                                    val intent = Intent(Intent.ACTION_VIEW, "https://opencellid.org".toUri())
-                                                    context.startActivity(intent)
-                                                }
-                                            })
-                                        },
-                                        modifier = Modifier.fillMaxWidth().height(32.dp),
-                                        colors = ButtonDefaults.textButtonColors(contentColor = Color(0xFF4CAF50))
-                                    ) {
-                                        Icon(Icons.Default.LocationOn, contentDescription = null, modifier = Modifier.size(14.dp))
-                                        Spacer(Modifier.width(6.dp))
-                                        Text("VER EN MAPA (OPENCELLID)", fontSize = 10.sp, fontFamily = FontFamily.Monospace)
-                                    }
-                                    Spacer(Modifier.height(8.dp))
-                                }
-
                                 HorizontalDivider(color = Color(0xFF222222))
                                 records.forEach { record ->
                                     Column(modifier = Modifier.padding(vertical = 8.dp)) {
