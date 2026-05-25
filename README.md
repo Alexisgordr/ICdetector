@@ -27,9 +27,14 @@ A powerful, open-source Android tool designed for real-time mobile network foren
 
 ## 🔒 Project Overview
 
+📱 Hardware Compatibility Note:
+For full-stack security telemetry (Ciphering & Identifier Disclosure), this application requires an Android 14+ device with a compliant baseband. Devices running Android 10-13 will operate in Heuristic Audit Mode, which remains highly effective but provides a different signal analysis depth.
+
 This application continuously monitors your device's cellular baseband connections, analyzing radio signaling parameters and cross-referencing active base stations with global registries to flag anomalies and protect your digital sovereignty.
 
 > ⚠️ **Disclaimer / Warning:** This application uses advanced heuristics to evaluate cellular environments. It is a proof-of-concept tool and **you can get false positives** due to legitimate carrier configurations, terrain topography, or network maintenance. Use with an auditing mindset.
+
+⚡ Performance Note: This tool is optimized for modern hardware (e.g., Pixel 9 series/GrapheneOS). While it maintains backward compatibility, the detection depth scales dynamically with the device's hardware capabilities and OS baseband implementation.
 
 ---
 
