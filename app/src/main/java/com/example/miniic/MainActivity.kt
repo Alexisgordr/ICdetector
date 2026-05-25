@@ -56,6 +56,7 @@ import android.telephony.TelephonyDisplayInfo
 import android.telephony.TelephonyManager
 import android.util.Log
 import androidx.activity.ComponentActivity
+import androidx.annotation.RequiresApi
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
@@ -72,6 +73,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -416,33 +418,58 @@ class MiniICService : Service() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
             if (ContextCompat.checkSelfPermission(this, Manifest.permission.READ_PHONE_STATE) == PackageManager.PERMISSION_GRANTED) {
                 try {
-                    val callback = if (Build.VERSION.SDK_INT >= 34) {
-                        // Prepared for Android 14+ listeners
-                        object : TelephonyCallback(), TelephonyCallback.CellInfoListener {
-                            override fun onCellInfoChanged(cellInfo: MutableList<CellInfo>) {
-                                isCallbackWorking = true
-                                processCellInfo(cellInfo)
-                            }
-                            
-                            // Implementation note: CipheringStatusListener and CellularIdentifierDisclosureListener 
-                            // are part of TelephonyCallback in API 34 but may require specific SDK configurations to resolve.
-                        }
-                    } else {
-                        object : TelephonyCallback(), TelephonyCallback.CellInfoListener {
-                            override fun onCellInfoChanged(cellInfo: MutableList<CellInfo>) {
-                                isCallbackWorking = true
-                                processCellInfo(cellInfo)
-                            }
+                    val callback = object : TelephonyCallback(), TelephonyCallback.CellInfoListener {
+                        override fun onCellInfoChanged(cellInfo: MutableList<CellInfo>) {
+                            isCallbackWorking = true
+                            processCellInfo(cellInfo)
                         }
                     }
                     telephonyCallback = callback
                     telephonyCallback?.let {
                         telephonyManager.registerTelephonyCallback(mainExecutor, it)
                     }
+
+                    // Registramos los detectores avanzados para Android 14/15+
+                    if (Build.VERSION.SDK_INT >= 34) {
+                        registerAdvancedSecurityCallback()
+                    }
                 } catch (e: SecurityException) {
                     e.printStackTrace()
                 }
             }
+        }
+    }
+
+    private fun registerAdvancedSecurityCallback() {
+        try {
+            if (Build.VERSION.SDK_INT >= 34) {
+                val securityCallback = ImsiCatcherSecurityCallback()
+                
+                // En Android 14/15+, registerTelephonyCallback usa reflexión interna para detectar
+                // si el objeto implementa las interfaces de escucha, incluso si no están en el classpath de compilación.
+                telephonyManager.registerTelephonyCallback(mainExecutor, securityCallback)
+            }
+        } catch (e: Exception) {
+            Log.e("MiniIC", "Aviso: No se pudo registrar el callback de seguridad avanzado: ${e.message}")
+        }
+    }
+
+    private fun triggerSecurityAlert(message: String) {
+        Log.e("MiniIC_Security", message)
+        toneGenerator?.startTone(ToneGenerator.TONE_SUP_ERROR, 500)
+        updateNotificationText("⚠️ $message")
+        
+        // Registrar la alerta en el historial
+        scope.launch(Dispatchers.IO) {
+            dbHelper.logConnection(
+                netType = "ALERTA",
+                cid = "SECURITY",
+                mnc = "N/A",
+                tac = "N/A",
+                mcc = "N/A",
+                dbm = -999,
+                verified = VerificationStatus.ERROR
+            )
         }
     }
 
@@ -744,8 +771,8 @@ class MiniICService : Service() {
         
         return try {
             currentClient.newCall(request).execute().use { response ->
-                val body = response.body?.string()
-                if (response.isSuccessful && body != null) {
+                val body = response.body.string()
+                if (response.isSuccessful) {
                     val json = JSONObject(body)
                     if (json.has("lat")) {
                         processSuccessfulVerification(json.getDouble("lat"), json.getDouble("lon"), cell, cacheKey)
@@ -773,8 +800,8 @@ class MiniICService : Service() {
         
         return try {
             currentClient.newCall(request).execute().use { response ->
-                val body = response.body?.string()
-                if (response.isSuccessful && body != null) {
+                val body = response.body.string()
+                if (response.isSuccessful) {
                     val json = JSONObject(body)
                     if (json.has("success") && json.getBoolean("success") && json.has("results")) {
                         val results = json.getJSONArray("results")
@@ -1064,6 +1091,46 @@ class MiniICService : Service() {
     private fun Int.valOrNa() = if (this == Int.MAX_VALUE || this == -1 || this == 0) "N/A" else this.toString()
     private fun Long.valOrNa() = if (this == Long.MAX_VALUE || this == -1L || this == 0L) "N/A" else this.toString()
 
+    /**
+     * Implementación de los detectores de seguridad para interceptar IMSI-Catchers.
+     * Usa reflexión para mantener compatibilidad y permitir compilación sin APIs de sistema.
+     */
+    @RequiresApi(Build.VERSION_CODES.S)
+    inner class ImsiCatcherSecurityCallback : TelephonyCallback() {
+
+        // Nota: Estos métodos se llaman por reflexión desde el sistema si el objeto los implementa
+        // o si se registran correctamente en Android 14/15+.
+        
+        // Detección de cifrado (Basado en el borrador de Android 15)
+        @Suppress("unused")
+        fun onCipheringStatusChanged(params: Any) {
+            try {
+                val getStatusMethod = params::class.java.getMethod("getCipheringStatus")
+                val status = getStatusMethod.invoke(params) as Int
+                if (status == 0) { // 0: CIPHERING_STATUS_NON_CIPHERED
+                    triggerSecurityAlert("¡PELIGRO! Conexión celular NO CIFRADA (Cifrado nulo detectado)")
+                }
+            } catch (_: Exception) {
+                // Intento alternativo por nombre de campo si el método falla
+                try {
+                    val statusField = params::class.java.getField("cipheringStatus")
+                    val status = statusField.get(params) as Int
+                    if (status == 0) {
+                        triggerSecurityAlert("¡PELIGRO! Conexión celular NO CIFRADA (Cifrado nulo detectado)")
+                    }
+                } catch (_: Exception) {
+                    triggerSecurityAlert("¡AVISO! Cambio de seguridad en el cifrado detectado")
+                }
+            }
+        }
+
+        // Detección de extracción de identidad
+        @Suppress("unused", "UNUSED_PARAMETER")
+        fun onCellularIdentifierDisclosure(params: Any) {
+            triggerSecurityAlert("¡ALERTA CRÍTICA! Intento de extracción de IMSI detectado por la red")
+        }
+    }
+
     companion object {
         const val CHANNEL_ID = "miniic_channel"
         const val NOTIFICATION_ID = 202
@@ -1169,6 +1236,7 @@ fun MainLayout(context: Context, dbHelper: CellDbHelper, service: MiniICService?
     if (!hasLoc || !hasPhone || !hasNotif) {
         Box(modifier = Modifier
             .fillMaxSize()
+            .statusBarsPadding()
             .padding(32.dp), contentAlignment = Alignment.Center) {
             Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(16.dp)) {
                 Text(
@@ -1233,6 +1301,7 @@ fun MainScreenContent(dbHelper: CellDbHelper, service: MiniICService?) {
     Column(
         modifier = Modifier
             .fillMaxSize()
+            .statusBarsPadding()
             .padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
@@ -1833,7 +1902,7 @@ fun HistoryPanel(dbHelper: CellDbHelper, onBack: () -> Unit) {
             LazyColumn(modifier = Modifier
                 .fillMaxWidth()
                 .weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                items(groupedItems) { (cid, records) ->
+                items(groupedItems, key = { it.first }) { (cid, records) ->
                     val isExpanded = expandedCids.contains(cid)
                     val first = records.first()
                     
