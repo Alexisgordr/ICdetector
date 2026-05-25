@@ -83,11 +83,20 @@ This application continuously monitors your device's cellular baseband connectio
 
 ## 🛠️ Getting Started & Configuration
 
-### OpenCellID Integration
-To unlock full tower verification capabilities, this app allows you to query the OpenCellID database in real-time:
-1. Get your free or commercial personal API token at [OpenCellID.org](https://opencellid.org/).
-2. Paste your token into the app settings menu.
-3. The app will automatically cross-check the active cell's geographic parameters to ensure it matches the official carrier registry.
+🌐 API Integration & Tower Verification
+To unlock full cellular infrastructure auditing and tower verification, this app seamlessly integrates with two of the world's most comprehensive cell tower databases.
+
+Get your API credentials:
+
+OpenCellID: Obtain your personal token at OpenCellID.org.
+
+WiGLE: Register your account and generate your API Name/Token at WiGLE.net.
+
+Configure: Navigate to the Settings menu within the app and paste your credentials.
+
+Verify: The app will automatically cross-check the active cell's geographic parameters (MCC, MNC, TAC, CID) against these global registries to ensure they match the official carrier infrastructure.
+
+💡 Smart Prioritization: The application intelligently prioritizes WiGLE for high-density mapping and cross-references with OpenCellID to ensure the highest possible accuracy for cell verification.
 
 > 💡 **GrapheneOS / Hardened OS Note:** This application strictly requires the **Network** permission to cross-reference cellular infrastructure with the OpenCellID API. Revoking network permissions via the OS sandbox will intentionally cause the application to terminate (Fail-Fast architecture), as real-time global registry validation is a core dependency of its security model.
 
