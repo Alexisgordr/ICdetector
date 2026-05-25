@@ -321,8 +321,10 @@ class MiniICService : Service() {
     private var isServiceRunning = false
     private var lastAirplaneTriggerTime = 0L
 
-    // OpenCellID API key (User should replace this)
+    // API credentials
     var openCellIdKey: String = ""
+    var wigleApiName: String = ""
+    var wigleApiToken: String = ""
     private val client = OkHttpClient()
     private val verificationCache = ConcurrentHashMap<String, VerificationStatus>()
 
@@ -359,6 +361,8 @@ class MiniICService : Service() {
         // Load API Key and Proxy from preferences
         val prefs = getSharedPreferences("miniic_prefs", MODE_PRIVATE)
         openCellIdKey = prefs.getString("opencellid_key", "") ?: ""
+        wigleApiName = prefs.getString("wigle_api_name", "") ?: ""
+        wigleApiToken = prefs.getString("wigle_api_token", "") ?: ""
         isProxyEnabled = prefs.getBoolean("proxy_enabled", false)
 
         try {
@@ -578,7 +582,7 @@ class MiniICService : Service() {
             // Trigger verification for the active cell if needed
             val active = sorted.firstOrNull { it.isRegistered }
             if (active != null) {
-                verifyCellWithOpenCellId(active)
+                verifyCell(active)
                 
                 // Update with cached verification status if available
                 val cacheKey = "${active.mcc}-${active.mnc}-${active.tac}-${active.cellId}"
@@ -689,11 +693,11 @@ class MiniICService : Service() {
         } catch (_: Exception) { null }
     }
 
-    private fun verifyCellWithOpenCellId(cell: CellData) {
-        if (cell.cellId == "N/A" || cell.mnc == "N/A" || cell.mcc == "N/A" || openCellIdKey.isBlank() || openCellIdKey.startsWith("pk.YOUR")) return
+    private fun verifyCell(cell: CellData) {
+        if (cell.cellId == "N/A" || cell.mnc == "N/A" || cell.mcc == "N/A") return
         
         val cacheKey = "${cell.mcc}-${cell.mnc}-${cell.tac}-${cell.cellId}"
-        if (verificationCache.containsKey(cacheKey)) return
+        if (verificationCache.containsKey(cacheKey) && verificationCache[cacheKey] != VerificationStatus.PENDING) return
         
         // Persistent cache check
         if (dbHelper.isCellVerified(cell.mnc, cell.tac, cell.cellId)) {
@@ -701,7 +705,19 @@ class MiniICService : Service() {
             return
         }
 
-        // Lock the cache entry immediately to prevent redundant requests during the 2s polling interval
+        if (openCellIdKey.isNotBlank() && !openCellIdKey.startsWith("pk.YOUR")) {
+            verifyCellWithOpenCellId(cell)
+        }
+        
+        if (wigleApiName.isNotBlank() && wigleApiToken.isNotBlank()) {
+            verifyCellWithWigle(cell)
+        }
+    }
+
+    private fun verifyCellWithOpenCellId(cell: CellData) {
+        val cacheKey = "${cell.mcc}-${cell.mnc}-${cell.tac}-${cell.cellId}"
+        
+        // Lock the cache entry immediately
         verificationCache[cacheKey] = VerificationStatus.PENDING
 
         val currentClient = if (isProxyEnabled) {
@@ -716,48 +732,117 @@ class MiniICService : Service() {
         
         val request = Request.Builder().url(url).build()
         
-        // Refactored to use coroutines within the service scope
         scope.launch(Dispatchers.IO) {
             try {
                 currentClient.newCall(request).execute().use { response ->
-                    val body = response.body?.string()
-                    
-                    if (response.isSuccessful && body != null) {
-                        val json = JSONObject(body)
-                        if (json.has("lat")) {
-                            val lat = json.getDouble("lat")
-                            val lon = json.getDouble("lon")
-                            verificationCache[cacheKey] = VerificationStatus.VERIFIED
-                            dbHelper.updateVerificationStatus(cell.mnc, cell.tac, cell.cellId, VerificationStatus.VERIFIED)
-                            
-                            // Re-trigger analysis with coordinates
-                            val updatedActive = cell.copy(verified = VerificationStatus.VERIFIED, lat = lat, lon = lon)
-                            val analyzedActive = analyzeThreats(updatedActive, neighbors = emptyList())
-                            
-                            // Update the UI flow with the newly analyzed data (ensuring we don't lose verification during handovers)
-                            withContext(Dispatchers.Main) {
-                                _cellFlow.value = _cellFlow.value.map { 
-                                    if (it.cellId == cell.cellId) analyzedActive.copy(isRegistered = it.isRegistered) else it 
-                                }
-                                
-                                if (analyzedActive.isSuspicious && analyzedActive.isRegistered) {
-                                    toneGenerator?.startTone(ToneGenerator.TONE_CDMA_SOFT_ERROR_LITE, 200)
-                                    checkAlerts(analyzedActive)
-                                }
-                            }
-                        } else {
-                            verificationCache[cacheKey] = VerificationStatus.NOT_FOUND
-                            dbHelper.updateVerificationStatus(cell.mnc, cell.tac, cell.cellId, VerificationStatus.NOT_FOUND)
-                        }
-                    } else {
-                        val status = if (response.code == 401 || response.code == 403) VerificationStatus.ERROR else VerificationStatus.NOT_FOUND
-                        verificationCache[cacheKey] = status
-                        dbHelper.updateVerificationStatus(cell.mnc, cell.tac, cell.cellId, status)
-                    }
+                    handleApiResponse(response, cell, cacheKey)
                 }
             } catch (e: IOException) {
-                Log.e("MiniIC", "API Request Failure: ${e.message}")
+                Log.e("MiniIC", "OpenCellID Request Failure: ${e.message}")
                 verificationCache[cacheKey] = VerificationStatus.ERROR
+            }
+        }
+    }
+
+    private fun verifyCellWithWigle(cell: CellData) {
+        val cacheKey = "${cell.mcc}-${cell.mnc}-${cell.tac}-${cell.cellId}"
+        
+        // If already verified or being verified, we might still want to try WiGLE if first failed
+        if (verificationCache[cacheKey] == VerificationStatus.VERIFIED) return
+
+        val currentClient = if (isProxyEnabled) {
+            client.newBuilder()
+                .proxy(Proxy(Proxy.Type.SOCKS, InetSocketAddress("127.0.0.1", 9050)))
+                .build()
+        } else {
+            client
+        }
+
+        // Basic Auth for WiGLE
+        val credentials = okhttp3.Credentials.basic(wigleApiName, wigleApiToken)
+        
+        val url = "https://api.wigle.net/api/v2/cell/search?mcc=${cell.mcc}&mnc=${cell.mnc}&lac=${cell.tac}&cellid=${cell.cellId}"
+        
+        val request = Request.Builder()
+            .url(url)
+            .header("Authorization", credentials)
+            .build()
+        
+        scope.launch(Dispatchers.IO) {
+            try {
+                currentClient.newCall(request).execute().use { response ->
+                    handleWigleResponse(response, cell, cacheKey)
+                }
+            } catch (e: IOException) {
+                Log.e("MiniIC", "WiGLE Request Failure: ${e.message}")
+                if (verificationCache[cacheKey] == VerificationStatus.PENDING) {
+                    verificationCache[cacheKey] = VerificationStatus.ERROR
+                }
+            }
+        }
+    }
+
+    private fun handleApiResponse(response: Response, cell: CellData, cacheKey: String) {
+        val body = response.body?.string()
+        if (response.isSuccessful && body != null) {
+            val json = JSONObject(body)
+            if (json.has("lat")) {
+                processSuccessfulVerification(json.getDouble("lat"), json.getDouble("lon"), cell, cacheKey)
+            } else {
+                verificationCache[cacheKey] = VerificationStatus.NOT_FOUND
+                dbHelper.updateVerificationStatus(cell.mnc, cell.tac, cell.cellId, VerificationStatus.NOT_FOUND)
+            }
+        } else {
+            val status = if (response.code == 401 || response.code == 403) VerificationStatus.ERROR else VerificationStatus.NOT_FOUND
+            verificationCache[cacheKey] = status
+            dbHelper.updateVerificationStatus(cell.mnc, cell.tac, cell.cellId, status)
+        }
+    }
+
+    private fun handleWigleResponse(response: Response, cell: CellData, cacheKey: String) {
+        val body = response.body?.string()
+        if (response.isSuccessful && body != null) {
+            val json = JSONObject(body)
+            if (json.has("success") && json.getBoolean("success") && json.has("results")) {
+                val results = json.getJSONArray("results")
+                if (results.length() > 0) {
+                    val first = results.getJSONObject(0)
+                    val lat = first.optDouble("trilat", first.optDouble("lat", 0.0))
+                    val lon = first.optDouble("trilong", first.optDouble("lon", 0.0))
+                    processSuccessfulVerification(lat, lon, cell, cacheKey)
+                } else {
+                    if (verificationCache[cacheKey] == VerificationStatus.PENDING) {
+                        verificationCache[cacheKey] = VerificationStatus.NOT_FOUND
+                        dbHelper.updateVerificationStatus(cell.mnc, cell.tac, cell.cellId, VerificationStatus.NOT_FOUND)
+                    }
+                }
+            }
+        } else {
+             if (verificationCache[cacheKey] == VerificationStatus.PENDING) {
+                val status = if (response.code == 401 || response.code == 403) VerificationStatus.ERROR else VerificationStatus.NOT_FOUND
+                verificationCache[cacheKey] = status
+                dbHelper.updateVerificationStatus(cell.mnc, cell.tac, cell.cellId, status)
+             }
+        }
+    }
+
+    private fun processSuccessfulVerification(lat: Double, lon: Double, cell: CellData, cacheKey: String) {
+        verificationCache[cacheKey] = VerificationStatus.VERIFIED
+        dbHelper.updateVerificationStatus(cell.mnc, cell.tac, cell.cellId, VerificationStatus.VERIFIED)
+        
+        // Re-trigger analysis with coordinates
+        val updatedActive = cell.copy(verified = VerificationStatus.VERIFIED, lat = lat, lon = lon)
+        val analyzedActive = analyzeThreats(updatedActive, neighbors = emptyList())
+        
+        // Update the UI flow
+        scope.launch(Dispatchers.Main) {
+            _cellFlow.value = _cellFlow.value.map { 
+                if (it.cellId == cell.cellId) analyzedActive.copy(isRegistered = it.isRegistered) else it 
+            }
+            
+            if (analyzedActive.isSuspicious && analyzedActive.isRegistered) {
+                toneGenerator?.startTone(ToneGenerator.TONE_CDMA_SOFT_ERROR_LITE, 200)
+                checkAlerts(analyzedActive)
             }
         }
     }
@@ -1395,18 +1480,27 @@ fun SettingsPanel(service: MiniICService?, onSave: () -> Unit) {
     val context = LocalContext.current
     val prefs = remember { context.getSharedPreferences("miniic_prefs", Context.MODE_PRIVATE) }
     var token by remember { mutableStateOf(prefs.getString("opencellid_key", "") ?: "") }
+    var wigleName by remember { mutableStateOf(prefs.getString("wigle_api_name", "") ?: "") }
+    var wigleToken by remember { mutableStateOf(prefs.getString("wigle_api_token", "") ?: "") }
     var proxyEnabled by remember { mutableStateOf(prefs.getBoolean("proxy_enabled", false)) }
+
+    val scrollState = rememberScrollState()
 
     Card(
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(containerColor = Color(0xFF111111)),
         shape = RoundedCornerShape(4.dp)
     ) {
-        Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        Column(
+            modifier = Modifier
+                .padding(16.dp)
+                .verticalScroll(scrollState),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
             Text("CONFIGURACIÓN", color = Color(0xFF666666), fontFamily = FontFamily.Monospace, fontSize = 12.sp)
             
+            // OpenCellID Section
             Text("OpenCellID API Token", color = Color.White, fontSize = 14.sp, fontFamily = FontFamily.Monospace)
-            
             OutlinedTextField(
                 value = token,
                 onValueChange = { token = it },
@@ -1420,6 +1514,42 @@ fun SettingsPanel(service: MiniICService?, onSave: () -> Unit) {
                     cursorColor = Color.White
                 )
             )
+
+            HorizontalDivider(color = Color(0xFF222222), modifier = Modifier.padding(vertical = 4.dp))
+
+            // WiGLE Section
+            Text("WiGLE API Credentials", color = Color.White, fontSize = 14.sp, fontFamily = FontFamily.Monospace)
+            
+            Text("API Name", color = Color(0xFF888888), fontSize = 11.sp, fontFamily = FontFamily.Monospace)
+            OutlinedTextField(
+                value = wigleName,
+                onValueChange = { wigleName = it },
+                modifier = Modifier.fillMaxWidth(),
+                textStyle = LocalTextStyle.current.copy(color = Color.White, fontFamily = FontFamily.Monospace, fontSize = 12.sp),
+                placeholder = { Text("AIDxxxxxxxxxxxxxxxx", color = Color(0xFF444444), fontSize = 12.sp) },
+                colors = OutlinedTextFieldDefaults.colors(
+                    focusedBorderColor = Color(0xFF4CAF50),
+                    unfocusedBorderColor = Color(0xFF333333),
+                    cursorColor = Color.White
+                )
+            )
+
+            Text("API Token", color = Color(0xFF888888), fontSize = 11.sp, fontFamily = FontFamily.Monospace)
+            OutlinedTextField(
+                value = wigleToken,
+                onValueChange = { wigleToken = it },
+                modifier = Modifier.fillMaxWidth(),
+                textStyle = LocalTextStyle.current.copy(color = Color.White, fontFamily = FontFamily.Monospace, fontSize = 12.sp),
+                placeholder = { Text("xxxxxxxxxxxxxxxx", color = Color(0xFF444444), fontSize = 12.sp) },
+                visualTransformation = PasswordVisualTransformation(),
+                colors = OutlinedTextFieldDefaults.colors(
+                    focusedBorderColor = Color(0xFF4CAF50),
+                    unfocusedBorderColor = Color(0xFF333333),
+                    cursorColor = Color.White
+                )
+            )
+
+            HorizontalDivider(color = Color(0xFF222222), modifier = Modifier.padding(vertical = 4.dp))
 
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                 Column {
@@ -1436,25 +1566,29 @@ fun SettingsPanel(service: MiniICService?, onSave: () -> Unit) {
                 )
             }
             
-                Button(
-                    onClick = {
-                        prefs.edit {
-                            putString("opencellid_key", token)
-                            putBoolean("proxy_enabled", proxyEnabled)
-                        }
-                        service?.openCellIdKey = token
-                        service?.isProxyEnabled = proxyEnabled
-                        onSave() // Volver a la pantalla principal
-                    },
+            Button(
+                onClick = {
+                    prefs.edit {
+                        putString("opencellid_key", token)
+                        putString("wigle_api_name", wigleName)
+                        putString("wigle_api_token", wigleToken)
+                        putBoolean("proxy_enabled", proxyEnabled)
+                    }
+                    service?.openCellIdKey = token
+                    service?.wigleApiName = wigleName
+                    service?.wigleApiToken = wigleToken
+                    service?.isProxyEnabled = proxyEnabled
+                    onSave() // Volver a la pantalla principal
+                },
                 modifier = Modifier.fillMaxWidth(),
                 colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF333333)),
                 shape = RoundedCornerShape(4.dp)
             ) {
-                Text("GUARDAR TOKEN", color = Color.White, fontFamily = FontFamily.Monospace)
+                Text("GUARDAR AJUSTES", color = Color.White, fontFamily = FontFamily.Monospace)
             }
             
             Text(
-                "Consigue tu token gratuito en opencellid.org para habilitar la verificación de antenas.",
+                "Configura OpenCellID o WiGLE para habilitar la verificación de antenas. Los datos se consultan de forma segura.",
                 color = Color(0xFF888888),
                 fontSize = 10.sp,
                 fontFamily = FontFamily.Monospace,
