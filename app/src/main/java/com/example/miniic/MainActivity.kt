@@ -19,6 +19,7 @@
 package com.example.miniic
 
 import android.Manifest
+import androidx.compose.animation.AnimatedVisibility
 import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
@@ -55,11 +56,14 @@ import android.telephony.TelephonyCallback
 import android.telephony.TelephonyDisplayInfo
 import android.telephony.TelephonyManager
 import android.util.Log
+import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.annotation.RequiresApi
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
+import java.io.OutputStreamWriter
+import java.nio.charset.StandardCharsets
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -83,6 +87,8 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.ExperimentalMaterialApi
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Cancel
+import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
@@ -120,6 +126,11 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.foundation.Canvas
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontFamily
@@ -160,7 +171,7 @@ import java.util.concurrent.ConcurrentHashMap
 class CellDbHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME, null, DATABASE_VERSION) {
     companion object {
         private const val DATABASE_NAME = "miniic_history.db"
-        private const val DATABASE_VERSION = 3
+        private const val DATABASE_VERSION = 4 // Subimos a la versión 4
         const val TABLE_HISTORY = "history"
         const val COLUMN_ID = "id"
         const val COLUMN_TIMESTAMP = "timestamp"
@@ -171,6 +182,8 @@ class CellDbHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME, 
         const val COLUMN_MCC = "mcc"
         const val COLUMN_DBM = "dbm"
         const val COLUMN_VERIFIED = "verified"
+        const val COLUMN_SCORE = "score" // NUEVO
+        const val COLUMN_FAILED_H = "failed_heuristics" // NUEVO
     }
 
     override fun onCreate(db: SQLiteDatabase) {
@@ -184,7 +197,9 @@ class CellDbHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME, 
                     "$COLUMN_TAC TEXT, " +
                     "$COLUMN_MCC TEXT, " +
                     "$COLUMN_DBM INTEGER, " +
-                    "$COLUMN_VERIFIED TEXT)",
+                    "$COLUMN_VERIFIED TEXT, " +
+                    "$COLUMN_SCORE INTEGER DEFAULT 100, " +
+                    "$COLUMN_FAILED_H TEXT)",
         )
     }
 
@@ -195,9 +210,13 @@ class CellDbHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME, 
         if (oldVersion < 3) {
             db.execSQL("ALTER TABLE $TABLE_HISTORY ADD COLUMN $COLUMN_MCC TEXT DEFAULT 'N/A'")
         }
+        if (oldVersion < 4) {
+            db.execSQL("ALTER TABLE $TABLE_HISTORY ADD COLUMN $COLUMN_SCORE INTEGER DEFAULT 100")
+            db.execSQL("ALTER TABLE $TABLE_HISTORY ADD COLUMN $COLUMN_FAILED_H TEXT DEFAULT ''")
+        }
     }
 
-    fun logConnection(netType: String, cid: String, mnc: String, tac: String, mcc: String, dbm: Int, verified: VerificationStatus = VerificationStatus.PENDING) {
+    fun logConnection(netType: String, cid: String, mnc: String, tac: String, mcc: String, dbm: Int, verified: VerificationStatus = VerificationStatus.PENDING, score: Int = 100, failedHeuristics: String = "") {
         val db = this.writableDatabase
         val values = ContentValues().apply {
             val sdf = SimpleDateFormat("HH:mm:ss", Locale.getDefault())
@@ -209,6 +228,8 @@ class CellDbHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME, 
             put(COLUMN_MCC, mcc)
             put(COLUMN_DBM, dbm)
             put(COLUMN_VERIFIED, verified.name)
+            put(COLUMN_SCORE, score)
+            put(COLUMN_FAILED_H, failedHeuristics)
         }
         db.insert(TABLE_HISTORY, null, values)
     }
@@ -240,7 +261,9 @@ class CellDbHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME, 
                             VerificationStatus.valueOf(cursor.getString(cursor.getColumnIndexOrThrow(COLUMN_VERIFIED))) 
                         } catch(_: Exception) { 
                             VerificationStatus.PENDING 
-                        }
+                        },
+                        score = cursor.getInt(cursor.getColumnIndexOrThrow(COLUMN_SCORE)),
+                        failedHeuristics = cursor.getString(cursor.getColumnIndexOrThrow(COLUMN_FAILED_H)) ?: ""
                     )
                 )
             } while (cursor.moveToNext())
@@ -274,7 +297,9 @@ data class HistoryRecord(
     val tac: String,
     val mcc: String,
     val dbm: Int,
-    val verified: VerificationStatus = VerificationStatus.PENDING
+    val verified: VerificationStatus = VerificationStatus.PENDING,
+    val score: Int = 100, // NUEVO
+    val failedHeuristics: String = "" // NUEVO
 )
 
 data class CellData(
@@ -291,7 +316,21 @@ data class CellData(
     val timingAdvance: Int? = null,
     val arfcn: Int? = null,
     val lat: Double? = null,
-    val lon: Double? = null
+    val lon: Double? = null,
+    val heuristicReport: HeuristicReport = HeuristicReport(),
+    val securityScore: Int = 100
+)
+
+data class HeuristicReport(
+    val isolatedCellPassed: Boolean = true,
+    val powerJumpPassed: Boolean = true,
+    val mccConsistencyPassed: Boolean = true,
+    val mncCountPassed: Boolean = true,
+    val tacDeviationPassed: Boolean = true,
+    val taDistancePassed: Boolean = true,
+    val ghostNeighborsPassed: Boolean = true,
+    val hardwareCipheringPassed: Boolean = true,
+    val pingPongPassed: Boolean = true // <--- ¡LA 9ª HEURÍSTICA!
 )
 
 enum class VerificationStatus {
@@ -307,6 +346,31 @@ class MiniICService : Service() {
     private val _cellFlow = MutableStateFlow<List<CellData>>(emptyList())
     val cellFlow: StateFlow<List<CellData>> = _cellFlow
 
+    private val _liveLogs = MutableStateFlow<List<String>>(listOf("[SYS] ICdetection Engine v1.0 Iniciado...", "[SYS] Esperando hooks del módem..."))
+    val liveLogs: StateFlow<List<String>> = _liveLogs
+
+    // Variables para la Gráfica de Telemetría
+    private val _dbmHistory = MutableStateFlow<List<Int>>(emptyList())
+    val dbmHistory: StateFlow<List<Int>> = _dbmHistory
+
+    private val _geoHistory = MutableStateFlow<List<Float>>(emptyList())
+    val geoHistory: StateFlow<List<Float>> = _geoHistory
+
+    // Estado para la UI del escáner
+    private val _auditStatus = MutableStateFlow<String>("")
+    val auditStatus: StateFlow<String> = _auditStatus
+    
+    // Guardamos la última auditoría completa
+    private var lastFullReport: HeuristicReport? = null
+    private var lastAuditTime = 0L
+
+    // Función para inyectar texto en la consola
+    private fun appendLog(type: String, message: String) {
+        val timestamp = SimpleDateFormat("HH:mm:ss.SSS", Locale.getDefault()).format(Date())
+        val newLog = "[$timestamp] $type $message"
+        _liveLogs.value = (_liveLogs.value + newLog).takeLast(40) // Guardamos solo las últimas 40 líneas para no consumir RAM
+    }
+
     private lateinit var telephonyManager: TelephonyManager
     private lateinit var dbHelper: CellDbHelper
     private lateinit var locationManager: LocationManager
@@ -318,6 +382,9 @@ class MiniICService : Service() {
     private var isScreenOn = true
     private var isServiceRunning = false
     private var lastAirplaneTriggerTime = 0L
+    
+    // Variable global para rastrear el cifrado
+    private var isHardwareCipheringActive = true
 
     // API credentials
     var openCellIdKey: String = ""
@@ -391,6 +458,7 @@ class MiniICService : Service() {
                     // 2. Si está activo, forzamos la limpieza de la pantalla y la notificación
                     _cellFlow.value = emptyList()
                     updateNotificationText("Sin señal / Modo Avión")
+                    appendLog("[SYS]", "⚠️ Modo Avión activo. Suspendiendo escaneo.")
                 } else {
                     // 3. Si no está activo, solicitamos datos de antenas de forma normal
                     requestFreshCellInfo()
@@ -448,14 +516,17 @@ class MiniICService : Service() {
                 // En Android 14/15+, registerTelephonyCallback usa reflexión interna para detectar
                 // si el objeto implementa las interfaces de escucha, incluso si no están en el classpath de compilación.
                 telephonyManager.registerTelephonyCallback(mainExecutor, securityCallback)
+                appendLog("[SYS]", "Callback de seguridad de hardware L3 registrado.")
             }
         } catch (e: Exception) {
             Log.e("MiniIC", "Aviso: No se pudo registrar el callback de seguridad avanzado: ${e.message}")
+            appendLog("[SYS]", "Error al registrar callback L3: ${e.message}")
         }
     }
 
     private fun triggerSecurityAlert(message: String) {
         Log.e("MiniIC_Security", message)
+        appendLog("[SEC]", "🚨 ALERTA: $message")
         toneGenerator?.startTone(ToneGenerator.TONE_SUP_ERROR, 500)
         updateNotificationText("⚠️ $message")
         
@@ -575,10 +646,10 @@ class MiniICService : Service() {
                 connectionRetryCount = 0
             }
 
-            val list = mutableListOf<CellData>()
+            var list = mutableListOf<CellData>()
             infoList?.forEach { info ->
                 val parsed = parseCell(info)
-                // Filter out invalid readings (Int.MAX_VALUE is Android's "unavailable" constant)
+                // Filter out invalid readings
                 if (parsed != null && parsed.dbm != Int.MAX_VALUE && parsed.dbm < 100) {
                     list.add(parsed)
                 }
@@ -589,6 +660,20 @@ class MiniICService : Service() {
                 updateNotificationText("Sin señal / Modo Avión")
                 return
             }
+
+            // --- INICIO PARCHE PIXEL CORREGIDO ---
+            // Solo robamos si el TA es mayor o igual que 0. No toques celdas que no tienen info.
+            val bestTa = list.firstOrNull { it.timingAdvance != null && it.timingAdvance >= 0 }?.timingAdvance
+            
+            if (bestTa != null) {
+                list = list.map { cell -> 
+                    // Solo asignamos si la celda es la activa y no tiene dato
+                    if (cell.isRegistered && cell.timingAdvance == null) {
+                        cell.copy(timingAdvance = bestTa)
+                    } else cell
+                }.toMutableList()
+            }
+            // --- FIN PARCHE ---
 
             // Identify neighbor cells (not registered)
             val neighbors = list.filter { !it.isRegistered }
@@ -627,84 +712,133 @@ class MiniICService : Service() {
     }
 
     private fun analyzeThreats(active: CellData, neighbors: List<CellData>): CellData {
-        var suspicious = false
         val reasons = mutableListOf<String>()
+        var score = 100
 
-        // 1. Neighbor analysis (Empty list while strong signal)
+        // Inicializamos todas las heurísticas en verde (true)
+        var hIsolated = true
+        var hPowerJump = true
+        var hMcc = true
+        var hMncCount = true
+        var hTac = true
+        var hTa = true
+        var hGhost = true
+        var hPingPong = true // NUEVO
+
+        // 1. Neighbor analysis
         if (neighbors.isEmpty() && active.dbm >= -80) {
-            suspicious = true
-            reasons.add("Celda aislada (sin vecinos)")
+            hIsolated = false
+            reasons.add("Celda aislada")
+            score -= 15
         }
 
-        // 2. Signal Gap analysis (Less sensitive: 35dB and must be strong active)
+        // 2. Signal Gap analysis
         val nextStrongest = neighbors.maxOfOrNull { it.dbm }
         if (nextStrongest != null && active.dbm >= -75 && active.dbm - nextStrongest > 35) {
-            suspicious = true
-            reasons.add("Salto de potencia anómalo (>35dB)")
+            hPowerJump = false
+            reasons.add("Salto potencia (>35dB)")
+            score -= 20
         }
 
         // 3. MNC/MCC Inconsistency
         val differentMcc = neighbors.filter { it.mcc != "N/A" && it.mcc != active.mcc }
         if (differentMcc.isNotEmpty()) {
-            suspicious = true
-            reasons.add("Inconsistencia de MCC en el área")
+            hMcc = false
+            reasons.add("Inconsistencia MCC")
+            score -= 30
         }
         
-        // 4. Multiple MNCs in area (Suspicious for IMSI catchers spoofing multiple IDs)
+        // 4. Multiple MNCs in area
         val uniqueMncs = (neighbors.map { it.mnc } + active.mnc).filter { it != "N/A" }.distinct()
         if (uniqueMncs.size > 3) {
-            suspicious = true
-            reasons.add("Demasiados MNCs detectados (>3)")
+            hMncCount = false
+            reasons.add("Multitud de MNCs")
+            score -= 15
         }
 
-        // 7. TAC Deviation Audit
+        // 5. TAC Deviation Audit
         if (neighbors.isNotEmpty() && active.tac != "N/A") {
             val neighborTacs = neighbors.map { it.tac }.filter { it != "N/A" }
             if (neighborTacs.isNotEmpty() && !neighborTacs.contains(active.tac)) {
-                suspicious = true
-                reasons.add("Desviación de TAC regional")
+                hTac = false
+                reasons.add("Desviación TAC")
+                score -= 20
             }
         }
 
-        // 5. Timing Advance Audit (Enhanced: Discrepancy between TA distance and database location)
+        // 6. Timing Advance Audit
         active.timingAdvance?.let { ta ->
-            // Si la red es 5G, el TA viene en microsegundos; si es LTE/GSM, viene en pasos de ~78m
-            val taDistanceMeters = if (active.networkType.contains("5G")) {
-                ta * 150 // Conversión de microsegundos de RTT a metros (c * RTT / 2)
-            } else {
-                ta * 78  // Estándar clásico para LTE
-            }
+            val taDistanceMeters = if (active.networkType.contains("5G")) ta * 150 else ta * 78
             if (active.lat != null && active.lon != null) {
                 getCurrentLocation()?.let { currentLoc ->
                     val results = FloatArray(1)
                     Location.distanceBetween(currentLoc.latitude, currentLoc.longitude, active.lat, active.lon, results)
-                    val realDistanceMeters = results[0]
-                    
-                    // If DB says 3km away but TA says 100m away, it's a spoofed CID
-                    if (realDistanceMeters > 2000 && taDistanceMeters < 500) {
-                        suspicious = true
-                        reasons.add("Suplantación de identidad (TA vs Distancia GPS)")
+                    if (results[0] > 2000 && taDistanceMeters < 500) {
+                        hTa = false
+                        reasons.add("Suplantación TA")
+                        score -= 40
                     }
                 }
             } else {
-                // Heuristic fallback: Low TA with high power without verification
                 if (!active.networkType.contains("5G") && ta <= 1 && active.dbm >= -60 && active.verified != VerificationStatus.VERIFIED) {
-                    suspicious = true
-                    reasons.add("Proximidad física anómala (TA=$ta)")
+                    hTa = false
+                    reasons.add("Proximidad anómala (TA)")
+                    score -= 15
                 }
             }
         }
 
-        // 6. Neighboring Null Check (Ghost Cells)
-        // If neighbors report ARFCNs but active cell dbm is high and neighbors are all N/A or extremely low
+        // 7. Ghost Cells Check
         if (active.dbm >= -70 && neighbors.isNotEmpty() && neighbors.all { it.dbm <= -120 }) {
-            suspicious = true
-            reasons.add("Lista de vecinos fantasma")
+            hGhost = false
+            reasons.add("Vecinos fantasma")
+            score -= 25
         }
 
+        // 8. Hardware Ciphering Check (Android 14+)
+        val hCiphering = isHardwareCipheringActive
+        if (!hCiphering) {
+            reasons.add("Cifrado de red anulado (A5/0)")
+            score -= 50 // Castigo masivo porque esto es un ataque confirmado
+        }
+
+        // 9. Ping-Pong Effect (Cambio rápido de celda forzado)
+        if (cellChangeHistory.size >= 3) {
+            hPingPong = false
+            reasons.add("Efecto Ping-Pong")
+            score -= 25 // Castigo duro, es un comportamiento muy agresivo
+        }
+
+        // Bonificadores y penalizadores por Base de Datos
+        if (active.verified == VerificationStatus.VERIFIED) {
+            score += 15 // La base de datos da confianza
+        } else if (active.verified == VerificationStatus.NOT_FOUND) {
+            score -= 10
+        }
+
+        // Cap del score entre 0 y 100
+        val finalScore = score.coerceIn(0, 100)
+        
+        // Si el score baja de 70, la consideramos sospechosa automáticamente
+        val isSuspicious = finalScore < 70
+
+        val report = HeuristicReport(
+            isolatedCellPassed = hIsolated,
+            powerJumpPassed = hPowerJump,
+            mccConsistencyPassed = hMcc,
+            mncCountPassed = hMncCount,
+            tacDeviationPassed = hTac,
+            taDistancePassed = hTa,
+            ghostNeighborsPassed = hGhost,
+            hardwareCipheringPassed = hCiphering,
+            pingPongPassed = hPingPong
+        )
+
         return active.copy(
-            isSuspicious = suspicious,
-            suspiciousReason = if (reasons.isNotEmpty()) reasons.joinToString(", ") else null
+            isSuspicious = isSuspicious,
+            suspiciousReason = if (reasons.isNotEmpty()) reasons.joinToString(" | ") else null,
+            heuristicReport = report,
+            securityScore = finalScore
         )
     }
 
@@ -735,6 +869,8 @@ class MiniICService : Service() {
         // Marcamos como PENDING inmediatamente para bloquear ráfagas
         verificationCache[cacheKey] = VerificationStatus.PENDING
 
+        appendLog("[API]", "Verificando firmas geográficas para CID: ${cell.cellId}...")
+        
         // 🛡️ MOTOR DE SINCRONIZACIÓN: Ejecución secuencial en hilo de fondo
         scope.launch(Dispatchers.IO) {
             var found = false
@@ -767,6 +903,7 @@ class MiniICService : Service() {
         }
 
         val url = "https://opencellid.org/cell/get?key=$openCellIdKey&mcc=${cell.mcc}&mnc=${cell.mnc}&lac=${cell.tac}&cellid=${cell.cellId}&format=json"
+        appendLog("[API]", "Consultando OpenCellId para CID: ${cell.cellId}...")
         val request = Request.Builder().url(url).build()
         
         return try {
@@ -796,6 +933,7 @@ class MiniICService : Service() {
 
         val credentials = okhttp3.Credentials.basic(wigleApiName, wigleApiToken)
         val url = "https://api.wigle.net/api/v2/cell/search?cell_net=${cell.mcc}&cell_op=${cell.mnc}&cell_lac=${cell.tac}&cell_id=${cell.cellId}"
+        appendLog("[API]", "Consultando WiGLE para CID: ${cell.cellId}...")
         val request = Request.Builder().url(url).header("Authorization", credentials).build()
         
         return try {
@@ -821,6 +959,7 @@ class MiniICService : Service() {
     }
 
     private fun processSuccessfulVerification(lat: Double, lon: Double, cell: CellData, cacheKey: String) {
+        appendLog("[API]", "Validación de base de datos OK. Lat/Lon obtenidas.")
         verificationCache[cacheKey] = VerificationStatus.VERIFIED
         dbHelper.updateVerificationStatus(
             cell.mnc,
@@ -852,21 +991,68 @@ class MiniICService : Service() {
 
         // 1. Log Connection and Ping-Pong Detection
         if (cid != prevCid) {
+            _dbmHistory.value = emptyList() // <-- Borramos la gráfica al cambiar de antena
+            appendLog("[RADIO]", "Handover celular completado -> Nueva celda CID: $cid ($net)")
+            
+            // --- DISPARADOR DEL REPORTE PROFESIONAL ---
+            generateAuditLog(cell) 
+            // ------------------------------------------
+
             val currentTime = System.currentTimeMillis()
             cellChangeHistory.add(Pair(cid, currentTime))
             cellChangeHistory.removeAll { currentTime - it.second > 10000L }
 
             if (cellChangeHistory.size >= 3) {
-                toneGenerator?.startTone(ToneGenerator.TONE_CDMA_PIP, 300)
-                Log.e("MiniIC", "ANOMALÍA: Efecto Ping-Pong detectado.")
+                // --- NUEVO: FILTRO DE MOVIMIENTO ---
+                val currentLocation = getCurrentLocation()
+                val speedMps = currentLocation?.speed ?: 0f // speed está en m/s
+                val isMovingFast = speedMps > 8f // 8 m/s son aprox 28.8 km/h (Umbral de coche)
+
+                if (!isMovingFast) {
+                    // Solo disparamos la alarma si estamos parados o caminando lento
+                    toneGenerator?.startTone(ToneGenerator.TONE_CDMA_PIP, 300)
+                    appendLog("[SEC]", "🚨 ¡ALERTA! Efecto Ping-Pong detectado en parado.")
+                    Log.e("MiniIC", "ANOMALÍA: Efecto Ping-Pong detectado en parado.")
+                } else {
+                    // Si vamos en coche, solo lo dejamos en el log como un evento de red, no como amenaza
+                    appendLog("[RADIO]", "Ping-Pong detectado a ${String.format("%.1f", speedMps * 3.6f)} km/h. Ignorando alerta por movimiento.")
+                }
+                // ------------------------------------
             }
 
             if (prevCid != null) {
                 scope.launch(Dispatchers.IO) {
-                    dbHelper.logConnection(net, cid, cell.mnc, cell.tac, cell.mcc, dbm, cell.verified)
+                    dbHelper.logConnection(
+                        netType = net, 
+                        cid = cid, 
+                        mnc = cell.mnc, 
+                        tac = cell.tac, 
+                        mcc = cell.mcc, 
+                        dbm = dbm, 
+                        verified = cell.verified,
+                        score = cell.securityScore,
+                        failedHeuristics = cell.suspiciousReason ?: "OK"
+                    )
                 }
             }
             prevCid = cid
+        }
+
+        // 2. Actualizamos la gráfica de telemetría (mantenemos los últimos 50 puntos)
+        if (dbm != -999 && dbm != Int.MAX_VALUE) {
+            val currentHistory = _dbmHistory.value.toMutableList()
+            currentHistory.add(dbm)
+            if (currentHistory.size > 50) currentHistory.removeAt(0)
+            _dbmHistory.value = currentHistory
+
+            // Actualizamos la gráfica geométrica (TA) de forma segura
+            val currentTa = cell.timingAdvance
+            if (currentTa != null && currentTa != Int.MAX_VALUE) {
+                val currentGeo = _geoHistory.value.toMutableList()
+                currentGeo.add(currentTa.toFloat())
+                if (currentGeo.size > 50) currentGeo.removeAt(0)
+                _geoHistory.value = currentGeo
+            }
         }
 
         // 2. High power signal alarm (often IMSI catcher range)
@@ -1002,7 +1188,20 @@ class MiniICService : Service() {
             is CellInfoLte -> {
                 val id = info.cellIdentity
                 val dbm = info.cellSignalStrength.dbm
-                val ta = info.cellSignalStrength.timingAdvance.let { if (it == Int.MAX_VALUE) null else it }
+                // EXTRAEMOS TA DE 4G:
+                var ta = info.cellSignalStrength.timingAdvance.let { if (it == Int.MAX_VALUE) null else it }
+                // HACK: Si la API oficial falla, intentamos leer la cadena de texto cruda del módem
+                if (ta == null || ta == Int.MAX_VALUE) {
+                    try {
+                        val rawString = info.cellSignalStrength.toString()
+                        val taMatch = Regex("ta=([0-9]+)").find(rawString)
+                        if (taMatch != null) {
+                            val extracted = taMatch.groupValues[1].toInt()
+                            if (extracted != Int.MAX_VALUE) ta = extracted
+                        }
+                    } catch (_: Exception) {}
+                }
+
                 val mcc = id.mccString ?: getNetworkOperatorMcc()
                 val mnc = id.mncString ?: getNetworkOperatorMnc()
                 CellData(reg, networkTypeString, id.ci.valOrNa(), mnc, id.tac.valOrNa(), dbm, mcc, timingAdvance = ta, arfcn = id.earfcn)
@@ -1012,15 +1211,28 @@ class MiniICService : Service() {
                 val strength = info.cellSignalStrength as CellSignalStrengthNr
                 val dbm = strength.ssRsrp
                 
-                // Forzamos el uso de timingAdvanceMicros (disponible en API 34+) para Pixel 9a
-                val ta = if (Build.VERSION.SDK_INT >= 34) {
+                // EXTRAEMOS TA DE 5G:
+                var ta: Int? = null
+                if (Build.VERSION.SDK_INT >= 34) {
                     try {
-                        // Usamos reflexión para asegurar compatibilidad en el build
                         val method = strength.javaClass.getMethod("getTimingAdvanceMicros")
                         val res = method.invoke(strength) as Int
-                        if (res == Int.MAX_VALUE || res == -1) null else res
-                    } catch (_: Exception) { null }
-                } else null
+                        if (res != Int.MAX_VALUE && res != -1) ta = res
+                    } catch (_: Exception) { }
+                }
+                
+                // HACK PARA 5G TENSOR: A veces el TA viene oculto en el toString() de la identidad, no en el strength
+                if (ta == null || ta == Int.MAX_VALUE) {
+                    try {
+                        val rawString = info.toString()
+                        // Buscamos patrones comunes en módems modernos
+                        val taMatch = Regex("ta=([0-9]+)").find(rawString) ?: Regex("timingAdvance=([0-9]+)").find(rawString)
+                        if (taMatch != null) {
+                            val extracted = taMatch.groupValues[1].toInt()
+                            if (extracted != Int.MAX_VALUE) ta = extracted
+                        }
+                    } catch (_: Exception) {}
+                }
 
                 val mcc = id.mccString ?: getNetworkOperatorMcc()
                 val mnc = id.mncString ?: getNetworkOperatorMnc()
@@ -1091,24 +1303,60 @@ class MiniICService : Service() {
     private fun Int.valOrNa() = if (this == Int.MAX_VALUE || this == -1 || this == 0) "N/A" else this.toString()
     private fun Long.valOrNa() = if (this == Long.MAX_VALUE || this == -1L || this == 0L) "N/A" else this.toString()
 
+    private fun generateAuditLog(cell: CellData) {
+        _auditStatus.value = "Auditoría en curso..."
+        appendLog("[AUDIT]", "--- INICIANDO CICLO DE AUDITORÍA (9 REGLAS) ---")
+        val report = cell.heuristicReport
+        val results = mapOf(
+            "1. Celda Aislada" to report.isolatedCellPassed,
+            "2. Estabilidad Potencia" to report.powerJumpPassed,
+            "3. Consistencia MCC" to report.mccConsistencyPassed,
+            "4. Límite MNC" to report.mncCountPassed,
+            "5. Validación Regional TAC" to report.tacDeviationPassed,
+            "6. Geometría (TA)" to report.taDistancePassed,
+            "7. Espectro Fantasma" to report.ghostNeighborsPassed,
+            "8. Cifrado Hardware" to report.hardwareCipheringPassed,
+            "9. Anti Ping-Pong" to report.pingPongPassed
+        )
+
+        results.forEach { (regla, pasado) ->
+            val status = if (pasado) "PASSED" else "FAILED"
+            appendLog("[HEUR]", "$regla: $status")
+        }
+
+        appendLog("[AUDIT]", "Resultado Global: ${cell.securityScore}% de seguridad.")
+        if (cell.isSuspicious) {
+            appendLog("[SEC]", "🚨 CRÍTICO: Antena sospechosa detectada: ${cell.suspiciousReason}")
+        } else {
+            appendLog("[SYS]", "✅ Entorno validado como SEGURO.")
+        }
+        _auditStatus.value = "Auditoría completada ✅"
+    }
+
     /**
      * Implementación de los detectores de seguridad para interceptar IMSI-Catchers.
      * Usa reflexión para mantener compatibilidad y permitir compilación sin APIs de sistema.
      */
     @RequiresApi(Build.VERSION_CODES.S)
-    inner class ImsiCatcherSecurityCallback : TelephonyCallback() {
+    inner class ImsiCatcherSecurityCallback : TelephonyCallback(), TelephonyCallback.CellInfoListener {
 
-        // Nota: Estos métodos se llaman por reflexión desde el sistema si el objeto los implementa
-        // o si se registran correctamente en Android 14/15+.
+        override fun onCellInfoChanged(cellInfo: MutableList<CellInfo>) {
+            // No hacer nada, es solo un listener de relleno para que Android acepte el registro.
+        }
         
-        // Detección de cifrado (Basado en el borrador de Android 15)
         @Suppress("unused")
         fun onCipheringStatusChanged(params: Any) {
+            appendLog("[MODEM]", "SYS: Evento de cambio en estado de cifrado detectado.")
             try {
                 val getStatusMethod = params::class.java.getMethod("getCipheringStatus")
                 val status = getStatusMethod.invoke(params) as Int
                 if (status == 0) { // 0: CIPHERING_STATUS_NON_CIPHERED
+                    isHardwareCipheringActive = false
+                    appendLog("[MODEM]", "¡ALERTA L1! Protocolo de cifrado anulado (A5/0)")
                     triggerSecurityAlert("¡PELIGRO! Conexión celular NO CIFRADA (Cifrado nulo detectado)")
+                } else {
+                    isHardwareCipheringActive = true
+                    appendLog("[MODEM]", "SYS: Cifrado de hardware validado como ACTIVO.")
                 }
             } catch (_: Exception) {
                 // Intento alternativo por nombre de campo si el método falla
@@ -1116,7 +1364,12 @@ class MiniICService : Service() {
                     val statusField = params::class.java.getField("cipheringStatus")
                     val status = statusField.get(params) as Int
                     if (status == 0) {
+                        isHardwareCipheringActive = false
+                        appendLog("[MODEM]", "¡ALERTA L1! Protocolo de cifrado anulado (A5/0)")
                         triggerSecurityAlert("¡PELIGRO! Conexión celular NO CIFRADA (Cifrado nulo detectado)")
+                    } else {
+                        isHardwareCipheringActive = true
+                        appendLog("[MODEM]", "SYS: Cifrado de hardware validado como ACTIVO.")
                     }
                 } catch (_: Exception) {
                     triggerSecurityAlert("¡AVISO! Cambio de seguridad en el cifrado detectado")
@@ -1127,6 +1380,7 @@ class MiniICService : Service() {
         // Detección de extracción de identidad
         @Suppress("unused", "UNUSED_PARAMETER")
         fun onCellularIdentifierDisclosure(params: Any) {
+            appendLog("[MODEM]", "🚨 CRÍTICO: Detección de Disclosure de Identificador Celular!")
             triggerSecurityAlert("¡ALERTA CRÍTICA! Intento de extracción de IMSI detectado por la red")
         }
     }
@@ -1272,20 +1526,14 @@ fun MainLayout(context: Context, dbHelper: CellDbHelper, service: MiniICService?
 @Composable
 fun MainScreenContent(dbHelper: CellDbHelper, service: MiniICService?) {
     val cellList by (service?.cellFlow ?: remember { MutableStateFlow(emptyList()) }).collectAsState()
+    val dbmHistory by (service?.dbmHistory ?: remember { MutableStateFlow(emptyList()) }).collectAsState()
+    val geoHistory by (service?.geoHistory ?: remember { MutableStateFlow(emptyList()) }).collectAsState()
+    
     var refreshing by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
-
-    val pullRefreshState = rememberPullRefreshState(
-        refreshing = refreshing,
-        onRefresh = {
-            scope.launch {
-                refreshing = true
-                service?.forceRefresh()
-                delay(800)
-                refreshing = false
-            }
-        }
-    )
+    val pullRefreshState = rememberPullRefreshState(refreshing = refreshing, onRefresh = {
+        scope.launch { refreshing = true; service?.forceRefresh(); delay(800); refreshing = false }
+    })
 
     val active = cellList.firstOrNull { it.isRegistered }
     var showHistory by remember { mutableStateOf(false) }
@@ -1298,13 +1546,7 @@ fun MainScreenContent(dbHelper: CellDbHelper, service: MiniICService?) {
         }
     }
 
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .statusBarsPadding()
-            .padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp)
-    ) {
+    Column(modifier = Modifier.fillMaxSize().statusBarsPadding().padding(16.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
         // App header
         Row(
             modifier = Modifier.fillMaxWidth(),
@@ -1346,52 +1588,46 @@ fun MainScreenContent(dbHelper: CellDbHelper, service: MiniICService?) {
         } else if (showHistory) {
             HistoryPanel(dbHelper = dbHelper) { showHistory = false }
         } else {
-            // Define visual security states
-            val (statusText, statusColor) = when {
-                active == null -> "BUSCANDO SEÑAL..." to Color(0xFF888888)
-                active.isSuspicious -> "SISTEMA EN COMPROMISO" to Color(0xFFCF6679)
-                active.verified == VerificationStatus.VERIFIED -> "ENTORNO SEGURO" to Color(0xFF4CAF50)
-                else -> "MONITORIZANDO RED" to Color(0xFFFFA000)
-            }
-
-            // Radar Style Header
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                colors = CardDefaults.cardColors(containerColor = statusColor.copy(alpha = 0.08f)),
-                border = BorderStroke(1.dp, statusColor.copy(alpha = 0.3f)),
-                shape = RoundedCornerShape(4.dp)
-            ) {
-                Row(
-                    modifier = Modifier
-                        .padding(16.dp)
-                        .fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Column {
-                        Text("ESTADO DEL SECTOR", color = Color(0xFF666666), fontFamily = FontFamily.Monospace, fontSize = 10.sp)
-                        Text(statusText, color = statusColor, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Bold, fontSize = 16.sp, letterSpacing = 1.sp)
-                    }
-                    if (active?.isSuspicious == true) {
-                        Icon(Icons.Default.Warning, contentDescription = null, tint = Color.Red, modifier = Modifier.size(24.dp))
-                    }
-                }
-            }
-
-            // Monitor parameters
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .weight(1f)
-                    .pullRefresh(pullRefreshState)
-            ) {
+            Box(modifier = Modifier.fillMaxSize().pullRefresh(pullRefreshState)) {
                 Column(
                     modifier = Modifier
                         .fillMaxSize()
                         .verticalScroll(rememberScrollState()),
                     verticalArrangement = Arrangement.spacedBy(16.dp)
                 ) {
-                    // Main Grid Card
+                    // Define visual security states
+                    val (statusText, statusColor) = when {
+                        active == null -> "BUSCANDO SEÑAL..." to Color(0xFF888888)
+                        active.isSuspicious -> "SISTEMA EN COMPROMISO" to Color(0xFFCF6679)
+                        active.verified == VerificationStatus.VERIFIED -> "ENTORNO SEGURO" to Color(0xFF4CAF50)
+                        else -> "MONITORIZANDO RED" to Color(0xFFFFA000)
+                    }
+
+                    // Radar Style Header
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = CardDefaults.cardColors(containerColor = statusColor.copy(alpha = 0.08f)),
+                        border = BorderStroke(1.dp, statusColor.copy(alpha = 0.3f)),
+                        shape = RoundedCornerShape(4.dp)
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .padding(16.dp)
+                                .fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Column {
+                                Text("ESTADO DEL SECTOR", color = Color(0xFF666666), fontFamily = FontFamily.Monospace, fontSize = 10.sp)
+                                Text(statusText, color = statusColor, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Bold, fontSize = 16.sp, letterSpacing = 1.sp)
+                            }
+                            if (active?.isSuspicious == true) {
+                                Icon(Icons.Default.Warning, contentDescription = null, tint = Color.Red, modifier = Modifier.size(24.dp))
+                            }
+                        }
+                    }
+
+                    // Main Grid Card (DATOS SIEMPRE VISIBLES)
                     Card(
                         modifier = Modifier.fillMaxWidth(),
                         colors = CardDefaults.cardColors(containerColor = Color(0xFF111111)),
@@ -1399,7 +1635,6 @@ fun MainScreenContent(dbHelper: CellDbHelper, service: MiniICService?) {
                         shape = RoundedCornerShape(4.dp)
                     ) {
                         Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
-                            // Row 1: Tech and Power
                             Row(modifier = Modifier.fillMaxWidth()) {
                                 DataBox(modifier = Modifier.weight(1f), label = "TECNOLOGÍA", value = active?.networkType ?: "N/A")
                                 DataBox(modifier = Modifier.weight(1f), label = "POTENCIA", value = if (active == null) "N/A" else "${active.dbm} dBm")
@@ -1407,102 +1642,28 @@ fun MainScreenContent(dbHelper: CellDbHelper, service: MiniICService?) {
                             
                             HorizontalDivider(color = Color(0xFF1A1A1A))
 
-                            // Row 2: Cell ID and TAC
                             Row(modifier = Modifier.fillMaxWidth()) {
                                 DataBox(modifier = Modifier.weight(1f), label = "CELL ID", value = active?.cellId ?: "N/A", highlight = true)
                                 DataBox(modifier = Modifier.weight(1f), label = "TAC / LAC", value = active?.tac ?: "N/A")
-                            }
-
-                            HorizontalDivider(color = Color(0xFF1A1A1A))
-
-                            // Row 3: MNC and Verification
-                            Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                                DataBox(modifier = Modifier.weight(1f), label = "OPERADOR (MNC)", value = active?.mnc ?: "N/A")
-                                Column(modifier = Modifier.weight(1f)) {
-                                    Text("VERIFICACIÓN", color = Color(0xFF555555), fontFamily = FontFamily.Monospace, fontSize = 10.sp, fontWeight = FontWeight.Bold)
-                                    Spacer(Modifier.height(4.dp))
-                                    VerificationBadge(active?.verified ?: VerificationStatus.PENDING)
-                                }
-                            }
-
-                            if (active != null) {
-                                SignalVisualizer(active, cellList.filter { !it.isRegistered })
-                            }
-
-                            if (active?.isSuspicious == true) {
-                                Card(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    colors = CardDefaults.cardColors(containerColor = Color(0xFF330000)),
-                                    border = BorderStroke(1.dp, Color.Red),
-                                    shape = RoundedCornerShape(4.dp)
-                                ) {
-                                    Row(modifier = Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                        Icon(Icons.Default.Warning, contentDescription = null, tint = Color.Red, modifier = Modifier.size(20.dp))
-                                        Column {
-                                            Text(
-                                                text = "AMENAZA: ${active.suspiciousReason}",
-                                                color = Color.Red,
-                                                fontSize = 12.sp,
-                                                fontFamily = FontFamily.Monospace,
-                                                fontWeight = FontWeight.Bold
-                                            )
-                                            Text(
-                                                text = "RECOMENDADO: ACTIVAR MODO AVIÓN",
-                                                color = Color.White,
-                                                fontSize = 10.sp,
-                                                fontFamily = FontFamily.Monospace,
-                                                fontWeight = FontWeight.Bold
-                                            )
-                                        }
-                                    }
-                                }
+                                DataBox(modifier = Modifier.weight(1f), label = "MNC", value = active?.mnc ?: "N/A")
                             }
                         }
                     }
 
-                    // Controls
+                    if (active != null) {
+                        SecurityScorePanel(active, dbmHistory, geoHistory, service)
+                    }
+
+                    if (active != null) {
+                        SignalVisualizer(active, cellList.filter { !it.isRegistered })
+                    }
+
                     if (service != null) {
-                        Card(
-                            modifier = Modifier.fillMaxWidth(),
-                            colors = CardDefaults.cardColors(containerColor = Color(0xFF111111)),
-                            border = BorderStroke(0.5.dp, Color(0xFF222222)),
-                            shape = RoundedCornerShape(4.dp)
-                        ) {
-                            Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
-                                Text("ALERTAS", color = Color(0xFF666666), fontFamily = FontFamily.Monospace, fontSize = 11.sp, fontWeight = FontWeight.Bold)
-                                
-                                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                                    Text("Alarma señal fuerte (>= -50 dBm)", color = Color.White, fontSize = 13.sp, fontFamily = FontFamily.Monospace)
-                                    Switch(
-                                        checked = service.isStrongSignalAlarmEnabled,
-                                        onCheckedChange = { service.isStrongSignalAlarmEnabled = it },
-                                        colors = SwitchDefaults.colors(
-                                            checkedThumbColor = Color.Black,
-                                            checkedTrackColor = Color(0xFF4CAF50),
-                                            uncheckedThumbColor = Color(0xFF444444),
-                                            uncheckedTrackColor = Color(0xFF141414),
-                                            uncheckedBorderColor = Color(0xFF333333)
-                                        )
-                                    )
-                                }
-
-                                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                                    Text("Modo avión auto en 3G/2G", color = Color.White, fontSize = 13.sp, fontFamily = FontFamily.Monospace)
-                                    Switch(
-                                        checked = service.is3gAirplaneModeEnabled,
-                                        onCheckedChange = { service.is3gAirplaneModeEnabled = it },
-                                        colors = SwitchDefaults.colors(
-                                            checkedThumbColor = Color.Black,
-                                            checkedTrackColor = Color(0xFF4CAF50),
-                                            uncheckedThumbColor = Color(0xFF444444),
-                                            uncheckedTrackColor = Color(0xFF141414),
-                                            uncheckedBorderColor = Color(0xFF333333)
-                                        )
-                                    )
-                                }
-                            }
-                        }
+                        val terminalLogs by service.liveLogs.collectAsState()
+                        LiveTerminalPanel(logs = terminalLogs)
                     }
+
+                    AuthorSignature()
                 }
                 
                 PullRefreshIndicator(
@@ -1513,8 +1674,6 @@ fun MainScreenContent(dbHelper: CellDbHelper, service: MiniICService?) {
                     contentColor = Color(0xFF4CAF50)
                 )
             }
-
-            AuthorSignature()
         }
     }
 }
@@ -1772,34 +1931,302 @@ fun SignalBarSegmented(label: String, dbm: Int, isMain: Boolean, isSuspicious: B
     }
 }
 
-fun exportToCsv(context: Context, items: List<HistoryRecord>) {
-    val fileName = "miniic_history_${System.currentTimeMillis()}.csv"
-    val file = File(context.cacheDir, fileName)
+@Composable
+fun SecurityScorePanel(active: CellData, dbmHistory: List<Int>, geoHistory: List<Float>, service: MiniICService?) {
+    var viewMode by remember { mutableStateOf("NONE") } // NONE, GRAPH, GEO, HEUR
+    val auditStatus by (service?.auditStatus ?: MutableStateFlow("Iniciando...")).collectAsState()
     
+    val scoreColor = if (active.securityScore >= 90) Color(0xFF4CAF50) else if (active.securityScore >= 70) Color(0xFFFFA000) else Color.Red
+
+    Card(modifier = Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = Color(0xFF111111)), border = BorderStroke(0.5.dp, Color(0xFF222222)), shape = RoundedCornerShape(4.dp)) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            // Fila de Puntuación + Botones
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                Column {
+                    Text("AUDITORÍA DE SEGURIDAD", color = Color(0xFF666666), fontFamily = FontFamily.Monospace, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                    if (auditStatus.isNotEmpty()) {
+                        Spacer(Modifier.height(4.dp))
+                        Text(auditStatus, color = Color(0xFF00FF00), fontFamily = FontFamily.Monospace, fontSize = 11.sp)
+                    }
+                    Spacer(Modifier.height(4.dp))
+                    Text("${active.securityScore}%", color = scoreColor, fontFamily = FontFamily.Monospace, fontSize = 28.sp, fontWeight = FontWeight.ExtraBold)
+                }
+            }
+
+            // Contenido dinámico según el botón
+            AnimatedVisibility(visible = viewMode != "NONE") {
+                Column(modifier = Modifier.padding(top = 16.dp)) {
+                    when(viewMode) {
+                        "GRAPH" -> TelemetryGraph(dbmHistory)
+                        "GEO" -> GeoGraph(active, geoHistory)
+                        "HEUR" -> {
+                            Text("AUDITORÍA DE PARÁMETROS", color = Color(0xFF555555), fontFamily = FontFamily.Monospace, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                            Spacer(Modifier.height(8.dp))
+                            HeuristicItem("Análisis de Celda Aislada", active.heuristicReport.isolatedCellPassed)
+                            HeuristicItem("Estabilidad de Potencia (Anti-Gap)", active.heuristicReport.powerJumpPassed)
+                            HeuristicItem("Consistencia de MCC", active.heuristicReport.mccConsistencyPassed)
+                            HeuristicItem("Límite de Redes MNC", active.heuristicReport.mncCountPassed)
+                            HeuristicItem("Validación Regional TAC", active.heuristicReport.tacDeviationPassed)
+                            HeuristicItem("Coherencia Geométrica (TA)", active.heuristicReport.taDistancePassed)
+                            HeuristicItem("Espectro de Vecinos (Anti-Ghost)", active.heuristicReport.ghostNeighborsPassed)
+                            HeuristicItem("Cifrado de Enlace (Hardware)", active.heuristicReport.hardwareCipheringPassed)
+                            HeuristicItem("Estabilidad de Conexión (Anti Ping-Pong)", active.heuristicReport.pingPongPassed)
+                        }
+                    }
+                }
+            }
+
+            Spacer(Modifier.height(16.dp))
+
+            // Fila de Botones Tácticos (ABAJO)
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                Button(
+                    onClick = { viewMode = if(viewMode == "GRAPH") "NONE" else "GRAPH" }, 
+                    modifier = Modifier.weight(1f),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = if(viewMode=="GRAPH") Color(0xFF444444) else Color(0xFF222222),
+                        contentColor = Color.White
+                    ),
+                    shape = RoundedCornerShape(4.dp),
+                    contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 4.dp, vertical = 4.dp)
+                ) {
+                    Text("SEÑAL", fontSize = 9.sp, fontFamily = FontFamily.Monospace)
+                }
+                Button(
+                    onClick = { viewMode = if(viewMode == "GEO") "NONE" else "GEO" }, 
+                    modifier = Modifier.weight(1f),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = if(viewMode=="GEO") Color(0xFF444444) else Color(0xFF222222),
+                        contentColor = Color.White
+                    ),
+                    shape = RoundedCornerShape(4.dp),
+                    contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 4.dp, vertical = 4.dp)
+                ) {
+                    Text("GEOM", fontSize = 9.sp, fontFamily = FontFamily.Monospace)
+                }
+                Button(
+                    onClick = { viewMode = if(viewMode == "HEUR") "NONE" else "HEUR" }, 
+                    modifier = Modifier.weight(1f),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = if(viewMode=="HEUR") Color(0xFF444444) else Color(0xFF222222),
+                        contentColor = Color.White
+                    ),
+                    shape = RoundedCornerShape(4.dp),
+                    contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 4.dp, vertical = 4.dp)
+                ) {
+                    Text("HEUR", fontSize = 9.sp, fontFamily = FontFamily.Monospace)
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun HeuristicItem(label: String, passed: Boolean) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(label, color = Color(0xFFCCCCCC), fontSize = 11.sp, fontFamily = FontFamily.Monospace)
+        if (passed) {
+            Icon(Icons.Default.CheckCircle, contentDescription = "Pass", tint = Color(0xFF4CAF50), modifier = Modifier.size(14.dp))
+        } else {
+            Icon(Icons.Default.Cancel, contentDescription = "Fail", tint = Color(0xFFCF6679), modifier = Modifier.size(14.dp))
+        }
+    }
+}
+
+@Composable
+fun TelemetryGraph(dbmHistory: List<Int>) {
+    val umbralPeligro = -70 // Umbral ajustable: a partir de -70 dBm, la señal es sospechosamente potente
+    
+    Column(modifier = Modifier.fillMaxWidth().padding(top = 16.dp)) {
+        HorizontalDivider(color = Color(0xFF1A1A1A))
+        Spacer(Modifier.height(8.dp))
+        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+            Text("TELEMETRÍA RSRP [UMBRAL: $umbralPeligro dBm]", color = Color(0xFF555555), fontFamily = FontFamily.Monospace, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+            Text("Límite: -40 dBm", color = Color(0xFF444444), fontSize = 8.sp, fontFamily = FontFamily.Monospace)
+        }
+
+        Canvas(modifier = Modifier.fillMaxWidth().height(100.dp).padding(vertical = 8.dp)) {
+            val maxPoints = 50
+            val width = size.width
+            val height = size.height
+            
+            // 1. Dibujar línea fantasma del UMBRAL DE PELIGRO
+            val normalizedUmbral = 1f - ((umbralPeligro - (-140f)) / 100f)
+            val umbralY = height * normalizedUmbral
+            drawLine(
+                color = Color.Red.copy(alpha = 0.5f),
+                start = Offset(0f, umbralY),
+                end = Offset(width, umbralY),
+                strokeWidth = 2f,
+                pathEffect = androidx.compose.ui.graphics.PathEffect.dashPathEffect(floatArrayOf(10f, 10f))
+            )
+
+            if (dbmHistory.isEmpty()) return@Canvas
+            
+            val minDbm = -140f
+            val maxDbm = -40f
+            val range = maxDbm - minDbm
+            val stepX = width / (maxPoints - 1)
+            val startX = width - ((dbmHistory.size - 1) * stepX)
+            
+            // Dibujar cada segmento de la línea
+            for (i in 0 until dbmHistory.size - 1) {
+                val dbm1 = dbmHistory[i]
+                val dbm2 = dbmHistory[i + 1]
+                
+                val x1 = startX + (i * stepX)
+                val y1 = height * (1f - ((dbm1 - minDbm) / range).coerceIn(0f, 1f))
+                val x2 = startX + ((i + 1) * stepX)
+                val y2 = height * (1f - ((dbm2 - minDbm) / range).coerceIn(0f, 1f))
+                
+                // Color dinámico: Rojo si supera el umbral, Cian si es seguro
+                val color = if (dbm1 >= umbralPeligro || dbm2 >= umbralPeligro) Color.Red else Color(0xFF00FFCC)
+                
+                drawLine(
+                    color = color,
+                    start = Offset(x1, y1),
+                    end = Offset(x2, y2),
+                    strokeWidth = 4f
+                )
+            }
+        }
+        Text("ROJO = ZONA DE ALTA POTENCIA (POSIBLE IMSI-CATCHER)", color = Color.Red, fontSize = 9.sp, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Bold)
+    }
+}
+
+@Composable
+fun GeoGraph(active: CellData, geoHistory: List<Float>) {
+    // Si es null, es que el módem no nos da el dato.
+    val isTaAvailable = active.timingAdvance != null && active.timingAdvance != Int.MAX_VALUE
+    val taValue = active.timingAdvance ?: -1 
+    
+    val is5g = active.networkType.contains("5G")
+    val multiplier = if (is5g) 150 else 78
+    val distanceMeters = taValue * multiplier
+    
+    val distanceText = when {
+        !isTaAvailable || taValue < 0 -> "NO DISPONIBLE"
+        taValue == 0 -> "< $multiplier m"
+        distanceMeters >= 1000 -> String.format("%.2f km", distanceMeters / 1000f)
+        else -> "$distanceMeters m"
+    }
+
+    Column(modifier = Modifier.fillMaxWidth().padding(top = 16.dp)) {
+        HorizontalDivider(color = Color(0xFF1A1A1A))
+        Spacer(Modifier.height(8.dp))
+        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.Bottom) {
+            Column {
+                Text("TELEMETRÍA GEOMÉTRICA (TA)", color = Color(0xFF555555), fontFamily = FontFamily.Monospace, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                Text(if (isTaAvailable && taValue >= 0) "Timing Advance: $taValue" else "Timing Advance: BLOQUEADO", color = Color(0xFFFFA000), fontFamily = FontFamily.Monospace, fontSize = 14.sp, fontWeight = FontWeight.Bold)
+            }
+            Column(horizontalAlignment = Alignment.End) {
+                Text("DISTANCIA FÍSICA APROX.", color = Color(0xFF444444), fontSize = 8.sp, fontFamily = FontFamily.Monospace)
+                Text(distanceText, color = if (isTaAvailable && taValue >= 0) Color.White else Color(0xFF888888), fontFamily = FontFamily.Monospace, fontSize = 16.sp, fontWeight = FontWeight.ExtraBold)
+            }
+        }
+
+        Canvas(modifier = Modifier.fillMaxWidth().height(100.dp).padding(vertical = 8.dp)) {
+            // Si no tenemos datos, dibujamos un mensaje visual en el Canvas
+            if (geoHistory.isEmpty() || !isTaAvailable || taValue < 0) {
+                 drawContext.canvas.nativeCanvas.drawText("SENSOR DE TA BLOQUEADO POR HARDWARE", 20f, 50f, android.graphics.Paint().apply { color = android.graphics.Color.DKGRAY; textSize = 30f })
+                 return@Canvas
+            }
+            
+            val maxPoints = 50
+            val width = size.width
+            val height = size.height
+            val maxTa = (geoHistory.maxOrNull() ?: 10f).coerceAtLeast(10f) * 1.5f 
+            val stepX = width / (maxPoints - 1)
+            val startX = width - ((geoHistory.size - 1) * stepX)
+            
+            val path = Path()
+            geoHistory.forEachIndexed { index, ta ->
+                val normalizedY = 1f - (ta / maxTa).coerceIn(0f, 1f)
+                val y = (height * normalizedY).coerceAtMost(height - 2f)
+                val x = startX + (index * stepX)
+                if (index == 0) path.moveTo(x, y) else path.lineTo(x, y)
+            }
+            drawPath(path = path, color = Color(0xFFFFA000), style = Stroke(width = 3f))
+        }
+        
+        if (!isTaAvailable || taValue < 0) {
+             Text("⚠️ NOTA: El chipset Tensor de Google restringe el acceso al TA en ciertas celdas para ahorrar energía. Esto no es un fallo de tu app, es una limitación de seguridad del hardware.", color = Color(0xFFCF6679), fontSize = 9.sp, fontFamily = FontFamily.Monospace)
+        } else {
+             Text("NARANJA = VARIACIÓN DE DISTANCIA (TA)", color = Color(0xFFFFA000), fontSize = 9.sp, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Bold)
+        }
+    }
+}
+
+@Composable
+fun LiveTerminalPanel(logs: List<String>) {
+    val scrollState = rememberScrollState()
+
+    // Auto-scroll al final cuando llegan nuevos logs
+    LaunchedEffect(logs.size) {
+        scrollState.animateScrollTo(scrollState.maxValue)
+    }
+
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(140.dp), // Altura fija para no comerse toda la pantalla
+        colors = CardDefaults.cardColors(containerColor = Color(0xFF050505)), // Negro puro
+        border = BorderStroke(1.dp, Color(0xFF222222)),
+        shape = RoundedCornerShape(4.dp)
+    ) {
+        Column(modifier = Modifier.padding(8.dp)) {
+            Text(
+                "RAW TERMINAL OUTPUT", 
+                color = Color(0xFF444444), 
+                fontFamily = FontFamily.Monospace, 
+                fontSize = 8.sp, 
+                fontWeight = FontWeight.Bold
+            )
+            Spacer(Modifier.height(4.dp))
+            
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .verticalScroll(scrollState)
+            ) {
+                logs.forEach { logLine ->
+                    Text(
+                        text = logLine,
+                        color = if (logLine.contains("PELIGRO") || logLine.contains("⚠️") || logLine.contains("🚨") || logLine.contains("ALERTA")) Color(0xFFCF6679) 
+                                else if (logLine.contains("✅") || logLine.contains("VERIFICADA") || logLine.contains("SYS:")) Color(0xFF4CAF50)
+                                else Color(0xFF00FF00), // Verde terminal clásico
+                        fontFamily = FontFamily.Monospace,
+                        fontSize = 9.sp,
+                        lineHeight = 12.sp
+                    )
+                }
+            }
+        }
+    }
+}
+
+fun exportToCsv(context: Context, items: List<HistoryRecord>, uri: android.net.Uri) {
     try {
-        val writer = FileWriter(file)
-        writer.append("Timestamp,NetType,CID,MNC,TAC,MCC,DBM,Verified\n")
-        items.forEach { item ->
-            writer.append("${item.timestamp},${item.netType},${item.cid},${item.mnc},${item.tac},${item.mcc},${item.dbm},${item.verified.name}\n")
+        val resolver = context.contentResolver
+        resolver.openOutputStream(uri).use { outputStream ->
+            if (outputStream != null) {
+                OutputStreamWriter(outputStream, StandardCharsets.UTF_8).use { writer ->
+                    writer.append("Timestamp,NetType,CID,MNC,TAC,MCC,DBM,Verified,SecurityScore,FailedHeuristics\n")
+                    items.forEach { item ->
+                        writer.append("${item.timestamp},${item.netType},${item.cid},${item.mnc},${item.tac},${item.mcc},${item.dbm},${item.verified.name},${item.score},\"${item.failedHeuristics}\"\n")
+                    }
+                    writer.flush()
+                }
+                Toast.makeText(context, "✅ CSV exportado con éxito", Toast.LENGTH_LONG).show()
+            }
         }
-        writer.flush()
-        writer.close()
-
-        val uri = FileProvider.getUriForFile(
-            context,
-            "${context.packageName}.fileprovider",
-            file
-        )
-
-        val intent = Intent(Intent.ACTION_SEND).apply {
-            type = "text/csv"
-            putExtra(Intent.EXTRA_STREAM, uri)
-            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-        }
-        context.startActivity(Intent.createChooser(intent, "Exportar Historial"))
-
     } catch (e: Exception) {
         e.printStackTrace()
+        Toast.makeText(context, "❌ Error al exportar: ${e.message}", Toast.LENGTH_SHORT).show()
     }
 }
 
@@ -1888,9 +2315,16 @@ fun HistoryPanel(dbHelper: CellDbHelper, onBack: () -> Unit) {
         } else {
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
                 val context = LocalContext.current
+                val exportLauncher = rememberLauncherForActivityResult(
+                    contract = ActivityResultContracts.CreateDocument("text/csv")
+                ) { uri ->
+                    uri?.let { exportToCsv(context, items, it) }
+                }
+
                 TextButton(
                     onClick = {
-                        exportToCsv(context, items)
+                        val fileName = "miniic_history_${System.currentTimeMillis()}.csv"
+                        exportLauncher.launch(fileName)
                     },
                     colors = ButtonDefaults.textButtonColors(contentColor = Color(0xFF4CAF50))
                 ) {
@@ -1941,13 +2375,25 @@ fun HistoryPanel(dbHelper: CellDbHelper, onBack: () -> Unit) {
                                 HorizontalDivider(color = Color(0xFF222222))
                                 records.forEach { record ->
                                     Column(modifier = Modifier.padding(vertical = 8.dp)) {
+                                        // Línea de Fecha y Potencia
                                         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                                             Text(record.timestamp, color = Color(0xFF666666), fontSize = 11.sp, fontFamily = FontFamily.Monospace)
                                             Text("${record.dbm} dBm (${record.netType})", color = Color.White, fontSize = 11.sp, fontFamily = FontFamily.Monospace)
                                         }
-                                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                                            Text("MNC: ${record.mnc}", color = Color(0xFF888888), fontSize = 11.sp, fontFamily = FontFamily.Monospace)
-                                            Text("TAC: ${record.tac}", color = Color(0xFF888888), fontSize = 11.sp, fontFamily = FontFamily.Monospace)
+                                        
+                                        // Línea de MNC / TAC y SCORE DE SEGURIDAD
+                                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                                            Text("MNC: ${record.mnc} | TAC: ${record.tac}", color = Color(0xFF888888), fontSize = 11.sp, fontFamily = FontFamily.Monospace)
+                                            
+                                            // Coloreamos el Score según la gravedad
+                                            val scoreColor = if (record.score >= 90) Color(0xFF4CAF50) else if (record.score >= 70) Color(0xFFFFA000) else Color(0xFFCF6679)
+                                            Text("🛡️ ${record.score}%", color = scoreColor, fontSize = 12.sp, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Bold)
+                                        }
+                                        
+                                        // Línea condicional: Solo aparece si hay heurísticas fallidas
+                                        if (record.failedHeuristics.isNotBlank() && record.failedHeuristics != "OK") {
+                                            Spacer(Modifier.height(4.dp))
+                                            Text("⚠️ Fallo: ${record.failedHeuristics}", color = Color(0xFFCF6679), fontSize = 10.sp, fontFamily = FontFamily.Monospace)
                                         }
                                     }
                                     if (record != records.last()) {
