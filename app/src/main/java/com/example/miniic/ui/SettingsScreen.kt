@@ -1,0 +1,125 @@
+package com.example.miniic.ui
+
+import android.content.Context
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import androidx.core.content.edit
+import com.example.miniic.service.MiniICService
+
+@Composable
+fun SettingsPanel(service: MiniICService?, onSave: () -> Unit) {
+    val context = LocalContext.current
+    val prefs = remember { context.getSharedPreferences("miniic_prefs", Context.MODE_PRIVATE) }
+    var token by remember { mutableStateOf(prefs.getString("opencellid_key", "") ?: "") }
+    var wigleName by remember { mutableStateOf(prefs.getString("wigle_api_name", "") ?: "") }
+    var wigleToken by remember { mutableStateOf(prefs.getString("wigle_api_token", "") ?: "") }
+    var proxyEnabled by remember { mutableStateOf(prefs.getBoolean("proxy_enabled", false)) }
+
+    val scrollState = rememberScrollState()
+
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = Color(0xFF111111)),
+        shape = RoundedCornerShape(4.dp),
+    ) {
+        Column(
+            modifier = Modifier
+                .padding(16.dp)
+                .verticalScroll(scrollState),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            Text("CONFIGURACIÓN", color = Color(0xFF666666), fontFamily = FontFamily.Monospace, fontSize = 12.sp)
+            Text("APIS", color = Color.White, fontSize = 14.sp, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Bold)
+            Text("OpenCellID Token", color = Color(0xFF888888), fontSize = 11.sp, fontFamily = FontFamily.Monospace)
+            OutlinedTextField(
+                value = token,
+                onValueChange = { token = it },
+                modifier = Modifier.fillMaxWidth(),
+                textStyle = LocalTextStyle.current.copy(color = Color.White, fontFamily = FontFamily.Monospace, fontSize = 12.sp),
+                placeholder = { Text("pk.xxxxxxxxxxxxxxxx", color = Color(0xFF444444), fontSize = 12.sp) },
+                visualTransformation = PasswordVisualTransformation(),
+                colors = OutlinedTextFieldDefaults.colors(
+                    focusedBorderColor = Color(0xFF4CAF50),
+                    unfocusedBorderColor = Color(0xFF333333),
+                    cursorColor = Color.White
+                )
+            )
+            HorizontalDivider(color = Color(0xFF1A1A1A), modifier = Modifier.padding(vertical = 4.dp))
+            Text("WiGLE API Name", color = Color(0xFF888888), fontSize = 11.sp, fontFamily = FontFamily.Monospace)
+            OutlinedTextField(
+                value = wigleName,
+                onValueChange = { wigleName = it },
+                modifier = Modifier.fillMaxWidth(),
+                textStyle = LocalTextStyle.current.copy(color = Color.White, fontFamily = FontFamily.Monospace, fontSize = 12.sp),
+                placeholder = { Text("AIDxxxxxxxxxxxxxxxx", color = Color(0xFF444444), fontSize = 12.sp) },
+                colors = OutlinedTextFieldDefaults.colors(
+                    focusedBorderColor = Color(0xFF4CAF50),
+                    unfocusedBorderColor = Color(0xFF333333),
+                    cursorColor = Color.White
+                )
+            )
+            Text("WiGLE API Token", color = Color(0xFF888888), fontSize = 11.sp, fontFamily = FontFamily.Monospace)
+            OutlinedTextField(
+                value = wigleToken,
+                onValueChange = { wigleToken = it },
+                modifier = Modifier.fillMaxWidth(),
+                textStyle = LocalTextStyle.current.copy(color = Color.White, fontFamily = FontFamily.Monospace, fontSize = 12.sp),
+                placeholder = { Text("xxxxxxxxxxxxxxxx", color = Color(0xFF444444), fontSize = 12.sp) },
+                visualTransformation = PasswordVisualTransformation(),
+                colors = OutlinedTextFieldDefaults.colors(
+                    focusedBorderColor = Color(0xFF4CAF50),
+                    unfocusedBorderColor = Color(0xFF333333),
+                    cursorColor = Color.White
+                )
+            )
+            HorizontalDivider(color = Color(0xFF222222), modifier = Modifier.padding(vertical = 4.dp))
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                Column {
+                    Text("Proxy Tor (Orbot)", color = Color.White, fontSize = 14.sp, fontFamily = FontFamily.Monospace)
+                    Text("Enruta API por Tor (SOCKS5 9050)", color = Color(0xFF666666), fontSize = 10.sp, fontFamily = FontFamily.Monospace)
+                }
+                Switch(
+                    checked = proxyEnabled,
+                    onCheckedChange = { proxyEnabled = it },
+                    colors = SwitchDefaults.colors(
+                        checkedThumbColor = Color.White,
+                        checkedTrackColor = Color(0xFF4CAF50)
+                    )
+                )
+            }
+            Button(
+                onClick = {
+                    prefs.edit {
+                        putString("opencellid_key", token)
+                        putString("wigle_api_name", wigleName)
+                        putString("wigle_api_token", wigleToken)
+                        putBoolean("proxy_enabled", proxyEnabled)
+                    }
+                    service?.openCellIdKey = token
+                    service?.wigleApiName = wigleName
+                    service?.wigleApiToken = wigleToken
+                    service?.isProxyEnabled = proxyEnabled
+                    onSave()
+                },
+                modifier = Modifier.fillMaxWidth(),
+                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF333333)),
+                shape = RoundedCornerShape(4.dp)
+            ) {
+                Text("GUARDAR AJUSTES", color = Color.White, fontFamily = FontFamily.Monospace)
+            }
+        }
+    }
+}

@@ -1,0 +1,740 @@
+package com.example.miniic.service
+
+import android.Manifest
+import android.app.*
+import android.content.*
+import android.content.pm.PackageManager
+import android.location.Location
+import android.location.LocationManager
+import android.media.AudioManager
+import android.media.ToneGenerator
+import android.os.*
+import android.provider.Settings
+import android.telephony.*
+import android.util.Log
+import androidx.annotation.RequiresApi
+import androidx.core.app.NotificationCompat
+import androidx.core.content.ContextCompat
+import com.example.miniic.MainActivity
+import com.example.miniic.core.ThreatAnalyzer
+import com.example.miniic.models.*
+import com.example.miniic.network.OpenCellIdClient
+import com.example.miniic.network.WigleClient
+import com.example.miniic.storage.CellDbHelper
+import com.example.miniic.telephony.CellParser
+import kotlinx.coroutines.*
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import okhttp3.OkHttpClient
+import java.text.SimpleDateFormat
+import java.util.*
+import java.util.concurrent.ConcurrentHashMap
+
+class MiniICService : Service() {
+
+    private val binder = LocalBinder()
+    private val scope = CoroutineScope(Dispatchers.Main + Job())
+    
+    private val _cellFlow = MutableStateFlow<List<CellData>>(emptyList())
+    val cellFlow: StateFlow<List<CellData>> = _cellFlow
+
+    private val _liveLogs = MutableStateFlow(listOf("[SYS] ICdetection Engine v1.0 Iniciado...", "[SYS] Esperando hooks del módem..."))
+    val liveLogs: StateFlow<List<String>> = _liveLogs
+
+    private val _dbmHistory = MutableStateFlow<List<Int>>(emptyList())
+    val dbmHistory: StateFlow<List<Int>> = _dbmHistory
+
+    private val _geoHistory = MutableStateFlow<List<Float>>(emptyList())
+    val geoHistory: StateFlow<List<Float>> = _geoHistory
+
+    private val _auditStatus = MutableStateFlow("")
+    val auditStatus: StateFlow<String> = _auditStatus
+
+    private var refreshActiveCellVerification = false
+
+    private fun appendLog(type: String, message: String) {
+        val timestamp = SimpleDateFormat("HH:mm:ss.SSS", Locale.getDefault()).format(Date())
+        val newLog = "[$timestamp] $type $message"
+        _liveLogs.value = (_liveLogs.value + newLog).takeLast(40)
+    }
+
+    private lateinit var telephonyManager: TelephonyManager
+    private lateinit var dbHelper: CellDbHelper
+    private lateinit var locationManager: LocationManager
+    private var toneGenerator: ToneGenerator? = null
+    private var telephonyCallback: TelephonyCallback? = null
+    private var displayInfoCallback: TelephonyCallback? = null
+    private var screenReceiver: BroadcastReceiver? = null
+    private var lastDisplayInfo: TelephonyDisplayInfo? = null
+    private var isScreenOn = true
+    private var isServiceRunning = false
+    private var lastAirplaneTriggerTime = 0L
+    
+    private var isHardwareCipheringActive = true
+
+    var openCellIdKey: String = ""
+    var wigleApiName: String = ""
+    var wigleApiToken: String = ""
+    private val client = OkHttpClient()
+    private val verificationCache = ConcurrentHashMap<String, VerificationStatus>()
+
+    var alarmThreshold = -50f
+    var isStrongSignalAlarmEnabled = true
+    var is3gAirplaneModeEnabled = true
+    var isProxyEnabled = false
+
+    private var prevCid: String? = null
+    private var prevNetType: String? = null
+    private var prevDbm: Int? = null
+    private var isCallbackWorking = false
+    private var connectionRetryCount = 0
+    private val cellChangeHistory = mutableListOf<Pair<String, Long>>()
+
+    inner class LocalBinder : Binder() {
+        fun getService(): MiniICService = this@MiniICService
+    }
+
+    fun forceRefresh() {
+        _cellFlow.value = emptyList()
+        requestFreshCellInfo()
+    }
+
+    override fun onCreate() {
+        super.onCreate()
+        isServiceRunning = true
+        telephonyManager = getSystemService(TELEPHONY_SERVICE) as TelephonyManager
+        dbHelper = CellDbHelper(this)
+        locationManager = getSystemService(LOCATION_SERVICE) as LocationManager
+        
+        val prefs = getSharedPreferences("miniic_prefs", MODE_PRIVATE)
+        openCellIdKey = prefs.getString("opencellid_key", "") ?: ""
+        wigleApiName = prefs.getString("wigle_api_name", "") ?: ""
+        wigleApiToken = prefs.getString("wigle_api_token", "") ?: ""
+        isProxyEnabled = prefs.getBoolean("proxy_enabled", false)
+
+        try {
+            toneGenerator = ToneGenerator(AudioManager.STREAM_ALARM, 100)
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+
+        createNotificationChannel()
+        startForeground(NOTIFICATION_ID, buildNotification("Sondeo activo"))
+
+        registerTelephonyCallback()
+        registerDisplayInfoCallback()
+        registerScreenReceiver()
+
+        scope.launch(Dispatchers.Default) {
+            var wasAirplaneModeOn = false
+            while (isActive && isServiceRunning) {
+                val delayTime = if (isScreenOn) 2000L else 10000L
+                
+                val isAirplaneModeOn = Settings.Global.getInt(
+                    contentResolver, 
+                    Settings.Global.AIRPLANE_MODE_ON, 
+                    0,
+                ) != 0
+
+                if (isAirplaneModeOn) {
+                    _cellFlow.value = emptyList()
+                    updateNotificationText("Sin señal / Modo Avión")
+                    appendLog("[SYS]", "⚠️ Modo Avión activo. Suspendiendo escaneo.")
+                    wasAirplaneModeOn = true
+                } else {
+                    if (wasAirplaneModeOn) {
+                        appendLog("[SYS]", "Conexión restaurada. Analizando nueva celda activa...")
+                        refreshActiveCellVerification = true
+                        wasAirplaneModeOn = false
+                    }
+                    requestFreshCellInfo()
+                }
+
+                delay(delayTime)
+            }
+        }
+    }
+
+    private fun registerScreenReceiver() {
+        val filter = IntentFilter().apply {
+            addAction(Intent.ACTION_SCREEN_ON)
+            addAction(Intent.ACTION_SCREEN_OFF)
+        }
+        screenReceiver = object : BroadcastReceiver() {
+            override fun onReceive(context: Context?, intent: Intent?) {
+                isScreenOn = intent?.action == Intent.ACTION_SCREEN_ON
+            }
+        }
+        registerReceiver(screenReceiver, filter)
+    }
+
+    private fun registerTelephonyCallback() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            if (ContextCompat.checkSelfPermission(this, Manifest.permission.READ_PHONE_STATE) == PackageManager.PERMISSION_GRANTED) {
+                try {
+                    val callback = object : TelephonyCallback(), TelephonyCallback.CellInfoListener {
+                        override fun onCellInfoChanged(cellInfo: MutableList<CellInfo>) {
+                            isCallbackWorking = true
+                            processCellInfo(cellInfo)
+                        }
+                    }
+                    telephonyCallback = callback
+                    telephonyCallback?.let {
+                        telephonyManager.registerTelephonyCallback(mainExecutor, it)
+                    }
+
+                    if (Build.VERSION.SDK_INT >= 34) {
+                        registerAdvancedSecurityCallback()
+                    }
+                } catch (e: SecurityException) {
+                    e.printStackTrace()
+                }
+            }
+        }
+    }
+
+    private fun registerAdvancedSecurityCallback() {
+        try {
+            if (Build.VERSION.SDK_INT >= 34) {
+                val securityCallback = ImsiCatcherSecurityCallback()
+                telephonyManager.registerTelephonyCallback(mainExecutor, securityCallback)
+                appendLog("[SYS]", "Callback de seguridad de hardware L3 registrado.")
+            }
+        } catch (e: Exception) {
+            Log.e("MiniIC", "Aviso: No se pudo registrar el callback de seguridad avanzado: ${e.message}")
+            appendLog("[SYS]", "Error al registrar callback L3: ${e.message}")
+        }
+    }
+
+    private fun triggerSecurityAlert(message: String) {
+        Log.e("MiniIC_Security", message)
+        appendLog("[SEC]", "🚨 ALERTA: $message")
+        toneGenerator?.startTone(ToneGenerator.TONE_SUP_ERROR, 500)
+        updateNotificationText("⚠️ $message")
+        
+        scope.launch(Dispatchers.IO) {
+            dbHelper.logConnection(
+                netType = "ALERTA",
+                cid = "SECURITY",
+                mnc = "N/A",
+                tac = "N/A",
+                mcc = "N/A",
+                dbm = -999,
+                verified = VerificationStatus.ERROR
+            )
+        }
+    }
+
+    private fun registerDisplayInfoCallback() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            if (ContextCompat.checkSelfPermission(this, Manifest.permission.READ_PHONE_STATE) == PackageManager.PERMISSION_GRANTED) {
+                try {
+                    displayInfoCallback = object : TelephonyCallback(), TelephonyCallback.DisplayInfoListener {
+                        override fun onDisplayInfoChanged(displayInfo: TelephonyDisplayInfo) {
+                            isCallbackWorking = true
+                            lastDisplayInfo = displayInfo
+                            requestFreshCellInfo()
+                        }
+                    }
+                    displayInfoCallback?.let {
+                        telephonyManager.registerTelephonyCallback(mainExecutor, it)
+                    }
+                } catch (e: SecurityException) {
+                    e.printStackTrace()
+                }
+            }
+        }
+    }
+
+    private fun requestFreshCellInfo() {
+        if (!isCallbackWorking && (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S)) {
+            connectionRetryCount++
+            if (connectionRetryCount >= 4) {
+                connectionRetryCount = 0
+                try {
+                    telephonyManager = getSystemService(TELEPHONY_SERVICE) as TelephonyManager
+                    telephonyCallback?.let { telephonyManager.unregisterTelephonyCallback(it) }
+                    displayInfoCallback?.let { telephonyManager.unregisterTelephonyCallback(it) }
+                } catch (_: Exception) {}
+                registerTelephonyCallback()
+                registerDisplayInfoCallback()
+            }
+        }
+
+        if ((telephonyCallback == null) && (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S)) {
+            registerTelephonyCallback()
+        }
+        if ((displayInfoCallback == null) && (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S)) {
+            registerDisplayInfoCallback()
+        }
+
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED) {
+            try {
+                telephonyManager.requestCellInfoUpdate(
+                    mainExecutor,
+                    object : TelephonyManager.CellInfoCallback() {
+                        override fun onCellInfo(cellInfo: MutableList<CellInfo>) {
+                            processCellInfo(cellInfo)
+                        }
+                        override fun onError(errorCode: Int, detail: Throwable?) {
+                            if (ContextCompat.checkSelfPermission(this@MiniICService, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED) {
+                                try {
+                                    processCellInfo(telephonyManager.allCellInfo)
+                                } catch (e: SecurityException) { e.printStackTrace() }
+                            }
+                        }
+                    }
+                )
+            } catch (e: SecurityException) { e.printStackTrace() }
+        }
+    }
+
+    override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        if (intent?.action == ACTION_STOP) {
+            stopSelf()
+            return START_NOT_STICKY
+        }
+        return START_STICKY
+    }
+
+    override fun onBind(intent: Intent?): IBinder = binder
+
+    override fun onDestroy() {
+        super.onDestroy()
+        isServiceRunning = false
+        scope.cancel()
+        toneGenerator?.release()
+        screenReceiver?.let { unregisterReceiver(it) }
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            telephonyCallback?.let {
+                telephonyManager.unregisterTelephonyCallback(it)
+            }
+            displayInfoCallback?.let {
+                telephonyManager.unregisterTelephonyCallback(it)
+            }
+        }
+    }
+
+    private fun processCellInfo(infoList: List<CellInfo>?) {
+        try {
+            if (!infoList.isNullOrEmpty()) {
+                isCallbackWorking = true
+                connectionRetryCount = 0
+            }
+
+            var list = mutableListOf<CellData>()
+            infoList?.forEach { info ->
+                val networkTypeString = if (info.isRegistered && info is CellInfoLte) {
+                    getLteSpecificType()
+                } else if (info is CellInfoLte) {
+                    "4G LTE"
+                } else if (info is CellInfoNr) {
+                    "5G NR (SA)"
+                } else if (info is CellInfoWcdma) {
+                    "3G WCDMA"
+                } else if (info is CellInfoGsm) {
+                    "2G GSM"
+                } else {
+                    "Unknown"
+                }
+
+                val mcc = getNetworkOperatorMcc()
+                val mnc = getNetworkOperatorMnc()
+
+                val parsed = CellParser.parseCell(info, networkTypeString, mcc, mnc)
+                if (parsed != null && parsed.dbm != Int.MAX_VALUE && parsed.dbm < 100) {
+                    list.add(parsed)
+                }
+            }
+
+            if (list.isEmpty()) {
+                _cellFlow.value = emptyList()
+                updateNotificationText("Sin señal / Modo Avión")
+                return
+            }
+
+            val bestTa = list.firstOrNull { it.timingAdvance != null && it.timingAdvance >= 0 }?.timingAdvance
+            
+            if (bestTa != null) {
+                list = list.asSequence().map { cell -> 
+                    if (cell.isRegistered && cell.timingAdvance == null) {
+                        cell.copy(timingAdvance = bestTa)
+                    } else cell
+                }.toMutableList()
+            }
+
+            val neighbors = list.filter { !it.isRegistered }
+            val currentLocation = getCurrentLocation()
+
+            val analyzedList = list.map { cell ->
+                ThreatAnalyzer.analyzeThreats(cell, neighbors, isHardwareCipheringActive, cellChangeHistory, currentLocation)
+            }
+
+            val sorted = analyzedList.sortedWith(
+                compareByDescending<CellData> { it.isRegistered }
+                    .thenByDescending { it.dbm }
+            )
+
+            val active = sorted.firstOrNull { it.isRegistered }
+            if (active != null) {
+                verifyCell(active)
+                
+                val cacheKey = "${active.mcc}-${active.mnc}-${active.tac}-${active.cellId}"
+                val status = verificationCache[cacheKey] ?: VerificationStatus.PENDING
+                
+                _cellFlow.value = sorted.map { 
+                    if (it.isRegistered) it.copy(verified = status) else it 
+                }
+                
+                checkAlerts(active.copy(verified = status))
+                updateNotification(active.copy(verified = status))
+            } else {
+                _cellFlow.value = emptyList()
+                updateNotificationText("Buscando red...")
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+    }
+
+    private fun getCurrentLocation(): Location? {
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) return null
+        return try {
+            locationManager.getLastKnownLocation(LocationManager.GPS_PROVIDER) 
+                ?: locationManager.getLastKnownLocation(LocationManager.NETWORK_PROVIDER)
+        } catch (_: Exception) { null }
+    }
+
+    private fun verifyCell(cell: CellData) {
+        if (cell.cellId == "N/A" || cell.mnc == "N/A" || cell.mcc == "N/A") return
+        
+        val cacheKey = "${cell.mcc}-${cell.mnc}-${cell.tac}-${cell.cellId}"
+        
+        if (refreshActiveCellVerification) {
+            val status = verificationCache[cacheKey]
+            if (status == VerificationStatus.NOT_FOUND || status == VerificationStatus.ERROR) {
+                verificationCache.remove(cacheKey)
+                appendLog("[API]", "Re-verificando celda actual tras ciclo de señal...")
+            }
+            refreshActiveCellVerification = false
+        }
+
+        val cachedStatus = verificationCache[cacheKey]
+        if (cachedStatus != null && cachedStatus != VerificationStatus.ERROR) {
+            return 
+        }
+        
+        if (dbHelper.isCellVerified(cell.mnc, cell.tac, cell.cellId)) {
+            verificationCache[cacheKey] = VerificationStatus.VERIFIED
+            return
+        }
+
+        verificationCache[cacheKey] = VerificationStatus.PENDING
+        appendLog("[API]", "Verificando firmas geográficas para CID: ${cell.cellId}...")
+        
+        scope.launch(Dispatchers.IO) {
+            var status = VerificationStatus.PENDING
+            
+            if (wigleApiName.isNotBlank() && wigleApiToken.isNotBlank()) {
+                val (s, data) = WigleClient.tryWigleSync(cell, wigleApiName, wigleApiToken, isProxyEnabled, client)
+                status = s
+                if (status == VerificationStatus.VERIFIED && data != null) {
+                    val lat = data.optDouble("trilat", data.optDouble("lat", 0.0))
+                    val lon = data.optDouble("trilong", data.optDouble("lon", 0.0))
+                    processSuccessfulVerification(lat, lon, cell, cacheKey)
+                }
+            }
+            
+            if (status != VerificationStatus.VERIFIED && openCellIdKey.isNotBlank() && !openCellIdKey.startsWith("pk.YOUR")) {
+                val (s, data) = OpenCellIdClient.tryOpenCellIdSyncWithData(cell, openCellIdKey, isProxyEnabled, client)
+                if (s != VerificationStatus.ERROR) {
+                    status = s
+                    if (status == VerificationStatus.VERIFIED && data != null) {
+                        processSuccessfulVerification(data.getDouble("lat"), data.getDouble("lon"), cell, cacheKey)
+                    }
+                }
+            }
+            
+            if (status == VerificationStatus.NOT_FOUND) {
+                verificationCache[cacheKey] = VerificationStatus.NOT_FOUND
+                dbHelper.updateVerificationStatus(cell.mnc, cell.tac, cell.cellId, VerificationStatus.NOT_FOUND)
+                appendLog("[API]", "Antena NO encontrada en bases de datos públicas.")
+            } else if (status == VerificationStatus.ERROR) {
+                verificationCache.remove(cacheKey)
+                appendLog("[API]", "⚠️ Error de conexión. Se reintentará la verificación.")
+            }
+        }
+    }
+
+    private fun processSuccessfulVerification(lat: Double, lon: Double, cell: CellData, cacheKey: String) {
+        appendLog("[API]", "Validación de base de datos OK. Lat/Lon obtenidas.")
+        verificationCache[cacheKey] = VerificationStatus.VERIFIED
+        dbHelper.updateVerificationStatus(
+            cell.mnc,
+            cell.tac,
+            cell.cellId,
+            VerificationStatus.VERIFIED)
+        
+        val updatedActive = cell.copy(verified = VerificationStatus.VERIFIED, lat = lat, lon = lon)
+        val analyzedActive = ThreatAnalyzer.analyzeThreats(updatedActive, emptyList(), isHardwareCipheringActive, cellChangeHistory, getCurrentLocation())
+        
+        scope.launch(Dispatchers.Main) {
+            _cellFlow.value = _cellFlow.value.map { 
+                if (it.cellId == cell.cellId) analyzedActive.copy(isRegistered = it.isRegistered) else it 
+            }
+            
+            if (analyzedActive.isSuspicious && analyzedActive.isRegistered) {
+                toneGenerator?.startTone(ToneGenerator.TONE_CDMA_SOFT_ERROR_LITE, 200)
+                checkAlerts(analyzedActive)
+            }
+        }
+    }
+
+    private fun checkAlerts(cell: CellData) {
+        val cid = cell.cellId
+        val dbm = cell.dbm
+        val net = cell.networkType
+
+        if (cid != prevCid) {
+            _dbmHistory.value = emptyList()
+            appendLog("[RADIO]", "Handover celular completado -> Nueva celda CID: $cid ($net)")
+            generateAuditLog(cell) 
+
+            val currentTime = System.currentTimeMillis()
+            cellChangeHistory.add(Pair(cid, currentTime))
+            cellChangeHistory.removeAll { currentTime - it.second > 10000L }
+
+            if (cellChangeHistory.size >= 3) {
+                val currentLocation = getCurrentLocation()
+                val speedMps = currentLocation?.speed ?: 0f
+                val isMovingFast = speedMps > 8f
+
+                if (!isMovingFast) {
+                    toneGenerator?.startTone(ToneGenerator.TONE_CDMA_PIP, 300)
+                    appendLog("[SEC]", "🚨 ¡ALERTA! Efecto Ping-Pong detectado en parado.")
+                    Log.e("MiniIC", "ANOMALÍA: Efecto Ping-Pong detectado en parado.")
+                } else {
+                    appendLog("[RADIO]", "Ping-Pong detectado a ${String.format(Locale.getDefault(), "%.1f", speedMps * 3.6f)} km/h. Ignorando alerta por movimiento.")
+                }
+            }
+
+            if (prevCid != null) {
+                scope.launch(Dispatchers.IO) {
+                    dbHelper.logConnection(
+                        netType = net, 
+                        cid = cid, 
+                        mnc = cell.mnc, 
+                        tac = cell.tac, 
+                        mcc = cell.mcc, 
+                        dbm = dbm, 
+                        verified = cell.verified,
+                        score = cell.securityScore,
+                        failedHeuristics = cell.suspiciousReason ?: "OK"
+                    )
+                }
+            }
+            prevCid = cid
+        }
+
+        if (dbm != -999 && dbm != Int.MAX_VALUE) {
+            val currentHistory = _dbmHistory.value.toMutableList()
+            currentHistory.add(dbm)
+            if (currentHistory.size > 50) currentHistory.removeAt(0)
+            _dbmHistory.value = currentHistory
+
+            val currentTa = cell.timingAdvance
+            if (currentTa != null && currentTa != Int.MAX_VALUE) {
+                val currentGeo = _geoHistory.value.toMutableList()
+                currentGeo.add(currentTa.toFloat())
+                if (currentGeo.size > 50) currentGeo.removeAt(0)
+                _geoHistory.value = currentGeo
+            }
+        }
+
+        if (isStrongSignalAlarmEnabled && dbm != -999 && dbm >= alarmThreshold) {
+            toneGenerator?.startTone(ToneGenerator.TONE_CDMA_ALERT_CALL_GUARD, 150)
+            Log.w("MiniIC", "Warning: High power signal detected: $dbm dBm")
+        }
+
+        if (prevNetType != null && prevDbm != null) {
+            val isPrevSecure = prevNetType!!.contains("4G") || prevNetType!!.contains("5G")
+            val isCurrentInsecure = net.contains("2G") || net.contains("3G")
+            if (isPrevSecure && isCurrentInsecure && prevDbm!! >= -85) {
+                toneGenerator?.startTone(ToneGenerator.TONE_SUP_ERROR, 500)
+                Log.e("MiniIC", "CRITICAL: Downgrade attack detected! Pre-transition signal: $prevDbm dBm")
+                triggerAirplaneMode()
+            }
+        }
+
+        if (cell.isSuspicious) {
+            toneGenerator?.startTone(ToneGenerator.TONE_CDMA_SOFT_ERROR_LITE, 200)
+            Log.e("MiniIC", "THREAT DETECTED: ${cell.suspiciousReason}")
+        }
+
+        if (is3gAirplaneModeEnabled && (net.contains("3G") || net.contains("2G"))) {
+            triggerAirplaneMode()
+        }
+
+        prevNetType = net
+        prevDbm = dbm
+    }
+
+    private fun triggerAirplaneMode() {
+        val currentTime = System.currentTimeMillis()
+        if (currentTime - lastAirplaneTriggerTime < 60000L) return
+        lastAirplaneTriggerTime = currentTime
+        Log.e("MiniIC", "CRITICAL: 2G/3G network detected! Attempting Airplane Mode fallback.")
+        toneGenerator?.startTone(ToneGenerator.TONE_PROP_BEEP2, 500)
+        try {
+            val isAirplaneOn = Settings.Global.getInt(contentResolver, Settings.Global.AIRPLANE_MODE_ON, 0) != 0
+            if (!isAirplaneOn) {
+                Settings.Global.putInt(contentResolver, Settings.Global.AIRPLANE_MODE_ON, 1)
+                val intent = Intent(Intent.ACTION_AIRPLANE_MODE_CHANGED).apply { putExtra("state", true) }
+                sendBroadcast(intent)
+            }
+        } catch (_: SecurityException) {
+            val intent = Intent(Settings.ACTION_AIRPLANE_MODE_SETTINGS).apply { addFlags(Intent.FLAG_ACTIVITY_NEW_TASK) }
+            startActivity(intent)
+        }
+    }
+
+    private fun updateNotification(cell: CellData) {
+        val vStatus = when(cell.verified) {
+            VerificationStatus.VERIFIED -> "✅ VERIFICADA"
+            VerificationStatus.NOT_FOUND -> "❌ NO REGISTRADA"
+            VerificationStatus.ERROR -> "⚠️ ERROR API"
+            VerificationStatus.PENDING -> "⏳ PENDIENTE"
+        }
+        val content = "$vStatus | ${cell.networkType} | CID: ${cell.cellId} | ${cell.dbm} dBm"
+        updateNotificationText(content)
+    }
+
+    private fun updateNotificationText(text: String) {
+        val nm = getSystemService(NOTIFICATION_SERVICE) as NotificationManager
+        nm.notify(NOTIFICATION_ID, buildNotification(text))
+    }
+
+    private fun buildNotification(text: String): Notification {
+        val intent = Intent(this, MainActivity::class.java)
+        val pendingIntent = PendingIntent.getActivity(this, 0, intent, PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
+        val stopIntent = Intent(this, MiniICService::class.java).apply { action = ACTION_STOP }
+        val stopPending = PendingIntent.getService(this, 1, stopIntent, PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
+
+        return NotificationCompat.Builder(this, CHANNEL_ID)
+            .setContentTitle("ICdetection: Monitoreo")
+            .setContentText(text)
+            .setSmallIcon(android.R.drawable.ic_menu_info_details)
+            .setContentIntent(pendingIntent)
+            .setOngoing(true)
+            .addAction(android.R.drawable.ic_menu_close_clear_cancel, "Detener", stopPending)
+            .build()
+    }
+
+    private fun createNotificationChannel() {
+        val chan = NotificationChannel(CHANNEL_ID, "miniIC Channel", NotificationManager.IMPORTANCE_LOW)
+        val nm = getSystemService(NotificationManager::class.java)
+        nm.createNotificationChannel(chan)
+    }
+
+    private fun getNetworkOperatorMcc(): String {
+        val operator = telephonyManager.networkOperator
+        return if (operator != null && operator.length >= 3) operator.substring(0, 3) else "N/A"
+    }
+
+    private fun getNetworkOperatorMnc(): String {
+        val operator = telephonyManager.networkOperator
+        return if (operator != null && operator.length > 3) operator.substring(3) else "N/A"
+    }
+
+    private fun getLteSpecificType(): String {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            lastDisplayInfo?.let { info ->
+                val override = info.overrideNetworkType
+                if (override == TelephonyDisplayInfo.OVERRIDE_NETWORK_TYPE_NR_NSA || override == TelephonyDisplayInfo.OVERRIDE_NETWORK_TYPE_NR_ADVANCED) return "5G NR (NSA)"
+            }
+            if (ContextCompat.checkSelfPermission(this, Manifest.permission.READ_PHONE_STATE) == PackageManager.PERMISSION_GRANTED) {
+                try {
+                    val ssStr = telephonyManager.serviceState?.toString() ?: ""
+                    if (ssStr.contains("nrState=CONNECTED") || ssStr.contains("nrState=NOT_RESTRICTED")) return "5G NR (NSA)"
+                } catch (_: Exception) {}
+            }
+        }
+        return "4G LTE"
+    }
+
+    private fun generateAuditLog(cell: CellData) {
+        _auditStatus.value = "Auditoría en curso..."
+        appendLog("[AUDIT]", "--- INICIANDO CICLO DE AUDITORÍA (9 REGLAS) ---")
+        val report = cell.heuristicReport
+        val results = mapOf(
+            "1. Celda Aislada" to report.isolatedCellPassed,
+            "2. Estabilidad Potencia" to report.powerJumpPassed,
+            "3. Consistencia MCC" to report.mccConsistencyPassed,
+            "4. Límite MNC" to report.mncCountPassed,
+            "5. Validación Regional TAC" to report.tacDeviationPassed,
+            "6. Geometría (TA)" to report.taDistancePassed,
+            "7. Espectro Fantasma" to report.ghostNeighborsPassed,
+            "8. Cifrado Hardware" to report.hardwareCipheringPassed,
+            "9. Anti Ping-Pong" to report.pingPongPassed
+        )
+
+        results.forEach { (regla, pasado) ->
+            val status = if (pasado) "PASSED" else "FAILED"
+            appendLog("[HEUR]", "$regla: $status")
+        }
+
+        appendLog("[AUDIT]", "Resultado Global: ${cell.securityScore}% de seguridad.")
+        if (cell.isSuspicious) appendLog("[SEC]", "🚨 CRÍTICO: Antena sospechosa detectada: ${cell.suspiciousReason}")
+        else appendLog("[SYS]", "✅ Entorno validado como SEGURO.")
+        _auditStatus.value = "Auditoría completada ✅"
+    }
+
+    @RequiresApi(Build.VERSION_CODES.S)
+    inner class ImsiCatcherSecurityCallback : TelephonyCallback(), TelephonyCallback.CellInfoListener {
+        override fun onCellInfoChanged(cellInfo: MutableList<CellInfo>) {}
+        
+        @Suppress("unused")
+        fun onCipheringStatusChanged(params: Any) {
+            appendLog("[MODEM]", "SYS: Evento de cambio en estado de cifrado detectado.")
+            try {
+                val getStatusMethod = params::class.java.getMethod("getCipheringStatus")
+                val status = getStatusMethod.invoke(params) as Int
+                if (status == 0) {
+                    isHardwareCipheringActive = false
+                    appendLog("[MODEM]", "¡ALERTA L1! Protocolo de cifrado anulado (A5/0)")
+                    triggerSecurityAlert("¡PELIGRO! Conexión celular NO CIFRADA (Cifrado nulo detectado)")
+                } else {
+                    isHardwareCipheringActive = true
+                    appendLog("[MODEM]", "SYS: Cifrado de hardware validado como ACTIVO.")
+                }
+            } catch (_: Exception) {
+                try {
+                    val statusField = params::class.java.getField("cipheringStatus")
+                    val status = statusField[params] as Int
+                    if (status == 0) {
+                        isHardwareCipheringActive = false
+                        appendLog("[MODEM]", "¡ALERTA L1! Protocolo de cifrado anulado (A5/0)")
+                        triggerSecurityAlert("¡PELIGRO! Conexión celular NO CIFRADA (Cifrado nulo detectado)")
+                    } else {
+                        isHardwareCipheringActive = true
+                        appendLog("[MODEM]", "SYS: Cifrado de hardware validado como ACTIVO.")
+                    }
+                } catch (_: Exception) {
+                    triggerSecurityAlert("¡AVISO! Cambio de seguridad en el cifrado detectado")
+                }
+            }
+        }
+
+        @Suppress("unused", "UNUSED_PARAMETER")
+        fun onCellularIdentifierDisclosure(params: Any) {
+            appendLog("[MODEM]", "🚨 CRÍTICO: Detección de Disclosure de Identificador Celular!")
+            triggerSecurityAlert("¡ALERTA CRÍTICA! Intento de extracción de IMSI detectado por la red")
+        }
+    }
+
+    companion object {
+        const val CHANNEL_ID = "miniic_channel"
+        const val NOTIFICATION_ID = 202
+        const val ACTION_STOP = "com.example.miniic.STOP"
+    }
+}

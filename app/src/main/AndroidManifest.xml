@@ -40,7 +40,7 @@
         </activity>
 
         <service
-            android:name="com.example.miniic.MiniICService"
+            android:name="com.example.miniic.service.MiniICService"
             android:foregroundServiceType="location"
             android:enabled="true"
             android:exported="false" />
