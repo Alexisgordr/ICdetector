@@ -875,12 +875,12 @@ class MiniICService : Service() {
         scope.launch(Dispatchers.IO) {
             var found = false
             
-            // 1. Intentar con WiGLE primero (si está configurado)
+            // 1. Intentar con WiGLE primero (Prioridad 1)
             if (wigleApiName.isNotBlank() && wigleApiToken.isNotBlank()) {
                 found = tryWigleSync(cell, cacheKey)
             }
             
-            // 2. Si no se encontró en WiGLE, intentamos con OpenCellId
+            // 2. Si no se encontró en WiGLE, intentamos con OpenCellId (Prioridad 2)
             if (!found && openCellIdKey.isNotBlank() && !openCellIdKey.startsWith("pk.YOUR")) {
                 found = tryOpenCellIdSync(cell, cacheKey)
             }
@@ -932,9 +932,19 @@ class MiniICService : Service() {
         }
 
         val credentials = okhttp3.Credentials.basic(wigleApiName, wigleApiToken)
-        val url = "https://api.wigle.net/api/v2/cell/search?cell_net=${cell.mcc}&cell_op=${cell.mnc}&cell_lac=${cell.tac}&cell_id=${cell.cellId}"
+        
+        // Parámetros limpios (WiGLE prefiere números sin ceros a la izquierda a veces)
+        val cleanMcc = cell.mcc.toIntOrNull() ?: cell.mcc
+        val cleanMnc = cell.mnc.toIntOrNull() ?: cell.mnc
+        
+        val url = "https://api.wigle.net/api/v2/cell/search?cell_net=$cleanMcc&cell_op=$cleanMnc&cell_lac=${cell.tac}&cell_id=${cell.cellId}"
+        
         appendLog("[API]", "Consultando WiGLE para CID: ${cell.cellId}...")
-        val request = Request.Builder().url(url).header("Authorization", credentials).build()
+        val request = Request.Builder()
+            .url(url)
+            .header("Authorization", credentials)
+            .header("User-Agent", "ICdetection/1.0 (Android)")
+            .build()
         
         return try {
             currentClient.newCall(request).execute().use { response ->
@@ -951,7 +961,12 @@ class MiniICService : Service() {
                             true
                         } else false
                     } else false
-                } else false
+                } else {
+                    if (response.code == 412) {
+                        appendLog("[API]", "⚠️ WiGLE Error 412: Acepta los términos en su web.")
+                    }
+                    false
+                }
             }
         } catch (_: IOException) {
             false
