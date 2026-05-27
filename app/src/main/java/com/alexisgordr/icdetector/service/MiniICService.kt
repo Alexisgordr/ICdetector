@@ -548,7 +548,7 @@ class MiniICService : Service() {
                     dbm = dbm, 
                     verified = cell.verified, // Será PENDING inicialmente
                     score = cell.securityScore,
-                    failedHeuristics = cell.suspiciousReason ?: "PENDING_AUDIT",
+                    failedHeuristics = cell.suspiciousReason ?: "OK",
                     lat = loc?.latitude,
                     lon = loc?.longitude
                 )
