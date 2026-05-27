@@ -10,7 +10,7 @@
       </ul>
     </td>
     <td width="40%" align="center">
-      <img src="https://github.com/user-attachments/assets/7d52c276-b2bd-4ff2-b4bf-b1f906e81f64" alt="miniIC Screenshot" width="260" />
+      <img src="https://github.com/user-attachments/assets/d07675cf-04e2-4d7a-b836-03d1988d8ddb" alt="miniIC Screenshot" width="260" />
     </td>
   </tr>
 </table>
