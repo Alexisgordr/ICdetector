@@ -76,7 +76,7 @@ class CellDbHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME, 
         failedHeuristics: String = "",
         lat: Double? = null,
         lon: Double? = null
-    ) {
+    ): Long {
         val db = this.writableDatabase
         val values = ContentValues().apply {
             val sdf = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault())
@@ -93,7 +93,54 @@ class CellDbHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME, 
             if (lat != null) put(COLUMN_LAT, lat)
             if (lon != null) put(COLUMN_LON, lon)
         }
-        db.insert(TABLE_HISTORY, null, values)
+        return db.insert(TABLE_HISTORY, null, values)
+    }
+
+    fun getKnownStatus(mnc: String, tac: String, cid: String, mcc: String, currentLat: Double? = null, currentLon: Double? = null): VerificationStatus {
+        val db = this.readableDatabase
+        // Buscamos cualquier registro previo de esta antena que no sea PENDING o ERROR
+        val query = "SELECT $COLUMN_VERIFIED, $COLUMN_LAT, $COLUMN_LON, $COLUMN_TIMESTAMP FROM $TABLE_HISTORY " +
+                    "WHERE $COLUMN_CID=? AND $COLUMN_MNC=? AND $COLUMN_TAC=? AND $COLUMN_MCC=? " +
+                    "AND $COLUMN_VERIFIED IN ('VERIFIED', 'NOT_FOUND') " +
+                    "ORDER BY CASE WHEN $COLUMN_VERIFIED='VERIFIED' THEN 1 ELSE 2 END ASC, $COLUMN_ID DESC LIMIT 1"
+        
+        val cursor = db.rawQuery(query, arrayOf(cid, mnc, tac, mcc))
+        var status = VerificationStatus.PENDING
+        
+        if (cursor.moveToFirst()) {
+            val savedStatusStr = cursor.getString(0)
+            val savedLat = if (cursor.isNull(1)) null else cursor.getDouble(1)
+            val savedLon = if (cursor.isNull(2)) null else cursor.getDouble(2)
+            val savedTimeStr = cursor.getString(3)
+            
+            val savedStatus = try { VerificationStatus.valueOf(savedStatusStr) } catch(_: Exception) { VerificationStatus.PENDING }
+            
+            if (savedStatus == VerificationStatus.VERIFIED) {
+                if (currentLat == null || currentLon == null || savedLat == null || savedLon == null) {
+                    status = VerificationStatus.VERIFIED
+                } else {
+                    val results = FloatArray(1)
+                    Location.distanceBetween(currentLat, currentLon, savedLat, savedLon, results)
+                    status = if (results[0] < 5000) VerificationStatus.VERIFIED else VerificationStatus.PENDING
+                }
+            } else if (savedStatus == VerificationStatus.NOT_FOUND) {
+                // Heurística de re-intento: si pasó más de 1 hora, volvemos a intentar
+                try {
+                    val sdf = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault())
+                    val savedDate = sdf.parse(savedTimeStr)
+                    val now = Date()
+                    if (savedDate != null && (now.time - savedDate.time) > 3600000) { // 1 hora
+                        status = VerificationStatus.PENDING
+                    } else {
+                        status = VerificationStatus.NOT_FOUND
+                    }
+                } catch (_: Exception) {
+                    status = VerificationStatus.NOT_FOUND
+                }
+            }
+        }
+        cursor.close()
+        return status
     }
 
     fun updateVerificationStatus(mnc: String, tac: String, cid: String, status: VerificationStatus, lat: Double? = null, lon: Double? = null, mcc: String? = null) {

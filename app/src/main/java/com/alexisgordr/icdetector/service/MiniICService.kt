@@ -388,17 +388,23 @@ class MiniICService : Service() {
 
             val active = sorted.firstOrNull { it.isRegistered }
             if (active != null) {
+                // 1. Obtener estado conocido (Caché o DB) para no mostrar PENDING si ya existe
+                val cacheKey = "${active.mcc}-${active.mnc}-${active.tac}-${active.cellId}"
+                val knownStatus = verificationCache[cacheKey] ?: VerificationStatus.PENDING
+
+                // 2. Lanzar alertas y registro con el estado actual
+                checkAlerts(active.copy(verified = knownStatus))
+
+                // 3. Iniciar proceso de verificación (solo si es necesario)
                 verifyCell(active, neighbors)
                 
-                val cacheKey = "${active.mcc}-${active.mnc}-${active.tac}-${active.cellId}"
-                val status = verificationCache[cacheKey] ?: VerificationStatus.PENDING
+                val finalStatus = verificationCache[cacheKey] ?: knownStatus
                 
                 _cellFlow.value = sorted.map { 
-                    if (it.isRegistered) it.copy(verified = status) else it 
+                    if (it.isRegistered) it.copy(verified = finalStatus) else it 
                 }
                 
-                checkAlerts(active.copy(verified = status))
-                updateNotification(active.copy(verified = status))
+                updateNotification(active.copy(verified = finalStatus))
             } else {
                 _cellFlow.value = emptyList()
                 updateNotificationText("Buscando red...")
@@ -421,62 +427,61 @@ class MiniICService : Service() {
         
         val cacheKey = "${cell.mcc}-${cell.mnc}-${cell.tac}-${cell.cellId}"
         
-        if (refreshActiveCellVerification) {
-            val status = verificationCache[cacheKey]
-            if (status == VerificationStatus.NOT_FOUND || status == VerificationStatus.ERROR) {
-                verificationCache.remove(cacheKey)
-                appendLog("[API]", "Re-verificando celda actual tras ciclo de señal...")
-            }
-            refreshActiveCellVerification = false
-        }
+        // 1. Mirar caché rápida
+        val cached = verificationCache[cacheKey]
+        if (cached != null && cached != VerificationStatus.PENDING && cached != VerificationStatus.ERROR) return
 
-        val cachedStatus = verificationCache[cacheKey]
-        if (cachedStatus != null && cachedStatus != VerificationStatus.ERROR) {
-            return 
-        }
-        
-        val currentLoc = getCurrentLocation()
-        if (dbHelper.isCellVerified(cell.mnc, cell.tac, cell.cellId, currentLoc?.latitude, currentLoc?.longitude, cell.mcc)) {
-            verificationCache[cacheKey] = VerificationStatus.VERIFIED
-            return
-        }
-
-        verificationCache[cacheKey] = VerificationStatus.PENDING
-        
         scope.launch(Dispatchers.IO) {
-            var status = VerificationStatus.PENDING
+            // 2. Mirar Base de Datos (fuera del hilo principal)
+            val currentLoc = getCurrentLocation()
+            val statusFromDb = dbHelper.getKnownStatus(cell.mnc, cell.tac, cell.cellId, cell.mcc, currentLoc?.latitude, currentLoc?.longitude)
             
-            // 1. Intentar con WiGLE (Prioridad 1)
+            if (statusFromDb != VerificationStatus.PENDING) {
+                verificationCache[cacheKey] = statusFromDb
+                updateFlowWithStatus(cell.cellId, statusFromDb)
+                return@launch
+            }
+
+            // 3. Consultar APIs si es realmente nueva
+            var finalStatus = VerificationStatus.PENDING
+            appendLog("[API]", "Nueva antena detectada. Verificando firmas en la nube...")
+
+            // Intento WiGLE
             if (wigleApiName.isNotBlank() && wigleApiToken.isNotBlank()) {
-                appendLog("[API]", "Consultando base de datos WiGLE.net para CID: ${cell.cellId}...")
                 val (s, data) = WigleClient.tryWigleSync(cell, wigleApiName, wigleApiToken, isProxyEnabled, client)
-                status = s
-                if (status == VerificationStatus.VERIFIED && data != null) {
+                if (s == VerificationStatus.VERIFIED && data != null) {
                     val lat = data.optDouble("trilat", data.optDouble("lat", 0.0))
                     val lon = data.optDouble("trilong", data.optDouble("lon", 0.0))
                     processSuccessfulVerification(lat, lon, cell, cacheKey, neighbors, "WiGLE")
+                    return@launch
                 }
+                finalStatus = s
             }
             
-            // 2. Si no se encontró en WiGLE, intentamos con OpenCellId (Prioridad 2)
-            if (status != VerificationStatus.VERIFIED && openCellIdKey.isNotBlank() && !openCellIdKey.startsWith("pk.YOUR")) {
-                appendLog("[API]", "WiGLE sin resultados. Consultando OpenCellID como fallback...")
+            // Fallback OpenCellID
+            if (finalStatus != VerificationStatus.VERIFIED && openCellIdKey.isNotBlank() && !openCellIdKey.startsWith("pk.YOUR")) {
                 val (s, data) = OpenCellIdClient.tryOpenCellIdSyncWithData(cell, openCellIdKey, isProxyEnabled, client)
-                if (s != VerificationStatus.ERROR) {
-                    status = s
-                    if (status == VerificationStatus.VERIFIED && data != null) {
-                        processSuccessfulVerification(data.getDouble("lat"), data.getDouble("lon"), cell, cacheKey, neighbors, "OpenCellID")
-                    }
+                if (s == VerificationStatus.VERIFIED && data != null) {
+                    processSuccessfulVerification(data.getDouble("lat"), data.getDouble("lon"), cell, cacheKey, neighbors, "OpenCellID")
+                    return@launch
                 }
+                finalStatus = s
             }
-            
-            if (status == VerificationStatus.NOT_FOUND) {
+
+            // Guardar resultado negativo si ninguna lo encontró
+            if (finalStatus == VerificationStatus.NOT_FOUND) {
                 verificationCache[cacheKey] = VerificationStatus.NOT_FOUND
                 dbHelper.updateVerificationStatus(cell.mnc, cell.tac, cell.cellId, VerificationStatus.NOT_FOUND, mcc = cell.mcc)
-                appendLog("[API]", "Antena NO encontrada en bases de datos públicas.")
-            } else if (status == VerificationStatus.ERROR) {
-                verificationCache.remove(cacheKey)
-                appendLog("[API]", "⚠️ Error de conexión. Se reintentará la verificación.")
+                appendLog("[API]", "Antena no identificada en bases públicas.")
+                updateFlowWithStatus(cell.cellId, VerificationStatus.NOT_FOUND)
+            }
+        }
+    }
+
+    private fun updateFlowWithStatus(cid: String, status: VerificationStatus) {
+        scope.launch(Dispatchers.Main) {
+            _cellFlow.value = _cellFlow.value.map { 
+                if (it.cellId == cid) it.copy(verified = status) else it
             }
         }
     }
@@ -531,24 +536,25 @@ class MiniICService : Service() {
                 appendLog("[RADIO]", "Ping-Pong detectado a ${String.format(Locale.getDefault(), "%.1f", speedKmh)} km/h. Ignorando alerta.")
             }
 
-            if (prevCid != null) {
-                scope.launch(Dispatchers.IO) {
-                    val loc = getCurrentLocation()
-                    dbHelper.logConnection(
-                        netType = net, 
-                        cid = cid, 
-                        mnc = cell.mnc, 
-                        tac = cell.tac, 
-                        mcc = cell.mcc, 
-                        dbm = dbm, 
-                        verified = cell.verified,
-                        score = cell.securityScore,
-                        failedHeuristics = cell.suspiciousReason ?: "OK",
-                        lat = loc?.latitude,
-                        lon = loc?.longitude
-                    )
-                }
+            // --- NUEVO: REGISTRO INMEDIATO DE LA NUEVA CELDA ---
+            scope.launch(Dispatchers.IO) {
+                val loc = getCurrentLocation()
+                dbHelper.logConnection(
+                    netType = net, 
+                    cid = cid, 
+                    mnc = cell.mnc, 
+                    tac = cell.tac, 
+                    mcc = cell.mcc, 
+                    dbm = dbm, 
+                    verified = cell.verified, // Será PENDING inicialmente
+                    score = cell.securityScore,
+                    failedHeuristics = cell.suspiciousReason ?: "PENDING_AUDIT",
+                    lat = loc?.latitude,
+                    lon = loc?.longitude
+                )
             }
+            // --------------------------------------------------
+
             prevCid = cid
         }
 
