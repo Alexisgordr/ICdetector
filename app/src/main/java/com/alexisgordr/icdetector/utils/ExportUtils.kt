@@ -1,9 +1,9 @@
-package com.example.miniic.utils
+package com.alexisgordr.icdetector.utils
 
 import android.content.Context
 import android.net.Uri
 import android.widget.Toast
-import com.example.miniic.models.HistoryRecord
+import com.alexisgordr.icdetector.models.HistoryRecord
 import java.io.OutputStreamWriter
 import java.nio.charset.StandardCharsets
 
@@ -14,7 +14,7 @@ object ExportUtils {
             resolver.openOutputStream(uri).use { outputStream ->
                 if (outputStream != null) {
                     OutputStreamWriter(outputStream, StandardCharsets.UTF_8).use { writer ->
-                        writer.append("Timestamp,NetType,CID,MNC,TAC,MCC,DBM,Verified,SecurityScore,FailedHeuristics\n")
+                        writer.append("Date,Timestamp,NetType,CID,MNC,TAC,MCC,DBM,Verified,SecurityScore,FailedHeuristics\n")
                         items.forEach { item ->
                             writer.append("${item.timestamp},${item.netType},${item.cid},${item.mnc},${item.tac},${item.mcc},${item.dbm},${item.verified.name},${item.score},\"${item.failedHeuristics}\"\n")
                         }

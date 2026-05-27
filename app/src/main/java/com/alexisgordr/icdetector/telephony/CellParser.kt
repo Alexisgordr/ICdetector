@@ -1,8 +1,8 @@
-package com.example.miniic.telephony
+package com.alexisgordr.icdetector.telephony
 
 import android.os.Build
 import android.telephony.*
-import com.example.miniic.models.CellData
+import com.alexisgordr.icdetector.models.CellData
 
 object CellParser {
 
@@ -13,6 +13,8 @@ object CellParser {
             is CellInfoLte -> {
                 val id = info.cellIdentity
                 val dbm = info.cellSignalStrength.dbm
+                val cellMcc = id.mccString ?: mcc
+                val cellMnc = id.mncString ?: mnc
                 var ta = info.cellSignalStrength.timingAdvance.let { if (it == Int.MAX_VALUE) null else it }
                 if (ta == null) {
                     try {
@@ -24,12 +26,14 @@ object CellParser {
                         }
                     } catch (_: Exception) {}
                 }
-                CellData(reg, networkTypeString, id.ci.valOrNa(), mnc, id.tac.valOrNa(), dbm, mcc, timingAdvance = ta, arfcn = id.earfcn)
+                CellData(reg, networkTypeString, id.ci.valOrNa(), cellMnc, id.tac.valOrNa(), dbm, cellMcc, timingAdvance = ta, arfcn = id.earfcn)
             }
             is CellInfoNr -> {
                 val id = info.cellIdentity as CellIdentityNr
                 val strength = info.cellSignalStrength as CellSignalStrengthNr
                 val dbm = strength.ssRsrp
+                val cellMcc = id.mccString ?: mcc
+                val cellMnc = id.mncString ?: mnc
                 var ta: Int? = null
                 if (Build.VERSION.SDK_INT >= 34) {
                     try {
@@ -48,18 +52,22 @@ object CellParser {
                         }
                     } catch (_: Exception) {}
                 }
-                CellData(reg, networkTypeString, id.nci.valOrNa(), mnc, id.tac.valOrNa(), dbm, mcc, timingAdvance = ta, arfcn = id.nrarfcn)
+                CellData(reg, networkTypeString, id.nci.valOrNa(), cellMnc, id.tac.valOrNa(), dbm, cellMcc, timingAdvance = ta, arfcn = id.nrarfcn)
             }
             is CellInfoWcdma -> {
                 val id = info.cellIdentity
                 val dbm = info.cellSignalStrength.dbm
-                CellData(reg, networkTypeString, id.cid.valOrNa(), mnc, id.lac.valOrNa(), dbm, mcc, arfcn = id.uarfcn)
+                val cellMcc = id.mccString ?: mcc
+                val cellMnc = id.mncString ?: mnc
+                CellData(reg, networkTypeString, id.cid.valOrNa(), cellMnc, id.lac.valOrNa(), dbm, cellMcc, arfcn = id.uarfcn)
             }
             is CellInfoGsm -> {
                 val id = info.cellIdentity
                 val dbm = info.cellSignalStrength.dbm
+                val cellMcc = id.mccString ?: mcc
+                val cellMnc = id.mncString ?: mnc
                 val ta = info.cellSignalStrength.timingAdvance.let { if (it == Int.MAX_VALUE) null else it }
-                CellData(reg, networkTypeString, id.cid.valOrNa(), mnc, id.lac.valOrNa(), dbm, mcc, timingAdvance = ta, arfcn = id.arfcn)
+                CellData(reg, networkTypeString, id.cid.valOrNa(), cellMnc, id.lac.valOrNa(), dbm, cellMcc, timingAdvance = ta, arfcn = id.arfcn)
             }
             else -> null
         }

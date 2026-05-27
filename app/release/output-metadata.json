@@ -4,7 +4,7 @@
     "type": "APK",
     "kind": "Directory"
   },
-  "applicationId": "com.example.miniic",
+  "applicationId": "com.alexisgordr.icdetector",
   "variantName": "release",
   "elements": [
     {

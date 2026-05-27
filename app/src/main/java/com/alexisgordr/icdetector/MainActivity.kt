@@ -3,7 +3,7 @@
  * Copyright (C) 2026 Alexis Gómez Rodríguez
  */
 
-package com.example.miniic
+package com.alexisgordr.icdetector
 
 import android.os.Bundle
 import android.os.IBinder
@@ -18,9 +18,9 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
-import com.example.miniic.service.MiniICService
-import com.example.miniic.storage.CellDbHelper
-import com.example.miniic.ui.MainLayout
+import com.alexisgordr.icdetector.service.MiniICService
+import com.alexisgordr.icdetector.storage.CellDbHelper
+import com.alexisgordr.icdetector.ui.MainLayout
 
 class MainActivity : ComponentActivity() {
     private var service by mutableStateOf<MiniICService?>(null)
@@ -44,7 +44,8 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         dbHelper = CellDbHelper(this)
         
-        startAndBindService()
+        // No iniciamos el servicio aquí directamente para evitar crasheos por permisos en Android 14+
+        // El inicio del servicio se gestionará desde el MainLayout cuando los permisos sean otorgados.
 
         setContent {
             MaterialTheme(

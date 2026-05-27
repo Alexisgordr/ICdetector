@@ -1,9 +1,10 @@
-package com.example.miniic.service
+package com.alexisgordr.icdetector.service
 
 import android.Manifest
 import android.app.*
 import android.content.*
 import android.content.pm.PackageManager
+import android.content.pm.ServiceInfo
 import android.location.Location
 import android.location.LocationManager
 import android.media.AudioManager
@@ -15,13 +16,13 @@ import android.util.Log
 import androidx.annotation.RequiresApi
 import androidx.core.app.NotificationCompat
 import androidx.core.content.ContextCompat
-import com.example.miniic.MainActivity
-import com.example.miniic.core.ThreatAnalyzer
-import com.example.miniic.models.*
-import com.example.miniic.network.OpenCellIdClient
-import com.example.miniic.network.WigleClient
-import com.example.miniic.storage.CellDbHelper
-import com.example.miniic.telephony.CellParser
+import com.alexisgordr.icdetector.MainActivity
+import com.alexisgordr.icdetector.core.ThreatAnalyzer
+import com.alexisgordr.icdetector.models.*
+import com.alexisgordr.icdetector.network.OpenCellIdClient
+import com.alexisgordr.icdetector.network.WigleClient
+import com.alexisgordr.icdetector.storage.CellDbHelper
+import com.alexisgordr.icdetector.telephony.CellParser
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -29,6 +30,8 @@ import okhttp3.OkHttpClient
 import java.text.SimpleDateFormat
 import java.util.*
 import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.CopyOnWriteArrayList
+import java.util.concurrent.TimeUnit
 
 class MiniICService : Service() {
 
@@ -38,7 +41,7 @@ class MiniICService : Service() {
     private val _cellFlow = MutableStateFlow<List<CellData>>(emptyList())
     val cellFlow: StateFlow<List<CellData>> = _cellFlow
 
-    private val _liveLogs = MutableStateFlow(listOf("[SYS] ICdetection Engine v1.0 Iniciado...", "[SYS] Esperando hooks del módem..."))
+    private val _liveLogs = MutableStateFlow(listOf("[SYS] ICdetector Engine Iniciado...", "[SYS] Esperando hooks del módem..."))
     val liveLogs: StateFlow<List<String>> = _liveLogs
 
     private val _dbmHistory = MutableStateFlow<List<Int>>(emptyList())
@@ -69,13 +72,18 @@ class MiniICService : Service() {
     private var isScreenOn = true
     private var isServiceRunning = false
     private var lastAirplaneTriggerTime = 0L
+    private var lastStrongSignalAlarmTime = 0L
     
     private var isHardwareCipheringActive = true
 
     var openCellIdKey: String = ""
     var wigleApiName: String = ""
     var wigleApiToken: String = ""
-    private val client = OkHttpClient()
+    private val client = OkHttpClient.Builder()
+        .connectTimeout(10, TimeUnit.SECONDS)
+        .readTimeout(10, TimeUnit.SECONDS)
+        .writeTimeout(10, TimeUnit.SECONDS)
+        .build()
     private val verificationCache = ConcurrentHashMap<String, VerificationStatus>()
 
     var alarmThreshold = -50f
@@ -88,7 +96,7 @@ class MiniICService : Service() {
     private var prevDbm: Int? = null
     private var isCallbackWorking = false
     private var connectionRetryCount = 0
-    private val cellChangeHistory = mutableListOf<Pair<String, Long>>()
+    private val cellChangeHistory = CopyOnWriteArrayList<Pair<String, Long>>()
 
     inner class LocalBinder : Binder() {
         fun getService(): MiniICService = this@MiniICService
@@ -119,7 +127,12 @@ class MiniICService : Service() {
         }
 
         createNotificationChannel()
-        startForeground(NOTIFICATION_ID, buildNotification("Sondeo activo"))
+        // En Android 14+ es obligatorio pasar el foregroundServiceType en startForeground
+        if (Build.VERSION.SDK_INT >= 34) {
+            startForeground(NOTIFICATION_ID, buildNotification("Sondeo activo"), ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION)
+        } else {
+            startForeground(NOTIFICATION_ID, buildNotification("Sondeo activo"))
+        }
 
         registerTelephonyCallback()
         registerDisplayInfoCallback()
@@ -132,8 +145,7 @@ class MiniICService : Service() {
                 
                 val isAirplaneModeOn = Settings.Global.getInt(
                     contentResolver, 
-                    Settings.Global.AIRPLANE_MODE_ON, 
-                    0,
+                    Settings.Global.AIRPLANE_MODE_ON, 0
                 ) != 0
 
                 if (isAirplaneModeOn) {
@@ -220,7 +232,9 @@ class MiniICService : Service() {
                 tac = "N/A",
                 mcc = "N/A",
                 dbm = -999,
-                verified = VerificationStatus.ERROR
+                verified = VerificationStatus.ERROR,
+                score = 0,
+                failedHeuristics = message
             )
         }
     }
@@ -261,30 +275,27 @@ class MiniICService : Service() {
             }
         }
 
-        if ((telephonyCallback == null) && (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S)) {
+        if (telephonyCallback == null && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
             registerTelephonyCallback()
         }
-        if ((displayInfoCallback == null) && (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S)) {
+        if (displayInfoCallback == null && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
             registerDisplayInfoCallback()
         }
 
         if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED) {
             try {
-                telephonyManager.requestCellInfoUpdate(
-                    mainExecutor,
-                    object : TelephonyManager.CellInfoCallback() {
-                        override fun onCellInfo(cellInfo: MutableList<CellInfo>) {
-                            processCellInfo(cellInfo)
-                        }
-                        override fun onError(errorCode: Int, detail: Throwable?) {
-                            if (ContextCompat.checkSelfPermission(this@MiniICService, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED) {
-                                try {
-                                    processCellInfo(telephonyManager.allCellInfo)
-                                } catch (e: SecurityException) { e.printStackTrace() }
-                            }
+                telephonyManager.requestCellInfoUpdate(mainExecutor, object : TelephonyManager.CellInfoCallback() {
+                    override fun onCellInfo(cellInfo: MutableList<CellInfo>) {
+                        processCellInfo(cellInfo)
+                    }
+                    override fun onError(errorCode: Int, detail: Throwable?) {
+                        if (ContextCompat.checkSelfPermission(this@MiniICService, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED) {
+                            try {
+                                processCellInfo(telephonyManager.allCellInfo)
+                            } catch (e: SecurityException) { e.printStackTrace() }
                         }
                     }
-                )
+                })
             } catch (e: SecurityException) { e.printStackTrace() }
         }
     }
@@ -353,7 +364,7 @@ class MiniICService : Service() {
                 return
             }
 
-            val bestTa = list.firstOrNull { it.timingAdvance != null && it.timingAdvance >= 0 }?.timingAdvance
+            val bestTa = list.firstOrNull { it.timingAdvance != null && it.timingAdvance!! >= 0 }?.timingAdvance
             
             if (bestTa != null) {
                 list = list.asSequence().map { cell -> 
@@ -377,7 +388,7 @@ class MiniICService : Service() {
 
             val active = sorted.firstOrNull { it.isRegistered }
             if (active != null) {
-                verifyCell(active)
+                verifyCell(active, neighbors)
                 
                 val cacheKey = "${active.mcc}-${active.mnc}-${active.tac}-${active.cellId}"
                 val status = verificationCache[cacheKey] ?: VerificationStatus.PENDING
@@ -405,7 +416,7 @@ class MiniICService : Service() {
         } catch (_: Exception) { null }
     }
 
-    private fun verifyCell(cell: CellData) {
+    private fun verifyCell(cell: CellData, neighbors: List<CellData>) {
         if (cell.cellId == "N/A" || cell.mnc == "N/A" || cell.mcc == "N/A") return
         
         val cacheKey = "${cell.mcc}-${cell.mnc}-${cell.tac}-${cell.cellId}"
@@ -424,40 +435,44 @@ class MiniICService : Service() {
             return 
         }
         
-        if (dbHelper.isCellVerified(cell.mnc, cell.tac, cell.cellId)) {
+        val currentLoc = getCurrentLocation()
+        if (dbHelper.isCellVerified(cell.mnc, cell.tac, cell.cellId, currentLoc?.latitude, currentLoc?.longitude, cell.mcc)) {
             verificationCache[cacheKey] = VerificationStatus.VERIFIED
             return
         }
 
         verificationCache[cacheKey] = VerificationStatus.PENDING
-        appendLog("[API]", "Verificando firmas geográficas para CID: ${cell.cellId}...")
         
         scope.launch(Dispatchers.IO) {
             var status = VerificationStatus.PENDING
             
+            // 1. Intentar con WiGLE (Prioridad 1)
             if (wigleApiName.isNotBlank() && wigleApiToken.isNotBlank()) {
+                appendLog("[API]", "Consultando base de datos WiGLE.net para CID: ${cell.cellId}...")
                 val (s, data) = WigleClient.tryWigleSync(cell, wigleApiName, wigleApiToken, isProxyEnabled, client)
                 status = s
                 if (status == VerificationStatus.VERIFIED && data != null) {
                     val lat = data.optDouble("trilat", data.optDouble("lat", 0.0))
                     val lon = data.optDouble("trilong", data.optDouble("lon", 0.0))
-                    processSuccessfulVerification(lat, lon, cell, cacheKey)
+                    processSuccessfulVerification(lat, lon, cell, cacheKey, neighbors, "WiGLE")
                 }
             }
             
+            // 2. Si no se encontró en WiGLE, intentamos con OpenCellId (Prioridad 2)
             if (status != VerificationStatus.VERIFIED && openCellIdKey.isNotBlank() && !openCellIdKey.startsWith("pk.YOUR")) {
+                appendLog("[API]", "WiGLE sin resultados. Consultando OpenCellID como fallback...")
                 val (s, data) = OpenCellIdClient.tryOpenCellIdSyncWithData(cell, openCellIdKey, isProxyEnabled, client)
                 if (s != VerificationStatus.ERROR) {
                     status = s
                     if (status == VerificationStatus.VERIFIED && data != null) {
-                        processSuccessfulVerification(data.getDouble("lat"), data.getDouble("lon"), cell, cacheKey)
+                        processSuccessfulVerification(data.getDouble("lat"), data.getDouble("lon"), cell, cacheKey, neighbors, "OpenCellID")
                     }
                 }
             }
             
             if (status == VerificationStatus.NOT_FOUND) {
                 verificationCache[cacheKey] = VerificationStatus.NOT_FOUND
-                dbHelper.updateVerificationStatus(cell.mnc, cell.tac, cell.cellId, VerificationStatus.NOT_FOUND)
+                dbHelper.updateVerificationStatus(cell.mnc, cell.tac, cell.cellId, VerificationStatus.NOT_FOUND, mcc = cell.mcc)
                 appendLog("[API]", "Antena NO encontrada en bases de datos públicas.")
             } else if (status == VerificationStatus.ERROR) {
                 verificationCache.remove(cacheKey)
@@ -466,17 +481,20 @@ class MiniICService : Service() {
         }
     }
 
-    private fun processSuccessfulVerification(lat: Double, lon: Double, cell: CellData, cacheKey: String) {
-        appendLog("[API]", "Validación de base de datos OK. Lat/Lon obtenidas.")
+    private fun processSuccessfulVerification(lat: Double, lon: Double, cell: CellData, cacheKey: String, neighbors: List<CellData>, source: String) {
+        appendLog("[API]", "Validación OK ($source). Firmas geográficas obtenidas.")
         verificationCache[cacheKey] = VerificationStatus.VERIFIED
         dbHelper.updateVerificationStatus(
             cell.mnc,
             cell.tac,
             cell.cellId,
-            VerificationStatus.VERIFIED)
+            VerificationStatus.VERIFIED,
+            lat,
+            lon,
+            cell.mcc)
         
         val updatedActive = cell.copy(verified = VerificationStatus.VERIFIED, lat = lat, lon = lon)
-        val analyzedActive = ThreatAnalyzer.analyzeThreats(updatedActive, emptyList(), isHardwareCipheringActive, cellChangeHistory, getCurrentLocation())
+        val analyzedActive = ThreatAnalyzer.analyzeThreats(updatedActive, neighbors, isHardwareCipheringActive, cellChangeHistory, getCurrentLocation())
         
         scope.launch(Dispatchers.Main) {
             _cellFlow.value = _cellFlow.value.map { 
@@ -504,22 +522,18 @@ class MiniICService : Service() {
             cellChangeHistory.add(Pair(cid, currentTime))
             cellChangeHistory.removeAll { currentTime - it.second > 10000L }
 
-            if (cellChangeHistory.size >= 3) {
-                val currentLocation = getCurrentLocation()
-                val speedMps = currentLocation?.speed ?: 0f
-                val isMovingFast = speedMps > 8f
-
-                if (!isMovingFast) {
-                    toneGenerator?.startTone(ToneGenerator.TONE_CDMA_PIP, 300)
-                    appendLog("[SEC]", "🚨 ¡ALERTA! Efecto Ping-Pong detectado en parado.")
-                    Log.e("MiniIC", "ANOMALÍA: Efecto Ping-Pong detectado en parado.")
-                } else {
-                    appendLog("[RADIO]", "Ping-Pong detectado a ${String.format(Locale.getDefault(), "%.1f", speedMps * 3.6f)} km/h. Ignorando alerta por movimiento.")
-                }
+            if (!cell.heuristicReport.pingPongPassed) {
+                toneGenerator?.startTone(ToneGenerator.TONE_CDMA_PIP, 300)
+                appendLog("[SEC]", "🚨 ¡ALERTA! Efecto Ping-Pong detectado en parado.")
+                Log.e("MiniIC", "ANOMALÍA: Efecto Ping-Pong detectado en parado.")
+            } else if (cellChangeHistory.size >= 3) {
+                val speedKmh = (getCurrentLocation()?.speed ?: 0f) * 3.6f
+                appendLog("[RADIO]", "Ping-Pong detectado a ${String.format(Locale.getDefault(), "%.1f", speedKmh)} km/h. Ignorando alerta.")
             }
 
             if (prevCid != null) {
                 scope.launch(Dispatchers.IO) {
+                    val loc = getCurrentLocation()
                     dbHelper.logConnection(
                         netType = net, 
                         cid = cid, 
@@ -529,7 +543,9 @@ class MiniICService : Service() {
                         dbm = dbm, 
                         verified = cell.verified,
                         score = cell.securityScore,
-                        failedHeuristics = cell.suspiciousReason ?: "OK"
+                        failedHeuristics = cell.suspiciousReason ?: "OK",
+                        lat = loc?.latitude,
+                        lon = loc?.longitude
                     )
                 }
             }
@@ -552,8 +568,13 @@ class MiniICService : Service() {
         }
 
         if (isStrongSignalAlarmEnabled && dbm != -999 && dbm >= alarmThreshold) {
-            toneGenerator?.startTone(ToneGenerator.TONE_CDMA_ALERT_CALL_GUARD, 150)
-            Log.w("MiniIC", "Warning: High power signal detected: $dbm dBm")
+            val now = System.currentTimeMillis()
+            if (now - lastStrongSignalAlarmTime > 60000L) { // Limit to once per minute
+                lastStrongSignalAlarmTime = now
+                toneGenerator?.startTone(ToneGenerator.TONE_CDMA_ALERT_CALL_GUARD, 150)
+                Log.w("MiniIC", "Warning: High power signal detected: $dbm dBm")
+                appendLog("[SEC]", "⚠️ Señal sospechosamente fuerte detectada: $dbm dBm")
+            }
         }
 
         if (prevNetType != null && prevDbm != null) {
@@ -583,7 +604,8 @@ class MiniICService : Service() {
         val currentTime = System.currentTimeMillis()
         if (currentTime - lastAirplaneTriggerTime < 60000L) return
         lastAirplaneTriggerTime = currentTime
-        Log.e("MiniIC", "CRITICAL: 2G/3G network detected! Attempting Airplane Mode fallback.")
+        Log.e("MiniIC", "CRITICAL: 2G/3G network detected! Fallback to manual settings.")
+        appendLog("[SEC]", "🚨 CRÍTICO: Red 2G/3G detectada. Abriendo ajustes para Modo Avión manual.")
         toneGenerator?.startTone(ToneGenerator.TONE_PROP_BEEP2, 500)
         try {
             val isAirplaneOn = Settings.Global.getInt(contentResolver, Settings.Global.AIRPLANE_MODE_ON, 0) != 0
@@ -664,7 +686,7 @@ class MiniICService : Service() {
 
     private fun generateAuditLog(cell: CellData) {
         _auditStatus.value = "Auditoría en curso..."
-        appendLog("[AUDIT]", "--- INICIANDO CICLO DE AUDITORÍA (9 REGLAS) ---")
+        appendLog("[AUDIT]", "--- INICIANDO CICLO DE AUDITORÍA (10 REGLAS) ---")
         val report = cell.heuristicReport
         val results = mapOf(
             "1. Celda Aislada" to report.isolatedCellPassed,
@@ -674,8 +696,9 @@ class MiniICService : Service() {
             "5. Validación Regional TAC" to report.tacDeviationPassed,
             "6. Geometría (TA)" to report.taDistancePassed,
             "7. Espectro Fantasma" to report.ghostNeighborsPassed,
-            "8. Cifrado Hardware" to report.hardwareCipheringPassed,
-            "9. Anti Ping-Pong" to report.pingPongPassed
+            "8. Sanidad ARFCN" to report.arfcnSanityPassed,
+            "9. Cifrado Hardware" to report.hardwareCipheringPassed,
+            "10. Anti Ping-Pong" to report.pingPongPassed
         )
 
         results.forEach { (regla, pasado) ->
@@ -695,13 +718,13 @@ class MiniICService : Service() {
         
         @Suppress("unused")
         fun onCipheringStatusChanged(params: Any) {
-            appendLog("[MODEM]", "SYS: Evento de cambio en estado de cifrado detectado.")
+            appendLog("[MODEM]", "SYS: Evento de cambio en estado de cifrado detectado (Reflexión).")
             try {
                 val getStatusMethod = params::class.java.getMethod("getCipheringStatus")
                 val status = getStatusMethod.invoke(params) as Int
                 if (status == 0) {
                     isHardwareCipheringActive = false
-                    appendLog("[MODEM]", "¡ALERTA L1! Protocolo de cifrado anulado (A5/0)")
+                    appendLog("[MODEM]", "¡ALERTA L1! Protocolo de cifrado anulado (Reflexión)")
                     triggerSecurityAlert("¡PELIGRO! Conexión celular NO CIFRADA (Cifrado nulo detectado)")
                 } else {
                     isHardwareCipheringActive = true
@@ -713,21 +736,21 @@ class MiniICService : Service() {
                     val status = statusField[params] as Int
                     if (status == 0) {
                         isHardwareCipheringActive = false
-                        appendLog("[MODEM]", "¡ALERTA L1! Protocolo de cifrado anulado (A5/0)")
+                        appendLog("[MODEM]", "¡ALERTA L1! Protocolo de cifrado anulado (Reflexión)")
                         triggerSecurityAlert("¡PELIGRO! Conexión celular NO CIFRADA (Cifrado nulo detectado)")
                     } else {
                         isHardwareCipheringActive = true
                         appendLog("[MODEM]", "SYS: Cifrado de hardware validado como ACTIVO.")
                     }
                 } catch (_: Exception) {
-                    triggerSecurityAlert("¡AVISO! Cambio de seguridad en el cifrado detectado")
+                    // Ignored
                 }
             }
         }
 
         @Suppress("unused", "UNUSED_PARAMETER")
         fun onCellularIdentifierDisclosure(params: Any) {
-            appendLog("[MODEM]", "🚨 CRÍTICO: Detección de Disclosure de Identificador Celular!")
+            appendLog("[MODEM]", "🚨 CRÍTICO: Detección de Disclosure de Identificador Celular (Reflexión)!")
             triggerSecurityAlert("¡ALERTA CRÍTICA! Intento de extracción de IMSI detectado por la red")
         }
     }
@@ -735,6 +758,6 @@ class MiniICService : Service() {
     companion object {
         const val CHANNEL_ID = "miniic_channel"
         const val NOTIFICATION_ID = 202
-        const val ACTION_STOP = "com.example.miniic.STOP"
+        const val ACTION_STOP = "com.alexisgordr.icdetector.STOP"
     }
 }

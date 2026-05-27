@@ -1,4 +1,4 @@
-package com.example.miniic.ui
+package com.alexisgordr.icdetector.ui
 
 import android.Manifest
 import android.content.Context
@@ -24,15 +24,14 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
-import com.example.miniic.MainActivity
-import com.example.miniic.R
-import com.example.miniic.models.*
-import com.example.miniic.service.MiniICService
-import com.example.miniic.storage.CellDbHelper
+import com.alexisgordr.icdetector.MainActivity
+import com.alexisgordr.icdetector.R
+import com.alexisgordr.icdetector.models.*
+import com.alexisgordr.icdetector.service.MiniICService
+import com.alexisgordr.icdetector.storage.CellDbHelper
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.launch
@@ -72,6 +71,24 @@ fun MainLayout(context: Context, dbHelper: CellDbHelper, service: MiniICService?
         }
     }
 
+    // DISPARADOR AUTOMÁTICO DE PERMISOS / INICIO DE SERVICIO
+    LaunchedEffect(hasLoc, hasPhone) {
+        if (!hasLoc || !hasPhone || (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU && !hasNotif)) {
+            val arr = mutableListOf(
+                Manifest.permission.ACCESS_FINE_LOCATION,
+                Manifest.permission.READ_PHONE_STATE
+            ).apply {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                    add(Manifest.permission.POST_NOTIFICATIONS)
+                }
+            }.toTypedArray()
+            launcher.launch(arr)
+        } else {
+            // Si ya tenemos los permisos críticos, iniciamos el servicio de forma segura
+            (context as? MainActivity)?.startAndBindService()
+        }
+    }
+
     if (!hasLoc || !hasPhone || !hasNotif) {
         Box(modifier = Modifier
             .fillMaxSize()
@@ -81,7 +98,7 @@ fun MainLayout(context: Context, dbHelper: CellDbHelper, service: MiniICService?
                 Text(
                     "ICdetection requiere permisos de localización, teléfono y notificaciones para funcionar.",
                     color = Color(0xFF888888),
-                    textAlign = TextAlign.Center,
+                    textAlign = androidx.compose.ui.text.style.TextAlign.Center,
                     fontSize = 14.sp
                 )
                 Button(
@@ -114,7 +131,7 @@ fun MainScreenContent(dbHelper: CellDbHelper, service: MiniICService?) {
     val dbmHistory by (service?.dbmHistory ?: remember { MutableStateFlow(emptyList()) }).collectAsState()
     val geoHistory by (service?.geoHistory ?: remember { MutableStateFlow(emptyList()) }).collectAsState()
     
-    var refreshing by remember { mutableStateOf(value = false) }
+    var refreshing by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
     val pullRefreshState = rememberPullRefreshState(refreshing = refreshing, onRefresh = {
         scope.launch { refreshing = true; service?.forceRefresh(); delay(800); refreshing = false }
@@ -232,19 +249,11 @@ fun MainScreenContent(dbHelper: CellDbHelper, service: MiniICService?) {
                     }
 
                     if (active != null) {
-                        SecurityScorePanel(
-                            active = active,
-                            dbmHistory = dbmHistory,
-                            geoHistory = geoHistory,
-                            service = service,
-                        )
+                        SecurityScorePanel(active, dbmHistory, geoHistory, service)
                     }
 
                     if (active != null) {
-                        SignalVisualizer(
-                            active = active,
-                            neighbors = cellList.filter { !it.isRegistered },
-                        )
+                        SignalVisualizer(active, cellList.filter { !it.isRegistered })
                     }
 
                     if (service != null) {
@@ -303,6 +312,7 @@ fun SecurityScorePanel(active: CellData, dbmHistory: List<Int>, geoHistory: List
                             HeuristicItem("Validación Regional TAC", active.heuristicReport.tacDeviationPassed)
                             HeuristicItem("Coherencia Geométrica (TA)", active.heuristicReport.taDistancePassed)
                             HeuristicItem("Espectro de Vecinos (Anti-Ghost)", active.heuristicReport.ghostNeighborsPassed)
+                            HeuristicItem("Sanidad de Frecuencia (ARFCN)", active.heuristicReport.arfcnSanityPassed)
                             HeuristicItem("Cifrado de Enlace (Hardware)", active.heuristicReport.hardwareCipheringPassed)
                             HeuristicItem("Estabilidad de Conexión (Anti Ping-Pong)", active.heuristicReport.pingPongPassed)
                         }

@@ -1,4 +1,4 @@
-package com.example.miniic.ui
+package com.alexisgordr.icdetector.ui
 
 import android.content.Intent
 import androidx.compose.foundation.BorderStroke
@@ -19,8 +19,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.net.toUri
-import com.example.miniic.models.CellData
-import com.example.miniic.models.VerificationStatus
+import com.alexisgordr.icdetector.models.VerificationStatus
 
 @Composable
 fun DataBox(modifier: Modifier, label: String, value: String, highlight: Boolean = false) {
@@ -44,7 +43,7 @@ fun AuthorSignature() {
             .fillMaxWidth()
             .padding(vertical = 8.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(8.dp)
+        verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         val context = LocalContext.current
         TextButton(

@@ -1,4 +1,4 @@
-package com.example.miniic.ui
+package com.alexisgordr.icdetector.ui
 
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.*

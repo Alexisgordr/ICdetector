@@ -1,7 +1,7 @@
-package com.example.miniic.network
+package com.alexisgordr.icdetector.network
 
-import com.example.miniic.models.CellData
-import com.example.miniic.models.VerificationStatus
+import com.alexisgordr.icdetector.models.CellData
+import com.alexisgordr.icdetector.models.VerificationStatus
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import org.json.JSONObject
@@ -26,12 +26,24 @@ object WigleClient {
         }
 
         val credentials = okhttp3.Credentials.basic(wigleApiName, wigleApiToken)
-        val url = "https://api.wigle.net/api/v2/cell/search?mcc=${cell.mcc}&mnc=${cell.mnc}&lac=${cell.tac}&cellid=${cell.cellId}"
         
+        // Mapeo de tecnología para WiGLE (indispensable para evitar ambigüedades)
+        val radioType = when {
+            cell.networkType.contains("5G") || cell.networkType.contains("NR") -> "NR"
+            cell.networkType.contains("4G") || cell.networkType.contains("LTE") -> "LTE"
+            cell.networkType.contains("3G") || cell.networkType.contains("WCDMA") -> "UMTS"
+            else -> "GSM"
+        }
+
+        // URL con parámetros oficiales y tipo de radio
+        val url = "https://api.wigle.net/api/v2/cell/search?mcc=${cell.mcc}&mnc=${cell.mnc}&lac=${cell.tac}&cellid=${cell.cellId}"
+
+
         val request = Request.Builder()
             .url(url)
             .header("Authorization", credentials)
             .header("User-Agent", "ICdetection/1.0 (Android)")
+            .header("Accept", "application/json")
             .build()
         
         return try {

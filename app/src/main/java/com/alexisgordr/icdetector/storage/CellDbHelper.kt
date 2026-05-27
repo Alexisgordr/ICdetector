@@ -1,20 +1,21 @@
-package com.example.miniic.storage
+package com.alexisgordr.icdetector.storage
 
 import android.content.ContentValues
 import android.content.Context
 import android.database.Cursor
 import android.database.sqlite.SQLiteDatabase
 import android.database.sqlite.SQLiteOpenHelper
-import com.example.miniic.models.HistoryRecord
-import com.example.miniic.models.VerificationStatus
+import android.location.Location
+import com.alexisgordr.icdetector.models.HistoryRecord
+import com.alexisgordr.icdetector.models.VerificationStatus
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 
 class CellDbHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME, null, DATABASE_VERSION) {
     companion object {
-        private const val DATABASE_NAME = "miniic_history.db"
-        private const val DATABASE_VERSION = 4
+        private const val DATABASE_NAME = "icdetector_history.db"
+        private const val DATABASE_VERSION = 5
         const val TABLE_HISTORY = "history"
         const val COLUMN_ID = "id"
         const val COLUMN_TIMESTAMP = "timestamp"
@@ -27,6 +28,8 @@ class CellDbHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME, 
         const val COLUMN_VERIFIED = "verified"
         const val COLUMN_SCORE = "score"
         const val COLUMN_FAILED_H = "failed_heuristics"
+        const val COLUMN_LAT = "lat"
+        const val COLUMN_LON = "lon"
     }
 
     override fun onCreate(db: SQLiteDatabase) {
@@ -42,27 +45,41 @@ class CellDbHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME, 
                     "$COLUMN_DBM INTEGER, " +
                     "$COLUMN_VERIFIED TEXT, " +
                     "$COLUMN_SCORE INTEGER DEFAULT 100, " +
-                    "$COLUMN_FAILED_H TEXT)",
+                    "$COLUMN_FAILED_H TEXT, " +
+                    "$COLUMN_LAT REAL, " +
+                    "$COLUMN_LON REAL)",
         )
     }
 
     override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {
-        if (oldVersion < 2) {
-            db.execSQL("ALTER TABLE $TABLE_HISTORY ADD COLUMN $COLUMN_VERIFIED TEXT DEFAULT 'PENDING'")
-        }
-        if (oldVersion < 3) {
-            db.execSQL("ALTER TABLE $TABLE_HISTORY ADD COLUMN $COLUMN_MCC TEXT DEFAULT 'N/A'")
-        }
+        if (oldVersion < 2) db.execSQL("ALTER TABLE $TABLE_HISTORY ADD COLUMN $COLUMN_VERIFIED TEXT DEFAULT 'PENDING'")
+        if (oldVersion < 3) db.execSQL("ALTER TABLE $TABLE_HISTORY ADD COLUMN $COLUMN_MCC TEXT DEFAULT 'N/A'")
         if (oldVersion < 4) {
             db.execSQL("ALTER TABLE $TABLE_HISTORY ADD COLUMN $COLUMN_SCORE INTEGER DEFAULT 100")
             db.execSQL("ALTER TABLE $TABLE_HISTORY ADD COLUMN $COLUMN_FAILED_H TEXT DEFAULT ''")
         }
+        if (oldVersion < 5) {
+            db.execSQL("ALTER TABLE $TABLE_HISTORY ADD COLUMN $COLUMN_LAT REAL")
+            db.execSQL("ALTER TABLE $TABLE_HISTORY ADD COLUMN $COLUMN_LON REAL")
+        }
     }
 
-    fun logConnection(netType: String, cid: String, mnc: String, tac: String, mcc: String, dbm: Int, verified: VerificationStatus = VerificationStatus.PENDING, score: Int = 100, failedHeuristics: String = "") {
+    fun logConnection(
+        netType: String,
+        cid: String,
+        mnc: String,
+        tac: String,
+        mcc: String,
+        dbm: Int,
+        verified: VerificationStatus = VerificationStatus.PENDING,
+        score: Int = 100,
+        failedHeuristics: String = "",
+        lat: Double? = null,
+        lon: Double? = null
+    ) {
         val db = this.writableDatabase
         val values = ContentValues().apply {
-            val sdf = SimpleDateFormat("HH:mm:ss", Locale.getDefault())
+            val sdf = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault())
             put(COLUMN_TIMESTAMP, sdf.format(Date()))
             put(COLUMN_NET_TYPE, netType)
             put(COLUMN_CID, cid)
@@ -73,16 +90,23 @@ class CellDbHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME, 
             put(COLUMN_VERIFIED, verified.name)
             put(COLUMN_SCORE, score)
             put(COLUMN_FAILED_H, failedHeuristics)
+            if (lat != null) put(COLUMN_LAT, lat)
+            if (lon != null) put(COLUMN_LON, lon)
         }
         db.insert(TABLE_HISTORY, null, values)
     }
 
-    fun updateVerificationStatus(mnc: String, tac: String, cid: String, status: VerificationStatus) {
+    fun updateVerificationStatus(mnc: String, tac: String, cid: String, status: VerificationStatus, lat: Double? = null, lon: Double? = null, mcc: String? = null) {
         val db = this.writableDatabase
         val values = ContentValues().apply {
             put(COLUMN_VERIFIED, status.name)
+            if (lat != null) put(COLUMN_LAT, lat)
+            if (lon != null) put(COLUMN_LON, lon)
         }
-        db.update(TABLE_HISTORY, values, "$COLUMN_CID=? AND $COLUMN_MNC=? AND $COLUMN_TAC=? AND $COLUMN_VERIFIED='PENDING'", arrayOf(cid, mnc, tac))
+        val where = if (mcc != null) "$COLUMN_CID=? AND $COLUMN_MNC=? AND $COLUMN_TAC=? AND $COLUMN_MCC=? AND $COLUMN_VERIFIED='PENDING'"
+                    else "$COLUMN_CID=? AND $COLUMN_MNC=? AND $COLUMN_TAC=? AND $COLUMN_VERIFIED='PENDING'"
+        val args = if (mcc != null) arrayOf(cid, mnc, tac, mcc) else arrayOf(cid, mnc, tac)
+        db.update(TABLE_HISTORY, values, where, args)
     }
 
     fun getRecords(): List<HistoryRecord> {
@@ -106,7 +130,7 @@ class CellDbHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME, 
                             VerificationStatus.PENDING 
                         },
                         score = cursor.getInt(cursor.getColumnIndexOrThrow(COLUMN_SCORE)),
-                        failedHeuristics = cursor.getString(cursor.getColumnIndexOrThrow(COLUMN_FAILED_H)) ?: "",
+                        failedHeuristics = cursor.getString(cursor.getColumnIndexOrThrow(COLUMN_FAILED_H)) ?: ""
                     )
                 )
             } while (cursor.moveToNext())
@@ -120,14 +144,39 @@ class CellDbHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME, 
         db.execSQL("DELETE FROM $TABLE_HISTORY")
     }
 
-    fun isCellVerified(mnc: String, tac: String, cid: String): Boolean {
+    fun isCellVerified(mnc: String, tac: String, cid: String, currentLat: Double? = null, currentLon: Double? = null, mcc: String? = null): Boolean {
         val db = this.readableDatabase
-        val cursor = db.rawQuery(
-            "SELECT 1 FROM $TABLE_HISTORY WHERE $COLUMN_CID=? AND $COLUMN_MNC=? AND $COLUMN_TAC=? AND $COLUMN_VERIFIED='VERIFIED' LIMIT 1",
-            arrayOf(cid, mnc, tac)
-        )
-        val exists = cursor.count > 0
+        val query = if (mcc != null) "SELECT $COLUMN_LAT, $COLUMN_LON FROM $TABLE_HISTORY WHERE $COLUMN_CID=? AND $COLUMN_MNC=? AND $COLUMN_TAC=? AND $COLUMN_MCC=? AND $COLUMN_VERIFIED='VERIFIED'"
+                    else "SELECT $COLUMN_LAT, $COLUMN_LON FROM $TABLE_HISTORY WHERE $COLUMN_CID=? AND $COLUMN_MNC=? AND $COLUMN_TAC=? AND $COLUMN_VERIFIED='VERIFIED'"
+        val args = if (mcc != null) arrayOf(cid, mnc, tac, mcc) else arrayOf(cid, mnc, tac)
+        val cursor = db.rawQuery(query, args)
+        
+        var verifiedAtThisLocation = false
+        if (cursor.moveToFirst()) {
+            if (currentLat == null || currentLon == null) {
+                // Si no tenemos GPS actual, confiamos en la verificación previa por ID
+                verifiedAtThisLocation = true
+            } else {
+                do {
+                    val savedLat = if (cursor.isNull(0)) null else cursor.getDouble(0)
+                    val savedLon = if (cursor.isNull(1)) null else cursor.getDouble(1)
+                    
+                    if (savedLat == null || savedLon == null) {
+                        // Si la verificación guardada no tiene GPS, la damos por válida por ahora
+                        verifiedAtThisLocation = true
+                        break
+                    }
+                    
+                    val results = FloatArray(1)
+                    Location.distanceBetween(currentLat, currentLon, savedLat, savedLon, results)
+                    if (results[0] < 5000) { // Radio de 5km
+                        verifiedAtThisLocation = true
+                        break
+                    }
+                } while (cursor.moveToNext())
+            }
+        }
         cursor.close()
-        return exists
+        return verifiedAtThisLocation
     }
 }

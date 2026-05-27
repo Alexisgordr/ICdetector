@@ -1,9 +1,9 @@
-package com.example.miniic.core
+package com.alexisgordr.icdetector.core
 
 import android.location.Location
-import com.example.miniic.models.CellData
-import com.example.miniic.models.HeuristicReport
-import com.example.miniic.models.VerificationStatus
+import com.alexisgordr.icdetector.models.CellData
+import com.alexisgordr.icdetector.models.HeuristicReport
+import com.alexisgordr.icdetector.models.VerificationStatus
 
 object ThreatAnalyzer {
 
@@ -12,7 +12,7 @@ object ThreatAnalyzer {
         neighbors: List<CellData>,
         isHardwareCipheringActive: Boolean,
         cellChangeHistory: List<Pair<String, Long>>,
-        currentLocation: Location?,
+        currentLocation: Location?
     ): CellData {
         val reasons = mutableListOf<String>()
         var score = 100
@@ -24,10 +24,11 @@ object ThreatAnalyzer {
         var hTac = true
         var hTa = true
         var hGhost = true
+        var hArfcn = true
         var hPingPong = true
 
         // 1. Neighbor analysis
-        if ((neighbors.isEmpty()) && (active.dbm >= -80)) {
+        if (neighbors.isEmpty() && active.dbm >= -80) {
             hIsolated = false
             reasons.add("Celda aislada")
             score -= 15
@@ -94,20 +95,39 @@ object ThreatAnalyzer {
             score -= 25
         }
 
-        // 8. Hardware Ciphering Check (Android 14+)
+        // 8. ARFCN Sanity Check (Enhanced)
+        active.arfcn?.let { arfcn ->
+            if (active.networkType.contains("5G")) {
+                // Heurística: NR-ARFCN máximo según 3GPP es ~3.27M.
+                if (arfcn > 3279165 || arfcn == 0) {
+                    hArfcn = false
+                    reasons.add("Frecuencia (ARFCN) 5G sospechosa")
+                    score -= 15
+                }
+            } else if (active.networkType.contains("4G") || active.networkType.contains("LTE")) {
+                // Heurística LTE: EARFCN suele estar entre 0 y 70645 (TS 36.101)
+                if (arfcn > 70645 || arfcn == 0) {
+                    hArfcn = false
+                    reasons.add("Frecuencia (EARFCN) 4G sospechosa")
+                    score -= 15
+                }
+            }
+        }
+
+        // 9. Hardware Ciphering Check (Android 14+)
         if (!isHardwareCipheringActive) {
             reasons.add("Cifrado de red anulado (A5/0)")
             score -= 50
         }
 
-        // 9. Ping-Pong Effect
+        // 10. Ping-Pong Effect
         if (cellChangeHistory.size >= 3) {
             val speedMps = currentLocation?.speed ?: 0f
             val isMovingFast = speedMps > 8f 
 
             if (!isMovingFast) {
                 hPingPong = false
-                reasons.add("Efecto Ping-Pong")
+                reasons.add("Efecto Ping-Pong (Cambios rápidos en parado)")
                 score -= 25
             }
         }
@@ -130,6 +150,7 @@ object ThreatAnalyzer {
             tacDeviationPassed = hTac,
             taDistancePassed = hTa,
             ghostNeighborsPassed = hGhost,
+            arfcnSanityPassed = hArfcn,
             hardwareCipheringPassed = isHardwareCipheringActive,
             pingPongPassed = hPingPong
         )

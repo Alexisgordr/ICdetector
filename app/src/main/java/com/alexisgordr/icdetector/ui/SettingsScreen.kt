@@ -1,4 +1,4 @@
-package com.example.miniic.ui
+package com.alexisgordr.icdetector.ui
 
 import android.content.Context
 import androidx.compose.foundation.layout.*
@@ -17,7 +17,7 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.edit
-import com.example.miniic.service.MiniICService
+import com.alexisgordr.icdetector.service.MiniICService
 
 @Composable
 fun SettingsPanel(service: MiniICService?, onSave: () -> Unit) {
@@ -120,6 +120,17 @@ fun SettingsPanel(service: MiniICService?, onSave: () -> Unit) {
             ) {
                 Text("GUARDAR AJUSTES", color = Color.White, fontFamily = FontFamily.Monospace)
             }
+
+            HorizontalDivider(color = Color(0xFF1A1A1A), modifier = Modifier.padding(vertical = 4.dp))
+
+            Text("AVISO TÉCNICO", color = Color(0xFFCF6679), fontSize = 12.sp, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Bold)
+            Text(
+                "Las alertas de Cifrado Hardware e IMSI Disclosure requieren que la app tenga privilegios del sistema (Root o System App). En dispositivos estándar, estas funciones se ejecutan en modo experimental por reflexión y podrían no recibir eventos del módem.",
+                color = Color(0xFF888888),
+                fontSize = 9.sp,
+                fontFamily = FontFamily.Monospace,
+                lineHeight = 12.sp
+            )
         }
     }
 }

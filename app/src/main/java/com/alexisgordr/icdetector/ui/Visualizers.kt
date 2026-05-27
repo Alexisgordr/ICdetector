@@ -1,4 +1,4 @@
-package com.example.miniic.ui
+package com.alexisgordr.icdetector.ui
 
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.*
@@ -16,8 +16,7 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.example.miniic.models.CellData
-
+import com.alexisgordr.icdetector.models.CellData
 import java.util.Locale
 
 @Composable

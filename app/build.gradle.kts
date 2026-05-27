@@ -25,11 +25,11 @@ plugins {
 }
 
 android {
-    namespace = "com.example.miniic"
+    namespace = "com.alexisgordr.icdetector"
     compileSdk = 37
 
     defaultConfig {
-        applicationId = "com.example.miniic"
+        applicationId = "com.alexisgordr.icdetector"
         minSdk = 29
         targetSdk = 37
         versionCode = 1

@@ -1,4 +1,4 @@
-package com.example.miniic.models
+package com.alexisgordr.icdetector.models
 
 data class HistoryRecord(
     val timestamp: String,

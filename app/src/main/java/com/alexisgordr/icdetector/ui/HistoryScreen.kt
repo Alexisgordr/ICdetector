@@ -1,4 +1,4 @@
-package com.example.miniic.ui
+package com.alexisgordr.icdetector.ui
 
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -21,9 +21,9 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
-import com.example.miniic.models.HistoryRecord
-import com.example.miniic.storage.CellDbHelper
-import com.example.miniic.utils.ExportUtils
+import com.alexisgordr.icdetector.models.HistoryRecord
+import com.alexisgordr.icdetector.storage.CellDbHelper
+import com.alexisgordr.icdetector.utils.ExportUtils
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -80,7 +80,9 @@ fun HistoryPanel(dbHelper: CellDbHelper, onBack: () -> Unit) {
         }
 
         if (items.isEmpty()) {
-            Box(modifier = Modifier.fillMaxWidth().weight(1f), contentAlignment = Alignment.Center) {
+            Box(modifier = Modifier
+                .fillMaxWidth()
+                .weight(1f), contentAlignment = Alignment.Center) {
                 Text("HISTORIAL VACÍO", color = Color(0xFF444444), fontFamily = FontFamily.Monospace, fontSize = 12.sp)
             }
         } else {
@@ -94,7 +96,7 @@ fun HistoryPanel(dbHelper: CellDbHelper, onBack: () -> Unit) {
 
                 TextButton(
                     onClick = {
-                        val fileName = "miniic_history_${System.currentTimeMillis()}.csv"
+                        val fileName = "icdetector_history_${System.currentTimeMillis()}.csv"
                         exportLauncher.launch(fileName)
                     },
                     colors = ButtonDefaults.textButtonColors(contentColor = Color(0xFF4CAF50))
@@ -147,11 +149,7 @@ fun HistoryPanel(dbHelper: CellDbHelper, onBack: () -> Unit) {
                                             Text(record.timestamp, color = Color(0xFF666666), fontSize = 11.sp, fontFamily = FontFamily.Monospace)
                                             Text("${record.dbm} dBm (${record.netType})", color = Color.White, fontSize = 11.sp, fontFamily = FontFamily.Monospace)
                                         }
-                                        Row(
-                                            modifier = Modifier.fillMaxWidth(),
-                                            horizontalArrangement = Arrangement.SpaceBetween,
-                                            verticalAlignment = Alignment.CenterVertically,
-                                        ) {
+                                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                                             Text("MNC: ${record.mnc} | TAC: ${record.tac}", color = Color(0xFF888888), fontSize = 11.sp, fontFamily = FontFamily.Monospace)
                                             val scoreColor = if (record.score >= 90) Color(0xFF4CAF50) else if (record.score >= 70) Color(0xFFFFA000) else Color(0xFFCF6679)
                                             Text("🛡️ ${record.score}%", color = scoreColor, fontSize = 12.sp, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Bold)

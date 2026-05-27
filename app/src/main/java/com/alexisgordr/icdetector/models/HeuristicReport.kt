@@ -1,4 +1,4 @@
-package com.example.miniic.models
+package com.alexisgordr.icdetector.models
 
 data class HeuristicReport(
     val isolatedCellPassed: Boolean = true,
@@ -8,6 +8,7 @@ data class HeuristicReport(
     val tacDeviationPassed: Boolean = true,
     val taDistancePassed: Boolean = true,
     val ghostNeighborsPassed: Boolean = true,
+    val arfcnSanityPassed: Boolean = true,
     val hardwareCipheringPassed: Boolean = true,
     val pingPongPassed: Boolean = true
 )

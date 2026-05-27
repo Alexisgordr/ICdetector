@@ -1,7 +1,7 @@
-package com.example.miniic.network
+package com.alexisgordr.icdetector.network
 
-import com.example.miniic.models.CellData
-import com.example.miniic.models.VerificationStatus
+import com.alexisgordr.icdetector.models.CellData
+import com.alexisgordr.icdetector.models.VerificationStatus
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import org.json.JSONObject
