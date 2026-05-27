@@ -364,6 +364,9 @@ class MiniICService : Service() {
     private var lastFullReport: HeuristicReport? = null
     private var lastAuditTime = 0L
 
+    // Flag para re-verificar celda tras modo avión
+    private var refreshActiveCellVerification = false
+
     // Función para inyectar texto en la consola
     private fun appendLog(type: String, message: String) {
         val timestamp = SimpleDateFormat("HH:mm:ss.SSS", Locale.getDefault()).format(Date())
@@ -445,6 +448,7 @@ class MiniICService : Service() {
 
         // Adaptive polling: slower when screen is off to save battery
         scope.launch(Dispatchers.Default) {
+            var wasAirplaneModeOn = false
             while (isActive && isServiceRunning) {
                 val delayTime = if (isScreenOn) 2000L else 10000L
                 
@@ -459,8 +463,14 @@ class MiniICService : Service() {
                     _cellFlow.value = emptyList()
                     updateNotificationText("Sin señal / Modo Avión")
                     appendLog("[SYS]", "⚠️ Modo Avión activo. Suspendiendo escaneo.")
+                    wasAirplaneModeOn = true
                 } else {
                     // 3. Si no está activo, solicitamos datos de antenas de forma normal
+                    if (wasAirplaneModeOn) {
+                        appendLog("[SYS]", "Conexión restaurada. Analizando nueva celda activa...")
+                        refreshActiveCellVerification = true
+                        wasAirplaneModeOn = false
+                    }
                     requestFreshCellInfo()
                 }
 
@@ -855,8 +865,19 @@ class MiniICService : Service() {
         
         val cacheKey = "${cell.mcc}-${cell.mnc}-${cell.tac}-${cell.cellId}"
         
-        // 🛡️ CORTAFUEGOS 1: Si la celda ya existe en la caché, se corta la ejecución.
-        if (verificationCache.containsKey(cacheKey)) {
+        // 🛡️ ACTUALIZACIÓN QUIRÚRGICA: Si venimos de modo avión y la celda actual falló antes, permitimos re-intento.
+        if (refreshActiveCellVerification) {
+            val status = verificationCache[cacheKey]
+            if (status == VerificationStatus.NOT_FOUND || status == VerificationStatus.ERROR) {
+                verificationCache.remove(cacheKey)
+                appendLog("[API]", "Re-verificando celda actual tras ciclo de señal...")
+            }
+            refreshActiveCellVerification = false
+        }
+
+        // 🛡️ CORTAFUEGOS 1: Si la celda ya existe en la caché (y no es error), se corta la ejecución.
+        val cachedStatus = verificationCache[cacheKey]
+        if (cachedStatus != null && cachedStatus != VerificationStatus.ERROR) {
             return 
         }
         
@@ -873,27 +894,36 @@ class MiniICService : Service() {
         
         // 🛡️ MOTOR DE SINCRONIZACIÓN: Ejecución secuencial en hilo de fondo
         scope.launch(Dispatchers.IO) {
-            var found = false
+            var status = VerificationStatus.PENDING
             
             // 1. Intentar con WiGLE primero (Prioridad 1)
             if (wigleApiName.isNotBlank() && wigleApiToken.isNotBlank()) {
-                found = tryWigleSync(cell, cacheKey)
+                status = tryWigleSync(cell, cacheKey)
             }
             
-            // 2. Si no se encontró en WiGLE, intentamos con OpenCellId (Prioridad 2)
-            if (!found && openCellIdKey.isNotBlank() && !openCellIdKey.startsWith("pk.YOUR")) {
-                found = tryOpenCellIdSync(cell, cacheKey)
+            // 2. Si no se encontró en WiGLE o hubo error, intentamos con OpenCellId (Prioridad 2)
+            if (status != VerificationStatus.VERIFIED && openCellIdKey.isNotBlank() && !openCellIdKey.startsWith("pk.YOUR")) {
+                val ociStatus = tryOpenCellIdSync(cell, cacheKey)
+                // Si OCI devuelve VERIFIED o NOT_FOUND, actualizamos el estado global
+                if (ociStatus != VerificationStatus.ERROR) {
+                    status = ociStatus
+                }
             }
             
-            // 3. Si ninguno encontró nada, marcamos como NOT_FOUND definitivamente
-            if (!found) {
+            // 3. Solo marcamos como NOT_FOUND si AMBAS apis fallaron (o la configurada falló) con un 404 real
+            if (status == VerificationStatus.NOT_FOUND) {
                 verificationCache[cacheKey] = VerificationStatus.NOT_FOUND
                 dbHelper.updateVerificationStatus(cell.mnc, cell.tac, cell.cellId, VerificationStatus.NOT_FOUND)
+                appendLog("[API]", "Antena NO encontrada en bases de datos públicas.")
+            } else if (status == VerificationStatus.ERROR) {
+                // Si hubo un error de red/proxy, permitimos reintento eliminando de la caché
+                verificationCache.remove(cacheKey)
+                appendLog("[API]", "⚠️ Error de conexión. Se reintentará la verificación.")
             }
         }
     }
 
-    private fun tryOpenCellIdSync(cell: CellData, cacheKey: String): Boolean {
+    private fun tryOpenCellIdSync(cell: CellData, cacheKey: String): VerificationStatus {
         val currentClient = if (isProxyEnabled) {
             client.newBuilder()
                 .proxy(Proxy(Proxy.Type.SOCKS, InetSocketAddress("127.0.0.1", 9050)))
@@ -913,16 +943,20 @@ class MiniICService : Service() {
                     val json = JSONObject(body)
                     if (json.has("lat")) {
                         processSuccessfulVerification(json.getDouble("lat"), json.getDouble("lon"), cell, cacheKey)
-                        true
-                    } else false
-                } else false
+                        VerificationStatus.VERIFIED
+                    } else {
+                        VerificationStatus.NOT_FOUND
+                    }
+                } else {
+                    if (response.code == 404) VerificationStatus.NOT_FOUND else VerificationStatus.ERROR
+                }
             }
         } catch (_: IOException) {
-            false
+            VerificationStatus.ERROR
         }
     }
 
-    private fun tryWigleSync(cell: CellData, cacheKey: String): Boolean {
+    private fun tryWigleSync(cell: CellData, cacheKey: String): VerificationStatus {
         val currentClient = if (isProxyEnabled) {
             client.newBuilder()
                 .proxy(Proxy(Proxy.Type.SOCKS, InetSocketAddress("127.0.0.1", 9050)))
@@ -933,11 +967,8 @@ class MiniICService : Service() {
 
         val credentials = okhttp3.Credentials.basic(wigleApiName, wigleApiToken)
         
-        // Parámetros limpios (WiGLE prefiere números sin ceros a la izquierda a veces)
-        val cleanMcc = cell.mcc.toIntOrNull() ?: cell.mcc
-        val cleanMnc = cell.mnc.toIntOrNull() ?: cell.mnc
-        
-        val url = "https://api.wigle.net/api/v2/cell/search?cell_net=$cleanMcc&cell_op=$cleanMnc&cell_lac=${cell.tac}&cell_id=${cell.cellId}"
+        // Parámetros para WiGLE (Usamos mcc, mnc, lac y cellid)
+        val url = "https://api.wigle.net/api/v2/cell/search?mcc=${cell.mcc}&mnc=${cell.mnc}&lac=${cell.tac}&cellid=${cell.cellId}"
         
         appendLog("[API]", "Consultando WiGLE para CID: ${cell.cellId}...")
         val request = Request.Builder()
@@ -948,7 +979,9 @@ class MiniICService : Service() {
         
         return try {
             currentClient.newCall(request).execute().use { response ->
+                val responseCode = response.code
                 val body = response.body.string()
+                
                 if (response.isSuccessful) {
                     val json = JSONObject(body)
                     if (json.has("success") && json.getBoolean("success") && json.has("results")) {
@@ -958,18 +991,25 @@ class MiniICService : Service() {
                             val lat = first.optDouble("trilat", first.optDouble("lat", 0.0))
                             val lon = first.optDouble("trilong", first.optDouble("lon", 0.0))
                             processSuccessfulVerification(lat, lon, cell, cacheKey)
-                            true
-                        } else false
-                    } else false
-                } else {
-                    if (response.code == 412) {
-                        appendLog("[API]", "⚠️ WiGLE Error 412: Acepta los términos en su web.")
+                            VerificationStatus.VERIFIED
+                        } else {
+                            // Si no hay resultados pero la petición fue exitosa, es un NOT_FOUND real
+                            VerificationStatus.NOT_FOUND
+                        }
+                    } else {
+                        VerificationStatus.ERROR
                     }
-                    false
+                } else {
+                    if (responseCode == 412) {
+                        appendLog("[API]", "⚠️ WiGLE: Acepta los términos en su web.")
+                    } else if (responseCode == 404) {
+                        return VerificationStatus.NOT_FOUND
+                    }
+                    VerificationStatus.ERROR
                 }
             }
         } catch (_: IOException) {
-            false
+            VerificationStatus.ERROR
         }
     }
 
@@ -1315,8 +1355,8 @@ class MiniICService : Service() {
         return "4G LTE"
     }
 
-    private fun Int.valOrNa() = if (this == Int.MAX_VALUE || this == -1 || this == 0) "N/A" else this.toString()
-    private fun Long.valOrNa() = if (this == Long.MAX_VALUE || this == -1L || this == 0L) "N/A" else this.toString()
+    private fun Int.valOrNa() = if (this == Int.MAX_VALUE || this == -1) "N/A" else this.toString()
+    private fun Long.valOrNa() = if (this == Long.MAX_VALUE || this == -1L) "N/A" else this.toString()
 
     private fun generateAuditLog(cell: CellData) {
         _auditStatus.value = "Auditoría en curso..."
