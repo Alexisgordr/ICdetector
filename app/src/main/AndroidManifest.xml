@@ -22,6 +22,8 @@
     <!-- memtagMode="sync" enforces MTE on GrapheneOS / MTE devices to prevent memory corruption attacks -->
     <application
         android:allowBackup="false"
+        android:dataExtractionRules="@xml/data_extraction_rules"
+        android:fullBackupContent="@xml/backup_rules"
         android:label="ICdetection"
         android:icon="@mipmap/ic_launcher"
         android:roundIcon="@mipmap/ic_launcher_round"

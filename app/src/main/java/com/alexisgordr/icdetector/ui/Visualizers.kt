@@ -114,11 +114,10 @@ fun GeoGraph(active: CellData, geoHistory: List<Float>) {
     val multiplier = if (is5g) 150 else 78
     val distanceMeters = taValue * multiplier
     
-    val currentLocale = Locale.getDefault()
     val distanceText = when {
         !isTaAvailable || taValue < 0 -> "NO DISPONIBLE"
         taValue == 0 -> "< $multiplier m"
-        distanceMeters >= 1000 -> String.format(currentLocale, "%.2f km", distanceMeters / 1000f)
+        distanceMeters >= 1000 -> String.format(Locale.ROOT, "%.2f km", distanceMeters / 1000f)
         else -> "$distanceMeters m"
     }
 

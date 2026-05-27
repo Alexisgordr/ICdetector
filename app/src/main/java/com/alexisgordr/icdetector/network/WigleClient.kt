@@ -35,8 +35,8 @@ object WigleClient {
             else -> "GSM"
         }
 
-        // URL con parámetros oficiales y tipo de radio
-        val url = "https://api.wigle.net/api/v2/cell/search?mcc=${cell.mcc}&mnc=${cell.mnc}&lac=${cell.tac}&cellid=${cell.cellId}"
+        // URL con parámetros oficiales y tipo de radio para mejorar la precisión
+        val url = "https://api.wigle.net/api/v2/cell/search?mcc=${cell.mcc}&mnc=${cell.mnc}&lac=${cell.tac}&cellid=${cell.cellId}&radio=$radioType"
 
 
         val request = Request.Builder()

@@ -364,7 +364,7 @@ class MiniICService : Service() {
                 return
             }
 
-            val bestTa = list.firstOrNull { it.timingAdvance != null && it.timingAdvance!! >= 0 }?.timingAdvance
+            val bestTa = list.firstOrNull { it.timingAdvance != null && it.timingAdvance >= 0 }?.timingAdvance
             
             if (bestTa != null) {
                 list = list.asSequence().map { cell -> 
