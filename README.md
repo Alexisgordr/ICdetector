@@ -105,39 +105,26 @@ Modern professional-grade IMSI-catchers may emulate legitimate carrier infrastru
 
 ---
 
-# 📱 Device Compatibility
+# 📱 Device & Hardware Compatibility
+
+ICdetection relies on low-level system calls (L3) and radio frequency callbacks to audit connection security. Because of this, hardware and firmware play a massive role in the app's detection capabilities.
+
+## Recommended: Google Pixel / GrapheneOS
+Pixel devices (specifically those with Tensor chips) running stock firmware, **GrapheneOS**, or near-AOSP environments provide the most transparent and reliable telemetry. 
+
+These environments respect low-level Android APIs, allowing ICdetection to accurately extract:
+- Hardware-level ciphering states (detecting unencrypted A5/0 connections).
+- Raw Timing Advance (TA) metrics for distance calculation.
+- Identifier disclosure events.
+
+## OEM Firmware Limitations (Samsung, Xiaomi, Huawei, etc.)
+Manufacturers with heavily customized firmware (e.g., OneUI, MIUI, EMUI) often modify the Hardware Abstraction Layer (HAL) of the radio. 
+
+This can result in the modem firmware blocking or obfuscating critical security sensors. On these devices, the app will still function and evaluate standard metrics, but advanced heuristics (like raw TA extraction or real-time cipher status) may be limited or entirely blocked by the OEM's hardware restrictions.
 
 ## Android Support
-
-### Android 14+
-Provides the best telemetry support currently available in standard Android userland.
-
-Depending on the device firmware and modem implementation, Android 14 may expose:
-- ciphering state callbacks
-- identifier disclosure events
-- enhanced telephony telemetry
-
-### Android 12 / 13
-Fully supported in heuristic analysis mode.
-
-Some low-level telemetry features are unavailable due to Android framework restrictions.
-
----
-
-## Recommended Devices
-
-### Google Pixel / GrapheneOS
-Pixel devices running:
-- stock Pixel firmware
-- GrapheneOS
-- near-AOSP environments
-
-provide the most reliable telemetry behavior currently observed during testing.
-
-This includes:
-- more stable TelephonyCallback behavior
-- better Timing Advance reporting
-- improved Android 14 security telemetry consistency
+- **Android 14+:** Provides the best telemetry support currently available in standard Android userland (including ciphering state callbacks).
+- **Android 12 / 13:** Fully supported in heuristic analysis mode, though some low-level telemetry features are unavailable due to framework restrictions.
 
 ---
 
@@ -151,90 +138,48 @@ The application continuously performs a multi-layer heuristic audit during:
 
 Current heuristics include:
 
----
-
 ## 1. Isolated Cell Detection
-Detects serving cells operating without coherent neighboring infrastructure.
-
-Useful against:
-- misconfigured SDR deployments
-- amateur rogue BTS setups
-- incomplete fake towers
-
----
+Detects serving cells operating without coherent neighboring infrastructure. Useful against misconfigured SDR deployments or amateur rogue BTS setups.
 
 ## 2. Signal Dominance Analysis
-Detects abnormal signal dominance deltas between the serving cell and neighboring towers.
-
-This may indicate:
-- forced camping behavior
-- aggressive signal overpowering
-- rogue tower attraction attempts
-
----
+Detects abnormal signal dominance deltas between the serving cell and neighboring towers, potentially indicating forced camping behavior.
 
 ## 3. MCC Consistency Validation
 Detects inconsistencies between neighboring Mobile Country Codes.
 
----
-
 ## 4. Multi-MNC Density Analysis
 Flags environments containing unusually high operator-code diversity.
-
----
 
 ## 5. TAC Regional Consistency
 Validates Tracking Area Code coherence against nearby infrastructure.
 
----
-
 ## 6. Timing Advance Geometric Analysis
-Attempts to correlate physical distance estimation using Timing Advance telemetry.
-
-This feature is highly device-dependent.
-
----
+Attempts to correlate physical distance estimation using Timing Advance telemetry. *(Highly device-dependent)*.
 
 ## 7. Ghost Neighbor Detection
 Detects invalid or incoherent neighboring-cell behavior.
 
----
-
 ## 8. ARFCN / Frequency Sanity Validation
 Performs basic consistency analysis against reported radio-frequency behavior.
 
----
-
 ## 9. Ciphering Integrity Monitoring
-Attempts to detect insecure or non-ciphered states when exposed by the Android framework and device firmware.
-
-Reliability varies significantly across OEMs.
-
----
+Attempts to detect insecure or non-ciphered states (A5/0) when exposed by the Android framework and device firmware.
 
 ## 10. Anti Ping-Pong Analysis
-Detects aggressive or repetitive reselection loops potentially associated with anomalous cellular behavior.
+Detects aggressive or repetitive reselection loops potentially associated with anomalous cellular behavior, with built-in speed filters to prevent false positives while driving.
 
 ---
 
 # 📊 Telemetry & Visualization
 
 ## Forensic Terminal
-Structured event-driven forensic logging engine.
-
-Designed to avoid noisy spam output while preserving important events.
-
----
+Structured event-driven forensic logging engine. Designed to avoid noisy spam output while preserving important events.
 
 ## Real-Time Signal Graphs
 Continuous RSRP visualization with heuristic threat overlays.
 
----
-
 ## Timing Advance Visualization
 Geometric TA graphing for distance-behavior observation.
-
----
 
 ## Threat Scoring
 Dynamic heuristic scoring engine with contextual event correlation.
@@ -245,15 +190,12 @@ Dynamic heuristic scoring engine with contextual event correlation.
 
 The application optionally cross-references cellular towers using:
 
-- OpenCellID
-- WiGLE
+- **OpenCellID**
+- **WiGLE**
 
-to compare observed infrastructure against publicly known tower databases.
+to compare observed infrastructure against publicly known crowdsourced tower databases.
 
-Important:
-Public tower databases are incomplete and may contain outdated or missing records.
-
-A "not found" result does not imply malicious infrastructure.
+*Important:* Public tower databases are incomplete and may contain outdated or missing records. A "not found" result does not imply malicious infrastructure.
 
 ---
 
@@ -262,12 +204,8 @@ A "not found" result does not imply malicious infrastructure.
 ## Optional SOCKS5 Routing
 ICdetection supports optional SOCKS5 proxy routing (Tor / Orbot compatible) for infrastructure verification requests.
 
----
-
 ## Local-First Design
-The application was designed with a local-first privacy philosophy.
-
-By default:
+The application was designed with a strict local-first privacy philosophy. By default:
 - no cloud synchronization exists
 - no analytics are collected
 - no advertising SDKs are included
@@ -279,8 +217,6 @@ By default:
 
 ## SQLite Event Storage
 All logs are stored locally on-device.
-
----
 
 ## CSV Export
 Forensic data can be exported for:
@@ -294,9 +230,7 @@ Forensic data can be exported for:
 
 # ⚠️ False Positives
 
-False positives are possible and expected.
-
-Legitimate situations that may trigger heuristic alerts include:
+False positives are possible and expected. Legitimate situations that may trigger heuristic alerts include:
 - carrier maintenance
 - dense urban deployments
 - roaming environments
@@ -304,14 +238,8 @@ Legitimate situations that may trigger heuristic alerts include:
 - indoor DAS systems
 - femtocells
 - rural coverage gaps
-- temporary infrastructure changes
 
-ICdetection should be interpreted as:
-- a forensic auditing tool
-- a telemetry analyzer
-- an anomaly detector
-
-—not as a definitive surveillance detector.
+ICdetection should be interpreted as a forensic auditing tool, a telemetry analyzer, and an anomaly detector—not as a definitive surveillance detector.
 
 ---
 
@@ -335,19 +263,6 @@ This limitation is inherent to Android userland restrictions.
 
 # ⚖️ License
 
-Licensed under the GNU General Public License v3.0 (GPL-3.0).
+Licensed under the **GNU General Public License v3.0 (GPL-3.0)** — see the [LICENSE](LICENSE) file for details.
 
-You are free to:
-- use
-- study
-- modify
-- redistribute
-- audit
-
-the software under GPL terms.
-
-Derivative works must remain open-source under GPL-compatible licensing.
-```
-
-```
-er the **GNU General Public License v3.0** — see the [LICENSE](LICENSE) file for details.
+You are free to use, study, modify, redistribute, and audit the software under GPL terms. Derivative works must remain open-source under GPL-compatible licensing.
