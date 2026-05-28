@@ -145,15 +145,37 @@ fun HistoryPanel(dbHelper: CellDbHelper, onBack: () -> Unit) {
                                 HorizontalDivider(color = Color(0xFF222222))
                                 records.forEach { record ->
                                     Column(modifier = Modifier.padding(vertical = 8.dp)) {
+                                        // Fila 1: Timestamp y dBm
                                         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                                             Text(record.timestamp, color = Color(0xFF666666), fontSize = 11.sp, fontFamily = FontFamily.Monospace)
                                             Text("${record.dbm} dBm (${record.netType})", color = Color.White, fontSize = 11.sp, fontFamily = FontFamily.Monospace)
                                         }
+                                        
+                                        // Fila 2: MNC/TAC y Score
                                         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                                             Text("MNC: ${record.mnc} | TAC: ${record.tac}", color = Color(0xFF888888), fontSize = 11.sp, fontFamily = FontFamily.Monospace)
                                             val scoreColor = if (record.score >= 90) Color(0xFF4CAF50) else if (record.score >= 70) Color(0xFFFFA000) else Color(0xFFCF6679)
                                             Text("🛡️ ${record.score}%", color = scoreColor, fontSize = 12.sp, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Bold)
                                         }
+                                        
+                                        // NUEVO: Fila 3 - Coordenadas y botón de mapa (si existen)
+                                        if (record.lat != null && record.lon != null) {
+                                            Row(
+                                                modifier = Modifier.fillMaxWidth(),
+                                                horizontalArrangement = Arrangement.SpaceBetween,
+                                                verticalAlignment = Alignment.CenterVertically
+                                            ) {
+                                                Text(
+                                                    "📍 ${String.format(java.util.Locale.ROOT, "%.4f", record.lat)}, ${String.format(java.util.Locale.ROOT, "%.4f", record.lon)}",
+                                                    color = Color(0xFF666666),
+                                                    fontSize = 9.sp,
+                                                    fontFamily = FontFamily.Monospace
+                                                )
+                                                LocationButton(record.lat, record.lon, record.cid)
+                                            }
+                                        }
+                                        
+                                        // Fallos de heurísticas (si los hay)
                                         if ((record.failedHeuristics.isNotBlank()) && (record.failedHeuristics != "OK")) {
                                             Spacer(Modifier.height(4.dp))
                                             Text("⚠️ Fallo: ${record.failedHeuristics}", color = Color(0xFFCF6679), fontSize = 10.sp, fontFamily = FontFamily.Monospace)

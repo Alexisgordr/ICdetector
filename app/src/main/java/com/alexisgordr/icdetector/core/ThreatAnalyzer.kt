@@ -3,16 +3,106 @@ package com.alexisgordr.icdetector.core
 import android.location.Location
 import com.alexisgordr.icdetector.models.CellData
 import com.alexisgordr.icdetector.models.HeuristicReport
+import com.alexisgordr.icdetector.models.HistoryRecord
 import com.alexisgordr.icdetector.models.VerificationStatus
+import com.alexisgordr.icdetector.storage.CellDbHelper
 
 object ThreatAnalyzer {
+
+    /**
+     * Calcula el umbral dinámico según el contexto de densidad de celdas (vecinos)
+     * Optimizamos para reducir falsos positivos en zonas rurales.
+     */
+    private fun getDynamicLocationThreshold(
+        neighbors: List<CellData>,
+        networkType: String
+    ): Double {
+        val count = neighbors.size
+        return when {
+            // Zona urbana densa (centro ciudad)
+            count >= 12 -> 2000.0
+            
+            // Zona urbana normal
+            count >= 6 -> 4000.0
+            
+            // Zona suburbana
+            count >= 3 -> 8000.0
+            
+            // 5G (SA/NSA) suele tener mayor densidad
+            networkType.contains("5G") -> 5000.0
+            
+            // Zona rural o macro-celdas: umbral amplio (15km) para evitar falsos positivos
+            else -> 15000.0
+        }
+    }
+
+    /**
+     * HEURÍSTICA #11: Análisis de Consistencia Geográfica y RF (PCI/ARFCN)
+     * Detecta si una celda aparece en ubicaciones imposibles o con perfiles de radio cambiados.
+     */
+    fun analyzeMobileCellId(
+        active: CellData,
+        currentLocation: Location?,
+        history: List<HistoryRecord>,
+        neighbors: List<CellData>
+    ): Triple<Boolean, Int, String?> {
+        if (currentLocation == null || active.cellId == "N/A") {
+            return Triple(true, 0, null)
+        }
+
+        if (history.isEmpty()) return Triple(true, 0, null)
+
+        val threshold = getDynamicLocationThreshold(neighbors, active.networkType)
+        var maxSeverity = 0
+        var threatDetail: String? = null
+
+        for (record in history) {
+            if (record.lat == null || record.lon == null) continue
+
+            val results = FloatArray(1)
+            Location.distanceBetween(currentLocation.latitude, currentLocation.longitude, record.lat, record.lon, results)
+            val distance = results[0].toDouble()
+
+            if (distance > threshold) {
+                // 1. Correlación de RF: Si además de la distancia, el PCI o ARFCN han cambiado, la sospecha es crítica.
+                val pciMismatch = record.pci != null && active.pci != null && record.pci != active.pci
+                val arfcnMismatch = record.arfcn != null && active.arfcn != null && record.arfcn != active.arfcn
+                
+                // 2. Cálculo de severidad gradual basado en la distancia
+                val distanceFactor = (distance / threshold).coerceAtMost(3.0)
+                var severity = when {
+                    distanceFactor > 2.5 -> 40
+                    distanceFactor > 1.8 -> 30
+                    distanceFactor > 1.2 -> 20
+                    else -> 10
+                }
+
+                // Penalización extra por inconsistencia de radio (PCI/ARFCN)
+                if (pciMismatch || arfcnMismatch) {
+                    severity += 25
+                    threatDetail = "Inconsistencia RF (PCI/ARFCN) detectada a gran distancia"
+                } else if (threatDetail == null) {
+                    threatDetail = "Celda detectada a distancia anómala (> ${threshold.toInt()}m)"
+                }
+
+                if (severity > maxSeverity) maxSeverity = severity
+            }
+        }
+
+        return if (maxSeverity > 0) {
+            Triple(false, maxSeverity.coerceAtMost(100), threatDetail)
+        } else {
+            Triple(true, 0, null)
+        }
+    }
 
     fun analyzeThreats(
         active: CellData,
         neighbors: List<CellData>,
         isHardwareCipheringActive: Boolean,
         cellChangeHistory: List<Pair<String, Long>>,
-        currentLocation: Location?
+        currentLocation: Location?,
+        preloadedHistory: List<HistoryRecord> = emptyList()
     ): CellData {
         val reasons = mutableListOf<String>()
         var score = 100
@@ -26,6 +116,7 @@ object ThreatAnalyzer {
         var hGhost = true
         var hArfcn = true
         var hPingPong = true
+        var hMobileCellId = true
 
         // 1. Neighbor analysis
         if (neighbors.isEmpty() && active.dbm >= -80) {
@@ -73,8 +164,6 @@ object ThreatAnalyzer {
             val taDistanceMeters = if (active.networkType.contains("5G")) ta * 150 else ta * 78
 
             if (active.lat != null && active.lon != null && currentLocation != null) {
-                // TA=0 es ambiguo en Android moderno (limitación del modem, no distancia real).
-                // Solo usamos la comparación GPS si TA > 0 para evitar falsos positivos.
                 if (ta > 0) {
                     val results = FloatArray(1)
                     Location.distanceBetween(
@@ -88,8 +177,6 @@ object ThreatAnalyzer {
                     }
                 }
             } else {
-                // Sin coordenadas GPS verificadas: la heurística de proximidad anómala
-                // sigue siendo útil incluso con TA=0 (señal muy fuerte + no verificada)
                 if (!active.networkType.contains("5G") && ta <= 1 && active.dbm >= -60
                     && active.verified != VerificationStatus.VERIFIED) {
                     hTa = false
@@ -109,14 +196,12 @@ object ThreatAnalyzer {
         // 8. ARFCN Sanity Check (Enhanced)
         active.arfcn?.let { arfcn ->
             if (active.networkType.contains("5G")) {
-                // Heurística: NR-ARFCN máximo según 3GPP es ~3.27M.
                 if (arfcn > 3279165 || arfcn == 0) {
                     hArfcn = false
                     reasons.add("Frecuencia (ARFCN) 5G sospechosa")
                     score -= 15
                 }
             } else if (active.networkType.contains("4G") || active.networkType.contains("LTE")) {
-                // Heurística LTE: EARFCN suele estar entre 0 y 70645 (TS 36.101)
                 if (arfcn > 70645 || arfcn == 0) {
                     hArfcn = false
                     reasons.add("Frecuencia (EARFCN) 4G sospechosa")
@@ -143,6 +228,14 @@ object ThreatAnalyzer {
             }
         }
 
+        // 11. NUEVA HEURÍSTICA: Consistencia Geográfica y RF (PCI/ARFCN)
+        val (hMobileOk, hMobilePenalty, hMobileReason) = analyzeMobileCellId(active, currentLocation, preloadedHistory, neighbors)
+        if (!hMobileOk) {
+            hMobileCellId = false
+            reasons.add(hMobileReason ?: "Consistencia geográfica fallida")
+            score -= hMobilePenalty
+        }
+
         // Bonificadores y penalizadores por Base de Datos
         if (active.verified == VerificationStatus.VERIFIED) {
             score += 15
@@ -163,7 +256,8 @@ object ThreatAnalyzer {
             ghostNeighborsPassed = hGhost,
             arfcnSanityPassed = hArfcn,
             hardwareCipheringPassed = isHardwareCipheringActive,
-            pingPongPassed = hPingPong
+            pingPongPassed = hPingPong,
+            mobileCellIdPassed = hMobileCellId
         )
 
         return active.copy(

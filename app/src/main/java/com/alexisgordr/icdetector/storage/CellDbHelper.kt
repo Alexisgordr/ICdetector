@@ -15,7 +15,7 @@ import java.util.Locale
 class CellDbHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME, null, DATABASE_VERSION) {
     companion object {
         private const val DATABASE_NAME = "icdetector_history.db"
-        private const val DATABASE_VERSION = 5
+        private const val DATABASE_VERSION = 6
         const val TABLE_HISTORY = "history"
         const val COLUMN_ID = "id"
         const val COLUMN_TIMESTAMP = "timestamp"
@@ -30,6 +30,8 @@ class CellDbHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME, 
         const val COLUMN_FAILED_H = "failed_heuristics"
         const val COLUMN_LAT = "lat"
         const val COLUMN_LON = "lon"
+        const val COLUMN_PCI = "pci"
+        const val COLUMN_ARFCN = "arfcn"
     }
 
     override fun onCreate(db: SQLiteDatabase) {
@@ -47,7 +49,9 @@ class CellDbHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME, 
                     "$COLUMN_SCORE INTEGER DEFAULT 100, " +
                     "$COLUMN_FAILED_H TEXT, " +
                     "$COLUMN_LAT REAL, " +
-                    "$COLUMN_LON REAL)",
+                    "$COLUMN_LON REAL, " +
+                    "$COLUMN_PCI INTEGER, " +
+                    "$COLUMN_ARFCN INTEGER)",
         )
     }
 
@@ -62,6 +66,10 @@ class CellDbHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME, 
             db.execSQL("ALTER TABLE $TABLE_HISTORY ADD COLUMN $COLUMN_LAT REAL")
             db.execSQL("ALTER TABLE $TABLE_HISTORY ADD COLUMN $COLUMN_LON REAL")
         }
+        if (oldVersion < 6) {
+            db.execSQL("ALTER TABLE $TABLE_HISTORY ADD COLUMN $COLUMN_PCI INTEGER")
+            db.execSQL("ALTER TABLE $TABLE_HISTORY ADD COLUMN $COLUMN_ARFCN INTEGER")
+        }
     }
 
     fun logConnection(
@@ -75,7 +83,9 @@ class CellDbHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME, 
         score: Int = 100,
         failedHeuristics: String = "",
         lat: Double? = null,
-        lon: Double? = null
+        lon: Double? = null,
+        pci: Int? = null,
+        arfcn: Int? = null
     ): Long {
         val db = this.writableDatabase
         val values = ContentValues().apply {
@@ -92,6 +102,8 @@ class CellDbHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME, 
             put(COLUMN_FAILED_H, failedHeuristics)
             if (lat != null) put(COLUMN_LAT, lat)
             if (lon != null) put(COLUMN_LON, lon)
+            if (pci != null) put(COLUMN_PCI, pci)
+            if (arfcn != null) put(COLUMN_ARFCN, arfcn)
         }
         return db.insert(TABLE_HISTORY, null, values)
     }
@@ -162,6 +174,16 @@ class CellDbHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME, 
         val cursor: Cursor = db.rawQuery("SELECT * FROM $TABLE_HISTORY ORDER BY $COLUMN_ID DESC", null)
         if (cursor.moveToFirst()) {
             do {
+                // Leer coordenadas (pueden ser NULL)
+                val lat = if (cursor.isNull(cursor.getColumnIndexOrThrow(COLUMN_LAT))) null 
+                          else cursor.getDouble(cursor.getColumnIndexOrThrow(COLUMN_LAT))
+                val lon = if (cursor.isNull(cursor.getColumnIndexOrThrow(COLUMN_LON))) null 
+                          else cursor.getDouble(cursor.getColumnIndexOrThrow(COLUMN_LON))
+                val pci = if (cursor.isNull(cursor.getColumnIndexOrThrow(COLUMN_PCI))) null
+                          else cursor.getInt(cursor.getColumnIndexOrThrow(COLUMN_PCI))
+                val arfcn = if (cursor.isNull(cursor.getColumnIndexOrThrow(COLUMN_ARFCN))) null
+                          else cursor.getInt(cursor.getColumnIndexOrThrow(COLUMN_ARFCN))
+                
                 list.add(
                     HistoryRecord(
                         timestamp = cursor.getString(cursor.getColumnIndexOrThrow(COLUMN_TIMESTAMP)),
@@ -177,7 +199,11 @@ class CellDbHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME, 
                             VerificationStatus.PENDING 
                         },
                         score = cursor.getInt(cursor.getColumnIndexOrThrow(COLUMN_SCORE)),
-                        failedHeuristics = cursor.getString(cursor.getColumnIndexOrThrow(COLUMN_FAILED_H)) ?: ""
+                        failedHeuristics = cursor.getString(cursor.getColumnIndexOrThrow(COLUMN_FAILED_H)) ?: "",
+                        lat = lat,
+                        lon = lon,
+                        pci = pci,
+                        arfcn = arfcn
                     )
                 )
             } while (cursor.moveToNext())
@@ -189,5 +215,92 @@ class CellDbHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME, 
     fun clear() {
         val db = this.writableDatabase
         db.execSQL("DELETE FROM $TABLE_HISTORY")
+    }
+
+    /**
+     * Obtiene registros previos de una misma Cell ID (excluyendo la ubicación actual)
+     * Limitado a los últimos 30 días para evitar datos obsoletos.
+     */
+    fun getPreviousCellHistory(
+        cellId: String,
+        mnc: String,
+        tac: String,
+        excludeCurrentLocation: android.location.Location
+    ): List<HistoryRecord> {
+        val history = mutableListOf<HistoryRecord>()
+        val db = this.readableDatabase
+        
+        // Excluir registros muy recientes (últimos 5 minutos) para evitar duplicados de la misma sesión
+        val fiveMinutesAgo = System.currentTimeMillis() - (5 * 60 * 1000)
+        // Decaimiento temporal: Solo considerar registros de los últimos 30 días
+        val thirtyDaysAgo = System.currentTimeMillis() - (30L * 24 * 60 * 60 * 1000)
+        
+        val dateFormat = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault())
+        val recentThreshold = dateFormat.format(Date(fiveMinutesAgo))
+        val oldThreshold = dateFormat.format(Date(thirtyDaysAgo))
+        
+        val query = """
+            SELECT * 
+            FROM $TABLE_HISTORY 
+            WHERE $COLUMN_CID = ? 
+              AND $COLUMN_MNC = ? 
+              AND $COLUMN_TAC = ?
+              AND $COLUMN_LAT IS NOT NULL 
+              AND $COLUMN_LON IS NOT NULL
+              AND $COLUMN_TIMESTAMP < ?
+              AND $COLUMN_TIMESTAMP > ?
+            ORDER BY $COLUMN_ID DESC
+            LIMIT 20
+        """.trimIndent()
+        
+        val cursor = db.rawQuery(query, arrayOf(cellId, mnc, tac, recentThreshold, oldThreshold))
+        
+        if (cursor.moveToFirst()) {
+            do {
+                val lat = cursor.getDouble(cursor.getColumnIndexOrThrow(COLUMN_LAT))
+                val lon = cursor.getDouble(cursor.getColumnIndexOrThrow(COLUMN_LON))
+                
+                // Evitar incluir la ubicación actual si está muy cerca (misma sesión)
+                val results = FloatArray(1)
+                Location.distanceBetween(
+                    excludeCurrentLocation.latitude, excludeCurrentLocation.longitude,
+                    lat, lon, results
+                )
+                
+                // Solo añadir si está a más de 50m de la ubicación actual
+                if (results[0] > 50) {
+                    val pci = if (cursor.isNull(cursor.getColumnIndexOrThrow(COLUMN_PCI))) null
+                              else cursor.getInt(cursor.getColumnIndexOrThrow(COLUMN_PCI))
+                    val arfcn = if (cursor.isNull(cursor.getColumnIndexOrThrow(COLUMN_ARFCN))) null
+                              else cursor.getInt(cursor.getColumnIndexOrThrow(COLUMN_ARFCN))
+
+                    history.add(
+                        HistoryRecord(
+                            timestamp = cursor.getString(cursor.getColumnIndexOrThrow(COLUMN_TIMESTAMP)),
+                            netType = cursor.getString(cursor.getColumnIndexOrThrow(COLUMN_NET_TYPE)),
+                            cid = cursor.getString(cursor.getColumnIndexOrThrow(COLUMN_CID)),
+                            mnc = cursor.getString(cursor.getColumnIndexOrThrow(COLUMN_MNC)),
+                            tac = cursor.getString(cursor.getColumnIndexOrThrow(COLUMN_TAC)),
+                            mcc = cursor.getString(cursor.getColumnIndexOrThrow(COLUMN_MCC)),
+                            dbm = cursor.getInt(cursor.getColumnIndexOrThrow(COLUMN_DBM)),
+                            verified = try { 
+                                VerificationStatus.valueOf(cursor.getString(cursor.getColumnIndexOrThrow(COLUMN_VERIFIED))) 
+                            } catch(_: Exception) { 
+                                VerificationStatus.PENDING 
+                            },
+                            score = cursor.getInt(cursor.getColumnIndexOrThrow(COLUMN_SCORE)),
+                            failedHeuristics = cursor.getString(cursor.getColumnIndexOrThrow(COLUMN_FAILED_H)) ?: "",
+                            lat = lat,
+                            lon = lon,
+                            pci = pci,
+                            arfcn = arfcn
+                        )
+                    )
+                }
+            } while (cursor.moveToNext())
+        }
+        cursor.close()
+        
+        return history
     }
 }

@@ -10,5 +10,9 @@ data class HistoryRecord(
     val dbm: Int,
     val verified: VerificationStatus = VerificationStatus.PENDING,
     val score: Int = 100,
-    val failedHeuristics: String = ""
+    val failedHeuristics: String = "",
+    val lat: Double? = null,
+    val lon: Double? = null,
+    val pci: Int? = null,
+    val arfcn: Int? = null
 )

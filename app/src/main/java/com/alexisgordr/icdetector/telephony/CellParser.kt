@@ -26,7 +26,7 @@ object CellParser {
                         }
                     } catch (_: Exception) {}
                 }
-                CellData(reg, networkTypeString, id.ci.valOrNa(), cellMnc, id.tac.valOrNa(), dbm, cellMcc, timingAdvance = ta, arfcn = id.earfcn)
+                CellData(reg, networkTypeString, id.ci.valOrNa(), cellMnc, id.tac.valOrNa(), dbm, cellMcc, timingAdvance = ta, arfcn = id.earfcn, pci = id.pci)
             }
             is CellInfoNr -> {
                 val id = info.cellIdentity as CellIdentityNr
@@ -52,14 +52,14 @@ object CellParser {
                         }
                     } catch (_: Exception) {}
                 }
-                CellData(reg, networkTypeString, id.nci.valOrNa(), cellMnc, id.tac.valOrNa(), dbm, cellMcc, timingAdvance = ta, arfcn = id.nrarfcn)
+                CellData(reg, networkTypeString, id.nci.valOrNa(), cellMnc, id.tac.valOrNa(), dbm, cellMcc, timingAdvance = ta, arfcn = id.nrarfcn, pci = id.pci)
             }
             is CellInfoWcdma -> {
                 val id = info.cellIdentity
                 val dbm = info.cellSignalStrength.dbm
                 val cellMcc = id.mccString ?: mcc
                 val cellMnc = id.mncString ?: mnc
-                CellData(reg, networkTypeString, id.cid.valOrNa(), cellMnc, id.lac.valOrNa(), dbm, cellMcc, arfcn = id.uarfcn)
+                CellData(reg, networkTypeString, id.cid.valOrNa(), cellMnc, id.lac.valOrNa(), dbm, cellMcc, arfcn = id.uarfcn, pci = id.psc)
             }
             is CellInfoGsm -> {
                 val id = info.cellIdentity

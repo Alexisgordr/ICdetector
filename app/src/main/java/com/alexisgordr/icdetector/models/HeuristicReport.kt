@@ -10,5 +10,6 @@ data class HeuristicReport(
     val ghostNeighborsPassed: Boolean = true,
     val arfcnSanityPassed: Boolean = true,
     val hardwareCipheringPassed: Boolean = true,
-    val pingPongPassed: Boolean = true
+    val pingPongPassed: Boolean = true,
+    val mobileCellIdPassed: Boolean = true
 )

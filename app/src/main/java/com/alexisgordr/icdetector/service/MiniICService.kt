@@ -374,39 +374,57 @@ class MiniICService : Service() {
             }
 
             val neighbors = list.filter { !it.isRegistered }
-            val currentLocation = getCurrentLocation()
+            val activeRaw = list.firstOrNull { it.isRegistered }
 
-            val analyzedList = list.map { cell ->
-                ThreatAnalyzer.analyzeThreats(cell, neighbors, isHardwareCipheringActive, cellChangeHistory, currentLocation)
-            }
-
-            val sorted = analyzedList.sortedWith(
-                compareByDescending<CellData> { it.isRegistered }
-                    .thenByDescending { it.dbm }
-            )
-
-            val active = sorted.firstOrNull { it.isRegistered }
-            if (active != null) {
-                // 1. Obtener estado conocido (Caché o DB) para no mostrar PENDING si ya existe
-                val cacheKey = "${active.mcc}-${active.mnc}-${active.tac}-${active.cellId}"
-                val knownStatus = verificationCache[cacheKey] ?: VerificationStatus.PENDING
-
-                // 2. Lanzar alertas y registro con el estado actual
-                checkAlerts(active.copy(verified = knownStatus))
-
-                // 3. Iniciar proceso de verificación (solo si es necesario)
-                verifyCell(active, neighbors)
+            scope.launch(Dispatchers.IO) {
+                val currentLocation = getCurrentLocation()
                 
-                val finalStatus = verificationCache[cacheKey] ?: knownStatus
-                
-                _cellFlow.value = sorted.map { 
-                    if (it.isRegistered) it.copy(verified = finalStatus) else it 
+                // Pre-fetch de historial para la heurística 11 (Geográfica/RF)
+                val preloadedHistory = if (activeRaw != null && activeRaw.cellId != "N/A" && currentLocation != null) {
+                    dbHelper.getPreviousCellHistory(activeRaw.cellId, activeRaw.mnc, activeRaw.tac, currentLocation)
+                } else emptyList()
+
+                val analyzedList = list.map { cell ->
+                    ThreatAnalyzer.analyzeThreats(
+                        active = cell,
+                        neighbors = neighbors,
+                        isHardwareCipheringActive = isHardwareCipheringActive,
+                        cellChangeHistory = cellChangeHistory,
+                        currentLocation = currentLocation,
+                        preloadedHistory = if (cell.isRegistered) preloadedHistory else emptyList()
+                    )
                 }
-                
-                updateNotification(active.copy(verified = finalStatus))
-            } else {
-                _cellFlow.value = emptyList()
-                updateNotificationText("Buscando red...")
+
+                withContext(Dispatchers.Main) {
+                    val sorted = analyzedList.sortedWith(
+                        compareByDescending<CellData> { it.isRegistered }
+                            .thenByDescending { it.dbm }
+                    )
+
+                    val active = sorted.firstOrNull { it.isRegistered }
+                    if (active != null) {
+                        // 1. Obtener estado conocido (Caché o DB) para no mostrar PENDING si ya existe
+                        val cacheKey = "${active.mcc}-${active.mnc}-${active.tac}-${active.cellId}"
+                        val knownStatus = verificationCache[cacheKey] ?: VerificationStatus.PENDING
+
+                        // 2. Lanzar alertas y registro con el estado actual
+                        checkAlerts(active.copy(verified = knownStatus))
+
+                        // 3. Iniciar proceso de verificación (solo si es necesario)
+                        verifyCell(active, neighbors)
+                        
+                        val finalStatus = verificationCache[cacheKey] ?: knownStatus
+                        
+                        _cellFlow.value = sorted.map { 
+                            if (it.isRegistered) it.copy(verified = finalStatus) else it 
+                        }
+                        
+                        updateNotification(active.copy(verified = finalStatus))
+                    } else {
+                        _cellFlow.value = emptyList()
+                        updateNotificationText("Buscando red...")
+                    }
+                }
             }
         } catch (e: Exception) {
             e.printStackTrace()
@@ -515,8 +533,20 @@ class MiniICService : Service() {
             lon,
             cell.mcc)
         
+        val loc = getCurrentLocation()
+        val history = if (loc != null && cell.cellId != "N/A") {
+            dbHelper.getPreviousCellHistory(cell.cellId, cell.mnc, cell.tac, loc)
+        } else emptyList()
+
         val updatedActive = cell.copy(verified = VerificationStatus.VERIFIED, lat = lat, lon = lon)
-        val analyzedActive = ThreatAnalyzer.analyzeThreats(updatedActive, neighbors, isHardwareCipheringActive, cellChangeHistory, getCurrentLocation())
+        val analyzedActive = ThreatAnalyzer.analyzeThreats(
+            active = updatedActive,
+            neighbors = neighbors,
+            isHardwareCipheringActive = isHardwareCipheringActive,
+            cellChangeHistory = cellChangeHistory,
+            currentLocation = loc,
+            preloadedHistory = history
+        )
         
         scope.launch(Dispatchers.Main) {
             _cellFlow.value = _cellFlow.value.map { 
@@ -567,7 +597,9 @@ class MiniICService : Service() {
                     score = cell.securityScore,
                     failedHeuristics = cell.suspiciousReason ?: "OK",
                     lat = loc?.latitude,
-                    lon = loc?.longitude
+                    lon = loc?.longitude,
+                    pci = cell.pci,
+                    arfcn = cell.arfcn
                 )
             }
             // --------------------------------------------------
@@ -709,7 +741,7 @@ class MiniICService : Service() {
 
     private fun generateAuditLog(cell: CellData) {
         _auditStatus.value = "Auditoría en curso..."
-        appendLog("[AUDIT]", "--- INICIANDO CICLO DE AUDITORÍA (10 REGLAS) ---")
+        appendLog("[AUDIT]", "--- INICIANDO CICLO DE AUDITORÍA (11 REGLAS) ---")
         val report = cell.heuristicReport
         val results = mapOf(
             "1. Celda Aislada" to report.isolatedCellPassed,
@@ -721,7 +753,8 @@ class MiniICService : Service() {
             "7. Espectro Fantasma" to report.ghostNeighborsPassed,
             "8. Sanidad ARFCN" to report.arfcnSanityPassed,
             "9. Cifrado Hardware" to report.hardwareCipheringPassed,
-            "10. Anti Ping-Pong" to report.pingPongPassed
+            "10. Anti Ping-Pong" to report.pingPongPassed,
+            "11. Consistencia Geográfica (Cell ID móvil)" to report.mobileCellIdPassed
         )
 
         results.forEach { (regla, pasado) ->

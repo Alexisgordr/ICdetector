@@ -305,16 +305,17 @@ fun SecurityScorePanel(active: CellData, dbmHistory: List<Int>, geoHistory: List
                         "HEUR" -> {
                             Text("AUDITORÍA DE PARÁMETROS", color = Color(0xFF555555), fontFamily = FontFamily.Monospace, fontSize = 10.sp, fontWeight = FontWeight.Bold)
                             Spacer(Modifier.height(8.dp))
-                            HeuristicItem("Análisis de Celda Aislada", active.heuristicReport.isolatedCellPassed)
-                            HeuristicItem("Estabilidad de Potencia (Anti-Gap)", active.heuristicReport.powerJumpPassed)
-                            HeuristicItem("Consistencia de MCC", active.heuristicReport.mccConsistencyPassed)
-                            HeuristicItem("Límite de Redes MNC", active.heuristicReport.mncCountPassed)
-                            HeuristicItem("Validación Regional TAC", active.heuristicReport.tacDeviationPassed)
-                            HeuristicItem("Coherencia Geométrica (TA)", active.heuristicReport.taDistancePassed)
-                            HeuristicItem("Espectro de Vecinos (Anti-Ghost)", active.heuristicReport.ghostNeighborsPassed)
-                            HeuristicItem("Sanidad de Frecuencia (ARFCN)", active.heuristicReport.arfcnSanityPassed)
-                            HeuristicItem("Cifrado de Enlace (Hardware)", active.heuristicReport.hardwareCipheringPassed)
-                            HeuristicItem("Estabilidad de Conexión (Anti Ping-Pong)", active.heuristicReport.pingPongPassed)
+                            HeuristicItem("1. Análisis de Celda Aislada", active.heuristicReport.isolatedCellPassed)
+                            HeuristicItem("2. Estabilidad de Potencia (Anti-Gap)", active.heuristicReport.powerJumpPassed)
+                            HeuristicItem("3. Consistencia de MCC", active.heuristicReport.mccConsistencyPassed)
+                            HeuristicItem("4. Límite de Redes MNC", active.heuristicReport.mncCountPassed)
+                            HeuristicItem("5. Validación Regional TAC", active.heuristicReport.tacDeviationPassed)
+                            HeuristicItem("6. Coherencia Geométrica (TA)", active.heuristicReport.taDistancePassed)
+                            HeuristicItem("7. Espectro de Vecinos (Anti-Ghost)", active.heuristicReport.ghostNeighborsPassed)
+                            HeuristicItem("8. Sanidad de Frecuencia (ARFCN)", active.heuristicReport.arfcnSanityPassed)
+                            HeuristicItem("9. Cifrado de Enlace (Hardware)", active.heuristicReport.hardwareCipheringPassed)
+                            HeuristicItem("10. Estabilidad de Conexión (Anti Ping-Pong)", active.heuristicReport.pingPongPassed)
+                            HeuristicItem("11. Consistencia Geográfica (Cell ID móvil)", active.heuristicReport.mobileCellIdPassed)
                         }
                     }
                 }

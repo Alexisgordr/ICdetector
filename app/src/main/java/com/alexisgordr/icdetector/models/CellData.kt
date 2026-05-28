@@ -13,6 +13,7 @@ data class CellData(
     val suspiciousReason: String? = null,
     val timingAdvance: Int? = null,
     val arfcn: Int? = null,
+    val pci: Int? = null,
     val lat: Double? = null,
     val lon: Double? = null,
     val heuristicReport: HeuristicReport = HeuristicReport(),
