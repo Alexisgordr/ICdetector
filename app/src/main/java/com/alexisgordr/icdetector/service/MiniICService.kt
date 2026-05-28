@@ -53,8 +53,6 @@ class MiniICService : Service() {
     private val _auditStatus = MutableStateFlow("")
     val auditStatus: StateFlow<String> = _auditStatus
 
-    private var refreshActiveCellVerification = false
-
     private fun appendLog(type: String, message: String) {
         val timestamp = SimpleDateFormat("HH:mm:ss.SSS", Locale.getDefault()).format(Date())
         val newLog = "[$timestamp] $type $message"
@@ -97,6 +95,7 @@ class MiniICService : Service() {
     private var isCallbackWorking = false
     private var connectionRetryCount = 0
     private val cellChangeHistory = CopyOnWriteArrayList<Pair<String, Long>>()
+    private var lastApiVerificationTime = 0L
 
     inner class LocalBinder : Binder() {
         fun getService(): MiniICService = this@MiniICService
@@ -156,7 +155,8 @@ class MiniICService : Service() {
                 } else {
                     if (wasAirplaneModeOn) {
                         appendLog("[SYS]", "Conexión restaurada. Analizando nueva celda activa...")
-                        refreshActiveCellVerification = true
+                        // Limpiar cache no-verificada para forzar re-consulta a DB y APIs si corresponde
+                        verificationCache.entries.removeIf { it.value != VerificationStatus.VERIFIED }
                         wasAirplaneModeOn = false
                     }
                     requestFreshCellInfo()
@@ -429,7 +429,23 @@ class MiniICService : Service() {
         
         // 1. Mirar caché rápida
         val cached = verificationCache[cacheKey]
-        if (cached != null && cached != VerificationStatus.PENDING && cached != VerificationStatus.ERROR) return
+        if (cached != null && cached != VerificationStatus.ERROR) return
+
+        val now = System.currentTimeMillis()
+        if (now - lastApiVerificationTime < 30000L) return
+        lastApiVerificationTime = now
+
+        // Verificar credenciales
+        val hasWigle = wigleApiName.isNotBlank() && wigleApiToken.isNotBlank()
+        val hasOpenCellId = openCellIdKey.isNotBlank() && !openCellIdKey.startsWith("pk.YOUR")
+
+        if (!hasWigle && !hasOpenCellId) {
+            appendLog("[API]", "Intentando conectarse a la base de datos")
+            return
+        }
+
+        // Marcamos como PENDING inmediatamente para evitar peticiones duplicadas (Race Condition)
+        verificationCache[cacheKey] = VerificationStatus.PENDING
 
         scope.launch(Dispatchers.IO) {
             // 2. Mirar Base de Datos (fuera del hilo principal)
@@ -439,6 +455,12 @@ class MiniICService : Service() {
             if (statusFromDb != VerificationStatus.PENDING) {
                 verificationCache[cacheKey] = statusFromDb
                 updateFlowWithStatus(cell.cellId, statusFromDb)
+                // Actualizar la fila recién insertada que quedó en PENDING
+                dbHelper.updateVerificationStatus(
+                    cell.mnc, cell.tac, cell.cellId,
+                    statusFromDb,
+                    mcc = cell.mcc
+                )
                 return@launch
             }
 

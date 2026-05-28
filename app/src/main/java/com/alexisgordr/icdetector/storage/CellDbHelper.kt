@@ -190,40 +190,4 @@ class CellDbHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME, 
         val db = this.writableDatabase
         db.execSQL("DELETE FROM $TABLE_HISTORY")
     }
-
-    fun isCellVerified(mnc: String, tac: String, cid: String, currentLat: Double? = null, currentLon: Double? = null, mcc: String? = null): Boolean {
-        val db = this.readableDatabase
-        val query = if (mcc != null) "SELECT $COLUMN_LAT, $COLUMN_LON FROM $TABLE_HISTORY WHERE $COLUMN_CID=? AND $COLUMN_MNC=? AND $COLUMN_TAC=? AND $COLUMN_MCC=? AND $COLUMN_VERIFIED='VERIFIED'"
-                    else "SELECT $COLUMN_LAT, $COLUMN_LON FROM $TABLE_HISTORY WHERE $COLUMN_CID=? AND $COLUMN_MNC=? AND $COLUMN_TAC=? AND $COLUMN_VERIFIED='VERIFIED'"
-        val args = if (mcc != null) arrayOf(cid, mnc, tac, mcc) else arrayOf(cid, mnc, tac)
-        val cursor = db.rawQuery(query, args)
-        
-        var verifiedAtThisLocation = false
-        if (cursor.moveToFirst()) {
-            if (currentLat == null || currentLon == null) {
-                // Si no tenemos GPS actual, confiamos en la verificación previa por ID
-                verifiedAtThisLocation = true
-            } else {
-                do {
-                    val savedLat = if (cursor.isNull(0)) null else cursor.getDouble(0)
-                    val savedLon = if (cursor.isNull(1)) null else cursor.getDouble(1)
-                    
-                    if (savedLat == null || savedLon == null) {
-                        // Si la verificación guardada no tiene GPS, la damos por válida por ahora
-                        verifiedAtThisLocation = true
-                        break
-                    }
-                    
-                    val results = FloatArray(1)
-                    Location.distanceBetween(currentLat, currentLon, savedLat, savedLon, results)
-                    if (results[0] < 5000) { // Radio de 5km
-                        verifiedAtThisLocation = true
-                        break
-                    }
-                } while (cursor.moveToNext())
-            }
-        }
-        cursor.close()
-        return verifiedAtThisLocation
-    }
 }

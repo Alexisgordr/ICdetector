@@ -71,16 +71,27 @@ object ThreatAnalyzer {
         // 6. Timing Advance Audit
         active.timingAdvance?.let { ta ->
             val taDistanceMeters = if (active.networkType.contains("5G")) ta * 150 else ta * 78
+
             if (active.lat != null && active.lon != null && currentLocation != null) {
-                val results = FloatArray(1)
-                Location.distanceBetween(currentLocation.latitude, currentLocation.longitude, active.lat, active.lon, results)
-                if (results[0] > 2000 && taDistanceMeters < 500) {
-                    hTa = false
-                    reasons.add("Suplantación TA")
-                    score -= 40
+                // TA=0 es ambiguo en Android moderno (limitación del modem, no distancia real).
+                // Solo usamos la comparación GPS si TA > 0 para evitar falsos positivos.
+                if (ta > 0) {
+                    val results = FloatArray(1)
+                    Location.distanceBetween(
+                        currentLocation.latitude, currentLocation.longitude,
+                        active.lat, active.lon, results
+                    )
+                    if (results[0] > 2000 && taDistanceMeters < 500) {
+                        hTa = false
+                        reasons.add("Suplantación TA")
+                        score -= 40
+                    }
                 }
             } else {
-                if (!active.networkType.contains("5G") && ta <= 1 && active.dbm >= -60 && active.verified != VerificationStatus.VERIFIED) {
+                // Sin coordenadas GPS verificadas: la heurística de proximidad anómala
+                // sigue siendo útil incluso con TA=0 (señal muy fuerte + no verificada)
+                if (!active.networkType.contains("5G") && ta <= 1 && active.dbm >= -60
+                    && active.verified != VerificationStatus.VERIFIED) {
                     hTa = false
                     reasons.add("Proximidad anómala (TA)")
                     score -= 15
