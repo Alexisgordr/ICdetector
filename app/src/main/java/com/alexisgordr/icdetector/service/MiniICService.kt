@@ -95,7 +95,6 @@ class MiniICService : Service() {
     private var isCallbackWorking = false
     private var connectionRetryCount = 0
     private val cellChangeHistory = CopyOnWriteArrayList<Pair<String, Long>>()
-    private var lastApiVerificationTime = 0L
 
     inner class LocalBinder : Binder() {
         fun getService(): MiniICService = this@MiniICService
@@ -430,10 +429,6 @@ class MiniICService : Service() {
         // 1. Mirar caché rápida
         val cached = verificationCache[cacheKey]
         if (cached != null && cached != VerificationStatus.ERROR) return
-
-        val now = System.currentTimeMillis()
-        if (now - lastApiVerificationTime < 30000L) return
-        lastApiVerificationTime = now
 
         // Verificar credenciales
         val hasWigle = wigleApiName.isNotBlank() && wigleApiToken.isNotBlank()

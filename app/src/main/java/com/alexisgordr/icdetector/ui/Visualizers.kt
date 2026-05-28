@@ -160,6 +160,8 @@ fun GeoGraph(active: CellData, geoHistory: List<Float>) {
         
         if (!isTaAvailable || taValue < 0) {
              Text("⚠️ NOTA: El chipset Tensor de Google restringe el acceso al TA en ciertas celdas para ahorrar energía. Esto no es un fallo de tu app, es una limitación de seguridad del hardware.", color = Color(0xFFCF6679), fontSize = 9.sp, fontFamily = FontFamily.Monospace)
+        } else if (taValue == 0) {
+            Text("⚠️ TA=0: Distancia < $multiplier m o limitación del modem", color = Color(0xFFCF6679), fontSize = 9.sp, fontFamily = FontFamily.Monospace)
         } else {
              Text("NARANJA = VARIACIÓN DE DISTANCIA (TA)", color = Color(0xFFFFA000), fontSize = 9.sp, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Bold)
         }
