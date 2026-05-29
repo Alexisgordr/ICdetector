@@ -74,7 +74,12 @@ class MiniICService : Service() {
     private var lastStrongSignalAlarmTime = 0L
     
     private var isHardwareCipheringActive = true
-    private val locationListener = LocationListener { }
+    private val locationListener = LocationListener { location ->
+        if (location.accuracy < 100f) {
+            onGpsAvailable()
+        }
+    }
+    private var lastGpsTriggerTime = 0L
 
     var openCellIdKey: String = ""
     var wigleApiName: String = ""
@@ -458,6 +463,45 @@ class MiniICService : Service() {
                 null // Sin GPS real o datos obsoletos
             }
         } catch (_: Exception) { null }
+    }
+
+    private fun onGpsAvailable() {
+        val now = System.currentTimeMillis()
+        // Solo re-verificar una vez cada 60 segundos máximo
+        if (now - lastGpsTriggerTime < 60000L) return
+        
+        val currentCell = _cellFlow.value.firstOrNull { it.isRegistered } ?: return
+        val cacheKey = "${currentCell.mcc}-${currentCell.mnc}-${currentCell.tac}-${currentCell.cellId}"
+        val cachedStatus = verificationCache[cacheKey]
+        
+        // Re-verificar si está en PENDING, ERROR, o VERIFIED pero sin coordenadas
+        val needsReverification = cachedStatus == VerificationStatus.PENDING ||
+                                  cachedStatus == VerificationStatus.ERROR ||
+                                  (cachedStatus == VerificationStatus.VERIFIED &&
+                                   currentCell.lat == null)
+        
+        if (!needsReverification) return
+        
+        lastGpsTriggerTime = now
+
+        // Esperar 3 segundos para que el GPS se estabilice antes de lanzar la verificación
+        scope.launch {
+            delay(3000L)
+            
+            // Releer el GPS después del delay — debería ser más estable
+            val stableLocation = getCurrentLocation()
+            if (stableLocation == null) {
+                appendLog("[GPS]", "GPS inestable tras espera, reintentando más tarde")
+                lastGpsTriggerTime = 0L // reset para que pueda reintentar
+                return@launch
+            }
+
+            verificationCache.remove(cacheKey)
+            appendLog("[GPS]", "GPS estabilizado — relanzando verificación")
+            
+            // Re-verificar
+            verifyCell(currentCell, _cellFlow.value.filter { !it.isRegistered })
+        }
     }
 
     private fun isValidCoordinate(lat: Double, lon: Double): Boolean {
