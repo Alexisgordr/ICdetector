@@ -347,10 +347,6 @@ If the project has been useful for:
 - development
 - security auditing
 
-you can optionally support ongoing development here:
-
-[Buy Me a Coffee](YOUR_LINK_HERE)
-
 Support is completely optional and helps fund:
 - testing devices
 - SDR experimentation
