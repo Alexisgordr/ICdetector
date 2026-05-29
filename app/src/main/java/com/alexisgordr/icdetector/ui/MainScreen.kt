@@ -3,6 +3,7 @@ package com.alexisgordr.icdetector.ui
 import android.Manifest
 import android.content.Context
 import android.content.pm.PackageManager
+import android.location.LocationManager
 import android.os.Build
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -21,11 +22,13 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import com.alexisgordr.icdetector.MainActivity
 import com.alexisgordr.icdetector.R
@@ -279,6 +282,22 @@ fun MainScreenContent(dbHelper: CellDbHelper, service: MiniICService?) {
 @Composable
 fun SecurityScorePanel(active: CellData, dbmHistory: List<Int>, geoHistory: List<Float>, service: MiniICService?) {
     var viewMode by remember { mutableStateOf("NONE") } // NONE, GRAPH, GEO, HEUR
+    val context = LocalContext.current
+
+    // GPS status — lee el valor cacheado, sin activar hardware
+    val hasGps = remember(active) {
+        try {
+            val lm = context.getSystemService(Context.LOCATION_SERVICE) as LocationManager
+            if (ActivityCompat.checkSelfPermission(
+                    context, Manifest.permission.ACCESS_FINE_LOCATION
+                ) == PackageManager.PERMISSION_GRANTED) {
+                val loc = lm.getLastKnownLocation(LocationManager.GPS_PROVIDER)
+                loc != null && loc.accuracy < 50f &&
+                (System.currentTimeMillis() - loc.time) < 30000L
+            } else false
+        } catch (_: Exception) { false }
+    }
+    
     val auditStatus by (service?.auditStatus ?: MutableStateFlow("Iniciando...")).collectAsState()
     
     val scoreColor = if (active.securityScore >= 90) Color(0xFF4CAF50) else if (active.securityScore >= 70) Color(0xFFFFA000) else Color.Red
@@ -322,6 +341,19 @@ fun SecurityScorePanel(active: CellData, dbmHistory: List<Int>, geoHistory: List
             }
 
             Spacer(Modifier.height(16.dp))
+
+            // Indicador GPS encima de los botones
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.End
+            ) {
+                Text(
+                    text = if (hasGps) "● GPS OK" else "● SIN GPS",
+                    color = if (hasGps) Color(0xFF4CAF50) else Color(0xFFCF6679),
+                    fontSize = 9.sp,
+                    fontFamily = FontFamily.Monospace
+                )
+            }
 
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                 Button(

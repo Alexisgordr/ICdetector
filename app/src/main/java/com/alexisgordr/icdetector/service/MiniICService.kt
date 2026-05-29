@@ -6,6 +6,7 @@ import android.content.*
 import android.content.pm.PackageManager
 import android.content.pm.ServiceInfo
 import android.location.Location
+import android.location.LocationListener
 import android.location.LocationManager
 import android.media.AudioManager
 import android.media.ToneGenerator
@@ -73,6 +74,7 @@ class MiniICService : Service() {
     private var lastStrongSignalAlarmTime = 0L
     
     private var isHardwareCipheringActive = true
+    private val locationListener = LocationListener { }
 
     var openCellIdKey: String = ""
     var wigleApiName: String = ""
@@ -135,6 +137,15 @@ class MiniICService : Service() {
         registerTelephonyCallback()
         registerDisplayInfoCallback()
         registerScreenReceiver()
+
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED) {
+            locationManager.requestLocationUpdates(
+                LocationManager.GPS_PROVIDER,
+                5000L,
+                10f,
+                locationListener
+            )
+        }
 
         scope.launch(Dispatchers.Default) {
             var wasAirplaneModeOn = false
@@ -315,6 +326,9 @@ class MiniICService : Service() {
         scope.cancel()
         toneGenerator?.release()
         screenReceiver?.let { unregisterReceiver(it) }
+        try {
+            locationManager.removeUpdates(locationListener)
+        } catch (_: Exception) {}
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
             telephonyCallback?.let {
                 telephonyManager.unregisterTelephonyCallback(it)
