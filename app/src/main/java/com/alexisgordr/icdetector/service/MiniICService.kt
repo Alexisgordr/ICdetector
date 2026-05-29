@@ -84,6 +84,10 @@ class MiniICService : Service() {
     }
     private var lastGpsTriggerTime = 0L
 
+    private val anomalyStreaks = ConcurrentHashMap<String, Int>()
+    private var lastStreakCellId = ""
+    private val CONFIRMATION_CYCLES = 3
+
     var openCellIdKey: String = ""
     var wigleApiName: String = ""
     var wigleApiToken: String = ""
@@ -440,8 +444,11 @@ class MiniICService : Service() {
                         val cacheKey = "${active.mcc}-${active.mnc}-${active.tac}-${active.cellId}"
                         val knownStatus = verificationCache[cacheKey] ?: VerificationStatus.PENDING
 
+                        // Aplicar confirmación temporal antes de alertas
+                        val confirmedActive = applyTemporalConfidence(active)
+
                         // 2. Lanzar alertas y registro con el estado actual
-                        checkAlerts(active.copy(verified = knownStatus))
+                        checkAlerts(confirmedActive.copy(verified = knownStatus))
 
                         // 3. Iniciar proceso de verificación (solo si es necesario)
                         verifyCell(active, neighbors)
@@ -449,10 +456,10 @@ class MiniICService : Service() {
                         val finalStatus = verificationCache[cacheKey] ?: knownStatus
                         
                         _cellFlow.value = sorted.map { 
-                            if (it.isRegistered) it.copy(verified = finalStatus) else it 
+                            if (it.isRegistered) confirmedActive.copy(verified = finalStatus) else it 
                         }
                         
-                        updateNotification(active.copy(verified = finalStatus))
+                        updateNotification(confirmedActive.copy(verified = finalStatus))
                     } else {
                         _cellFlow.value = emptyList()
                         updateNotificationText("Buscando red...")
@@ -504,6 +511,34 @@ class MiniICService : Service() {
         val network = cm.activeNetwork ?: return false
         val capabilities = cm.getNetworkCapabilities(network) ?: return false
         return capabilities.hasTransport(NetworkCapabilities.TRANSPORT_WIFI)
+    }
+
+    private fun applyTemporalConfidence(cell: CellData): CellData {
+        // Si cambia la celda activa, resetear todos los streaks
+        if (cell.cellId != lastStreakCellId) {
+            anomalyStreaks.clear()
+            lastStreakCellId = cell.cellId
+        }
+
+        val currentStreak = if (cell.isSuspicious) {
+            val newStreak = (anomalyStreaks[cell.cellId] ?: 0) + 1
+            anomalyStreaks[cell.cellId] = newStreak
+            newStreak
+        } else {
+            anomalyStreaks.remove(cell.cellId)
+            0
+        }
+
+        val isConfirmed = cell.isSuspicious && currentStreak >= CONFIRMATION_CYCLES
+
+        return cell.copy(
+            isSuspicious = isConfirmed,
+            suspiciousReason = when {
+                isConfirmed -> cell.suspiciousReason
+                cell.isSuspicious -> "[$currentStreak/$CONFIRMATION_CYCLES ciclos confirmando] ${cell.suspiciousReason}"
+                else -> null
+            }
+        )
     }
 
     private fun onGpsAvailable() {
