@@ -5,7 +5,6 @@ import com.alexisgordr.icdetector.models.CellData
 import com.alexisgordr.icdetector.models.HeuristicReport
 import com.alexisgordr.icdetector.models.HistoryRecord
 import com.alexisgordr.icdetector.models.VerificationStatus
-import com.alexisgordr.icdetector.storage.CellDbHelper
 
 object ThreatAnalyzer {
 
@@ -53,22 +52,30 @@ object ThreatAnalyzer {
         if (history.isEmpty()) return Triple(true, 0, null)
 
         val threshold = getDynamicLocationThreshold(neighbors, active.networkType)
-        var maxSeverity = 0
-        var threatDetail: String? = null
 
-        for (record in history) {
-            if (record.lat == null || record.lon == null) continue
+        // Separar registros con coordenadas válidas
+        val validRecords = history.filter { it.lat != null && it.lon != null }
+        if (validRecords.isEmpty()) return Triple(true, 0, null)
 
+        // Clasificar cada registro como anómalo o normal
+        data class RecordAnalysis(
+            val isAnomalous: Boolean,
+            val severity: Int,
+            val threatDetail: String?
+        )
+
+        val analyses = validRecords.map { record ->
             val results = FloatArray(1)
-            Location.distanceBetween(currentLocation.latitude, currentLocation.longitude, record.lat, record.lon, results)
+            Location.distanceBetween(
+                currentLocation.latitude, currentLocation.longitude,
+                record.lat!!, record.lon!!, results
+            )
             val distance = results[0].toDouble()
 
             if (distance > threshold) {
-                // 1. Correlación de RF: Si además de la distancia, el PCI o ARFCN han cambiado, la sospecha es crítica.
                 val pciMismatch = record.pci != null && active.pci != null && record.pci != active.pci
                 val arfcnMismatch = record.arfcn != null && active.arfcn != null && record.arfcn != active.arfcn
-                
-                // 2. Cálculo de severidad gradual basado en la distancia
+
                 val distanceFactor = (distance / threshold).coerceAtMost(3.0)
                 var severity = when {
                     distanceFactor > 2.5 -> 40
@@ -77,23 +84,33 @@ object ThreatAnalyzer {
                     else -> 10
                 }
 
-                // Penalización extra por inconsistencia de radio (PCI/ARFCN)
-                if (pciMismatch || arfcnMismatch) {
+                val detail = if (pciMismatch || arfcnMismatch) {
                     severity += 25
-                    threatDetail = "Inconsistencia RF (PCI/ARFCN) detectada a gran distancia"
-                } else if (threatDetail == null) {
-                    threatDetail = "Celda detectada a distancia anómala (> ${threshold.toInt()}m)"
+                    "Inconsistencia RF (PCI/ARFCN) detectada a gran distancia"
+                } else {
+                    "Celda detectada a distancia anómala (> ${threshold.toInt()}m)"
                 }
 
-                if (severity > maxSeverity) maxSeverity = severity
+                RecordAnalysis(true, severity, detail)
+            } else {
+                RecordAnalysis(false, 0, null)
             }
         }
 
-        return if (maxSeverity > 0) {
-            Triple(false, maxSeverity.coerceAtMost(100), threatDetail)
-        } else {
-            Triple(true, 0, null)
+        // Fix: análisis por mayoría — solo alarma si >30% de registros son anómalos
+        // Evita que 1-2 registros antiguos de IMSI catcher dominen sobre muchos normales
+        val anomalousRecords = analyses.filter { it.isAnomalous }
+        val anomalyRatio = anomalousRecords.size.toFloat() / validRecords.size
+
+        // Mínimo 2 registros anómalos Y ratio > 30% para evitar falsos positivos aislados
+        if (anomalousRecords.size < 2 || anomalyRatio < 0.30f) {
+            return Triple(true, 0, null)
         }
+
+        // Tomar la severidad máxima entre los registros anómalos
+        val worst = anomalousRecords.maxByOrNull { it.severity }!!
+
+        return Triple(false, worst.severity.coerceAtMost(100), worst.threatDetail)
     }
 
     fun analyzeThreats(

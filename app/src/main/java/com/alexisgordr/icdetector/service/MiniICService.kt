@@ -434,9 +434,39 @@ class MiniICService : Service() {
     private fun getCurrentLocation(): Location? {
         if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) return null
         return try {
-            locationManager.getLastKnownLocation(LocationManager.GPS_PROVIDER) 
-                ?: locationManager.getLastKnownLocation(LocationManager.NETWORK_PROVIDER)
+            val gpsLocation = locationManager.getLastKnownLocation(LocationManager.GPS_PROVIDER)
+            // Solo aceptar GPS puro — filtrar por precisión y antigüedad
+            if (gpsLocation != null && 
+                gpsLocation.accuracy < 50f && 
+                (System.currentTimeMillis() - gpsLocation.time) < 30000L) {
+                gpsLocation
+            } else {
+                null // Sin GPS real o datos obsoletos
+            }
         } catch (_: Exception) { null }
+    }
+
+    private fun isValidCoordinate(lat: Double, lon: Double): Boolean {
+        if (lat == 0.0 && lon == 0.0) return false
+        if (lat < -90 || lat > 90) return false
+        if (lon < -180 || lon > 180) return false
+        
+        val currentLoc = getCurrentLocation()
+        if (currentLoc == null) {
+            appendLog("[API]", "Coordenadas descartadas: sin fix GPS para validar distancia")
+            return false
+        }
+
+        val results = FloatArray(1)
+        Location.distanceBetween(
+            currentLoc.latitude, currentLoc.longitude,
+            lat, lon, results
+        )
+        if (results[0] > 200000f) {
+            appendLog("[API]", "Coordenadas rechazadas: a ${results[0].toInt()}m de tu posición")
+            return false
+        }
+        return true
     }
 
     private fun verifyCell(cell: CellData, neighbors: List<CellData>) {
@@ -485,10 +515,14 @@ class MiniICService : Service() {
             if (wigleApiName.isNotBlank() && wigleApiToken.isNotBlank()) {
                 val (s, data) = WigleClient.tryWigleSync(cell, wigleApiName, wigleApiToken, isProxyEnabled, client)
                 if (s == VerificationStatus.VERIFIED && data != null) {
-                    val lat = data.optDouble("trilat", data.optDouble("lat", 0.0))
-                    val lon = data.optDouble("trilong", data.optDouble("lon", 0.0))
-                    processSuccessfulVerification(lat, lon, cell, cacheKey, neighbors, "WiGLE")
-                    return@launch
+                    val lat = data.optDouble("trilat", data.optDouble("lat", Double.NaN))
+                    val lon = data.optDouble("trilong", data.optDouble("lon", Double.NaN))
+                    if (!lat.isNaN() && !lon.isNaN() && isValidCoordinate(lat, lon)) {
+                        processSuccessfulVerification(lat, lon, cell, cacheKey, neighbors, "WiGLE")
+                        return@launch
+                    } else {
+                        appendLog("[API]", "WiGLE: coordenadas inválidas descartadas.")
+                    }
                 }
                 finalStatus = s
             }
@@ -497,8 +531,14 @@ class MiniICService : Service() {
             if (finalStatus != VerificationStatus.VERIFIED && openCellIdKey.isNotBlank() && !openCellIdKey.startsWith("pk.YOUR")) {
                 val (s, data) = OpenCellIdClient.tryOpenCellIdSyncWithData(cell, openCellIdKey, isProxyEnabled, client)
                 if (s == VerificationStatus.VERIFIED && data != null) {
-                    processSuccessfulVerification(data.getDouble("lat"), data.getDouble("lon"), cell, cacheKey, neighbors, "OpenCellID")
-                    return@launch
+                    val lat = data.optDouble("lat", Double.NaN)
+                    val lon = data.optDouble("lon", Double.NaN)
+                    if (!lat.isNaN() && !lon.isNaN() && isValidCoordinate(lat, lon)) {
+                        processSuccessfulVerification(lat, lon, cell, cacheKey, neighbors, "OpenCellID")
+                        return@launch
+                    } else {
+                        appendLog("[API]", "OpenCellID: coordenadas inválidas descartadas.")
+                    }
                 }
                 finalStatus = s
             }
