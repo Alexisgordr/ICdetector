@@ -1,9 +1,7 @@
 package com.alexisgordr.icdetector.ui
 
-import android.content.Intent
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -13,12 +11,10 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.core.net.toUri
 import com.alexisgordr.icdetector.models.VerificationStatus
 
 @Composable
@@ -42,36 +38,8 @@ fun AuthorSignature() {
         modifier = Modifier
             .fillMaxWidth()
             .padding(vertical = 8.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(8.dp),
+        horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        val context = LocalContext.current
-        TextButton(
-            onClick = {
-                val intent = Intent(Intent.ACTION_VIEW, "https://buymeacoffee.com/alexisgomez".toUri())
-                context.startActivity(intent)
-            },
-            colors = ButtonDefaults.textButtonColors(contentColor = Color(0xFFFFDD00)),
-            modifier = Modifier
-                .height(32.dp)
-                .border(BorderStroke(0.5.dp, Color(0xFF333333)), RoundedCornerShape(16.dp))
-                .padding(horizontal = 8.dp)
-        ) {
-            Icon(
-                Icons.Default.Favorite, 
-                contentDescription = null, 
-                modifier = Modifier.size(14.dp),
-                tint = Color(0xFFCF6679)
-            )
-            Spacer(Modifier.width(6.dp))
-            Text(
-                "APOYAR PROYECTO", 
-                fontFamily = FontFamily.Monospace, 
-                fontSize = 10.sp, 
-                fontWeight = FontWeight.Bold
-            )
-        }
-
         Text(
             text = "HECHO POR ALEXIS G. // OPEN SOURCE",
             fontFamily = FontFamily.Monospace,

@@ -17,6 +17,12 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.edit
+import androidx.core.net.toUri
+import android.content.Intent
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.border
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Favorite
 import com.alexisgordr.icdetector.service.MiniICService
 
 @Composable
@@ -131,6 +137,35 @@ fun SettingsPanel(service: MiniICService?, onSave: () -> Unit) {
                 fontFamily = FontFamily.Monospace,
                 lineHeight = 12.sp
             )
+
+            Spacer(Modifier.height(8.dp))
+            HorizontalDivider(color = Color(0xFF1A1A1A))
+            Spacer(Modifier.height(8.dp))
+            TextButton(
+                onClick = {
+                    val intent = Intent(Intent.ACTION_VIEW, "https://buymeacoffee.com/alexisgomez".toUri())
+                    context.startActivity(intent)
+                },
+                colors = ButtonDefaults.textButtonColors(contentColor = Color(0xFFFFDD00)),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(36.dp)
+                    .border(BorderStroke(0.5.dp, Color(0xFF333333)), RoundedCornerShape(16.dp))
+            ) {
+                Icon(
+                    Icons.Default.Favorite,
+                    contentDescription = null,
+                    modifier = Modifier.size(14.dp),
+                    tint = Color(0xFFCF6679)
+                )
+                Spacer(Modifier.width(6.dp))
+                Text(
+                    "APOYAR PROYECTO",
+                    fontFamily = FontFamily.Monospace,
+                    fontSize = 10.sp,
+                    fontWeight = FontWeight.Bold
+                )
+            }
         }
     }
 }

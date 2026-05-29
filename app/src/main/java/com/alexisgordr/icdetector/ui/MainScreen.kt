@@ -199,12 +199,12 @@ fun MainScreenContent(dbHelper: CellDbHelper, service: MiniICService?) {
                         .verticalScroll(rememberScrollState()),
                     verticalArrangement = Arrangement.spacedBy(16.dp)
                 ) {
-                    val (statusText, statusColor) = when {
-                        active == null -> "BUSCANDO SEÑAL..." to Color(0xFF888888)
-                        active.isSuspicious -> "SISTEMA EN COMPROMISO" to Color(0xFFCF6679)
-                        active.verified == VerificationStatus.VERIFIED -> "ENTORNO SEGURO" to Color(0xFF4CAF50)
-                        else -> "MONITORIZANDO RED" to Color(0xFFFFA000)
-                    }
+                        val (statusText, statusColor) = when {
+                            active == null -> "BUSCANDO SEÑAL..." to Color(0xFF888888)
+                            active.isSuspicious -> "SISTEMA EN COMPROMISO" to Color(0xFFCF6679)
+                            active.verified == VerificationStatus.VERIFIED -> "ENTORNO SEGURO" to Color(0xFF4CAF50)
+                            else -> "MONITORIZANDO — ${active.securityScore}%" to Color(0xFFFFA000)
+                        }
 
                     Card(
                         modifier = Modifier.fillMaxWidth(),
@@ -325,6 +325,20 @@ fun SecurityScorePanel(active: CellData, dbmHistory: List<Int>, geoHistory: List
                         Spacer(Modifier.height(4.dp))
                         Text(auditStatus, color = Color(0xFF00FF00), fontFamily = FontFamily.Monospace, fontSize = 11.sp)
                     }
+
+                    // Mostrar ciclos de confirmación si está acumulando
+                    val streakText = active.suspiciousReason
+                    if (streakText != null && streakText.contains("ciclos confirmando")) {
+                        Spacer(Modifier.height(4.dp))
+                        Text(
+                            streakText.substringBefore("]") + "]",
+                            color = Color(0xFFFFA000),
+                            fontSize = 9.sp,
+                            fontFamily = FontFamily.Monospace,
+                            letterSpacing = 0.5.sp
+                        )
+                    }
+
                     Spacer(Modifier.height(4.dp))
                     Text("${active.securityScore}%", color = scoreColor, fontFamily = FontFamily.Monospace, fontSize = 28.sp, fontWeight = FontWeight.ExtraBold)
                 }

@@ -26,7 +26,7 @@ fun LiveTerminalPanel(logs: List<String>) {
     Card(
         modifier = Modifier
             .fillMaxWidth()
-            .height(140.dp),
+            .height(200.dp),
         colors = CardDefaults.cardColors(containerColor = Color(0xFF050505)),
         border = BorderStroke(1.dp, Color(0xFF222222)),
         shape = RoundedCornerShape(4.dp),
