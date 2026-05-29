@@ -467,39 +467,48 @@ class MiniICService : Service() {
 
     private fun onGpsAvailable() {
         val now = System.currentTimeMillis()
-        // Solo re-verificar una vez cada 60 segundos máximo
         if (now - lastGpsTriggerTime < 60000L) return
-        
+
         val currentCell = _cellFlow.value.firstOrNull { it.isRegistered } ?: return
         val cacheKey = "${currentCell.mcc}-${currentCell.mnc}-${currentCell.tac}-${currentCell.cellId}"
         val cachedStatus = verificationCache[cacheKey]
-        
-        // Re-verificar si está en PENDING, ERROR, o VERIFIED pero sin coordenadas
-        val needsReverification = cachedStatus == VerificationStatus.PENDING ||
-                                  cachedStatus == VerificationStatus.ERROR ||
-                                  (cachedStatus == VerificationStatus.VERIFIED &&
-                                   currentCell.lat == null)
-        
-        if (!needsReverification) return
-        
-        lastGpsTriggerTime = now
 
-        // Esperar 3 segundos para que el GPS se estabilice antes de lanzar la verificación
+        // Solo re-verificar si realmente está pendiente o con error
+        val needsReverification = cachedStatus == null ||
+                                  cachedStatus == VerificationStatus.PENDING ||
+                                  cachedStatus == VerificationStatus.ERROR
+
+        if (!needsReverification) return
+
+        lastGpsTriggerTime = now
         scope.launch {
             delay(3000L)
-            
-            // Releer el GPS después del delay — debería ser más estable
-            val stableLocation = getCurrentLocation()
-            if (stableLocation == null) {
+
+            // Verificar también en DB antes de lanzar
+            val loc = getCurrentLocation()
+            if (loc == null) {
                 appendLog("[GPS]", "GPS inestable tras espera, reintentando más tarde")
-                lastGpsTriggerTime = 0L // reset para que pueda reintentar
+                lastGpsTriggerTime = 0L
+                return@launch
+            }
+
+            val dbStatus = withContext(Dispatchers.IO) {
+                dbHelper.getKnownStatus(
+                    currentCell.mnc, currentCell.tac, currentCell.cellId,
+                    currentCell.mcc, loc.latitude, loc.longitude
+                )
+            }
+
+            if (dbStatus == VerificationStatus.VERIFIED) {
+                appendLog("[GPS]", "Celda ya verificada en DB, sin necesidad de API")
+                verificationCache[cacheKey] = VerificationStatus.VERIFIED
+                // Forzar actualización de la UI con el estado recuperado
+                updateFlowWithStatus(currentCell.cellId, VerificationStatus.VERIFIED)
                 return@launch
             }
 
             verificationCache.remove(cacheKey)
             appendLog("[GPS]", "GPS estabilizado — relanzando verificación")
-            
-            // Re-verificar
             verifyCell(currentCell, _cellFlow.value.filter { !it.isRegistered })
         }
     }
