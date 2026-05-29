@@ -1,5 +1,6 @@
 package com.alexisgordr.icdetector.ui
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -31,12 +32,41 @@ import kotlinx.coroutines.withContext
 @Composable
 fun HistoryPanel(dbHelper: CellDbHelper, onBack: () -> Unit) {
     var items by remember { mutableStateOf<List<HistoryRecord>>(emptyList()) }
+    val showDeleteConfirm = remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
 
     LaunchedEffect(Unit) {
         withContext(Dispatchers.IO) {
             items = dbHelper.getRecords()
         }
+    }
+
+    if (showDeleteConfirm.value) {
+        AlertDialog(
+            onDismissRequest = { showDeleteConfirm.value = false },
+            title = { Text("¿Borrar Historial?", color = Color.White, fontFamily = FontFamily.Monospace) },
+            text = { Text("Esta acción eliminará permanentemente todos los registros de antenas y geolocalización. ¿Continuar?", color = Color(0xFF888888), fontFamily = FontFamily.Monospace) },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        scope.launch(Dispatchers.IO) {
+                            dbHelper.clear()
+                            items = emptyList()
+                            withContext(Dispatchers.Main) { showDeleteConfirm.value = false }
+                        }
+                    },
+                    colors = ButtonDefaults.textButtonColors(contentColor = Color(0xFFCF6679))
+                ) {
+                    Text("BORRAR TODO", fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDeleteConfirm.value = false }) {
+                    Text("CANCELAR", color = Color.White, fontFamily = FontFamily.Monospace)
+                }
+            },
+            containerColor = Color(0xFF111111)
+        )
     }
 
     val groupedItems = remember(items) {
@@ -57,26 +87,13 @@ fun HistoryPanel(dbHelper: CellDbHelper, onBack: () -> Unit) {
     Column(modifier = Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Row(
             modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
+            horizontalArrangement = Arrangement.Start,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                IconButton(onClick = onBack) {
-                    Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back", tint = Color.White)
-                }
-                Text("HISTORIAL DE ANTENAS", color = Color(0xFF666666), fontFamily = FontFamily.Monospace, fontSize = 12.sp)
+            IconButton(onClick = onBack) {
+                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back", tint = Color.White)
             }
-            TextButton(
-                onClick = {
-                    scope.launch(Dispatchers.IO) {
-                        dbHelper.clear()
-                        items = emptyList()
-                    }
-                },
-                colors = ButtonDefaults.textButtonColors(contentColor = Color(0xFFCF6679))
-            ) {
-                Text("LIMPIAR", fontFamily = FontFamily.Monospace, fontSize = 11.sp)
-            }
+            Text("HISTORIAL DE ANTENAS", color = Color(0xFF666666), fontFamily = FontFamily.Monospace, fontSize = 12.sp)
         }
 
         if (items.isEmpty()) {
@@ -190,6 +207,20 @@ fun HistoryPanel(dbHelper: CellDbHelper, onBack: () -> Unit) {
                     }
                 }
             }
+
+            // BOTÓN LIMPIAR AL FINAL
+            if (items.isNotEmpty()) {
+                OutlinedButton(
+                    onClick = { showDeleteConfirm.value = true },
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = ButtonDefaults.outlinedButtonColors(contentColor = Color(0xFFCF6679)),
+                    border = BorderStroke(1.dp, Color(0xFFCF6679).copy(alpha = 0.3f)),
+                    shape = RoundedCornerShape(4.dp)
+                ) {
+                    Text("LIMPIAR BASE DE DATOS", fontFamily = FontFamily.Monospace, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                }
+            }
+
             AuthorSignature()
         }
     }
