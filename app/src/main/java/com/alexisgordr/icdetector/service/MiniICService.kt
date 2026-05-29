@@ -75,7 +75,8 @@ class MiniICService : Service() {
     private var lastAirplaneTriggerTime = 0L
     private var lastStrongSignalAlarmTime = 0L
     
-    private var isHardwareCipheringActive = true
+    private var isHardwareCipheringActive = false
+    private var isHardwareCipheringAvailable = false
     private val locationListener = LocationListener { location ->
         if (location.accuracy < 100f) {
             onGpsAvailable()
@@ -235,9 +236,10 @@ class MiniICService : Service() {
             if (Build.VERSION.SDK_INT >= 34) {
                 val securityCallback = ImsiCatcherSecurityCallback()
                 telephonyManager.registerTelephonyCallback(mainExecutor, securityCallback)
-                appendLog("[SYS]", "Callback de seguridad de hardware L3 registrado.")
+                appendLog("[SYS]", "Callback L3 registrado (esperando eventos del modem).")
             }
         } catch (e: Exception) {
+            isHardwareCipheringAvailable = false
             Log.e("MiniIC", "Aviso: No se pudo registrar el callback de seguridad avanzado: ${e.message}")
             appendLog("[SYS]", "Error al registrar callback L3: ${e.message}")
         }
@@ -418,6 +420,7 @@ class MiniICService : Service() {
                         active = cell,
                         neighbors = neighbors,
                         isHardwareCipheringActive = isHardwareCipheringActive,
+                        isHardwareCipheringAvailable = isHardwareCipheringAvailable,
                         cellChangeHistory = cellChangeHistory,
                         currentLocation = currentLocation,
                         preloadedHistory = if (cell.isRegistered) preloadedHistory else emptyList(),
@@ -703,6 +706,7 @@ class MiniICService : Service() {
             active = updatedActive,
             neighbors = neighbors,
             isHardwareCipheringActive = isHardwareCipheringActive,
+            isHardwareCipheringAvailable = isHardwareCipheringAvailable,
             cellChangeHistory = cellChangeHistory,
             currentLocation = loc,
             preloadedHistory = history,
@@ -935,7 +939,8 @@ class MiniICService : Service() {
         
         @Suppress("unused")
         fun onCipheringStatusChanged(params: Any) {
-            appendLog("[MODEM]", "SYS: Evento de cambio en estado de cifrado detectado (Reflexión).")
+            isHardwareCipheringAvailable = true
+            appendLog("[MODEM]", "Evento de cambio en estado de cifrado detectado (Reflexión).")
             try {
                 val getStatusMethod = params::class.java.getMethod("getCipheringStatus")
                 val status = getStatusMethod.invoke(params) as Int

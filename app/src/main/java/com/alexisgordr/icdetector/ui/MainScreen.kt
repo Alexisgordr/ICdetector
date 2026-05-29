@@ -346,7 +346,20 @@ fun SecurityScorePanel(active: CellData, dbmHistory: List<Int>, geoHistory: List
                             HeuristicItem("6. Coherencia Geométrica (TA)", active.heuristicReport.taDistancePassed)
                             HeuristicItem("7. Espectro de Vecinos (Anti-Ghost)", active.heuristicReport.ghostNeighborsPassed)
                             HeuristicItem("8. Sanidad de Frecuencia (ARFCN)", active.heuristicReport.arfcnSanityPassed)
-                            HeuristicItem("9. Cifrado de Enlace (Hardware)", active.heuristicReport.hardwareCipheringPassed)
+
+                            if (active.heuristicReport.hardwareCipheringAvailable) {
+                                HeuristicItem("9. Cifrado de Enlace (Hardware)", active.heuristicReport.hardwareCipheringPassed)
+                            } else {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Text("⚠", color = Color(0xFFFFA000), fontSize = 10.sp, fontFamily = FontFamily.Monospace)
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Text("9. Cifrado de Enlace (Hardware) — NO DISPONIBLE", color = Color(0xFFFFA000), fontSize = 10.sp, fontFamily = FontFamily.Monospace)
+                                }
+                            }
+
                             HeuristicItem("10. Estabilidad de Conexión (Anti Ping-Pong)", active.heuristicReport.pingPongPassed)
                             HeuristicItem("11. Consistencia Geográfica (Cell ID móvil)", active.heuristicReport.mobileCellIdPassed)
                         }

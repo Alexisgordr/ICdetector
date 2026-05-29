@@ -117,6 +117,7 @@ object ThreatAnalyzer {
         active: CellData,
         neighbors: List<CellData>,
         isHardwareCipheringActive: Boolean,
+        isHardwareCipheringAvailable: Boolean = false,
         cellChangeHistory: List<Pair<String, Long>>,
         currentLocation: Location?,
         preloadedHistory: List<HistoryRecord> = emptyList(),
@@ -229,7 +230,7 @@ object ThreatAnalyzer {
         }
 
         // 9. Hardware Ciphering Check (Android 14+)
-        if (!isHardwareCipheringActive) {
+        if (isHardwareCipheringAvailable && !isHardwareCipheringActive) {
             reasons.add("Cifrado de red anulado (A5/0)")
             score -= 50
         }
@@ -274,6 +275,7 @@ object ThreatAnalyzer {
             ghostNeighborsPassed = hGhost,
             arfcnSanityPassed = hArfcn,
             hardwareCipheringPassed = isHardwareCipheringActive,
+            hardwareCipheringAvailable = isHardwareCipheringAvailable,
             pingPongPassed = hPingPong,
             mobileCellIdPassed = hMobileCellId
         )
