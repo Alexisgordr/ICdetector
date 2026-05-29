@@ -144,12 +144,20 @@ class MiniICService : Service() {
         registerScreenReceiver()
 
         if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED) {
-            locationManager.requestLocationUpdates(
-                LocationManager.GPS_PROVIDER,
-                5000L,
-                10f,
-                locationListener
-            )
+            // GPS puro por satélite
+            if (locationManager.isProviderEnabled(LocationManager.GPS_PROVIDER)) {
+                locationManager.requestLocationUpdates(
+                    LocationManager.GPS_PROVIDER,
+                    3000L, 5f, locationListener
+                )
+            }
+            // Network/WiFi (GrapheneOS usa sus propios servidores, privado)
+            if (locationManager.isProviderEnabled(LocationManager.NETWORK_PROVIDER)) {
+                locationManager.requestLocationUpdates(
+                    LocationManager.NETWORK_PROVIDER,
+                    3000L, 5f, locationListener
+                )
+            }
         }
 
         scope.launch(Dispatchers.Default) {
@@ -451,16 +459,36 @@ class MiniICService : Service() {
     }
 
     private fun getCurrentLocation(): Location? {
-        if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) return null
         return try {
-            val gpsLocation = locationManager.getLastKnownLocation(LocationManager.GPS_PROVIDER)
-            // Solo aceptar GPS puro — filtrar por precisión y antigüedad
-            if (gpsLocation != null && 
-                gpsLocation.accuracy < 50f && 
-                (System.currentTimeMillis() - gpsLocation.time) < 30000L) {
-                gpsLocation
-            } else {
-                null // Sin GPS real o datos obsoletos
+            if (ContextCompat.checkSelfPermission(
+                    this, Manifest.permission.ACCESS_FINE_LOCATION
+                ) != PackageManager.PERMISSION_GRANTED) return null
+
+            val gpsLoc = locationManager.getLastKnownLocation(LocationManager.GPS_PROVIDER)
+            val netLoc = locationManager.getLastKnownLocation(LocationManager.NETWORK_PROVIDER)
+
+            val now = System.currentTimeMillis()
+            val maxAge = 120000L    // 2 minutos
+            val maxAccuracy = 100f  // 100 metros
+
+            // Filtrar por antigüedad y precisión
+            val validGps = gpsLoc?.takeIf {
+                it.accuracy < maxAccuracy &&
+                (now - it.time) < maxAge
+            }
+
+            val validNet = netLoc?.takeIf {
+                it.accuracy < maxAccuracy &&
+                (now - it.time) < maxAge
+            }
+
+            // Preferir el más preciso de los dos
+            when {
+                validGps != null && validNet != null ->
+                    if (validGps.accuracy <= validNet.accuracy) validGps else validNet
+                validGps != null -> validGps
+                validNet != null -> validNet
+                else -> null
             }
         } catch (_: Exception) { null }
     }

@@ -291,9 +291,23 @@ fun SecurityScorePanel(active: CellData, dbmHistory: List<Int>, geoHistory: List
             if (ActivityCompat.checkSelfPermission(
                     context, Manifest.permission.ACCESS_FINE_LOCATION
                 ) == PackageManager.PERMISSION_GRANTED) {
-                val loc = lm.getLastKnownLocation(LocationManager.GPS_PROVIDER)
-                loc != null && loc.accuracy < 50f &&
-                (System.currentTimeMillis() - loc.time) < 30000L
+                
+                val now = System.currentTimeMillis()
+                val maxAge = 120000L
+                val maxAccuracy = 100f
+
+                val gpsLoc = lm.getLastKnownLocation(LocationManager.GPS_PROVIDER)
+                val netLoc = lm.getLastKnownLocation(LocationManager.NETWORK_PROVIDER)
+
+                val validGps = gpsLoc?.let {
+                    it.accuracy < maxAccuracy && (now - it.time) < maxAge
+                } ?: false
+
+                val validNet = netLoc?.let {
+                    it.accuracy < maxAccuracy && (now - it.time) < maxAge
+                } ?: false
+
+                validGps || validNet
             } else false
         } catch (_: Exception) { false }
     }
