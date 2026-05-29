@@ -193,21 +193,19 @@ fun MainScreenContent(dbHelper: CellDbHelper, service: MiniICService?) {
             HistoryPanel(dbHelper = dbHelper) { showHistory = false }
         } else {
             Box(modifier = Modifier.fillMaxSize().pullRefresh(pullRefreshState)) {
-                Column(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .verticalScroll(rememberScrollState()),
-                    verticalArrangement = Arrangement.spacedBy(16.dp)
-                ) {
-                        val (statusText, statusColor) = when {
-                            active == null -> "BUSCANDO SEÑAL..." to Color(0xFF888888)
-                            active.isSuspicious -> "SISTEMA EN COMPROMISO" to Color(0xFFCF6679)
-                            active.verified == VerificationStatus.VERIFIED -> "ENTORNO SEGURO" to Color(0xFF4CAF50)
-                            else -> "MONITORIZANDO — ${active.securityScore}%" to Color(0xFFFFA000)
-                        }
+                Column(modifier = Modifier.fillMaxSize()) {
+                    val (statusText, statusColor) = when {
+                        active == null -> "BUSCANDO SEÑAL..." to Color(0xFF888888)
+                        active.isSuspicious -> "SISTEMA EN COMPROMISO" to Color(0xFFCF6679)
+                        active.verified == VerificationStatus.VERIFIED -> "ENTORNO SEGURO" to Color(0xFF4CAF50)
+                        else -> "MONITORIZANDO — ${active.securityScore}%" to Color(0xFFFFA000)
+                    }
 
+                    // STICKY: Card de estado
                     Card(
-                        modifier = Modifier.fillMaxWidth(),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(bottom = 8.dp),
                         colors = CardDefaults.cardColors(containerColor = statusColor.copy(alpha = 0.08f)),
                         border = BorderStroke(1.dp, statusColor.copy(alpha = 0.3f)),
                         shape = RoundedCornerShape(4.dp)
@@ -229,42 +227,50 @@ fun MainScreenContent(dbHelper: CellDbHelper, service: MiniICService?) {
                         }
                     }
 
-                    Card(
-                        modifier = Modifier.fillMaxWidth(),
-                        colors = CardDefaults.cardColors(containerColor = Color(0xFF111111)),
-                        border = BorderStroke(0.5.dp, Color(0xFF222222)),
-                        shape = RoundedCornerShape(4.dp)
+                    // SCROLLABLE: Todo lo demás
+                    Column(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .verticalScroll(rememberScrollState()),
+                        verticalArrangement = Arrangement.spacedBy(16.dp)
                     ) {
-                        Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
-                            Row(modifier = Modifier.fillMaxWidth()) {
-                                DataBox(modifier = Modifier.weight(1f), label = "TECNOLOGÍA", value = active?.networkType ?: "N/A")
-                                DataBox(modifier = Modifier.weight(1f), label = "POTENCIA", value = if (active == null) "N/A" else "${active.dbm} dBm")
-                            }
-                            
-                            HorizontalDivider(color = Color(0xFF1A1A1A))
+                        Card(
+                            modifier = Modifier.fillMaxWidth(),
+                            colors = CardDefaults.cardColors(containerColor = Color(0xFF111111)),
+                            border = BorderStroke(0.5.dp, Color(0xFF222222)),
+                            shape = RoundedCornerShape(4.dp)
+                        ) {
+                            Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                                Row(modifier = Modifier.fillMaxWidth()) {
+                                    DataBox(modifier = Modifier.weight(1f), label = "TECNOLOGÍA", value = active?.networkType ?: "N/A")
+                                    DataBox(modifier = Modifier.weight(1f), label = "POTENCIA", value = if (active == null) "N/A" else "${active.dbm} dBm")
+                                }
+                                
+                                HorizontalDivider(color = Color(0xFF1A1A1A))
 
-                            Row(modifier = Modifier.fillMaxWidth()) {
-                                DataBox(modifier = Modifier.weight(1f), label = "CELL ID", value = active?.cellId ?: "N/A", highlight = true)
-                                DataBox(modifier = Modifier.weight(1f), label = "TAC / LAC", value = active?.tac ?: "N/A")
-                                DataBox(modifier = Modifier.weight(1f), label = "MNC", value = active?.mnc ?: "N/A")
+                                Row(modifier = Modifier.fillMaxWidth()) {
+                                    DataBox(modifier = Modifier.weight(1f), label = "CELL ID", value = active?.cellId ?: "N/A", highlight = true)
+                                    DataBox(modifier = Modifier.weight(1f), label = "TAC / LAC", value = active?.tac ?: "N/A")
+                                    DataBox(modifier = Modifier.weight(1f), label = "MNC", value = active?.mnc ?: "N/A")
+                                }
                             }
                         }
-                    }
 
-                    if (active != null) {
-                        SecurityScorePanel(active, dbmHistory, geoHistory, service)
-                    }
+                        if (active != null) {
+                            SecurityScorePanel(active, dbmHistory, geoHistory, service)
+                        }
 
-                    if (active != null) {
-                        SignalVisualizer(active, cellList.filter { !it.isRegistered })
-                    }
+                        if (active != null) {
+                            SignalVisualizer(active, cellList.filter { !it.isRegistered })
+                        }
 
-                    if (service != null) {
-                        val terminalLogs by service.liveLogs.collectAsState()
-                        LiveTerminalPanel(logs = terminalLogs)
-                    }
+                        if (service != null) {
+                            val terminalLogs by service.liveLogs.collectAsState()
+                            LiveTerminalPanel(logs = terminalLogs)
+                        }
 
-                    AuthorSignature()
+                        AuthorSignature()
+                    }
                 }
                 
                 PullRefreshIndicator(
