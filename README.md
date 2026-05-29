@@ -1,3 +1,4 @@
+
 <table>
   <tr>
     <td width="60%" valign="top">
@@ -14,7 +15,7 @@
       </ul>
     </td>
     <td width="40%" align="center">
-      <img src="https://github.com/user-attachments/assets/d07675cf-04e2-4d7a-b836-03d1988d8ddb"
+      <img  src="https://github.com/user-attachments/assets/88366965-a866-463d-b187-e3f6f4a12183"
            alt="ICdetection Screenshot"
            width="260" />
     </td>
