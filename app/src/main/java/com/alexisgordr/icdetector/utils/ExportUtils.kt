@@ -14,9 +14,24 @@ object ExportUtils {
             resolver.openOutputStream(uri).use { outputStream ->
                 if (outputStream != null) {
                     OutputStreamWriter(outputStream, StandardCharsets.UTF_8).use { writer ->
-                        writer.append("Date,Timestamp,NetType,CID,MNC,TAC,MCC,DBM,Verified,SecurityScore,FailedHeuristics\n")
+                        writer.append("Timestamp,NetType,CID,MNC,TAC,MCC,DBM,Verified,SecurityScore,FailedHeuristics,Lat,Lon,PCI,ARFCN\n")
                         items.forEach { item ->
-                            writer.append("${item.timestamp},${item.netType},${item.cid},${item.mnc},${item.tac},${item.mcc},${item.dbm},${item.verified.name},${item.score},\"${item.failedHeuristics}\"\n")
+                            writer.append(
+                                "${item.timestamp}," +
+                                "${item.netType}," +
+                                "${item.cid}," +
+                                "${item.mnc}," +
+                                "${item.tac}," +
+                                "${item.mcc}," +
+                                "${item.dbm}," +
+                                "${item.verified.name}," +
+                                "${item.score}," +
+                                "\"${item.failedHeuristics}\"," +
+                                "${item.lat ?: ""}," +
+                                "${item.lon ?: ""}," +
+                                "${item.pci ?: ""}," +
+                                "${item.arfcn ?: ""}\n"
+                            )
                         }
                         writer.flush()
                     }
