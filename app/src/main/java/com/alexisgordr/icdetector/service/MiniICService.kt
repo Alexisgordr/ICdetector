@@ -492,6 +492,21 @@ class MiniICService : Service() {
                 return@launch
             }
 
+            // NUEVO: rellenar registros históricos sin coordenadas
+            scope.launch(Dispatchers.IO) {
+                val updated = dbHelper.updateNullCoordinates(
+                    currentCell.cellId,
+                    currentCell.mnc,
+                    currentCell.tac,
+                    currentCell.mcc,
+                    loc.latitude,
+                    loc.longitude
+                )
+                if (updated > 0) {
+                    appendLog("[GPS]", "Coordenadas rellenadas en $updated registros históricos")
+                }
+            }
+
             val dbStatus = withContext(Dispatchers.IO) {
                 dbHelper.getKnownStatus(
                     currentCell.mnc, currentCell.tac, currentCell.cellId,

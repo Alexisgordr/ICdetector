@@ -217,6 +217,27 @@ class CellDbHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME, 
         db.execSQL("DELETE FROM $TABLE_HISTORY")
     }
 
+    fun updateNullCoordinates(
+        cellId: String, mnc: String, tac: String, mcc: String,
+        lat: Double, lon: Double
+    ): Int {
+        val db = this.writableDatabase
+        return try {
+            val values = ContentValues().apply {
+                put(COLUMN_LAT, lat)
+                put(COLUMN_LON, lon)
+            }
+            db.update(
+                TABLE_HISTORY,
+                values,
+                "$COLUMN_CID = ? AND $COLUMN_MNC = ? AND $COLUMN_TAC = ? AND $COLUMN_MCC = ? AND $COLUMN_LAT IS NULL",
+                arrayOf(cellId, mnc, tac, mcc)
+            )
+        } catch (_: Exception) {
+            0
+        }
+    }
+
     /**
      * Obtiene registros previos de una misma Cell ID (excluyendo la ubicación actual)
      * Limitado a los últimos 30 días para evitar datos obsoletos.
@@ -225,7 +246,7 @@ class CellDbHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME, 
         cellId: String,
         mnc: String,
         tac: String,
-        excludeCurrentLocation: android.location.Location
+        excludeCurrentLocation: Location
     ): List<HistoryRecord> {
         val history = mutableListOf<HistoryRecord>()
         val db = this.readableDatabase
