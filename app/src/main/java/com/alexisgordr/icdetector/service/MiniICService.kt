@@ -8,6 +8,8 @@ import android.content.pm.ServiceInfo
 import android.location.Location
 import android.location.LocationListener
 import android.location.LocationManager
+import android.net.ConnectivityManager
+import android.net.NetworkCapabilities
 import android.media.AudioManager
 import android.media.ToneGenerator
 import android.os.*
@@ -418,7 +420,8 @@ class MiniICService : Service() {
                         isHardwareCipheringActive = isHardwareCipheringActive,
                         cellChangeHistory = cellChangeHistory,
                         currentLocation = currentLocation,
-                        preloadedHistory = if (cell.isRegistered) preloadedHistory else emptyList()
+                        preloadedHistory = if (cell.isRegistered) preloadedHistory else emptyList(),
+                        isWifiActive = isWifiConnected()
                     )
                 }
 
@@ -491,6 +494,13 @@ class MiniICService : Service() {
                 else -> null
             }
         } catch (_: Exception) { null }
+    }
+
+    private fun isWifiConnected(): Boolean {
+        val cm = getSystemService(CONNECTIVITY_SERVICE) as ConnectivityManager
+        val network = cm.activeNetwork ?: return false
+        val capabilities = cm.getNetworkCapabilities(network) ?: return false
+        return capabilities.hasTransport(NetworkCapabilities.TRANSPORT_WIFI)
     }
 
     private fun onGpsAvailable() {
@@ -695,7 +705,8 @@ class MiniICService : Service() {
             isHardwareCipheringActive = isHardwareCipheringActive,
             cellChangeHistory = cellChangeHistory,
             currentLocation = loc,
-            preloadedHistory = history
+            preloadedHistory = history,
+            isWifiActive = isWifiConnected()
         )
         
         scope.launch(Dispatchers.Main) {

@@ -119,7 +119,8 @@ object ThreatAnalyzer {
         isHardwareCipheringActive: Boolean,
         cellChangeHistory: List<Pair<String, Long>>,
         currentLocation: Location?,
-        preloadedHistory: List<HistoryRecord> = emptyList()
+        preloadedHistory: List<HistoryRecord> = emptyList(),
+        isWifiActive: Boolean = false
     ): CellData {
         val reasons = mutableListOf<String>()
         var score = 100
@@ -136,7 +137,7 @@ object ThreatAnalyzer {
         var hMobileCellId = true
 
         // 1. Neighbor analysis
-        if (neighbors.isEmpty() && active.dbm >= -80) {
+        if (!isWifiActive && neighbors.isEmpty() && active.dbm >= -80) {
             hIsolated = false
             reasons.add("Celda aislada")
             score -= 15
@@ -144,7 +145,7 @@ object ThreatAnalyzer {
 
         // 2. Signal Gap analysis
         val nextStrongest = neighbors.maxOfOrNull { it.dbm }
-        if (nextStrongest != null && active.dbm >= -75 && (active.dbm - nextStrongest > 35)) {
+        if (!isWifiActive && nextStrongest != null && active.dbm >= -75 && (active.dbm - nextStrongest > 35)) {
             hPowerJump = false
             reasons.add("Salto potencia (>35dB)")
             score -= 20
@@ -204,7 +205,7 @@ object ThreatAnalyzer {
         }
 
         // 7. Ghost Cells Check
-        if (active.dbm >= -70 && neighbors.isNotEmpty() && neighbors.all { it.dbm <= -120 }) {
+        if (!isWifiActive && active.dbm >= -70 && neighbors.isNotEmpty() && neighbors.all { it.dbm <= -120 }) {
             hGhost = false
             reasons.add("Vecinos fantasma")
             score -= 25

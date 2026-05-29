@@ -6,7 +6,8 @@
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
     <uses-permission android:name="android.permission.READ_PHONE_STATE" />
-    
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+
     <!-- Required to turn on Airplane Mode -->
     <uses-permission
         android:name="android.permission.WRITE_SECURE_SETTINGS"
@@ -14,7 +15,9 @@
     <uses-permission android:name="android.permission.WRITE_SETTINGS" />
 
     <!-- Foreground service and notifications -->
-    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission
+        android:name="android.permission.FOREGROUND_SERVICE"
+        tools:ignore="ForegroundServicePermission" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_LOCATION" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.INTERNET" />
@@ -45,7 +48,8 @@
             android:name="com.alexisgordr.icdetector.service.MiniICService"
             android:foregroundServiceType="location"
             android:enabled="true"
-            android:exported="false" />
+            android:exported="false"
+            tools:ignore="ForegroundServicePermission" />
 
         <provider
             android:name="androidx.core.content.FileProvider"
