@@ -61,7 +61,7 @@ The lead developer (**Alexis Gómez Rodríguez**) designed:
 - validation methodology
 - anomaly correlation logic
 
-AI assistance (Gemini) was used for:
+AI assistance (Gemini,Claude,Chatgpt,Deepshek) was used for:
 - Kotlin implementation support
 - Android API integration
 - architectural iteration
