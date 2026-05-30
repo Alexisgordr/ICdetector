@@ -1,3 +1,7 @@
+![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)
+![Platform](https://img.shields.io/badge/Platform-Android%2012%2B-green.svg)
+![Root Required](https://img.shields.io/badge/Root-Not%20Required-brightgreen.svg)
+![Status](https://img.shields.io/badge/Status-Active-success.svg)
 
 <table>
   <tr>
@@ -15,7 +19,7 @@
       </ul>
     </td>
     <td width="40%" align="center">
-      <img  src="https://github.com/user-attachments/assets/88366965-a866-463d-b187-e3f6f4a12183"
+      <img src="https://github.com/user-attachments/assets/88366965-a866-463d-b187-e3f6f4a12183"
            alt="ICdetection Screenshot"
            width="260" />
     </td>
@@ -61,7 +65,7 @@ The lead developer (**Alexis Gómez Rodríguez**) designed:
 - validation methodology
 - anomaly correlation logic
 
-AI assistance (Gemini,Claude,Chatgpt,Deepshek) was used for:
+AI assistance (Gemini, Claude, ChatGPT, DeepSeek) was used for:
 - Kotlin implementation support
 - Android API integration
 - architectural iteration
@@ -193,8 +197,13 @@ Attempts to detect insecure or non-ciphered cellular states (A5/0) when exposed 
 ## 10. Anti Ping-Pong Analysis
 Detects aggressive reselection loops and repetitive handover behavior while applying mobility-aware filtering to reduce false positives during vehicular movement.
 
-## 11. Infrastructure Reputation Correlation
-Cross-validates observed cellular infrastructure against public crowdsourced tower databases.
+## 11. Geographic Consistency Analysis (H11)
+Validates Cell IDs against a local GPS-based historical database built from previous observations. Detects Cell IDs appearing from physically inconsistent locations over time — a strong indicator of mobile rogue infrastructure cloning legitimate tower identifiers.
+
+Unlike database cross-referencing, this heuristic is entirely offline and cannot be defeated by registering fake towers in public databases. Detection relies on physical geography and is immune to RF parameter spoofing.
+
+## Temporal Confidence Decay
+Anomalies must persist across 3 consecutive analysis cycles before triggering a confirmed threat alert. Transient heuristic failures are logged but do not raise alarms, significantly reducing false positive alert fatigue in dynamic RF environments.
 
 ---
 
@@ -336,25 +345,6 @@ These limitations are inherent to Android userland restrictions.
 
 ---
 
-# ☕ Support the Project
-
-ICdetection is an independent open-source research project developed and maintained in personal time.
-
-If the project has been useful for:
-- learning
-- research
-- experimentation
-- development
-- security auditing
-
-Support is completely optional and helps fund:
-- testing devices
-- SDR experimentation
-- long-term maintenance
-- continued research
-
----
-
 # ⚖️ License
 
 Licensed under the **GNU General Public License v3.0 (GPL-3.0)**.
@@ -369,4 +359,3 @@ You are free to:
 the software under GPL terms.
 
 Derivative works must remain open-source under GPL-compatible licensing.
-```
