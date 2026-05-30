@@ -365,8 +365,11 @@ Derivative works must remain open-source under GPL-compatible licensing.
 # 🙏 Acknowledgements
 
 Thank you all for your understanding throughout the many iterations this project has gone through.
+
 The project is now considered stable and feature-complete within the boundaries of what Android userland allows without root access.
+
 Future updates will focus on bug fixes and minor improvements as they are discovered in real-world usage.
+
 This is the stable release. Thank you, and best regards to everyone who has followed the project.
 
 — Alexis
