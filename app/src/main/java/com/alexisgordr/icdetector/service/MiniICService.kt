@@ -228,7 +228,6 @@ class MiniICService : Service() {
     private fun checkLatencyAnomaly() {
         // Solo medir si el usuario lo ha activado explícitamente
         if (!isLatencyDetectionEnabled) return
-        if (!isScreenOn) return
         if (isWifiConnected()) return
 
         val now = System.currentTimeMillis()
