@@ -87,6 +87,7 @@ class MiniICService : Service() {
     private val anomalyStreaks = ConcurrentHashMap<String, Int>()
     private var lastStreakCellId = ""
     private val CONFIRMATION_CYCLES = 3
+    private var hasLoggedMissingCredentials = false
 
     var openCellIdKey: String = ""
     var wigleApiName: String = ""
@@ -131,6 +132,10 @@ class MiniICService : Service() {
         wigleApiName = prefs.getString("wigle_api_name", "") ?: ""
         wigleApiToken = prefs.getString("wigle_api_token", "") ?: ""
         isProxyEnabled = prefs.getBoolean("proxy_enabled", false)
+
+        if (wigleApiName.isNotBlank() || openCellIdKey.isNotBlank()) {
+            hasLoggedMissingCredentials = false
+        }
 
         try {
             toneGenerator = ToneGenerator(AudioManager.STREAM_ALARM, 100)
@@ -641,7 +646,10 @@ class MiniICService : Service() {
         val hasOpenCellId = openCellIdKey.isNotBlank() && !openCellIdKey.startsWith("pk.YOUR")
 
         if (!hasWigle && !hasOpenCellId) {
-            appendLog("[API]", "Intentando conectarse a la base de datos")
+            if (!hasLoggedMissingCredentials) {
+                appendLog("[API]", "⚠ Sin credenciales configuradas. Ve a Ajustes para añadir Wigle o OpenCellID.")
+                hasLoggedMissingCredentials = true
+            }
             return
         }
 
