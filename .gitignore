@@ -6,10 +6,28 @@ out/
 .gradle/
 build/
 app/build/
+captures/
+externalNativeBuild/
+.cxx/
 
 # Local configuration
 local.properties
 
+# Keystores / Secrets (¡NUNCA subir estos!)
+*.jks
+*.keystore
+*.p12
+google-services.json
+
 # OS generated files
 .DS_Store
 Thumbs.db
+
+# Build artifacts
+*.apk
+*.aar
+*.ap_
+*.dex
+
+# Benchmarking
+*.hprof
