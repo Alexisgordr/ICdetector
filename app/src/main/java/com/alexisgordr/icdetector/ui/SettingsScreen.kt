@@ -95,19 +95,46 @@ fun SettingsPanel(service: MiniICService?, onSave: () -> Unit) {
                 )
             )
             HorizontalDivider(color = Color(0xFF222222), modifier = Modifier.padding(vertical = 4.dp))
-            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                Column {
-                    Text("Proxy Tor (Orbot)", color = Color.White, fontSize = 14.sp, fontFamily = FontFamily.Monospace)
-                    Text("Enruta API por Tor (SOCKS5 9050)", color = Color(0xFF666666), fontSize = 10.sp, fontFamily = FontFamily.Monospace)
-                }
-                Switch(
-                    checked = proxyEnabled,
-                    onCheckedChange = { proxyEnabled = it },
-                    colors = SwitchDefaults.colors(
-                        checkedThumbColor = Color.White,
-                        checkedTrackColor = Color(0xFF4CAF50)
+            // Proxy Tor — se oculta si latencia experimental está activa
+            if (!latencyDetectionEnabled) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column {
+                        Text(
+                            "Proxy Tor (Orbot)",
+                            color = Color.White,
+                            fontSize = 14.sp,
+                            fontFamily = FontFamily.Monospace
+                        )
+                        Text(
+                            "Enruta API por Tor (SOCKS5 9050)",
+                            color = Color(0xFF666666),
+                            fontSize = 10.sp,
+                            fontFamily = FontFamily.Monospace
+                        )
+                    }
+                    Switch(
+                        checked = proxyEnabled,
+                        onCheckedChange = { proxyEnabled = it },
+                        colors = SwitchDefaults.colors(
+                            checkedThumbColor = Color.White,
+                            checkedTrackColor = Color(0xFF4CAF50)
+                        )
                     )
-                )
+                }
+            }
+            // Leer estado WiFi de forma reactiva
+            val isWifiActive by produceState(initialValue = false) {
+                while (true) {
+                    val cm = context.getSystemService(Context.CONNECTIVITY_SERVICE)
+                        as android.net.ConnectivityManager
+                    val caps = cm.getNetworkCapabilities(cm.activeNetwork)
+                    value = caps?.hasTransport(android.net.NetworkCapabilities.TRANSPORT_WIFI) ?: false
+                    kotlinx.coroutines.delay(2000L) // comprueba cada 2 segundos
+                }
             }
 
             HorizontalDivider(color = Color(0xFF222222), modifier = Modifier.padding(vertical = 4.dp))
@@ -120,12 +147,15 @@ fun SettingsPanel(service: MiniICService?, onSave: () -> Unit) {
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
                         "Detección de Latencia (Experimental)",
-                        color = Color.White,
+                        color = if (isWifiActive) Color(0xFF444444) else Color.White,
                         fontSize = 14.sp,
                         fontFamily = FontFamily.Monospace
                     )
                     Text(
-                        "3 peticiones HEAD cada 30s a servidores públicos para detectar posible interferencia MITM. Desactivado por defecto.",
+                        if (isWifiActive)
+                            "No disponible con WiFi activo."
+                        else
+                            "3 peticiones HEAD cada 30s. Incompatible con Proxy Tor.",
                         color = Color(0xFF666666),
                         fontSize = 9.sp,
                         fontFamily = FontFamily.Monospace,
@@ -135,10 +165,16 @@ fun SettingsPanel(service: MiniICService?, onSave: () -> Unit) {
                 Spacer(Modifier.width(8.dp))
                 Switch(
                     checked = latencyDetectionEnabled,
-                    onCheckedChange = { latencyDetectionEnabled = it },
+                    enabled = !isWifiActive,
+                    onCheckedChange = {
+                        latencyDetectionEnabled = it
+                        if (it) proxyEnabled = false
+                    },
                     colors = SwitchDefaults.colors(
                         checkedThumbColor = Color.White,
-                        checkedTrackColor = Color(0xFFFFA000)  // ámbar = experimental
+                        checkedTrackColor = Color(0xFFFFA000),
+                        disabledCheckedTrackColor = Color(0xFF444444),
+                        disabledUncheckedTrackColor = Color(0xFF333333)
                     )
                 )
             }
