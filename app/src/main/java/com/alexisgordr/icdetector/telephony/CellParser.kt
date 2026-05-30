@@ -15,6 +15,10 @@ object CellParser {
                 val dbm = info.cellSignalStrength.dbm
                 val cellMcc = id.mccString ?: mcc
                 val cellMnc = id.mncString ?: mnc
+                val rsrq = info.cellSignalStrength.rsrq
+                    .let { if (it == Int.MAX_VALUE) null else it }
+                val sinr = info.cellSignalStrength.rssnr
+                    .let { if (it == Int.MAX_VALUE) null else it }
                 var ta = info.cellSignalStrength.timingAdvance.let { if (it == Int.MAX_VALUE) null else it }
                 if (ta == null) {
                     try {
@@ -26,7 +30,7 @@ object CellParser {
                         }
                     } catch (_: Exception) {}
                 }
-                CellData(reg, networkTypeString, id.ci.valOrNa(), cellMnc, id.tac.valOrNa(), dbm, cellMcc, timingAdvance = ta, arfcn = id.earfcn, pci = id.pci)
+                CellData(reg, networkTypeString, id.ci.valOrNa(), cellMnc, id.tac.valOrNa(), dbm, cellMcc, timingAdvance = ta, arfcn = id.earfcn, pci = id.pci, rsrq = rsrq, sinr = sinr)
             }
             is CellInfoNr -> {
                 val id = info.cellIdentity as CellIdentityNr
@@ -52,7 +56,11 @@ object CellParser {
                         }
                     } catch (_: Exception) {}
                 }
-                CellData(reg, networkTypeString, id.nci.valOrNa(), cellMnc, id.tac.valOrNa(), dbm, cellMcc, timingAdvance = ta, arfcn = id.nrarfcn, pci = id.pci)
+                val rsrq = strength.ssRsrq
+                    .let { if (it == Int.MAX_VALUE) null else it }
+                val sinr = strength.ssSinr
+                    .let { if (it == Int.MAX_VALUE) null else it }
+                CellData(reg, networkTypeString, id.nci.valOrNa(), cellMnc, id.tac.valOrNa(), dbm, cellMcc, timingAdvance = ta, arfcn = id.nrarfcn, pci = id.pci, rsrq = rsrq, sinr = sinr)
             }
             is CellInfoWcdma -> {
                 val id = info.cellIdentity

@@ -121,7 +121,8 @@ object ThreatAnalyzer {
         cellChangeHistory: List<Pair<String, Long>>,
         currentLocation: Location?,
         preloadedHistory: List<HistoryRecord> = emptyList(),
-        isWifiActive: Boolean = false
+        isWifiActive: Boolean = false,
+        isNetworkLatencyAnomalous: Boolean = false  // ← NUEVO
     ): CellData {
         val reasons = mutableListOf<String>()
         var score = 100
@@ -253,6 +254,19 @@ object ThreatAnalyzer {
             hMobileCellId = false
             reasons.add(hMobileReason ?: "Consistencia geográfica fallida")
             score -= hMobilePenalty
+        }
+
+        // 12. RF Quality + Latency Cross-Layer Correlation (Experimental)
+        // Señal fuerte + RSRQ malo + latencia anómala = posible MITM activo
+        if (!isWifiActive && isNetworkLatencyAnomalous && active.dbm >= -70) {
+            val rsrqAnomalous = active.rsrq != null && active.rsrq <= -15
+            val sinrAnomalous = active.sinr != null && active.sinr <= 0
+
+            if (rsrqAnomalous || sinrAnomalous) {
+                reasons.add("RF anómalo + latencia: posible MITM (Experimental)")
+                score -= 20
+                // Nota: appendLog no está disponible aquí, se asume que se logueará fuera o se manejará por reasons
+            }
         }
 
         // Bonificadores y penalizadores por Base de Datos

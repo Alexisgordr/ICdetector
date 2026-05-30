@@ -132,6 +132,7 @@ fun MainLayout(context: Context, dbHelper: CellDbHelper, service: MiniICService?
 fun MainScreenContent(dbHelper: CellDbHelper, service: MiniICService?) {
     val cellList by (service?.cellFlow ?: remember { MutableStateFlow(emptyList()) }).collectAsState()
     val dbmHistory by (service?.dbmHistory ?: remember { MutableStateFlow(emptyList()) }).collectAsState()
+    val rsrqHistory by (service?.rsrqHistory ?: remember { MutableStateFlow(emptyList()) }).collectAsState()
     val geoHistory by (service?.geoHistory ?: remember { MutableStateFlow(emptyList()) }).collectAsState()
     
     var refreshing by remember { mutableStateOf(false) }
@@ -257,7 +258,7 @@ fun MainScreenContent(dbHelper: CellDbHelper, service: MiniICService?) {
                         }
 
                         if (active != null) {
-                            SecurityScorePanel(active, dbmHistory, geoHistory, service)
+                            SecurityScorePanel(active, dbmHistory, rsrqHistory, geoHistory, service)
                         }
 
                         if (active != null) {
@@ -286,7 +287,7 @@ fun MainScreenContent(dbHelper: CellDbHelper, service: MiniICService?) {
 }
 
 @Composable
-fun SecurityScorePanel(active: CellData, dbmHistory: List<Int>, geoHistory: List<Float>, service: MiniICService?) {
+fun SecurityScorePanel(active: CellData, dbmHistory: List<Int>, rsrqHistory: List<Int>, geoHistory: List<Float>, service: MiniICService?) {
     var viewMode by remember { mutableStateOf("NONE") } // NONE, GRAPH, GEO, HEUR
     val context = LocalContext.current
 
@@ -348,6 +349,13 @@ fun SecurityScorePanel(active: CellData, dbmHistory: List<Int>, geoHistory: List
                     Spacer(Modifier.height(4.dp))
                     Text("${active.securityScore}%", color = scoreColor, fontFamily = FontFamily.Monospace, fontSize = 28.sp, fontWeight = FontWeight.ExtraBold)
                 }
+
+                // DERECHA — minigráficas RF en vivo
+                Column(horizontalAlignment = Alignment.End) {
+                    MiniRsrpGraph(dbmHistory, active.dbm)
+                    Spacer(Modifier.height(4.dp))
+                    MiniRsrqGraph(rsrqHistory, active.rsrq)
+                }
             }
 
             AnimatedVisibility(visible = viewMode != "NONE") {
@@ -389,11 +397,43 @@ fun SecurityScorePanel(active: CellData, dbmHistory: List<Int>, geoHistory: List
 
             Spacer(Modifier.height(16.dp))
 
-            // Indicador GPS encima de los botones
+            // Indicadores GPS y RED encima de los botones
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.End
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
             ) {
+                // Indicador RED — izquierda
+                val netState by service?.networkLatencyState?.collectAsState()
+                    ?: remember { mutableStateOf("OK") }
+
+                Text(
+                    text = if (netState == "OK") "● RED OK" else "● RED ANÓMALA",
+                    color = if (netState == "OK") Color(0xFF4CAF50) else Color(0xFFCF6679),
+                    fontSize = 9.sp,
+                    fontFamily = FontFamily.Monospace
+                )
+
+                // Indicador RF — centro, siempre visible
+                val rsrq = active.rsrq
+                val isRfWarning = netState == "ANOMALA" && rsrq != null && rsrq <= -15
+
+                val (rfText, rfColor) = when {
+                    rsrq == null          -> "● RF N/A"     to Color(0xFF666666)
+                    isRfWarning           -> "⚠ RF WARNING" to Color(0xFFFFA000)
+                    rsrq > -15            -> "● RF OK"       to Color(0xFF4CAF50)
+                    else                  -> "● RF N/A"      to Color(0xFF666666)
+                }
+
+                Text(
+                    text = rfText,
+                    color = rfColor,
+                    fontSize = 9.sp,
+                    fontFamily = FontFamily.Monospace,
+                    fontWeight = if (isRfWarning) FontWeight.Bold else FontWeight.Normal
+                )
+
+                // Indicador GPS — derecha
                 Text(
                     text = if (hasGps) "● GPS OK" else "● SIN GPS",
                     color = if (hasGps) Color(0xFF4CAF50) else Color(0xFFCF6679),

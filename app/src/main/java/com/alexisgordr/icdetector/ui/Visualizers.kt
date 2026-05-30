@@ -167,3 +167,126 @@ fun GeoGraph(active: CellData, geoHistory: List<Float>) {
         }
     }
 }
+
+@Composable
+fun MiniRsrpGraph(dbmHistory: List<Int>, currentDbm: Int) {
+    val umbral = -70
+
+    val labelColor = when {
+        currentDbm >= -70 -> Color.Red
+        currentDbm >= -85 -> Color(0xFFFFA000)
+        else              -> Color(0xFF4CAF50)
+    }
+
+    val labelText = when {
+        currentDbm >= -70 -> "RSRP ⚠"
+        currentDbm >= -85 -> "RSRP ~"
+        else              -> "RSRP OK"
+    }
+
+    Column {
+        Text(
+            text = labelText,
+            color = labelColor,
+            fontSize = 7.sp,
+            fontFamily = FontFamily.Monospace,
+            fontWeight = FontWeight.Bold
+        )
+        Canvas(modifier = Modifier.width(120.dp).height(40.dp)) {
+            val w = size.width; val h = size.height
+            // Línea umbral punteada
+            val uy = h * (1f - ((umbral - (-140f)) / 100f))
+            drawLine(
+                Color.Red.copy(alpha = 0.4f),
+                Offset(0f, uy), Offset(w, uy),
+                strokeWidth = 1f,
+                pathEffect = androidx.compose.ui.graphics.PathEffect
+                    .dashPathEffect(floatArrayOf(5f, 5f))
+            )
+            // Línea RSRP
+            if (dbmHistory.size >= 2) {
+                val step = w / 49f
+                val start = w - (dbmHistory.size - 1) * step
+                for (i in 0 until dbmHistory.size - 1) {
+                    val v1 = dbmHistory[i]; val v2 = dbmHistory[i + 1]
+                    val x1 = start + i * step; val x2 = start + (i + 1) * step
+                    val y1 = h * (1f - ((v1 - (-140f)) / 100f).coerceIn(0f, 1f))
+                    val y2 = h * (1f - ((v2 - (-140f)) / 100f).coerceIn(0f, 1f))
+                    val color = when {
+                        v1 >= -70 || v2 >= -70 -> Color.Red
+                        v1 >= -85 || v2 >= -85 -> Color(0xFFFFA000)
+                        else                   -> Color(0xFF4CAF50)
+                    }
+                    drawLine(color, Offset(x1, y1), Offset(x2, y2), strokeWidth = 2f)
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun MiniRsrqGraph(rsrqHistory: List<Int>, currentRsrq: Int?) {
+    val umbral = -15
+
+    val labelColor = when {
+        currentRsrq == null  -> Color(0xFF666666)
+        currentRsrq <= -15   -> Color.Red
+        currentRsrq <= -10   -> Color(0xFFFFA000)
+        else                 -> Color(0xFF4CAF50)
+    }
+
+    val labelText = when {
+        currentRsrq == null  -> "RSRQ N/A"
+        currentRsrq <= -15   -> "RSRQ ⚠"
+        currentRsrq <= -10   -> "RSRQ ~"
+        else                 -> "RSRQ OK"
+    }
+
+    Column {
+        Text(
+            text = labelText,
+            color = labelColor,
+            fontSize = 7.sp,
+            fontFamily = FontFamily.Monospace,
+            fontWeight = FontWeight.Bold
+        )
+        Canvas(modifier = Modifier.width(120.dp).height(40.dp)) {
+            val w = size.width; val h = size.height
+            // Línea umbral punteada
+            val uy = h * (1f - ((umbral - (-20f)) / 17f).coerceIn(0f, 1f))
+            drawLine(
+                Color(0xFFFFA000).copy(alpha = 0.4f),
+                Offset(0f, uy), Offset(w, uy),
+                strokeWidth = 1f,
+                pathEffect = androidx.compose.ui.graphics.PathEffect
+                    .dashPathEffect(floatArrayOf(5f, 5f))
+            )
+            // Línea RSRQ
+            if (rsrqHistory.size >= 2) {
+                val step = w / 49f
+                val start = w - (rsrqHistory.size - 1) * step
+                for (i in 0 until rsrqHistory.size - 1) {
+                    val v1 = rsrqHistory[i]; val v2 = rsrqHistory[i + 1]
+                    val x1 = start + i * step; val x2 = start + (i + 1) * step
+                    val y1 = h * (1f - ((v1 - (-20f)) / 17f).coerceIn(0f, 1f))
+                    val y2 = h * (1f - ((v2 - (-20f)) / 17f).coerceIn(0f, 1f))
+                    val color = when {
+                        v1 <= -15 || v2 <= -15 -> Color.Red
+                        v1 <= -10 || v2 <= -10 -> Color(0xFFFFA000)
+                        else                   -> Color(0xFF4CAF50)
+                    }
+                    drawLine(color, Offset(x1, y1), Offset(x2, y2), strokeWidth = 2f)
+                }
+            } else if (currentRsrq == null) {
+                drawContext.canvas.nativeCanvas.drawText(
+                    "N/A",
+                    w / 2f - 20f, h / 2f,
+                    android.graphics.Paint().apply {
+                        color = android.graphics.Color.DKGRAY
+                        textSize = 24f
+                    }
+                )
+            }
+        }
+    }
+}

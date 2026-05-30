@@ -50,11 +50,17 @@ class MiniICService : Service() {
     private val _dbmHistory = MutableStateFlow<List<Int>>(emptyList())
     val dbmHistory: StateFlow<List<Int>> = _dbmHistory
 
+    private val _rsrqHistory = MutableStateFlow<List<Int>>(emptyList())
+    val rsrqHistory: StateFlow<List<Int>> = _rsrqHistory
+
     private val _geoHistory = MutableStateFlow<List<Float>>(emptyList())
     val geoHistory: StateFlow<List<Float>> = _geoHistory
 
     private val _auditStatus = MutableStateFlow("")
     val auditStatus: StateFlow<String> = _auditStatus
+
+    private val _networkLatencyState = MutableStateFlow<String>("OK")
+    val networkLatencyState: StateFlow<String> = _networkLatencyState
 
     private fun appendLog(type: String, message: String) {
         val timestamp = SimpleDateFormat("HH:mm:ss.SSS", Locale.getDefault()).format(Date())
@@ -89,6 +95,20 @@ class MiniICService : Service() {
     private val CONFIRMATION_CYCLES = 3
     private var hasLoggedMissingCredentials = false
 
+    // Latency anomaly detection
+    private val latencyHistory = ConcurrentHashMap<String, MutableList<Long>>()
+    private var lastLatencyCheckTime = 0L
+    private var latencyAnomalyStreak = 0
+    private val LATENCY_CHECK_INTERVAL = 30000L   // cada 30 segundos
+    private val LATENCY_HISTORY_SIZE = 10          // últimas 10 mediciones
+    private val LATENCY_ANOMALY_MULTIPLIER = 2.5   // 2.5x el promedio = anómalo
+    private val LATENCY_CONFIRMATION_CYCLES = 3    // 3 ciclos para confirmar
+    private val LATENCY_ENDPOINTS = listOf(
+        "https://www.google.com/generate_204",    // ✅ enorme, sin límites
+        "https://one.one.one.one/",               // ✅ Cloudflare, sin límites
+        "https://dns.quad9.net/"                  // ✅ Quad9, DNS público grande
+    )
+
     var openCellIdKey: String = ""
     var wigleApiName: String = ""
     var wigleApiToken: String = ""
@@ -103,6 +123,7 @@ class MiniICService : Service() {
     var isStrongSignalAlarmEnabled = true
     var is3gAirplaneModeEnabled = true
     var isProxyEnabled = false
+    var isLatencyDetectionEnabled: Boolean = false
 
     private var prevCid: String? = null
     private var prevNetType: String? = null
@@ -132,6 +153,7 @@ class MiniICService : Service() {
         wigleApiName = prefs.getString("wigle_api_name", "") ?: ""
         wigleApiToken = prefs.getString("wigle_api_token", "") ?: ""
         isProxyEnabled = prefs.getBoolean("proxy_enabled", false)
+        isLatencyDetectionEnabled = prefs.getBoolean("latency_detection_enabled", false)
 
         if (wigleApiName.isNotBlank() || openCellIdKey.isNotBlank()) {
             hasLoggedMissingCredentials = false
@@ -195,10 +217,105 @@ class MiniICService : Service() {
                         wasAirplaneModeOn = false
                     }
                     requestFreshCellInfo()
+                    checkLatencyAnomaly()
                 }
 
                 delay(delayTime)
             }
+        }
+    }
+
+    private fun checkLatencyAnomaly() {
+        // Solo medir si el usuario lo ha activado explícitamente
+        if (!isLatencyDetectionEnabled) return
+        if (!isScreenOn) return
+        if (isWifiConnected()) return
+
+        val now = System.currentTimeMillis()
+        if (now - lastLatencyCheckTime < LATENCY_CHECK_INTERVAL) return
+
+        val activeCellId = _cellFlow.value
+            .firstOrNull { it.isRegistered }?.cellId ?: return
+
+        lastLatencyCheckTime = now
+
+        scope.launch(Dispatchers.IO) {
+            // Medir latencia en los 3 endpoints simultáneamente
+            val latencies = LATENCY_ENDPOINTS.mapNotNull { endpoint ->
+                try {
+                    val start = System.currentTimeMillis()
+                    val request = okhttp3.Request.Builder()
+                        .url(endpoint)
+                        .head()  // HEAD: sin body, mínimo tráfico
+                        .build()
+                    client.newCall(request).execute().use { }
+                    System.currentTimeMillis() - start
+                } catch (_: Exception) {
+                    null  // endpoint no disponible, ignorar
+                }
+            }
+
+            // Necesitamos al menos 2 de 3 endpoints respondiendo
+            if (latencies.size < 2) {
+                appendLog("[NET]", "Latencia: sin suficientes endpoints disponibles")
+                return@launch
+            }
+
+            val avgLatency = latencies.average().toLong()
+            val history = latencyHistory.getOrPut(activeCellId) { mutableListOf() }
+
+            if (history.size >= 5) {
+                val historicalAvg = history.average()
+                val isAnomalous = avgLatency > historicalAvg * LATENCY_ANOMALY_MULTIPLIER
+
+                if (isAnomalous) {
+                    _networkLatencyState.value = "ANOMALA"
+                    latencyAnomalyStreak++
+                    appendLog(
+                        "[NET]",
+                        "⚠ Latencia anómala [${latencyAnomalyStreak}/$LATENCY_CONFIRMATION_CYCLES]:" +
+                                " ${avgLatency}ms (media: ${historicalAvg.toInt()}ms) — 3 endpoints"
+                    )
+
+                    if (latencyAnomalyStreak >= LATENCY_CONFIRMATION_CYCLES) {
+                        appendLog("[NET]", "🔴 ANOMALÍA DE RED PERSISTENTE — posible interferencia MITM")
+
+                        // Pitido suave diferenciado + notificación
+                        scope.launch(Dispatchers.Main) {
+                            // Pitido — distinto al de amenaza principal
+                            toneGenerator?.startTone(ToneGenerator.TONE_CDMA_SOFT_ERROR_LITE, 300)
+
+                            // Notificación visible aunque pantalla apagada
+                            val notification = NotificationCompat.Builder(this@MiniICService, CHANNEL_ID)
+                                .setSmallIcon(android.R.drawable.ic_dialog_alert)
+                                .setContentTitle("⚠ Anomalía de Red")
+                                .setContentText("Latencia anómala persistente — posible interferencia MITM")
+                                .setPriority(NotificationCompat.PRIORITY_HIGH)
+                                .setAutoCancel(true)
+                                .build()
+
+                            val nm = getSystemService(NotificationManager::class.java)
+                            nm.notify(LATENCY_NOTIFICATION_ID, notification)
+                        }
+
+                        latencyAnomalyStreak = 0
+                    }
+                } else {
+                    _networkLatencyState.value = "OK"
+                    if (latencyAnomalyStreak > 0) {
+                        appendLog("[NET]", "✅ Latencia normalizada: ${avgLatency}ms")
+                    }
+                    latencyAnomalyStreak = 0
+                    appendLog("[NET]", "Latencia OK: ${avgLatency}ms (media: ${historicalAvg.toInt()}ms)")
+                }
+            } else {
+                // Aprendiendo baseline — no alarmar todavía
+                appendLog("[NET]", "Latencia: ${avgLatency}ms (aprendiendo baseline ${history.size + 1}/$LATENCY_HISTORY_SIZE...)")
+            }
+
+            // Guardar en histórico
+            history.add(avgLatency)
+            if (history.size > LATENCY_HISTORY_SIZE) history.removeAt(0)
         }
     }
 
@@ -433,7 +550,8 @@ class MiniICService : Service() {
                         cellChangeHistory = cellChangeHistory,
                         currentLocation = currentLocation,
                         preloadedHistory = if (cell.isRegistered) preloadedHistory else emptyList(),
-                        isWifiActive = isWifiConnected()
+                        isWifiActive = isWifiConnected(),
+                        isNetworkLatencyAnomalous = networkLatencyState.value == "ANOMALA"  // ← NUEVO
                     )
                 }
 
@@ -753,7 +871,8 @@ class MiniICService : Service() {
             cellChangeHistory = cellChangeHistory,
             currentLocation = loc,
             preloadedHistory = history,
-            isWifiActive = isWifiConnected()
+            isWifiActive = isWifiConnected(),
+            isNetworkLatencyAnomalous = networkLatencyState.value == "ANOMALA"  // ← NUEVO
         )
         
         scope.launch(Dispatchers.Main) {
@@ -820,6 +939,14 @@ class MiniICService : Service() {
             currentHistory.add(dbm)
             if (currentHistory.size > 50) currentHistory.removeAt(0)
             _dbmHistory.value = currentHistory
+
+            val rsrq = cell.rsrq
+            if (rsrq != null && rsrq != Int.MAX_VALUE) {
+                val currentRsrq = _rsrqHistory.value.toMutableList()
+                currentRsrq.add(rsrq)
+                if (currentRsrq.size > 50) currentRsrq.removeAt(0)
+                _rsrqHistory.value = currentRsrq
+            }
 
             val currentTa = cell.timingAdvance
             if (currentTa != null && currentTa != Int.MAX_VALUE) {
@@ -1023,6 +1150,7 @@ class MiniICService : Service() {
     companion object {
         const val CHANNEL_ID = "miniic_channel"
         const val NOTIFICATION_ID = 202
+        const val LATENCY_NOTIFICATION_ID = 3  // distinto al NOTIFICATION_ID principal
         const val ACTION_STOP = "com.alexisgordr.icdetector.STOP"
     }
 }

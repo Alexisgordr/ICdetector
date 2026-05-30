@@ -33,6 +33,9 @@ fun SettingsPanel(service: MiniICService?, onSave: () -> Unit) {
     var wigleName by remember { mutableStateOf(prefs.getString("wigle_api_name", "") ?: "") }
     var wigleToken by remember { mutableStateOf(prefs.getString("wigle_api_token", "") ?: "") }
     var proxyEnabled by remember { mutableStateOf(prefs.getBoolean("proxy_enabled", false)) }
+    var latencyDetectionEnabled by remember {
+        mutableStateOf(prefs.getBoolean("latency_detection_enabled", false))
+    }
 
     val scrollState = rememberScrollState()
 
@@ -106,6 +109,40 @@ fun SettingsPanel(service: MiniICService?, onSave: () -> Unit) {
                     )
                 )
             }
+
+            HorizontalDivider(color = Color(0xFF222222), modifier = Modifier.padding(vertical = 4.dp))
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        "Detección de Latencia (Experimental)",
+                        color = Color.White,
+                        fontSize = 14.sp,
+                        fontFamily = FontFamily.Monospace
+                    )
+                    Text(
+                        "3 peticiones HEAD cada 30s a servidores públicos para detectar posible interferencia MITM. Desactivado por defecto.",
+                        color = Color(0xFF666666),
+                        fontSize = 9.sp,
+                        fontFamily = FontFamily.Monospace,
+                        lineHeight = 12.sp
+                    )
+                }
+                Spacer(Modifier.width(8.dp))
+                Switch(
+                    checked = latencyDetectionEnabled,
+                    onCheckedChange = { latencyDetectionEnabled = it },
+                    colors = SwitchDefaults.colors(
+                        checkedThumbColor = Color.White,
+                        checkedTrackColor = Color(0xFFFFA000)  // ámbar = experimental
+                    )
+                )
+            }
+
             Button(
                 onClick = {
                     prefs.edit {
@@ -113,11 +150,13 @@ fun SettingsPanel(service: MiniICService?, onSave: () -> Unit) {
                         putString("wigle_api_name", wigleName)
                         putString("wigle_api_token", wigleToken)
                         putBoolean("proxy_enabled", proxyEnabled)
+                        putBoolean("latency_detection_enabled", latencyDetectionEnabled)
                     }
                     service?.openCellIdKey = token
                     service?.wigleApiName = wigleName
                     service?.wigleApiToken = wigleToken
                     service?.isProxyEnabled = proxyEnabled
+                    service?.isLatencyDetectionEnabled = latencyDetectionEnabled
                     onSave()
                 },
                 modifier = Modifier.fillMaxWidth(),
