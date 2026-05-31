@@ -225,3 +225,182 @@ fun HistoryPanel(dbHelper: CellDbHelper, onBack: () -> Unit) {
         }
     }
 }
+
+@Composable
+fun IntelPanel(dbHelper: CellDbHelper) {
+    var items by remember { mutableStateOf<List<HistoryRecord>>(emptyList()) }
+
+    LaunchedEffect(Unit) {
+        withContext(Dispatchers.IO) {
+            items = dbHelper.getRecords()
+        }
+    }
+
+    if (items.isEmpty()) {
+        Box(modifier = Modifier.fillMaxWidth().padding(16.dp),
+            contentAlignment = Alignment.Center) {
+            Text("SIN DATOS AÚN", color = Color(0xFF444444),
+                fontFamily = FontFamily.Monospace, fontSize = 11.sp)
+        }
+        return
+    }
+
+    val groupedItems = remember(items) {
+        val groups = mutableMapOf<String, MutableList<HistoryRecord>>()
+        val orderedCids = mutableListOf<String>()
+        items.forEach { record ->
+            if (!groups.containsKey(record.cid)) {
+                orderedCids.add(record.cid)
+                groups[record.cid] = mutableListOf()
+            }
+            groups[record.cid]!!.add(record)
+        }
+        orderedCids.map { cid -> cid to groups[cid]!! }
+    }
+
+    // Calcular estadísticas
+    val totalCells = groupedItems.size
+    val totalConnections = items.size
+    val avgScore = items.asSequence().map { it.score }.average()
+    val suspiciousEvents = items.count { it.score < 70 }
+    val verifiedCells = groupedItems.count { (_, r) -> r.any { it.verified.name == "VERIFIED" } }
+    val notFoundCells = groupedItems.count { (_, r) -> r.any { it.verified.name == "NOT_FOUND" } }
+    val recordsWithGps = items.count { it.lat != null && it.lon != null }
+    val mostSeenCell = groupedItems.maxByOrNull { it.second.size }
+    val anomalousCells = groupedItems.count { (_, r) ->
+        r.any { it.failedHeuristics.isNotBlank() && it.failedHeuristics != "OK" }
+    }
+    val networkTypes = items.groupBy { it.netType }
+        .mapValues { it.value.size }
+        .entries.sortedByDescending { it.value }
+    val dateFrom = items.lastOrNull()?.timestamp?.take(10) ?: "N/A"
+    val dateTo = items.firstOrNull()?.timestamp?.take(10) ?: "N/A"
+
+    Column(
+        modifier = Modifier.fillMaxWidth().padding(top = 12.dp),
+        verticalArrangement = Arrangement.spacedBy(0.dp)
+    ) {
+        HorizontalDivider(color = Color(0xFF1A1A1A))
+        Spacer(Modifier.height(8.dp))
+
+        Text(
+            "RESUMEN DE INTELIGENCIA RF",
+            color = Color(0xFF555555),
+            fontFamily = FontFamily.Monospace,
+            fontSize = 10.sp,
+            fontWeight = FontWeight.Bold
+        )
+
+        Spacer(Modifier.height(8.dp))
+
+        // Grid 2x3 uniforme
+        Row(modifier = Modifier.fillMaxWidth()) {
+            IntelCell(Modifier.weight(1f), "CELDAS", totalCells.toString())
+            IntelCell(Modifier.weight(1f), "CONEXIONES", totalConnections.toString())
+            IntelCell(Modifier.weight(1f), "SCORE MEDIO", String.format(java.util.Locale.ROOT, "%.1f%%", avgScore))
+        }
+
+        Spacer(Modifier.height(6.dp))
+        HorizontalDivider(color = Color(0xFF1A1A1A))
+        Spacer(Modifier.height(6.dp))
+
+        Row(modifier = Modifier.fillMaxWidth()) {
+            IntelCell(Modifier.weight(1f), "VERIFIED", verifiedCells.toString(), Color(0xFF4CAF50))
+            IntelCell(Modifier.weight(1f), "NOT FOUND", notFoundCells.toString(), Color(0xFFFFA000))
+            IntelCell(
+                Modifier.weight(1f), "SOSPECHOSAS", suspiciousEvents.toString(),
+                if (suspiciousEvents > 0) Color(0xFFCF6679) else Color(0xFF4CAF50)
+            )
+        }
+
+        Spacer(Modifier.height(6.dp))
+        HorizontalDivider(color = Color(0xFF1A1A1A))
+        Spacer(Modifier.height(6.dp))
+
+        Row(modifier = Modifier.fillMaxWidth()) {
+            IntelCell(Modifier.weight(1f), "CON GPS", recordsWithGps.toString())
+            IntelCell(
+                Modifier.weight(1f), "ANOMALÍAS", anomalousCells.toString(),
+                if (anomalousCells > 0) Color(0xFFFFA000) else Color(0xFF4CAF50)
+            )
+            // Período en 2 líneas para que no se corte
+            Column(
+                modifier = Modifier.weight(1f),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Text("PERÍODO", color = Color(0xFF555555), fontSize = 7.sp,
+                    fontFamily = FontFamily.Monospace)
+                Text(dateFrom, color = Color.White, fontSize = 8.sp,
+                    fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Bold)
+                Text(dateTo, color = Color(0xFF888888), fontSize = 8.sp,
+                    fontFamily = FontFamily.Monospace)
+            }
+        }
+
+        Spacer(Modifier.height(6.dp))
+        HorizontalDivider(color = Color(0xFF1A1A1A))
+        Spacer(Modifier.height(6.dp))
+
+        // MÁS VISTA — fila completa centrada
+        mostSeenCell?.let { (cid, records) ->
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text("MÁS VISTA", color = Color(0xFF555555),
+                    fontSize = 8.sp, fontFamily = FontFamily.Monospace)
+                Text(cid, color = Color.White,
+                    fontSize = 9.sp, fontFamily = FontFamily.Monospace,
+                    fontWeight = FontWeight.Bold)
+                Text("${records.size}x", color = Color(0xFF4CAF50),
+                    fontSize = 9.sp, fontFamily = FontFamily.Monospace,
+                    fontWeight = FontWeight.Bold)
+            }
+            Spacer(Modifier.height(6.dp))
+            HorizontalDivider(color = Color(0xFF1A1A1A))
+            Spacer(Modifier.height(6.dp))
+        }
+
+        // REDES
+        if (networkTypes.isNotEmpty()) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text("REDES", color = Color(0xFF555555),
+                    fontSize = 8.sp, fontFamily = FontFamily.Monospace)
+                networkTypes.take(3).forEach { (type, count) ->
+                    Row(verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(2.dp)) {
+                        Text(type, color = Color(0xFF888888),
+                            fontSize = 8.sp, fontFamily = FontFamily.Monospace)
+                        Text(":$count", color = Color.White,
+                            fontSize = 8.sp, fontFamily = FontFamily.Monospace,
+                            fontWeight = FontWeight.Bold)
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun IntelCell(
+    modifier: Modifier = Modifier,
+    label: String,
+    value: String,
+    valueColor: Color = Color.White
+) {
+    Column(
+        modifier = modifier,
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        Text(label, color = Color(0xFF555555), fontSize = 7.sp,
+            fontFamily = FontFamily.Monospace)
+        Text(value, color = valueColor, fontSize = 11.sp,
+            fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Bold)
+    }
+}
+

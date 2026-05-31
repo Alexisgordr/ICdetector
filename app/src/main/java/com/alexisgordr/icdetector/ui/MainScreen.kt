@@ -258,7 +258,7 @@ fun MainScreenContent(dbHelper: CellDbHelper, service: MiniICService?) {
                         }
 
                         if (active != null) {
-                            SecurityScorePanel(active, dbmHistory, rsrqHistory, geoHistory, service)
+                            SecurityScorePanel(active, dbmHistory, rsrqHistory, geoHistory, dbHelper, service)
                         }
 
                         if (active != null) {
@@ -287,7 +287,7 @@ fun MainScreenContent(dbHelper: CellDbHelper, service: MiniICService?) {
 }
 
 @Composable
-fun SecurityScorePanel(active: CellData, dbmHistory: List<Int>, rsrqHistory: List<Int>, geoHistory: List<Float>, service: MiniICService?) {
+fun SecurityScorePanel(active: CellData, dbmHistory: List<Int>, rsrqHistory: List<Int>, geoHistory: List<Float>, dbHelper: CellDbHelper, service: MiniICService?) {
     var viewMode by remember { mutableStateOf("NONE") } // NONE, GRAPH, GEO, HEUR
     val context = LocalContext.current
 
@@ -361,7 +361,7 @@ fun SecurityScorePanel(active: CellData, dbmHistory: List<Int>, rsrqHistory: Lis
             AnimatedVisibility(visible = viewMode != "NONE") {
                 Column(modifier = Modifier.padding(top = 16.dp)) {
                     when(viewMode) {
-                        "GRAPH" -> TelemetryGraph(dbmHistory)
+                        "GRAPH" -> IntelPanel(dbHelper)
                         "GEO" -> GeoGraph(active, geoHistory)
                         "HEUR" -> {
                             Text("AUDITORÍA DE PARÁMETROS", color = Color(0xFF555555), fontFamily = FontFamily.Monospace, fontSize = 10.sp, fontWeight = FontWeight.Bold)
@@ -453,7 +453,7 @@ fun SecurityScorePanel(active: CellData, dbmHistory: List<Int>, rsrqHistory: Lis
                     shape = RoundedCornerShape(4.dp),
                     contentPadding = PaddingValues(horizontal = 4.dp, vertical = 4.dp)
                 ) {
-                    Text("SEÑAL", fontSize = 9.sp, fontFamily = FontFamily.Monospace)
+                    Text("INTEL", fontSize = 9.sp, fontFamily = FontFamily.Monospace)
                 }
                 Button(
                     onClick = { viewMode = if(viewMode == "GEO") "NONE" else "GEO" }, 
