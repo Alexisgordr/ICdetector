@@ -18,27 +18,15 @@ object ThreatAnalyzer {
     ): Double {
         val count = neighbors.size
         return when {
-            // Zona urbana densa (centro ciudad)
             count >= 12 -> 2000.0
-            
-            // Zona urbana normal
-            count >= 6 -> 4000.0
-            
-            // Zona suburbana
-            count >= 3 -> 8000.0
-            
-            // 5G (SA/NSA) suele tener mayor densidad
+            count >= 6  -> 4000.0
+            count >= 3  -> 8000.0
             networkType.contains("5G") -> 5000.0
-            
-            // Zona rural o macro-celdas: umbral amplio (15km) para evitar falsos positivos
-            else -> 15000.0
+            count == 0  -> 25000.0  // Sin vecinas = zona muy rural o macrocelda
+            else        -> 15000.0
         }
     }
 
-    /**
-     * HEURÍSTICA #11: Análisis de Consistencia Geográfica y RF (PCI/ARFCN)
-     * Detecta si una celda aparece en ubicaciones imposibles o con perfiles de radio cambiados.
-     */
     fun analyzeMobileCellId(
         active: CellData,
         currentLocation: Location?,
@@ -53,11 +41,9 @@ object ThreatAnalyzer {
 
         val threshold = getDynamicLocationThreshold(neighbors, active.networkType)
 
-        // Separar registros con coordenadas válidas
         val validRecords = history.filter { it.lat != null && it.lon != null }
         if (validRecords.isEmpty()) return Triple(true, 0, null)
 
-        // Clasificar cada registro como anómalo o normal
         data class RecordAnalysis(
             val isAnomalous: Boolean,
             val severity: Int,
@@ -97,19 +83,14 @@ object ThreatAnalyzer {
             }
         }
 
-        // Fix: análisis por mayoría — solo alarma si >30% de registros son anómalos
-        // Evita que 1-2 registros antiguos de IMSI catcher dominen sobre muchos normales
         val anomalousRecords = analyses.filter { it.isAnomalous }
         val anomalyRatio = anomalousRecords.size.toFloat() / validRecords.size
 
-        // Mínimo 2 registros anómalos Y ratio > 30% para evitar falsos positivos aislados
         if (anomalousRecords.size < 2 || anomalyRatio < 0.30f) {
             return Triple(true, 0, null)
         }
 
-        // Tomar la severidad máxima entre los registros anómalos
         val worst = anomalousRecords.maxByOrNull { it.severity }!!
-
         return Triple(false, worst.severity.coerceAtMost(100), worst.threatDetail)
     }
 
@@ -122,7 +103,7 @@ object ThreatAnalyzer {
         currentLocation: Location?,
         preloadedHistory: List<HistoryRecord> = emptyList(),
         isWifiActive: Boolean = false,
-        isNetworkLatencyAnomalous: Boolean = false  // ← NUEVO
+        isNetworkLatencyAnomalous: Boolean = false
     ): CellData {
         val reasons = mutableListOf<String>()
         var score = 100
@@ -160,9 +141,10 @@ object ThreatAnalyzer {
             reasons.add("Inconsistencia MCC")
             score -= 30
         }
-        
+
         // 4. Multiple MNCs in area
-        val uniqueMncs = (neighbors.asSequence().map { it.mnc } + active.mnc).filter { it != "N/A" }.distinct().toList()
+        val uniqueMncs = (neighbors.asSequence().map { it.mnc } + active.mnc)
+            .filter { it != "N/A" }.distinct().toList()
         if (uniqueMncs.size > 3) {
             hMncCount = false
             reasons.add("Multitud de MNCs")
@@ -180,8 +162,13 @@ object ThreatAnalyzer {
         }
 
         // 6. Timing Advance Audit
+        // Fix: 5G NSA usa celda LTE ancla → multiplicador 78m/TA igual que LTE
+        // Solo 5G SA puro usa 150m/TA
         active.timingAdvance?.let { ta ->
-            val taDistanceMeters = if (active.networkType.contains("5G")) ta * 150 else ta * 78
+            val is5gSA = active.networkType.contains("5G") &&
+                         !active.networkType.contains("NSA")
+            val taMultiplier = if (is5gSA) 150 else 78
+            val taDistanceMeters = ta * taMultiplier
 
             if (active.lat != null && active.lon != null && currentLocation != null) {
                 if (ta > 0) {
@@ -197,7 +184,7 @@ object ThreatAnalyzer {
                     }
                 }
             } else {
-                if (!active.networkType.contains("5G") && ta <= 1 && active.dbm >= -60
+                if (!is5gSA && ta <= 1 && active.dbm >= -60
                     && active.verified != VerificationStatus.VERIFIED) {
                     hTa = false
                     reasons.add("Proximidad anómala (TA)")
@@ -207,13 +194,18 @@ object ThreatAnalyzer {
         }
 
         // 7. Ghost Cells Check
-        if (!isWifiActive && active.dbm >= -70 && neighbors.isNotEmpty() && neighbors.all { it.dbm <= -120 }) {
+        // Umbral subido a -65dBm y vecinas a -110dBm para reducir
+        // falsos positivos en zonas rurales con macroceldas
+        if (!isWifiActive && active.dbm >= -65 && neighbors.isNotEmpty()
+            && neighbors.all { it.dbm <= -110 }) {
             hGhost = false
             reasons.add("Vecinos fantasma")
             score -= 25
         }
 
-        // 8. ARFCN Sanity Check (Enhanced)
+        // 8. ARFCN Sanity Check
+        // Fix: máximo teórico LTE es 262143, no 70645
+        // 70645 es válido para Band 252/255 (CBRS)
         active.arfcn?.let { arfcn ->
             if (active.networkType.contains("5G")) {
                 if (arfcn > 3279165 || arfcn == 0) {
@@ -222,7 +214,7 @@ object ThreatAnalyzer {
                     score -= 15
                 }
             } else if (active.networkType.contains("4G") || active.networkType.contains("LTE")) {
-                if (arfcn > 70645 || arfcn == 0) {
+                if (arfcn > 262143 || arfcn == 0) {  // ← máximo teórico 3GPP
                     hArfcn = false
                     reasons.add("Frecuencia (EARFCN) 4G sospechosa")
                     score -= 15
@@ -239,8 +231,7 @@ object ThreatAnalyzer {
         // 10. Ping-Pong Effect
         if (cellChangeHistory.size >= 3) {
             val speedMps = currentLocation?.speed ?: 0f
-            val isMovingFast = speedMps > 8f 
-
+            val isMovingFast = speedMps > 8f
             if (!isMovingFast) {
                 hPingPong = false
                 reasons.add("Efecto Ping-Pong (Cambios rápidos en parado)")
@@ -248,8 +239,10 @@ object ThreatAnalyzer {
             }
         }
 
-        // 11. NUEVA HEURÍSTICA: Consistencia Geográfica y RF (PCI/ARFCN)
-        val (hMobileOk, hMobilePenalty, hMobileReason) = analyzeMobileCellId(active, currentLocation, preloadedHistory, neighbors)
+        // 11. Consistencia Geográfica y RF (PCI/ARFCN)
+        val (hMobileOk, hMobilePenalty, hMobileReason) = analyzeMobileCellId(
+            active, currentLocation, preloadedHistory, neighbors
+        )
         if (!hMobileOk) {
             hMobileCellId = false
             reasons.add(hMobileReason ?: "Consistencia geográfica fallida")
@@ -257,19 +250,16 @@ object ThreatAnalyzer {
         }
 
         // 12. RF Quality + Latency Cross-Layer Correlation (Experimental)
-        // Señal fuerte + RSRQ malo + latencia anómala = posible MITM activo
         if (!isWifiActive && isNetworkLatencyAnomalous && active.dbm >= -70) {
             val rsrqAnomalous = active.rsrq != null && active.rsrq <= -15
             val sinrAnomalous = active.sinr != null && active.sinr <= 0
-
             if (rsrqAnomalous || sinrAnomalous) {
                 reasons.add("RF anómalo + latencia: posible MITM (Experimental)")
                 score -= 20
-                // Nota: appendLog no está disponible aquí, se asume que se logueará fuera o se manejará por reasons
             }
         }
 
-        // Calcular probabilidad Bayesiana de amenaza
+        // Probabilidad Bayesiana de amenaza
         val failedList = buildList {
             if (!hIsolated) add("isolated")
             if (!hPowerJump) add("powerJump")
@@ -320,7 +310,7 @@ object ThreatAnalyzer {
             suspiciousReason = if (reasons.isNotEmpty()) reasons.joinToString(" | ") else null,
             heuristicReport = report,
             securityScore = finalScore,
-            threatProbability = threatProbability  // ← NUEVO
+            threatProbability = threatProbability
         )
     }
 }
