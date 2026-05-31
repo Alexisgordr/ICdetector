@@ -130,10 +130,20 @@ fun MainLayout(context: Context, dbHelper: CellDbHelper, service: MiniICService?
 @OptIn(ExperimentalMaterialApi::class)
 @Composable
 fun MainScreenContent(dbHelper: CellDbHelper, service: MiniICService?) {
-    val cellList by (service?.cellFlow ?: remember { MutableStateFlow(emptyList()) }).collectAsState()
-    val dbmHistory by (service?.dbmHistory ?: remember { MutableStateFlow(emptyList()) }).collectAsState()
-    val rsrqHistory by (service?.rsrqHistory ?: remember { MutableStateFlow(emptyList()) }).collectAsState()
-    val geoHistory by (service?.geoHistory ?: remember { MutableStateFlow(emptyList()) }).collectAsState()
+    // FIX: el `remember` no debe ir dentro del elvis (?:), porque solo se ejecuta
+    // cuando service es null. Al conectarse el servicio (null -> no-null) cambia el
+    // número de llamadas a remember entre recomposiciones y eso rompe el estado de
+    // Compose. Lo elevamos con remember(service) para que sea estable y se recree
+    // únicamente cuando cambia la instancia del servicio.
+    val cellFlow = remember(service) { service?.cellFlow ?: MutableStateFlow<List<CellData>>(emptyList()) }
+    val dbmFlow = remember(service) { service?.dbmHistory ?: MutableStateFlow<List<Int>>(emptyList()) }
+    val rsrqFlow = remember(service) { service?.rsrqHistory ?: MutableStateFlow<List<Int>>(emptyList()) }
+    val geoFlow = remember(service) { service?.geoHistory ?: MutableStateFlow<List<Float>>(emptyList()) }
+
+    val cellList by cellFlow.collectAsState()
+    val dbmHistory by dbmFlow.collectAsState()
+    val rsrqHistory by rsrqFlow.collectAsState()
+    val geoHistory by geoFlow.collectAsState()
     
     var refreshing by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
@@ -462,7 +472,8 @@ fun SecurityScorePanel(active: CellData, dbmHistory: List<Int>, rsrqHistory: Lis
         } catch (_: Exception) { false }
     }
     
-    val auditStatus by (service?.auditStatus ?: MutableStateFlow("Iniciando...")).collectAsState()
+    val auditFlow = remember(service) { service?.auditStatus ?: MutableStateFlow("Iniciando...") }
+    val auditStatus by auditFlow.collectAsState()
     
     val scoreColor = if (active.securityScore >= 90) Color(0xFF4CAF50) else if (active.securityScore >= 70) Color(0xFFFFA000) else Color.Red
 
@@ -560,8 +571,8 @@ fun SecurityScorePanel(active: CellData, dbmHistory: List<Int>, rsrqHistory: Lis
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 // Indicador RED — izquierda
-                val netState by service?.networkLatencyState?.collectAsState()
-                    ?: remember { mutableStateOf("OK") }
+                val latencyFlow = remember(service) { service?.networkLatencyState ?: MutableStateFlow("OK") }
+                val netState by latencyFlow.collectAsState()
 
                 Text(
                     text = if (netState == "OK") "● RED OK" else "● RED ANÓMALA",

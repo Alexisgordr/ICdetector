@@ -118,6 +118,7 @@ class MiniICService : Service() {
         .writeTimeout(10, TimeUnit.SECONDS)
         .build()
     private val verificationCache = ConcurrentHashMap<String, VerificationStatus>()
+    private val lastVerificationErrorTime = ConcurrentHashMap<String, Long>()
 
     var alarmThreshold = -50f
     var isStrongSignalAlarmEnabled = true
@@ -540,18 +541,23 @@ class MiniICService : Service() {
                     dbHelper.getPreviousCellHistory(activeRaw.cellId, activeRaw.mnc, activeRaw.tac, currentLocation)
                 } else emptyList()
 
+                // FIX: analizar SOLO la celda activa (la activa ya se compara con las vecinas dentro de analyzeThreats)
                 val analyzedList = list.map { cell ->
-                    ThreatAnalyzer.analyzeThreats(
-                        active = cell,
-                        neighbors = neighbors,
-                        isHardwareCipheringActive = isHardwareCipheringActive,
-                        isHardwareCipheringAvailable = isHardwareCipheringAvailable,
-                        cellChangeHistory = cellChangeHistory,
-                        currentLocation = currentLocation,
-                        preloadedHistory = if (cell.isRegistered) preloadedHistory else emptyList(),
-                        isWifiActive = isWifiConnected(),
-                        isNetworkLatencyAnomalous = networkLatencyState.value == "ANOMALA"  // ← NUEVO
-                    )
+                    if (cell.isRegistered) {
+                        ThreatAnalyzer.analyzeThreats(
+                            active = cell,
+                            neighbors = neighbors,
+                            isHardwareCipheringActive = isHardwareCipheringActive,
+                            isHardwareCipheringAvailable = isHardwareCipheringAvailable,
+                            cellChangeHistory = cellChangeHistory,
+                            currentLocation = currentLocation,
+                            preloadedHistory = preloadedHistory,
+                            isWifiActive = isWifiConnected(),
+                            isNetworkLatencyAnomalous = networkLatencyState.value == "ANOMALA"
+                        )
+                    } else {
+                        cell
+                    }
                 }
 
                 withContext(Dispatchers.Main) {
@@ -757,6 +763,11 @@ class MiniICService : Service() {
         // 1. Mirar caché rápida
         val cached = verificationCache[cacheKey]
         if (cached != null && cached != VerificationStatus.ERROR) return
+        // FIX: si la última vez fue ERROR, reintentar solo pasados 60s (no saturar la API)
+        if (cached == VerificationStatus.ERROR) {
+            val last = lastVerificationErrorTime[cacheKey] ?: 0L
+            if (System.currentTimeMillis() - last < 60000L) return
+        }
 
         // Verificar credenciales
         val hasWigle = wigleApiName.isNotBlank() && wigleApiToken.isNotBlank()
@@ -832,6 +843,12 @@ class MiniICService : Service() {
                 dbHelper.updateVerificationStatus(cell.mnc, cell.tac, cell.cellId, VerificationStatus.NOT_FOUND, mcc = cell.mcc)
                 appendLog("[API]", "Antena no identificada en bases públicas.")
                 updateFlowWithStatus(cell.cellId, VerificationStatus.NOT_FOUND)
+            } else if (finalStatus == VerificationStatus.ERROR) {
+                // FIX: antes la celda se quedaba atascada en PENDING para siempre tras un fallo de red
+                verificationCache[cacheKey] = VerificationStatus.ERROR
+                lastVerificationErrorTime[cacheKey] = System.currentTimeMillis()
+                appendLog("[API]", "Error de red al verificar. Se reintentará más tarde.")
+                updateFlowWithStatus(cell.cellId, VerificationStatus.ERROR)
             }
         }
     }
