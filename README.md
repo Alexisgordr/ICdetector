@@ -200,7 +200,9 @@ Detects aggressive reselection loops and repetitive handover behavior while appl
 ## 11. Geographic Consistency Analysis (H11)
 Validates Cell IDs against a local GPS-based historical database built from previous observations. Detects Cell IDs appearing from physically inconsistent locations over time — a strong indicator of mobile rogue infrastructure cloning legitimate tower identifiers.
 
-Unlike database cross-referencing, this heuristic is entirely offline and cannot be defeated by registering fake towers in public databases. Detection relies on physical geography and is immune to RF parameter spoofing.
+Because it is anchored to physical geography (the device's own GPS position), this heuristic is immune to RF parameter spoofing: no falsified radio parameter can alter the phone's real-world location. It is also fully offline and cannot be poisoned by registering fake towers in public databases, since it relies on no external database at all.
+
+Its scope is limited to cells for which prior history (and a valid GPS fix) already exists. As such, it detects **identifier cloning at a distance** — but it does not catch a catcher that uses an unknown/fresh Cell ID, one that operates physically next to the legitimate tower, or a cell observed for the first time with no historical baseline yet.
 
 ## Temporal Confidence Decay
 Anomalies must persist across 3 consecutive analysis cycles before triggering a confirmed threat alert. Transient heuristic failures are logged but do not raise alarms, significantly reducing false positive alert fatigue in dynamic RF environments.
@@ -372,4 +374,4 @@ Future updates will focus on bug fixes and minor improvements as they are discov
 
 This is the stable release. Thank you, and best regards to everyone who has followed the project.
 
-— Alexis
+- Alexis
