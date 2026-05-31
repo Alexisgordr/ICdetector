@@ -374,4 +374,4 @@ Future updates will focus on bug fixes and minor improvements as they are discov
 
 This is the stable release. Thank you, and best regards to everyone who has followed the project.
 
-- Alexis
+-- Alexis
