@@ -3,36 +3,51 @@ package com.alexisgordr.icdetector.core
 /**
  * Bayesian IMSI-Catcher Threat Scorer
  *
- * Likelihood ratios basados en:
+ * Likelihood ratios basados en literatura académica:
  * - LTEInspector (Purdue University, 2018)
  * - IMSI-Catch Me If You Can (Shaik et al., 2016)
  * - Practical attacks against privacy in LTE (Raza et al., 2018)
  *
+ * IMPORTANTE: Los valores numéricos son estimaciones razonadas
+ * derivadas de la literatura. Los papers describen cualitativamente
+ * la especificidad de cada indicador pero NO publican likelihood
+ * ratios exactos. Estos valores son interpretaciones expertas,
+ * no constantes científicamente medidas.
+ *
  * Prior P(IMSI) = 0.02 (2%) — estimación conservadora
  * para entorno urbano europeo sin contexto especial.
  *
- * Nota: powerJump, ghostCells e isolated están agrupadas
- * como heurísticas correlacionadas (mismo fenómeno RF).
- * Solo se aplica la más potente del grupo para evitar
- * inflación del posterior por dependencia implícita.
+ * Heurísticas agrupadas por correlación física para evitar
+ * inflación del posterior por dependencia implícita en Naive Bayes.
  */
 object BayesianScorer {
 
     private const val PRIOR = 0.02f
 
     private val LIKELIHOOD_RATIOS = mapOf(
-        "isolated"    to 3.5f,
-        "powerJump"   to 5.5f,
-        "mccMismatch" to 9.0f,
-        "mncCount"    to 2.0f,
-        "tacDev"      to 6.5f,
-        "taDistance"  to 7.0f,
-        "ghostCells"  to 4.5f,
-        "arfcn"       to 8.0f,
-        "ciphering"   to 12.0f,
-        "pingPong"    to 3.0f,
-        "h11"         to 6.0f,
-        "latency"     to 1.8f
+        // Grupo RF Dominance — señal dominante anómala
+        // Expert-derived LR estimate — not directly reported by source paper
+        "isolated"    to 3.5f,  // Shaik et al. — 34% IMSI catchers sin vecinas
+        "powerJump"   to 5.5f,  // LTEInspector — power dominance fiable en urbano
+        "ghostCells"  to 4.5f,  // Ambiente RF artificialmente controlado
+
+        // Grupo Identidad — parámetros de red anómalos
+        // Expert-derived LR estimate — not directly reported by source paper
+        "mccMismatch" to 9.0f,  // Alta especificidad — raro legítimamente
+        "mncCount"    to 2.0f,  // Baja especificidad en mercados con MVNOs
+        "tacDev"      to 6.5f,  // Raza et al. — TAC mismatch alta especificidad
+
+        // Grupo Movilidad — comportamiento temporal anómalo
+        // Expert-derived LR estimate — not directly reported by source paper
+        "pingPong"    to 3.0f,  // Baja especificidad standalone
+        "h11"         to 6.0f,  // Compromiso móvil vs fijo
+        "taDistance"  to 7.0f,  // Físicamente irrefutable con TA real
+
+        // Independientes
+        // Expert-derived LR estimate — not directly reported by source paper
+        "arfcn"       to 8.0f,  // ARFCN fuera 3GPP spec — imposible legítimo
+        "ciphering"   to 12.0f, // A5/0 en LTE — indicador crítico (ETSI papers)
+        "latency"     to 1.8f   // Experimental — demasiadas variables confundentes
     )
 
     private val DB_RATIOS = mapOf(
@@ -42,9 +57,26 @@ object BayesianScorer {
         "ERROR"     to 1.1f
     )
 
-    // Heurísticas correlacionadas — describen el mismo fenómeno RF
-    // (IMSI catcher dominando la señal sobre las vecinas)
+    // Grupos de heurísticas correlacionadas
+    // Dentro de cada grupo solo se aplica la LR más alta
+    // para evitar inflación por dependencia implícita
+
+    // RF Dominance — correlación fuerte, mismo fenómeno físico
+    // Un IMSI catcher dominando la señal produce los tres simultáneamente
     private val RF_DOMINANCE_GROUP = listOf("powerJump", "ghostCells", "isolated")
+
+    // Movilidad — correlación moderada, comportamiento temporal
+    private val MOBILITY_GROUP = listOf("pingPong", "h11", "taDistance")
+
+    // mncCount y tacDev — correlación débil entre sí
+    // pueden aparecer juntos en estaciones mal configuradas
+    private val WEAK_IDENTITY_GROUP = listOf("mncCount", "tacDev")
+
+    // mccMismatch — independiente, evidencia muy fuerte por sí sola
+    // No se agrupa — siempre actualiza individualmente
+
+    private val ALL_GROUPS = listOf(RF_DOMINANCE_GROUP, MOBILITY_GROUP, WEAK_IDENTITY_GROUP)
+    private val ALL_GROUPED = ALL_GROUPS.flatten()
 
     fun calculate(
         failedHeuristics: List<String>,
@@ -53,19 +85,20 @@ object BayesianScorer {
     ): Float {
         var posterior = PRIOR
 
-        // Grupo RF dominance — solo aplicar la más potente
-        // para evitar inflación por dependencia implícita
-        val rfDominanceMax = failedHeuristics
-            .filter { it in RF_DOMINANCE_GROUP }
-            .maxOfOrNull { LIKELIHOOD_RATIOS[it] ?: 1.0f } ?: 1.0f
+        // Para cada grupo — aplicar solo la LR más potente
+        ALL_GROUPS.forEach { group ->
+            val maxLr = failedHeuristics
+                .filter { it in group }
+                .maxOfOrNull { LIKELIHOOD_RATIOS[it] ?: 1.0f } ?: 1.0f
 
-        if (rfDominanceMax > 1.0f) {
-            posterior = bayesUpdate(posterior, rfDominanceMax)
+            if (maxLr > 1.0f) {
+                posterior = bayesUpdate(posterior, maxLr)
+            }
         }
 
         // Heurísticas independientes — actualizar individualmente
         failedHeuristics
-            .filter { it !in RF_DOMINANCE_GROUP }
+            .filter { it !in ALL_GROUPED }
             .forEach { heuristic ->
                 val lr = LIKELIHOOD_RATIOS[heuristic] ?: 1.0f
                 posterior = bayesUpdate(posterior, lr)
