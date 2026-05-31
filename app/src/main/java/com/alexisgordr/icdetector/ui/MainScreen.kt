@@ -241,18 +241,161 @@ fun MainScreenContent(dbHelper: CellDbHelper, service: MiniICService?) {
                             border = BorderStroke(0.5.dp, Color(0xFF222222)),
                             shape = RoundedCornerShape(4.dp)
                         ) {
-                            Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
-                                Row(modifier = Modifier.fillMaxWidth()) {
-                                    DataBox(modifier = Modifier.weight(1f), label = "TECNOLOGÍA", value = active?.networkType ?: "N/A")
-                                    DataBox(modifier = Modifier.weight(1f), label = "POTENCIA", value = if (active == null) "N/A" else "${active.dbm} dBm")
+                            Column(modifier = Modifier.fillMaxWidth()) {
+
+                                // Fila 1 — TECNOLOGÍA y POTENCIA
+                                Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                                    // TECNOLOGÍA
+                                    Column(
+                                        modifier = Modifier
+                                            .weight(1f)
+                                            .padding(horizontal = 16.dp, vertical = 14.dp)
+                                    ) {
+                                        Text(
+                                            "TECNOLOGÍA",
+                                            color = Color(0xFF555555),
+                                            fontFamily = FontFamily.Monospace,
+                                            fontSize = 9.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            letterSpacing = 1.sp
+                                        )
+                                        Spacer(Modifier.height(4.dp))
+                                        Text(
+                                            active?.networkType ?: "N/A",
+                                            color = Color.White,
+                                            fontFamily = FontFamily.Monospace,
+                                            fontSize = 15.sp,
+                                            fontWeight = FontWeight.Bold
+                                        )
+                                    }
+
+                                    // Divisor vertical
+                                    Box(
+                                        modifier = Modifier
+                                            .width(0.5.dp)
+                                            .height(40.dp)
+                                            .background(Color(0xFF222222))
+                                    )
+
+                                    // POTENCIA
+                                    Column(
+                                        modifier = Modifier
+                                            .weight(1f)
+                                            .padding(horizontal = 16.dp, vertical = 14.dp)
+                                    ) {
+                                        Text(
+                                            "POTENCIA",
+                                            color = Color(0xFF555555),
+                                            fontFamily = FontFamily.Monospace,
+                                            fontSize = 9.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            letterSpacing = 1.sp
+                                        )
+                                        Spacer(Modifier.height(4.dp))
+                                        Text(
+                                            if (active == null) "N/A" else "${active.dbm} dBm",
+                                            color = if (active != null && active.dbm >= -70) Color(0xFFCF6679)
+                                            else if (active != null && active.dbm >= -85) Color(0xFFFFA000)
+                                            else Color.White,
+                                            fontFamily = FontFamily.Monospace,
+                                            fontSize = 15.sp,
+                                            fontWeight = FontWeight.Bold
+                                        )
+                                    }
                                 }
-                                
+
                                 HorizontalDivider(color = Color(0xFF1A1A1A))
 
-                                Row(modifier = Modifier.fillMaxWidth()) {
-                                    DataBox(modifier = Modifier.weight(1f), label = "CELL ID", value = active?.cellId ?: "N/A", highlight = true)
-                                    DataBox(modifier = Modifier.weight(1f), label = "TAC / LAC", value = active?.tac ?: "N/A")
-                                    DataBox(modifier = Modifier.weight(1f), label = "MNC", value = active?.mnc ?: "N/A")
+                                // Fila 2 — CELL ID, TAC/LAC, MNC
+                                Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+
+                                    // CELL ID
+                                    Column(
+                                        modifier = Modifier
+                                            .weight(1.4f)
+                                            .padding(horizontal = 16.dp, vertical = 14.dp)
+                                    ) {
+                                        Text(
+                                            "CELL ID",
+                                            color = Color(0xFF555555),
+                                            fontFamily = FontFamily.Monospace,
+                                            fontSize = 9.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            letterSpacing = 1.sp
+                                        )
+                                        Spacer(Modifier.height(4.dp))
+                                        Text(
+                                            active?.cellId ?: "N/A",
+                                            color = Color(0xFF4CAF50),
+                                            fontFamily = FontFamily.Monospace,
+                                            fontSize = 13.sp,
+                                            fontWeight = FontWeight.ExtraBold
+                                        )
+                                    }
+
+                                    // Divisor vertical
+                                    Box(
+                                        modifier = Modifier
+                                            .width(0.5.dp)
+                                            .height(40.dp)
+                                            .background(Color(0xFF222222))
+                                    )
+
+                                    // TAC / LAC
+                                    Column(
+                                        modifier = Modifier
+                                            .weight(1f)
+                                            .padding(horizontal = 16.dp, vertical = 14.dp)
+                                    ) {
+                                        Text(
+                                            "TAC / LAC",
+                                            color = Color(0xFF555555),
+                                            fontFamily = FontFamily.Monospace,
+                                            fontSize = 9.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            letterSpacing = 1.sp
+                                        )
+                                        Spacer(Modifier.height(4.dp))
+                                        Text(
+                                            active?.tac ?: "N/A",
+                                            color = Color.White,
+                                            fontFamily = FontFamily.Monospace,
+                                            fontSize = 13.sp,
+                                            fontWeight = FontWeight.Bold
+                                        )
+                                    }
+
+                                    // Divisor vertical
+                                    Box(
+                                        modifier = Modifier
+                                            .width(0.5.dp)
+                                            .height(40.dp)
+                                            .background(Color(0xFF222222))
+                                    )
+
+                                    // MNC
+                                    Column(
+                                        modifier = Modifier
+                                            .weight(0.6f)
+                                            .padding(horizontal = 16.dp, vertical = 14.dp)
+                                    ) {
+                                        Text(
+                                            "MNC",
+                                            color = Color(0xFF555555),
+                                            fontFamily = FontFamily.Monospace,
+                                            fontSize = 9.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            letterSpacing = 1.sp
+                                        )
+                                        Spacer(Modifier.height(4.dp))
+                                        Text(
+                                            active?.mnc ?: "N/A",
+                                            color = Color.White,
+                                            fontFamily = FontFamily.Monospace,
+                                            fontSize = 13.sp,
+                                            fontWeight = FontWeight.Bold
+                                        )
+                                    }
                                 }
                             }
                         }
@@ -348,6 +491,19 @@ fun SecurityScorePanel(active: CellData, dbmHistory: List<Int>, rsrqHistory: Lis
 
                     Spacer(Modifier.height(4.dp))
                     Text("${active.securityScore}%", color = scoreColor, fontFamily = FontFamily.Monospace, fontSize = 28.sp, fontWeight = FontWeight.ExtraBold)
+
+                    // Probabilidad Bayesiana de amenaza
+                    val threatColor = when {
+                        active.threatProbability >= 50f -> Color(0xFFCF6679)
+                        active.threatProbability >= 20f -> Color(0xFFFFA000)
+                        else -> Color(0xFF555555)
+                    }
+                    Text(
+                        "Amenaza estimada: ${String.format(java.util.Locale.ROOT, "%.1f", active.threatProbability)}%",
+                        color = threatColor,
+                        fontSize = 9.sp,
+                        fontFamily = FontFamily.Monospace
+                    )
                 }
 
                 // DERECHA — minigráficas RF en vivo

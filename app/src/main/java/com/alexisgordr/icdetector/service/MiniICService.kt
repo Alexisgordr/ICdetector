@@ -1099,7 +1099,7 @@ class MiniICService : Service() {
         appendLog("[AUDIT]", "Resultado Global: ${cell.securityScore}% de seguridad.")
         if (cell.isSuspicious) appendLog("[SEC]", "🚨 CRÍTICO: Antena sospechosa detectada: ${cell.suspiciousReason}")
         else appendLog("[SYS]", "✅ Entorno validado como SEGURO.")
-        _auditStatus.value = "Auditoría completada ✅"
+        _auditStatus.value = "Auditoría completada"
     }
 
     @RequiresApi(Build.VERSION_CODES.S)

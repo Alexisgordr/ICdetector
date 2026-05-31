@@ -269,6 +269,27 @@ object ThreatAnalyzer {
             }
         }
 
+        // Calcular probabilidad Bayesiana de amenaza
+        val failedList = buildList {
+            if (!hIsolated) add("isolated")
+            if (!hPowerJump) add("powerJump")
+            if (!hMcc) add("mccMismatch")
+            if (!hMncCount) add("mncCount")
+            if (!hTac) add("tacDev")
+            if (!hTa) add("taDistance")
+            if (!hGhost) add("ghostCells")
+            if (!hArfcn) add("arfcn")
+            if (isHardwareCipheringAvailable && !isHardwareCipheringActive) add("ciphering")
+            if (!hPingPong) add("pingPong")
+            if (!hMobileCellId) add("h11")
+        }
+
+        val threatProbability = BayesianScorer.calculate(
+            failedList,
+            active.verified.name,
+            isNetworkLatencyAnomalous
+        )
+
         // Bonificadores y penalizadores por Base de Datos
         if (active.verified == VerificationStatus.VERIFIED) {
             score += 15
@@ -298,7 +319,8 @@ object ThreatAnalyzer {
             isSuspicious = isSuspicious,
             suspiciousReason = if (reasons.isNotEmpty()) reasons.joinToString(" | ") else null,
             heuristicReport = report,
-            securityScore = finalScore
+            securityScore = finalScore,
+            threatProbability = threatProbability  // ← NUEVO
         )
     }
 }

@@ -19,5 +19,6 @@ data class CellData(
     val rsrq: Int? = null,   // ← NUEVO: calidad de señal LTE/NR (-3 a -20 dB)
     val sinr: Int? = null,   // ← NUEVO: relación señal/ruido
     val heuristicReport: HeuristicReport = HeuristicReport(),
-    val securityScore: Int = 100
+    val securityScore: Int = 100,
+    val threatProbability: Float = 0f  // ← NUEVO: probabilidad Bayesiana de IMSI catcher
 )
