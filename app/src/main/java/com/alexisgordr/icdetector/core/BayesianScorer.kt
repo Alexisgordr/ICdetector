@@ -10,45 +10,42 @@ package com.alexisgordr.icdetector.core
  *
  * Prior P(IMSI) = 0.02 (2%) — estimación conservadora
  * para entorno urbano europeo sin contexto especial.
+ *
+ * Nota: powerJump, ghostCells e isolated están agrupadas
+ * como heurísticas correlacionadas (mismo fenómeno RF).
+ * Solo se aplica la más potente del grupo para evitar
+ * inflación del posterior por dependencia implícita.
  */
 object BayesianScorer {
 
-    // Probabilidad base de encontrar un IMSI catcher
-    // en entorno urbano europeo normal
     private const val PRIOR = 0.02f
 
-    // Likelihood ratios por heurística
-    // LR > 1 → aumenta probabilidad de IMSI catcher
-    // LR < 1 → reduce probabilidad
     private val LIKELIHOOD_RATIOS = mapOf(
-        "isolated"    to 3.5f,  // Shaik et al. — 34% IMSI catchers sin vecinas
-        "powerJump"   to 5.5f,  // LTEInspector — power dominance es fiable
-        "mccMismatch" to 9.0f,  // Alta especificidad, muy raro legítimamente
-        "mncCount"    to 2.0f,  // Baja especificidad en mercados con MVNOs
-        "tacDev"      to 6.5f,  // Raza et al. — TAC mismatch alta especificidad
-        "taDistance"  to 7.0f,  // Físicamente irrefutable cuando TA es real
-        "ghostCells"  to 4.5f,  // Ambiente RF artificialmente controlado
-        "arfcn"       to 8.0f,  // ARFCN fuera de 3GPP spec — imposible legítimo
-        "ciphering"   to 12.0f, // A5/0 en LTE es indicador crítico (ETSI)
-        "pingPong"    to 3.0f,  // Baja especificidad standalone
-        "h11"         to 6.0f,  // Compromiso: potente vs móviles, ciego vs fijos
-        "latency"     to 1.8f   // Experimental — demasiadas variables confundentes
+        "isolated"    to 3.5f,
+        "powerJump"   to 5.5f,
+        "mccMismatch" to 9.0f,
+        "mncCount"    to 2.0f,
+        "tacDev"      to 6.5f,
+        "taDistance"  to 7.0f,
+        "ghostCells"  to 4.5f,
+        "arfcn"       to 8.0f,
+        "ciphering"   to 12.0f,
+        "pingPong"    to 3.0f,
+        "h11"         to 6.0f,
+        "latency"     to 1.8f
     )
 
-    // Factores de corrección por estado de verificación DB
     private val DB_RATIOS = mapOf(
-        "VERIFIED"  to 0.4f,  // Reduce probabilidad — celda conocida y legítima
-        "NOT_FOUND" to 1.4f,  // Aumenta ligeramente — celda desconocida
-        "PENDING"   to 1.0f,  // Neutral — sin información
-        "ERROR"     to 1.1f   // Ligeramente sospechoso — fallo de verificación
+        "VERIFIED"  to 0.4f,
+        "NOT_FOUND" to 1.4f,
+        "PENDING"   to 1.0f,
+        "ERROR"     to 1.1f
     )
 
-    /**
-     * Calcula la probabilidad estimada de IMSI catcher (0-100%)
-     * usando actualización Bayesiana secuencial (Naive Bayes).
-     *
-     * P(IMSI|evidencia) = LR * P(IMSI) / (LR * P(IMSI) + P(¬IMSI))
-     */
+    // Heurísticas correlacionadas — describen el mismo fenómeno RF
+    // (IMSI catcher dominando la señal sobre las vecinas)
+    private val RF_DOMINANCE_GROUP = listOf("powerJump", "ghostCells", "isolated")
+
     fun calculate(
         failedHeuristics: List<String>,
         verificationStatus: String,
@@ -56,22 +53,36 @@ object BayesianScorer {
     ): Float {
         var posterior = PRIOR
 
-        // Actualizar con cada heurística fallida
-        failedHeuristics.forEach { heuristic ->
-            val lr = LIKELIHOOD_RATIOS[heuristic] ?: 1.0f
-            posterior = bayesUpdate(posterior, lr)
+        // Grupo RF dominance — solo aplicar la más potente
+        // para evitar inflación por dependencia implícita
+        val rfDominanceMax = failedHeuristics
+            .filter { it in RF_DOMINANCE_GROUP }
+            .maxOfOrNull { LIKELIHOOD_RATIOS[it] ?: 1.0f } ?: 1.0f
+
+        if (rfDominanceMax > 1.0f) {
+            posterior = bayesUpdate(posterior, rfDominanceMax)
         }
 
-        // Actualizar con estado de verificación DB
+        // Heurísticas independientes — actualizar individualmente
+        failedHeuristics
+            .filter { it !in RF_DOMINANCE_GROUP }
+            .forEach { heuristic ->
+                val lr = LIKELIHOOD_RATIOS[heuristic] ?: 1.0f
+                posterior = bayesUpdate(posterior, lr)
+            }
+
+        // Factor verificación DB
         val dbLr = DB_RATIOS[verificationStatus] ?: 1.0f
         posterior = bayesUpdate(posterior, dbLr)
 
-        // Actualizar con latencia si está activa y anómala
+        // Factor latencia experimental
         if (isLatencyAnomalous) {
             posterior = bayesUpdate(posterior, LIKELIHOOD_RATIOS["latency"]!!)
         }
 
-        return (posterior * 100f).coerceIn(0f, 100f)
+        // Saturación en 95% — honestidad epistémica
+        // Android userland nunca puede confirmar con certeza absoluta
+        return (posterior * 100f).coerceIn(0f, 95f)
     }
 
     private fun bayesUpdate(prior: Float, likelihoodRatio: Float): Float {
