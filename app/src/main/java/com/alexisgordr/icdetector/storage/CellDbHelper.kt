@@ -7,7 +7,9 @@ import android.database.sqlite.SQLiteDatabase
 import android.database.sqlite.SQLiteOpenHelper
 import android.location.Location
 import com.alexisgordr.icdetector.models.HistoryRecord
+import com.alexisgordr.icdetector.models.SignalBaseline
 import com.alexisgordr.icdetector.models.VerificationStatus
+import kotlin.math.sqrt
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -323,5 +325,69 @@ class CellDbHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME, 
         cursor.close()
         
         return history
+    }
+
+    /**
+     * Línea base de potencia (dBm) de una celda a partir de observaciones cercanas
+     * a la ubicación actual (mismo sitio), últimos 30 días. null si no hay muestras
+     * suficientes (rodaje). No modifica el esquema; solo lee columnas existentes.
+     */
+    fun getCellSignalBaseline(
+        cellId: String,
+        mnc: String,
+        tac: String,
+        nearLocation: Location,
+        radiusMeters: Float = 500f,
+        minSamples: Int = 5
+    ): SignalBaseline? {
+        val db = this.readableDatabase
+        val thirtyDaysAgo = System.currentTimeMillis() - (30L * 24 * 60 * 60 * 1000)
+        val dateFormat = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault())
+        val oldThreshold = dateFormat.format(Date(thirtyDaysAgo))
+
+        val query = """
+            SELECT $COLUMN_DBM, $COLUMN_LAT, $COLUMN_LON
+            FROM $TABLE_HISTORY
+            WHERE $COLUMN_CID = ?
+              AND $COLUMN_MNC = ?
+              AND $COLUMN_TAC = ?
+              AND $COLUMN_LAT IS NOT NULL
+              AND $COLUMN_LON IS NOT NULL
+              AND $COLUMN_TIMESTAMP > ?
+            ORDER BY $COLUMN_ID DESC
+            LIMIT 200
+        """.trimIndent()
+
+        val cursor = db.rawQuery(query, arrayOf(cellId, mnc, tac, oldThreshold))
+        val samples = mutableListOf<Int>()
+        if (cursor.moveToFirst()) {
+            do {
+                val dbm = cursor.getInt(0)
+                val lat = cursor.getDouble(1)
+                val lon = cursor.getDouble(2)
+                val results = FloatArray(1)
+                Location.distanceBetween(
+                    nearLocation.latitude, nearLocation.longitude, lat, lon, results
+                )
+                if (results[0] <= radiusMeters && dbm in -140..-30) {
+                    samples.add(dbm)
+                }
+            } while (cursor.moveToNext())
+        }
+        cursor.close()
+
+        if (samples.size < minSamples) return null
+
+        val mean = samples.average()
+        val variance = samples.sumOf { (it - mean) * (it - mean) } / samples.size
+        val stdDev = sqrt(variance)
+
+        return SignalBaseline(
+            sampleCount = samples.size,
+            meanDbm = mean,
+            stdDevDbm = stdDev,
+            minDbm = samples.minOrNull()!!,
+            maxDbm = samples.maxOrNull()!!
+        )
     }
 }

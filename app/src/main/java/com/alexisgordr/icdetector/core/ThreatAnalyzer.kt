@@ -4,6 +4,7 @@ import android.location.Location
 import com.alexisgordr.icdetector.models.CellData
 import com.alexisgordr.icdetector.models.HeuristicReport
 import com.alexisgordr.icdetector.models.HistoryRecord
+import com.alexisgordr.icdetector.models.SignalBaseline
 import com.alexisgordr.icdetector.models.VerificationStatus
 
 object ThreatAnalyzer {
@@ -103,7 +104,8 @@ object ThreatAnalyzer {
         currentLocation: Location?,
         preloadedHistory: List<HistoryRecord> = emptyList(),
         isWifiActive: Boolean = false,
-        isNetworkLatencyAnomalous: Boolean = false
+        isNetworkLatencyAnomalous: Boolean = false,
+        signalBaseline: SignalBaseline? = null
     ): CellData {
         val reasons = mutableListOf<String>()
         var score = 100
@@ -118,6 +120,7 @@ object ThreatAnalyzer {
         var hArfcn = true
         var hPingPong = true
         var hMobileCellId = true
+        var hSignalBaseline = true
 
         // 1. Neighbor analysis
         if (!isWifiActive && neighbors.isEmpty() && active.dbm >= -80) {
@@ -259,6 +262,22 @@ object ThreatAnalyzer {
             }
         }
 
+        // 13. Anomalía de potencia vs línea base propia (baseline geográfico)
+        signalBaseline?.let { base ->
+            val effectiveStd = maxOf(base.stdDevDbm, 4.0)
+            val excessDb = active.dbm - base.meanDbm  // positivo = más fuerte de lo habitual
+            val significant = excessDb >= 18.0 && excessDb >= 3.0 * effectiveStd
+            if (!isWifiActive && significant && active.dbm >= -95) {
+                hSignalBaseline = false
+                reasons.add("Potencia anómala vs historial (+${excessDb.toInt()}dB)")
+                score -= when {
+                    excessDb >= 30 -> 25
+                    excessDb >= 24 -> 18
+                    else -> 12
+                }
+            }
+        }
+
         // Probabilidad Bayesiana de amenaza
         val failedList = buildList {
             if (!hIsolated) add("isolated")
@@ -272,6 +291,7 @@ object ThreatAnalyzer {
             if (isHardwareCipheringAvailable && !isHardwareCipheringActive) add("ciphering")
             if (!hPingPong) add("pingPong")
             if (!hMobileCellId) add("h11")
+            if (!hSignalBaseline) add("signalBaseline")
         }
 
         val threatProbability = BayesianScorer.calculate(
@@ -302,7 +322,8 @@ object ThreatAnalyzer {
             hardwareCipheringPassed = isHardwareCipheringActive,
             hardwareCipheringAvailable = isHardwareCipheringAvailable,
             pingPongPassed = hPingPong,
-            mobileCellIdPassed = hMobileCellId
+            mobileCellIdPassed = hMobileCellId,
+            signalBaselinePassed = hSignalBaseline
         )
 
         return active.copy(

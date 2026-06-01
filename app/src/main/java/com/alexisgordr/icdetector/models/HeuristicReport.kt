@@ -12,5 +12,6 @@ data class HeuristicReport(
     val hardwareCipheringPassed: Boolean = true,
     val hardwareCipheringAvailable: Boolean = false,
     val pingPongPassed: Boolean = true,
-    val mobileCellIdPassed: Boolean = true
+    val mobileCellIdPassed: Boolean = true,
+    val signalBaselinePassed: Boolean = true
 )

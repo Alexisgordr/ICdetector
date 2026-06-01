@@ -541,6 +541,10 @@ class MiniICService : Service() {
                     dbHelper.getPreviousCellHistory(activeRaw.cellId, activeRaw.mnc, activeRaw.tac, currentLocation)
                 } else emptyList()
 
+                val signalBaseline = if (activeRaw != null && activeRaw.cellId != "N/A" && currentLocation != null) {
+                    dbHelper.getCellSignalBaseline(activeRaw.cellId, activeRaw.mnc, activeRaw.tac, currentLocation)
+                } else null
+
                 // FIX: analizar SOLO la celda activa (la activa ya se compara con las vecinas dentro de analyzeThreats)
                 val analyzedList = list.map { cell ->
                     if (cell.isRegistered) {
@@ -553,7 +557,8 @@ class MiniICService : Service() {
                             currentLocation = currentLocation,
                             preloadedHistory = preloadedHistory,
                             isWifiActive = isWifiConnected(),
-                            isNetworkLatencyAnomalous = networkLatencyState.value == "ANOMALA"
+                            isNetworkLatencyAnomalous = networkLatencyState.value == "ANOMALA",
+                            signalBaseline = signalBaseline
                         )
                     } else {
                         cell
@@ -739,8 +744,9 @@ class MiniICService : Service() {
         
         val currentLoc = getCurrentLocation()
         if (currentLoc == null) {
-            appendLog("[API]", "Coordenadas descartadas: sin fix GPS para validar distancia")
-            return false
+            // FIX: sin fix GPS no podemos validar la distancia, pero eso NO significa
+            // que la coordenada de la API sea inválida. Antes la celda se quedaba en PENDING.
+            return true
         }
 
         val results = FloatArray(1)
@@ -849,6 +855,13 @@ class MiniICService : Service() {
                 lastVerificationErrorTime[cacheKey] = System.currentTimeMillis()
                 appendLog("[API]", "Error de red al verificar. Se reintentará más tarde.")
                 updateFlowWithStatus(cell.cellId, VerificationStatus.ERROR)
+            } else if (finalStatus == VerificationStatus.VERIFIED) {
+                // FIX: la API confirmó la celda pero no se pudo guardar coordenada.
+                // Antes no había rama VERIFIED aquí y se quedaba en PENDING.
+                verificationCache[cacheKey] = VerificationStatus.VERIFIED
+                dbHelper.updateVerificationStatus(cell.mnc, cell.tac, cell.cellId, VerificationStatus.VERIFIED, mcc = cell.mcc)
+                appendLog("[API]", "Antena verificada (sin coordenada disponible).")
+                updateFlowWithStatus(cell.cellId, VerificationStatus.VERIFIED)
             }
         }
     }
@@ -878,6 +891,10 @@ class MiniICService : Service() {
             dbHelper.getPreviousCellHistory(cell.cellId, cell.mnc, cell.tac, loc)
         } else emptyList()
 
+        val sigBaseline = if (loc != null && cell.cellId != "N/A") {
+            dbHelper.getCellSignalBaseline(cell.cellId, cell.mnc, cell.tac, loc)
+        } else null
+
         val updatedActive = cell.copy(verified = VerificationStatus.VERIFIED, lat = lat, lon = lon)
         val analyzedActive = ThreatAnalyzer.analyzeThreats(
             active = updatedActive,
@@ -888,7 +905,8 @@ class MiniICService : Service() {
             currentLocation = loc,
             preloadedHistory = history,
             isWifiActive = isWifiConnected(),
-            isNetworkLatencyAnomalous = networkLatencyState.value == "ANOMALA"  // ← NUEVO
+            isNetworkLatencyAnomalous = networkLatencyState.value == "ANOMALA",
+            signalBaseline = sigBaseline
         )
         
         scope.launch(Dispatchers.Main) {
@@ -1092,7 +1110,7 @@ class MiniICService : Service() {
 
     private fun generateAuditLog(cell: CellData) {
         _auditStatus.value = "Auditoría en curso..."
-        appendLog("[AUDIT]", "--- INICIANDO CICLO DE AUDITORÍA (11 REGLAS) ---")
+        appendLog("[AUDIT]", "--- INICIANDO CICLO DE AUDITORÍA (12 REGLAS) ---")
         val report = cell.heuristicReport
         val results = mapOf(
             "1. Celda Aislada" to report.isolatedCellPassed,
@@ -1105,7 +1123,8 @@ class MiniICService : Service() {
             "8. Sanidad ARFCN" to report.arfcnSanityPassed,
             "9. Cifrado Hardware" to report.hardwareCipheringPassed,
             "10. Anti Ping-Pong" to report.pingPongPassed,
-            "11. Consistencia Geográfica (Cell ID móvil)" to report.mobileCellIdPassed
+            "11. Consistencia Geográfica (Cell ID móvil)" to report.mobileCellIdPassed,
+            "12. Potencia vs Histórico (Baseline geográfico)" to report.signalBaselinePassed
         )
 
         results.forEach { (regla, pasado) ->
