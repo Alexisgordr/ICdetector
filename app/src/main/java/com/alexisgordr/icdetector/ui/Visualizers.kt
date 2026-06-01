@@ -1,6 +1,7 @@
 package com.alexisgordr.icdetector.ui
 
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Text
@@ -47,63 +48,6 @@ fun SignalVisualizer(active: CellData, neighbors: List<CellData>) {
     }
 }
 
-@Composable
-fun TelemetryGraph(dbmHistory: List<Int>) {
-    val umbralPeligro = -70
-    
-    Column(modifier = Modifier.fillMaxWidth().padding(top = 16.dp)) {
-        HorizontalDivider(color = Color(0xFF1A1A1A))
-        Spacer(Modifier.height(8.dp))
-        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-            Text("TELEMETRÍA RSRP [UMBRAL: $umbralPeligro dBm]", color = Color(0xFF555555), fontFamily = FontFamily.Monospace, fontSize = 10.sp, fontWeight = FontWeight.Bold)
-            Text("Límite: -40 dBm", color = Color(0xFF444444), fontSize = 8.sp, fontFamily = FontFamily.Monospace)
-        }
-
-        Canvas(modifier = Modifier.fillMaxWidth().height(100.dp).padding(vertical = 8.dp)) {
-            val maxPoints = 50
-            val width = size.width
-            val height = size.height
-            
-            val normalizedUmbral = 1f - ((umbralPeligro - (-140f)) / 100f)
-            val umbralY = height * normalizedUmbral
-            drawLine(
-                color = Color.Red.copy(alpha = 0.5f),
-                start = Offset(0f, umbralY),
-                end = Offset(width, umbralY),
-                strokeWidth = 2f,
-                pathEffect = androidx.compose.ui.graphics.PathEffect.dashPathEffect(floatArrayOf(10f, 10f))
-            )
-
-            if (dbmHistory.isEmpty()) return@Canvas
-            
-            val minDbm = -140f
-            val maxDbm = -40f
-            val range = maxDbm - minDbm
-            val stepX = width / (maxPoints - 1)
-            val startX = width - ((dbmHistory.size - 1) * stepX)
-            
-            for (i in 0 until (dbmHistory.size - 1)) {
-                val dbm1 = dbmHistory[i]
-                val dbm2 = dbmHistory[i + 1]
-                
-                val x1 = startX + (i * stepX)
-                val y1 = height * (1f - ((dbm1 - minDbm) / range).coerceIn(0f, 1f))
-                val x2 = startX + ((i + 1) * stepX)
-                val y2 = height * (1f - ((dbm2 - minDbm) / range).coerceIn(0f, 1f))
-                
-                val color = if (dbm1 >= umbralPeligro || dbm2 >= umbralPeligro) Color.Red else Color(0xFF00FFCC)
-                
-                drawLine(
-                    color = color,
-                    start = Offset(x1, y1),
-                    end = Offset(x2, y2),
-                    strokeWidth = 4f
-                )
-            }
-        }
-        Text("ROJO = ZONA DE ALTA POTENCIA (POSIBLE IMSI-CATCHER)", color = Color.Red, fontSize = 9.sp, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Bold)
-    }
-}
 
 @Composable
 fun GeoGraph(active: CellData, geoHistory: List<Float>) {
@@ -184,7 +128,7 @@ fun MiniRsrpGraph(dbmHistory: List<Int>, currentDbm: Int) {
         else              -> "RSRP OK"
     }
 
-    Column {
+    Column(horizontalAlignment = Alignment.End) {
         Text(
             text = labelText,
             color = labelColor,
@@ -192,7 +136,7 @@ fun MiniRsrpGraph(dbmHistory: List<Int>, currentDbm: Int) {
             fontFamily = FontFamily.Monospace,
             fontWeight = FontWeight.Bold
         )
-        Canvas(modifier = Modifier.width(120.dp).height(40.dp)) {
+        Canvas(modifier = Modifier.width(75.dp).height(30.dp)) {
             val w = size.width; val h = size.height
             // Línea umbral punteada
             val uy = h * (1f - ((umbral - (-140f)) / 100f))
@@ -242,7 +186,7 @@ fun MiniRsrqGraph(rsrqHistory: List<Int>, currentRsrq: Int?) {
         else                 -> "RSRQ OK"
     }
 
-    Column {
+    Column(horizontalAlignment = Alignment.End) {
         Text(
             text = labelText,
             color = labelColor,
@@ -250,7 +194,7 @@ fun MiniRsrqGraph(rsrqHistory: List<Int>, currentRsrq: Int?) {
             fontFamily = FontFamily.Monospace,
             fontWeight = FontWeight.Bold
         )
-        Canvas(modifier = Modifier.width(120.dp).height(40.dp)) {
+        Canvas(modifier = Modifier.width(75.dp).height(30.dp)) {
             val w = size.width; val h = size.height
             // Línea umbral punteada
             val uy = h * (1f - ((umbral - (-20f)) / 17f).coerceIn(0f, 1f))
@@ -285,6 +229,63 @@ fun MiniRsrqGraph(rsrqHistory: List<Int>, currentRsrq: Int?) {
                         color = android.graphics.Color.DKGRAY
                         textSize = 24f
                     }
+                )
+            }
+        }
+    }
+}
+
+@Composable
+fun MiniSinrGraph(sinr: Int?) {
+    // El SINR suele ir de -20 (pésimo) a +30 (excelente)
+    val actualSinr = sinr ?: 0
+    // Normalizamos el valor para la gráfica (de 0 a 1)
+    // Asumimos un rango visual de -10 a +25 para que se mueva bien
+    val normalized = ((actualSinr + 10).toFloat() / 35f).coerceIn(0f, 1f)
+
+    // Colores: Si es menor o igual a 0 (alerta MITM), rojo. Si no, verde o amarillo.
+    val barColor = when {
+        actualSinr <= 0 -> Color(0xFFCF6679) // Rojo alerta (Ruido > Señal)
+        actualSinr in 1..10 -> Color(0xFFFFEB3B) // Amarillo (Interferencia media)
+        else -> Color(0xFF4CAF50) // Verde (Señal limpia)
+    }
+
+    Column(
+        modifier = Modifier.width(60.dp),
+        horizontalAlignment = Alignment.End
+    ) {
+        Text(
+            text = "SINR",
+            color = Color.Gray,
+            fontSize = 8.sp,
+            fontFamily = FontFamily.Monospace,
+            fontWeight = FontWeight.Bold
+        )
+        Row(
+            verticalAlignment = Alignment.Bottom,
+            modifier = Modifier.height(24.dp)
+        ) {
+            Text(
+                text = "${sinr ?: "--"} dB",
+                color = barColor,
+                fontSize = 12.sp,
+                fontFamily = FontFamily.Monospace,
+                fontWeight = FontWeight.Bold
+            )
+            Spacer(modifier = Modifier.width(6.dp))
+            // Pequeña barra visual
+            Box(
+                modifier = Modifier
+                    .width(4.dp)
+                    .fillMaxHeight()
+                    .background(Color.DarkGray)
+            ) {
+                Box(
+                    modifier = Modifier
+                        .width(4.dp)
+                        .fillMaxHeight(normalized)
+                        .background(barColor)
+                        .align(Alignment.BottomCenter)
                 )
             }
         }

@@ -258,7 +258,7 @@ fun MainScreenContent(dbHelper: CellDbHelper, service: MiniICService?) {
                                     // TECNOLOGÍA
                                     Column(
                                         modifier = Modifier
-                                            .weight(1f)
+                                            .weight(0.85f)
                                             .padding(horizontal = 16.dp, vertical = 14.dp)
                                     ) {
                                         Text(
@@ -290,7 +290,7 @@ fun MainScreenContent(dbHelper: CellDbHelper, service: MiniICService?) {
                                     // POTENCIA
                                     Column(
                                         modifier = Modifier
-                                            .weight(1f)
+                                            .weight(1.15f)
                                             .padding(horizontal = 16.dp, vertical = 14.dp)
                                     ) {
                                         Text(
@@ -302,28 +302,35 @@ fun MainScreenContent(dbHelper: CellDbHelper, service: MiniICService?) {
                                             letterSpacing = 1.sp
                                         )
                                         Spacer(Modifier.height(4.dp))
-                                        Text(
-                                            if (active == null) "N/A" else "${active.dbm} dBm",
-                                            color = if (active != null && active.dbm >= -70) Color(0xFFCF6679)
-                                            else if (active != null && active.dbm >= -85) Color(0xFFFFA000)
-                                            else Color.White,
-                                            fontFamily = FontFamily.Monospace,
-                                            fontSize = 15.sp,
-                                            fontWeight = FontWeight.Bold
-                                        )
+                                        Row(
+                                            modifier = Modifier.fillMaxWidth(),
+                                            horizontalArrangement = Arrangement.SpaceBetween,
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            Text(
+                                                if (active == null) "N/A" else "${active.dbm} dBm",
+                                                color = if (active != null && active.dbm >= -70) Color(0xFFCF6679)
+                                                else if (active != null && active.dbm >= -85) Color(0xFFFFA000)
+                                                else Color.White,
+                                                fontFamily = FontFamily.Monospace,
+                                                fontSize = 14.sp,
+                                                fontWeight = FontWeight.Bold
+                                            )
+                                            MiniRsrqGraph(rsrqHistory, active?.rsrq)
+                                        }
                                     }
                                 }
 
                                 HorizontalDivider(color = Color(0xFF1A1A1A))
 
-                                // Fila 2 — CELL ID, TAC/LAC, MNC
+                                // Fila 2 — CELL ID, TAC/LAC, MNC y ARFCN
                                 Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
 
                                     // CELL ID
                                     Column(
                                         modifier = Modifier
-                                            .weight(1.4f)
-                                            .padding(horizontal = 16.dp, vertical = 14.dp)
+                                            .weight(1.1f)
+                                            .padding(horizontal = 12.dp, vertical = 14.dp)
                                     ) {
                                         Text(
                                             "CELL ID",
@@ -354,8 +361,8 @@ fun MainScreenContent(dbHelper: CellDbHelper, service: MiniICService?) {
                                     // TAC / LAC
                                     Column(
                                         modifier = Modifier
-                                            .weight(1f)
-                                            .padding(horizontal = 16.dp, vertical = 14.dp)
+                                            .weight(0.8f)
+                                            .padding(horizontal = 12.dp, vertical = 14.dp)
                                     ) {
                                         Text(
                                             "TAC / LAC",
@@ -386,8 +393,8 @@ fun MainScreenContent(dbHelper: CellDbHelper, service: MiniICService?) {
                                     // MNC
                                     Column(
                                         modifier = Modifier
-                                            .weight(0.6f)
-                                            .padding(horizontal = 16.dp, vertical = 14.dp)
+                                            .weight(0.5f)
+                                            .padding(horizontal = 12.dp, vertical = 14.dp)
                                     ) {
                                         Text(
                                             "MNC",
@@ -406,12 +413,52 @@ fun MainScreenContent(dbHelper: CellDbHelper, service: MiniICService?) {
                                             fontWeight = FontWeight.Bold
                                         )
                                     }
+
+                                    // Divisor vertical
+                                    Box(
+                                        modifier = Modifier
+                                            .width(0.5.dp)
+                                            .height(40.dp)
+                                            .background(Color(0xFF222222))
+                                    )
+
+                                    // ARFCN (Nueva columna añadida a la derecha)
+                                    Column(
+                                        modifier = Modifier
+                                            .weight(0.7f)
+                                            .padding(horizontal = 12.dp, vertical = 14.dp)
+                                    ) {
+                                        Text(
+                                            "ARFCN",
+                                            color = Color(0xFF555555),
+                                            fontFamily = FontFamily.Monospace,
+                                            fontSize = 9.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            letterSpacing = 1.sp
+                                        )
+                                        Spacer(Modifier.height(4.dp))
+                                        
+                                        // 1. Evaluamos dinámicamente si la heurística de sanidad del ARFCN ha fallado
+                                        val esArfcnFalso = active?.heuristicReport?.arfcnSanityPassed == false
+                                        
+                                        // 2. Asignamos el color: si es falso, usamos el rojo de alerta del proyecto (0xFFCF6679)
+                                        val arfcnColor = if (esArfcnFalso) Color(0xFFCF6679) else Color.White
+                                        
+                                        Text(
+                                            text = active?.arfcn?.toString() ?: "N/A",
+                                            color = arfcnColor,
+                                            fontFamily = FontFamily.Monospace,
+                                            fontSize = 13.sp,
+                                            // Si es falso, aumentamos el grosor a ExtraBold para que resalte todavía más
+                                            fontWeight = if (esArfcnFalso) FontWeight.ExtraBold else FontWeight.Bold
+                                        )
+                                    }
                                 }
                             }
                         }
 
                         if (active != null) {
-                            SecurityScorePanel(active, dbmHistory, rsrqHistory, geoHistory, dbHelper, service)
+                            SecurityScorePanel(active, dbmHistory, geoHistory, dbHelper, service)
                         }
 
                         if (active != null) {
@@ -440,7 +487,7 @@ fun MainScreenContent(dbHelper: CellDbHelper, service: MiniICService?) {
 }
 
 @Composable
-fun SecurityScorePanel(active: CellData, dbmHistory: List<Int>, rsrqHistory: List<Int>, geoHistory: List<Float>, dbHelper: CellDbHelper, service: MiniICService?) {
+fun SecurityScorePanel(active: CellData, dbmHistory: List<Int>, geoHistory: List<Float>, dbHelper: CellDbHelper, service: MiniICService?) {
     var viewMode by remember { mutableStateOf("NONE") } // NONE, GRAPH, GEO, HEUR
     val context = LocalContext.current
 
@@ -521,7 +568,7 @@ fun SecurityScorePanel(active: CellData, dbmHistory: List<Int>, rsrqHistory: Lis
                 Column(horizontalAlignment = Alignment.End) {
                     MiniRsrpGraph(dbmHistory, active.dbm)
                     Spacer(Modifier.height(4.dp))
-                    MiniRsrqGraph(rsrqHistory, active.rsrq)
+                    MiniSinrGraph(active.sinr)
                 }
             }
 
