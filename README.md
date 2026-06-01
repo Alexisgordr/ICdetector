@@ -204,6 +204,13 @@ Because it is anchored to physical geography (the device's own GPS position), th
 
 Its scope is limited to cells for which prior history (and a valid GPS fix) already exists. As such, it detects **identifier cloning at a distance** — but it does not catch a catcher that uses an unknown/fresh Cell ID, one that operates physically next to the legitimate tower, or a cell observed for the first time with no historical baseline yet.
 
+## 12. Signal Baseline Anomaly (H12)
+Learns each cell's typical signal level (dBm) at a given location from the device's own historical observations, then flags readings that are anomalously **strong** compared to that learned baseline. A nearby rogue transmitter impersonating a cell that is normally weaker at that spot will appear far stronger than its own history — a physical inconsistency that falsified radio parameters cannot hide, since the attacker cannot change how close their transmitter physically is to the device.
+
+Like H11, it is fully offline, relies on no external database, and needs no labelled data: it only learns from what the device has already observed. It is grouped with the RF-dominance heuristics in the Bayesian engine, so it cannot double-count with Signal Dominance Analysis and inflate the score.
+
+Its scope is limited to cells with enough nearby historical samples, so a warm-up period is required: with no prior baseline for a location it stays silent. Only the "stronger than usual" direction is treated as suspicious, since weaker-than-usual readings are commonly caused by obstruction or distance rather than an attack.
+
 ## Temporal Confidence Decay
 Anomalies must persist across 3 consecutive analysis cycles before triggering a confirmed threat alert. Transient heuristic failures are logged but do not raise alarms, significantly reducing false positive alert fatigue in dynamic RF environments.
 
@@ -373,5 +380,6 @@ The project is now considered stable and feature-complete within the boundaries 
 Future updates will focus on bug fixes and minor improvements as they are discovered in real-world usage.
 
 This is the stable release. Thank you, and best regards to everyone who has followed the project.
+
 
 -- Alexis
