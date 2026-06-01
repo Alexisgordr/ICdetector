@@ -10,6 +10,24 @@ import com.alexisgordr.icdetector.models.VerificationStatus
 object ThreatAnalyzer {
 
     /**
+     * ¿La señal venía degradándose de forma progresiva en los últimos ciclos?
+     * Excepción física para la heurística 14: si la potencia caía poco a poco
+     * (estás entrando a un garaje/sótano/ascensor), un salto a banda baja es legítimo
+     * y no debe penalizarse. Sin datos suficientes devuelve false (no podemos afirmar
+     * que se degradaba), de modo que la decisión recae en si la señal previa era fuerte.
+     */
+    private fun isSignalDegrading(recent: List<Int>): Boolean {
+        if (recent.size < 4) return false
+        val window = recent.takeLast(4)
+        val firstHalf = window.take(2).average()
+        val secondHalf = window.takeLast(2).average()
+        val sustainedDrop = (firstHalf - secondHalf) >= 6.0
+        val steps = window.zipWithNext().count { (a, b) -> b < a }
+        val mostlyDecreasing = steps >= window.size - 2 && (window.first() - window.last()) >= 6
+        return sustainedDrop || mostlyDecreasing
+    }
+
+    /**
      * Calcula el umbral dinámico según el contexto de densidad de celdas (vecinos)
      * Optimizamos para reducir falsos positivos en zonas rurales.
      */
@@ -105,7 +123,10 @@ object ThreatAnalyzer {
         preloadedHistory: List<HistoryRecord> = emptyList(),
         isWifiActive: Boolean = false,
         isNetworkLatencyAnomalous: Boolean = false,
-        signalBaseline: SignalBaseline? = null
+        signalBaseline: SignalBaseline? = null,
+        previousBand: Int? = null,
+        previousDbm: Int? = null,
+        recentRegisteredDbm: List<Int> = emptyList()
     ): CellData {
         val reasons = mutableListOf<String>()
         var score = 100
@@ -121,6 +142,7 @@ object ThreatAnalyzer {
         var hPingPong = true
         var hMobileCellId = true
         var hSignalBaseline = true
+        var hBandDowngrade = true
 
         // 1. Neighbor analysis
         if (!isWifiActive && neighbors.isEmpty() && active.dbm >= -80) {
@@ -289,6 +311,36 @@ object ThreatAnalyzer {
             }
         }
 
+        // 14. Band Downgrade intra-tecnología (salto forzado a banda sub-GHz)
+        // Defensivo: el orquestador ya bloquea el downgrade inter-tecnología (4G->2G/3G).
+        // Esto cubre el hueco INTRA-LTE: un salto vertical injustificado desde una banda
+        // alta urbana (1800/2100/2600 MHz) a una banda baja sub-GHz (800/900/700 MHz).
+        // Las bandas sub-GHz penetran muros y cubren mucho radio con poca potencia, así
+        // que un transmisor cercano que te "tira" a una de ellas mientras venías con
+        // señal excelente en alta frecuencia es una anomalía. Solo se evalúa entre
+        // celdas LTE/4G (la tabla de bandas es de LTE; el NR usa otra y no se mezcla).
+        // Excepción física: si la señal venía cayendo de forma progresiva (estás entrando
+        // a un garaje/sótano), el salto a banda baja es legítimo y NO se penaliza.
+        // Usa BandPlan para mapear EARFCN->banda (el EARFCN NO es monótono con la frecuencia).
+        run {
+            val isLte = active.networkType.contains("4G") || active.networkType.contains("LTE")
+            val curBand = active.band ?: active.arfcn?.let { BandPlan.earfcnToBandLte(it) }
+            if (isLte && curBand != null && previousBand != null
+                && BandPlan.isHighBand(previousBand) && BandPlan.isLowBand(curBand)) {
+                // ¿Veníamos con buena señal en la banda alta? (downgrade injustificado)
+                val prevStrong = previousDbm != null && previousDbm >= -90
+                // ¿Estaba la señal degradándose progresivamente? -> movimiento físico legítimo.
+                val degrading = isSignalDegrading(recentRegisteredDbm)
+                if (prevStrong && !degrading) {
+                    hBandDowngrade = false
+                    val from = BandPlan.approxFreqMhz(previousBand) ?: 0
+                    val to = BandPlan.approxFreqMhz(curBand) ?: 0
+                    reasons.add("Downgrade de banda forzado (${from}MHz→${to}MHz, B$previousBand→B$curBand)")
+                    score -= 25
+                }
+            }
+        }
+
         // Probabilidad Bayesiana de amenaza
         val failedList = buildList {
             if (!hIsolated) add("isolated")
@@ -303,6 +355,7 @@ object ThreatAnalyzer {
             if (!hPingPong) add("pingPong")
             if (!hMobileCellId) add("h11")
             if (!hSignalBaseline) add("signalBaseline")
+            if (!hBandDowngrade) add("bandDowngrade")
         }
 
         val threatProbability = BayesianScorer.calculate(
@@ -334,7 +387,8 @@ object ThreatAnalyzer {
             hardwareCipheringAvailable = isHardwareCipheringAvailable,
             pingPongPassed = hPingPong,
             mobileCellIdPassed = hMobileCellId,
-            signalBaselinePassed = hSignalBaseline
+            signalBaselinePassed = hSignalBaseline,
+            bandDowngradePassed = hBandDowngrade
         )
 
         return active.copy(

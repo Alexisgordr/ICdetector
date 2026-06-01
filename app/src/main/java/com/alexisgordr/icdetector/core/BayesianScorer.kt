@@ -48,7 +48,8 @@ object BayesianScorer {
         // Expert-derived LR estimate — not directly reported by source paper
         "arfcn"       to 8.0f,  // ARFCN fuera 3GPP spec — imposible legítimo
         "ciphering"   to 12.0f, // A5/0 en LTE — indicador crítico (ETSI papers)
-        "latency"     to 1.8f   // Experimental — demasiadas variables confundentes
+        "latency"     to 1.8f,  // Experimental — demasiadas variables confundentes
+        "bandDowngrade" to 2.5f  // Downgrade forzado a banda baja
     )
 
     private val DB_RATIOS = mapOf(
@@ -67,7 +68,7 @@ object BayesianScorer {
     // signalBaseline (potencia anómala vs historial) es el mismo fenómeno de
     // dominancia visto contra el propio histórico, así que se agrupa aquí para
     // que solo cuente la LR más alta y no infle el posterior junto a powerJump.
-    private val RF_DOMINANCE_GROUP = listOf("powerJump", "ghostCells", "isolated", "signalBaseline")
+    private val RF_DOMINANCE_GROUP = listOf("powerJump", "ghostCells", "isolated", "signalBaseline", "bandDowngrade")
 
     // Movilidad — correlación moderada, comportamiento temporal
     private val MOBILITY_GROUP = listOf("pingPong", "h11", "taDistance")

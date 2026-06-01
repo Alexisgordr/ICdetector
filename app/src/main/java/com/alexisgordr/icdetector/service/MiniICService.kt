@@ -130,6 +130,12 @@ class MiniICService : Service() {
     private var prevCid: String? = null
     private var prevNetType: String? = null
     private var prevDbm: Int? = null
+    // Estado para heurística 14 (band downgrade intra-LTE). Guardan la última celda
+    // REGISTRADA analizada; el buffer de tendencia sobrevive al handover para detectar si
+    // la señal venía degradándose progresivamente (excepción del garaje/sótano).
+    private var prevBand: Int? = null
+    private var prevRegisteredDbm: Int? = null
+    private val recentRegisteredDbmTrend = CopyOnWriteArrayList<Int>()
     private var isCallbackWorking = false
     private var connectionRetryCount = 0
     private val cellChangeHistory = CopyOnWriteArrayList<Pair<String, Long>>()
@@ -565,7 +571,10 @@ class MiniICService : Service() {
                             preloadedHistory = preloadedHistory,
                             isWifiActive = isWifiConnected(),
                             isNetworkLatencyAnomalous = networkLatencyState.value == "ANOMALA",
-                            signalBaseline = signalBaseline
+                            signalBaseline = signalBaseline,
+                            previousBand = prevBand,
+                            previousDbm = prevRegisteredDbm,
+                            recentRegisteredDbm = recentRegisteredDbmTrend.toList()
                         )
                     } else {
                         // Las vecinas no se evalúan como amenaza; se mantienen como contexto.
@@ -601,6 +610,18 @@ class MiniICService : Service() {
                         }
                         
                         updateNotification(confirmedActive.copy(verified = finalStatus))
+
+                        // Actualizar estado de banda para la heurística 14 (tras el análisis,
+                        // de modo que el PRÓXIMO ciclo compare contra estos valores).
+                        val isLteActive = active.networkType.contains("4G") || active.networkType.contains("LTE")
+                        prevBand = if (isLteActive) {
+                            active.band ?: active.arfcn?.let { com.alexisgordr.icdetector.core.BandPlan.earfcnToBandLte(it) }
+                        } else null
+                        prevRegisteredDbm = active.dbm
+                        if (active.dbm != Int.MAX_VALUE && active.dbm != -999) {
+                            recentRegisteredDbmTrend.add(active.dbm)
+                            while (recentRegisteredDbmTrend.size > 6) recentRegisteredDbmTrend.removeAt(0)
+                        }
                     } else {
                         _cellFlow.value = emptyList()
                         updateNotificationText("Buscando red...")
@@ -920,7 +941,10 @@ class MiniICService : Service() {
             preloadedHistory = history,
             isWifiActive = isWifiConnected(),
             isNetworkLatencyAnomalous = networkLatencyState.value == "ANOMALA",  // ← NUEVO
-            signalBaseline = sigBaseline
+            signalBaseline = sigBaseline,
+            previousBand = prevBand,
+            previousDbm = prevRegisteredDbm,
+            recentRegisteredDbm = recentRegisteredDbmTrend.toList()
         )
         
         scope.launch(Dispatchers.Main) {
@@ -1124,7 +1148,7 @@ class MiniICService : Service() {
 
     private fun generateAuditLog(cell: CellData) {
         _auditStatus.value = "Auditoría en curso..."
-        appendLog("[AUDIT]", "--- INICIANDO CICLO DE AUDITORÍA (12 REGLAS) ---")
+        appendLog("[AUDIT]", "--- INICIANDO CICLO DE AUDITORÍA (13 REGLAS) ---")
         val report = cell.heuristicReport
         val results = mapOf(
             "1. Celda Aislada" to report.isolatedCellPassed,
@@ -1138,7 +1162,8 @@ class MiniICService : Service() {
             "9. Cifrado Hardware" to report.hardwareCipheringPassed,
             "10. Anti Ping-Pong" to report.pingPongPassed,
             "11. Consistencia Geográfica (Cell ID móvil)" to report.mobileCellIdPassed,
-            "12. Potencia vs Histórico (Baseline geográfico)" to report.signalBaselinePassed
+            "12. Potencia vs Histórico (Baseline geográfico)" to report.signalBaselinePassed,
+            "13. Downgrade de Banda (Intra-LTE)" to report.bandDowngradePassed
         )
 
         results.forEach { (regla, pasado) ->

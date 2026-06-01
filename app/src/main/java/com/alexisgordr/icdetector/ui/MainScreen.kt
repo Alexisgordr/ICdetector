@@ -258,7 +258,7 @@ fun MainScreenContent(dbHelper: CellDbHelper, service: MiniICService?) {
                                     // TECNOLOGÍA
                                     Column(
                                         modifier = Modifier
-                                            .weight(0.85f)
+                                            .weight(1f)
                                             .padding(horizontal = 16.dp, vertical = 14.dp)
                                     ) {
                                         Text(
@@ -290,7 +290,7 @@ fun MainScreenContent(dbHelper: CellDbHelper, service: MiniICService?) {
                                     // POTENCIA
                                     Column(
                                         modifier = Modifier
-                                            .weight(1.15f)
+                                            .weight(1f)
                                             .padding(horizontal = 16.dp, vertical = 14.dp)
                                     ) {
                                         Text(
@@ -302,23 +302,34 @@ fun MainScreenContent(dbHelper: CellDbHelper, service: MiniICService?) {
                                             letterSpacing = 1.sp
                                         )
                                         Spacer(Modifier.height(4.dp))
-                                        Row(
-                                            modifier = Modifier.fillMaxWidth(),
-                                            horizontalArrangement = Arrangement.SpaceBetween,
-                                            verticalAlignment = Alignment.CenterVertically
-                                        ) {
-                                            Text(
-                                                if (active == null) "N/A" else "${active.dbm} dBm",
-                                                color = if (active != null && active.dbm >= -70) Color(0xFFCF6679)
-                                                else if (active != null && active.dbm >= -85) Color(0xFFFFA000)
-                                                else Color.White,
-                                                fontFamily = FontFamily.Monospace,
-                                                fontSize = 14.sp,
-                                                fontWeight = FontWeight.Bold
-                                            )
-                                            MiniRsrqGraph(rsrqHistory, active?.rsrq)
-                                        }
+                                        Text(
+                                            if (active == null) "N/A" else "${active.dbm} dBm",
+                                            color = if (active != null && active.dbm >= -70) Color(0xFFCF6679)
+                                            else if (active != null && active.dbm >= -85) Color(0xFFFFA000)
+                                            else Color.White,
+                                            fontFamily = FontFamily.Monospace,
+                                            fontSize = 15.sp,
+                                            fontWeight = FontWeight.Bold
+                                        )
                                     }
+                                }
+
+                                HorizontalDivider(color = Color(0xFF1A1A1A))
+
+                                // Fila métricas — BANDA y RSRQ
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(horizontal = 16.dp, vertical = 12.dp),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.Top
+                                ) {
+                                    BandIndicator(
+                                        arfcn = active?.arfcn,
+                                        networkType = active?.networkType ?: "",
+                                        suspicious = active != null && !active.heuristicReport.bandDowngradePassed
+                                    )
+                                    MiniRsrqGraph(rsrqHistory, active?.rsrq)
                                 }
 
                                 HorizontalDivider(color = Color(0xFF1A1A1A))
@@ -605,6 +616,7 @@ fun SecurityScorePanel(active: CellData, dbmHistory: List<Int>, geoHistory: List
                             HeuristicItem("10. Estabilidad de Conexión (Anti Ping-Pong)", active.heuristicReport.pingPongPassed)
                             HeuristicItem("11. Consistencia Geográfica (Cell ID móvil)", active.heuristicReport.mobileCellIdPassed)
                             HeuristicItem("12. Potencia vs Histórico (Baseline geográfico)", active.heuristicReport.signalBaselinePassed)
+                            HeuristicItem("13. Downgrade de Banda (Intra-LTE)", active.heuristicReport.bandDowngradePassed)
                         }
                     }
                 }

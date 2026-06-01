@@ -2,7 +2,9 @@ package com.alexisgordr.icdetector.ui
 
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -18,6 +20,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.alexisgordr.icdetector.models.CellData
+import com.alexisgordr.icdetector.core.BandPlan
 import java.util.Locale
 
 @Composable
@@ -288,6 +291,63 @@ fun MiniSinrGraph(sinr: Int?) {
                         .align(Alignment.BottomCenter)
                 )
             }
+        }
+    }
+}
+
+/**
+ * Indicador de banda física. Línea compacta "BANDA  [B20 · 800MHz]".
+ *
+ * Mapeo correcto por tipo de red:
+ *  - 4G LTE y 5G NSA  -> la celda registrada es LTE (en NSA, el ancla), su arfcn es un
+ *    EARFCN válido, así que se mapea con BandPlan.
+ *  - 5G SA            -> el arfcn es un NR-ARFCN (otra tabla); NO se mapea con la tabla
+ *    LTE (daría una banda falsa). Se muestra "5G".
+ *  - Resto / desconocido -> "—".
+ *
+ * Rojo (heurística 14 disparada) o gris neutro.
+ */
+@Composable
+fun BandIndicator(arfcn: Int?, networkType: String, suspicious: Boolean) {
+    val isSa = networkType.contains("(SA)")
+    val mappable = !isSa && (
+        networkType.contains("LTE") ||
+        networkType.contains("4G") ||
+        networkType.contains("NSA")
+    )
+    val band = if (mappable) arfcn?.let { BandPlan.earfcnToBandLte(it) } else null
+    val freq = band?.let { BandPlan.approxFreqMhz(it) }
+
+    val label = when {
+        band != null && freq != null -> "B$band · ${freq}MHz"
+        isSa -> "5G NR"
+        else -> "—"
+    }
+    val color = if (suspicious) Color(0xFFCF6679) else Color(0xFF888888)
+
+    Column {
+        Text(
+            text = "BANDA",
+            color = Color(0xFF555555),
+            fontSize = 9.sp,
+            fontFamily = FontFamily.Monospace,
+            fontWeight = FontWeight.Bold,
+            letterSpacing = 1.sp
+        )
+        Spacer(Modifier.height(5.dp))
+        Box(
+            modifier = Modifier
+                .background(color.copy(alpha = 0.12f), RoundedCornerShape(4.dp))
+                .border(1.dp, color.copy(alpha = 0.5f), RoundedCornerShape(4.dp))
+                .padding(horizontal = 8.dp, vertical = 4.dp)
+        ) {
+            Text(
+                text = label,
+                color = color,
+                fontSize = 12.sp,
+                fontFamily = FontFamily.Monospace,
+                fontWeight = FontWeight.Bold
+            )
         }
     }
 }
