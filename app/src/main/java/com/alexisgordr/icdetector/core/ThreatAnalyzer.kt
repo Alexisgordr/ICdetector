@@ -148,7 +148,10 @@ object ThreatAnalyzer {
         // 4. Multiple MNCs in area
         val uniqueMncs = (neighbors.asSequence().map { it.mnc } + active.mnc)
             .filter { it != "N/A" }.distinct().toList()
-        if (uniqueMncs.size > 3) {
+        // Umbral >4 (antes >3): es habitual ver 3-4 MNC de forma legítima
+        // (MVNOs, estaciones de tren, roaming, zonas fronterizas). Subir el umbral
+        // reduce falsos positivos sin necesidad de tocar la LR (que sigue baja a propósito).
+        if (uniqueMncs.size > 4) {
             hMncCount = false
             reasons.add("Multitud de MNCs")
             score -= 15
@@ -263,7 +266,15 @@ object ThreatAnalyzer {
         }
 
         // 13. Anomalía de potencia vs línea base propia (baseline geográfico)
+        // Aprende del propio historial: esta celda, en este punto, suele verse a X dBm.
+        // Un transmisor cercano (catcher) suplantando una celda que aquí es habitualmente
+        // más débil aparece con una potencia anómalamente ALTA. Se anchea a la geografía
+        // (mismo sitio) y al historial del usuario, no a parámetros de red falseables.
+        // Solo la dirección "más fuerte de lo normal" es sospechosa; más débil puede ser
+        // simple obstrucción o distancia. Requiere historial (si no, no juzga nada).
         signalBaseline?.let { base ->
+            // Acotamos el stddev a un mínimo para no disparar con historiales muy planos,
+            // y exigimos una desviación grande Y estadísticamente significativa.
             val effectiveStd = maxOf(base.stdDevDbm, 4.0)
             val excessDb = active.dbm - base.meanDbm  // positivo = más fuerte de lo habitual
             val significant = excessDb >= 18.0 && excessDb >= 3.0 * effectiveStd

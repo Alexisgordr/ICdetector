@@ -118,6 +118,7 @@ class MiniICService : Service() {
         .writeTimeout(10, TimeUnit.SECONDS)
         .build()
     private val verificationCache = ConcurrentHashMap<String, VerificationStatus>()
+    // Marca temporal del último ERROR por celda, para permitir reintentos sin saturar la API
     private val lastVerificationErrorTime = ConcurrentHashMap<String, Long>()
 
     var alarmThreshold = -50f
@@ -541,11 +542,17 @@ class MiniICService : Service() {
                     dbHelper.getPreviousCellHistory(activeRaw.cellId, activeRaw.mnc, activeRaw.tac, currentLocation)
                 } else emptyList()
 
+                // Pre-fetch de la línea base de potencia para la heurística 13 (baseline geográfico)
                 val signalBaseline = if (activeRaw != null && activeRaw.cellId != "N/A" && currentLocation != null) {
                     dbHelper.getCellSignalBaseline(activeRaw.cellId, activeRaw.mnc, activeRaw.tac, currentLocation)
                 } else null
 
-                // FIX: analizar SOLO la celda activa (la activa ya se compara con las vecinas dentro de analyzeThreats)
+                // FIX: analizar SOLO la celda activa (registrada). Antes se llamaba a
+                // analyzeThreats sobre cada celda, vecinas incluidas, y como `neighbors`
+                // contiene a todas las no registradas, cada vecina se comparaba consigo
+                // misma. Además, el análisis de amenazas está pensado para la celda
+                // servidora, no para las vecinas (que solo son contexto). La activa nunca
+                // está dentro de `neighbors`, así que ya no hay auto-comparación.
                 val analyzedList = list.map { cell ->
                     if (cell.isRegistered) {
                         ThreatAnalyzer.analyzeThreats(
@@ -561,6 +568,7 @@ class MiniICService : Service() {
                             signalBaseline = signalBaseline
                         )
                     } else {
+                        // Las vecinas no se evalúan como amenaza; se mantienen como contexto.
                         cell
                     }
                 }
@@ -745,7 +753,10 @@ class MiniICService : Service() {
         val currentLoc = getCurrentLocation()
         if (currentLoc == null) {
             // FIX: sin fix GPS no podemos validar la distancia, pero eso NO significa
-            // que la coordenada de la API sea inválida. Antes la celda se quedaba en PENDING.
+            // que la coordenada de la API sea inválida. Antes se devolvía false y la
+            // celda —aunque la API la verificara— se quedaba atascada en PENDING.
+            // Aceptamos la coordenada (pasa los chequeos básicos); el sanity de
+            // distancia se omite hasta tener un fix GPS fiable.
             return true
         }
 
@@ -754,7 +765,7 @@ class MiniICService : Service() {
             currentLoc.latitude, currentLoc.longitude,
             lat, lon, results
         )
-        if (results[0] > 200000f) {
+        if (results[0] > 50000f) {
             appendLog("[API]", "Coordenadas rechazadas: a ${results[0].toInt()}m de tu posición")
             return false
         }
@@ -769,7 +780,8 @@ class MiniICService : Service() {
         // 1. Mirar caché rápida
         val cached = verificationCache[cacheKey]
         if (cached != null && cached != VerificationStatus.ERROR) return
-        // FIX: si la última vez fue ERROR, reintentar solo pasados 60s (no saturar la API)
+        // Si la última vez fue ERROR (p. ej. sin red), reintentar solo pasados 60s
+        // para no machacar la API en cada ciclo de escaneo (~2s).
         if (cached == VerificationStatus.ERROR) {
             val last = lastVerificationErrorTime[cacheKey] ?: 0L
             if (System.currentTimeMillis() - last < 60000L) return
@@ -850,14 +862,17 @@ class MiniICService : Service() {
                 appendLog("[API]", "Antena no identificada en bases públicas.")
                 updateFlowWithStatus(cell.cellId, VerificationStatus.NOT_FOUND)
             } else if (finalStatus == VerificationStatus.ERROR) {
-                // FIX: antes la celda se quedaba atascada en PENDING para siempre tras un fallo de red
+                // FIX: antes la celda se quedaba atascada en PENDING para siempre tras
+                // un fallo de red, porque el guard de arriba solo reintenta si es ERROR.
+                // Marcamos ERROR (con timestamp) para permitir un reintento posterior.
                 verificationCache[cacheKey] = VerificationStatus.ERROR
                 lastVerificationErrorTime[cacheKey] = System.currentTimeMillis()
                 appendLog("[API]", "Error de red al verificar. Se reintentará más tarde.")
                 updateFlowWithStatus(cell.cellId, VerificationStatus.ERROR)
             } else if (finalStatus == VerificationStatus.VERIFIED) {
-                // FIX: la API confirmó la celda pero no se pudo guardar coordenada.
-                // Antes no había rama VERIFIED aquí y se quedaba en PENDING.
+                // FIX: la API confirmó la celda pero no se pudo guardar coordenada
+                // (respuesta sin lat/lon, etc.). Antes no había rama VERIFIED aquí y
+                // la celda se quedaba en PENDING. La marcamos VERIFIED igualmente.
                 verificationCache[cacheKey] = VerificationStatus.VERIFIED
                 dbHelper.updateVerificationStatus(cell.mnc, cell.tac, cell.cellId, VerificationStatus.VERIFIED, mcc = cell.mcc)
                 appendLog("[API]", "Antena verificada (sin coordenada disponible).")
@@ -890,7 +905,6 @@ class MiniICService : Service() {
         val history = if (loc != null && cell.cellId != "N/A") {
             dbHelper.getPreviousCellHistory(cell.cellId, cell.mnc, cell.tac, loc)
         } else emptyList()
-
         val sigBaseline = if (loc != null && cell.cellId != "N/A") {
             dbHelper.getCellSignalBaseline(cell.cellId, cell.mnc, cell.tac, loc)
         } else null
@@ -905,7 +919,7 @@ class MiniICService : Service() {
             currentLocation = loc,
             preloadedHistory = history,
             isWifiActive = isWifiConnected(),
-            isNetworkLatencyAnomalous = networkLatencyState.value == "ANOMALA",
+            isNetworkLatencyAnomalous = networkLatencyState.value == "ANOMALA",  // ← NUEVO
             signalBaseline = sigBaseline
         )
         

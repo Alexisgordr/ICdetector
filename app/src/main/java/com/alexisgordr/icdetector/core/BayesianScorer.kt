@@ -30,7 +30,7 @@ object BayesianScorer {
         "isolated"    to 3.5f,  // Shaik et al. — 34% IMSI catchers sin vecinas
         "powerJump"   to 5.5f,  // LTEInspector — power dominance fiable en urbano
         "ghostCells"  to 4.5f,  // Ambiente RF artificialmente controlado
-        "signalBaseline" to 3.5f, // Potencia anómala vs historial propio
+        "signalBaseline" to 3.5f, // Potencia anómala vs historial propio (mismo fenómeno de dominancia)
 
         // Grupo Identidad — parámetros de red anómalos
         // Expert-derived LR estimate — not directly reported by source paper
@@ -63,7 +63,10 @@ object BayesianScorer {
     // para evitar inflación por dependencia implícita
 
     // RF Dominance — correlación fuerte, mismo fenómeno físico
-    // Un IMSI catcher dominando la señal produce los tres simultáneamente
+    // Un IMSI catcher dominando la señal produce los tres simultáneamente.
+    // signalBaseline (potencia anómala vs historial) es el mismo fenómeno de
+    // dominancia visto contra el propio histórico, así que se agrupa aquí para
+    // que solo cuente la LR más alta y no infle el posterior junto a powerJump.
     private val RF_DOMINANCE_GROUP = listOf("powerJump", "ghostCells", "isolated", "signalBaseline")
 
     // Movilidad — correlación moderada, comportamiento temporal
