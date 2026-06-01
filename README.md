@@ -211,6 +211,11 @@ Like H11, it is fully offline, relies on no external database, and needs no labe
 
 Its scope is limited to cells with enough nearby historical samples, so a warm-up period is required: with no prior baseline for a location it stays silent. Only the "stronger than usual" direction is treated as suspicious, since weaker-than-usual readings are commonly caused by obstruction or distance rather than an attack.
 
+## 13. Intra-LTE Band Downgrade Analysis (H13)
+Detects aggressive and suspicious shifts from high-frequency capacity bands (e.g., Band 7) to low-frequency sub-GHz bands (e.g., Band 20). Attackers frequently attempt to push target devices into lower frequencies to maximize signal penetration and extend their sweeping area.
+
+This heuristic mathematically differentiates between a sudden, forced band downgrade (highly indicative of a Rogue BTS or IMSI-catcher attack) and a natural, progressive signal degradation (such as entering a basement or parking garage). By evaluating physical band properties through EARFCN mapping rather than abstract channel numbers, it accurately identifies malicious physical-layer manipulations while heavily reducing false positives during normal mobility.
+
 ## Temporal Confidence Decay
 Anomalies must persist across 3 consecutive analysis cycles before triggering a confirmed threat alert. Transient heuristic failures are logged but do not raise alarms, significantly reducing false positive alert fatigue in dynamic RF environments.
 
