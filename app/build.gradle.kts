@@ -51,6 +51,15 @@ android {
         compose = true
     }
 
+    lint {
+        // El servicio ya declara foregroundServiceType="location", tiene el permiso
+        // FOREGROUND_SERVICE_LOCATION y pasa el tipo en startForeground() (Android 14+),
+        // así que cumple todos los requisitos técnicos. Este aviso es solo un recordatorio
+        // de la justificación ante Google Play (un paso de publicación, no de código), por
+        // lo que se desactiva para no dejar ruido en builds.
+        disable += "ForegroundServiceType"
+    }
+
     packaging {
         resources {
             excludes += "/META-INF/{AL2.0,LGPL2.1}"

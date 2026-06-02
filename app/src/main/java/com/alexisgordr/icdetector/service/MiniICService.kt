@@ -96,6 +96,19 @@ class MiniICService : Service() {
     private val CONFIRMATION_CYCLES = 3
     private var hasLoggedMissingCredentials = false
 
+    // Caché del prefetch de BD (heurísticas 11 y 13) para no repetir las consultas SQLite
+    // en cada ciclo cuando estás parado en la misma celda. Se invalida al cambiar de celda,
+    // al moverte > 150 m (la ubicación afecta al baseline) o al superar el TTL.
+    // NO toca el pipeline ni el flujo de confirmación: analyzeThreats sigue ejecutándose
+    // cada ciclo igual que antes; solo se evita repetir el trabajo de base de datos.
+    private var cachedCellSignature = ""
+    private var cachedLocationLat = 0.0
+    private var cachedLocationLon = 0.0
+    private var cachedHistory: List<HistoryRecord> = emptyList()
+    private var cachedBaseline: SignalBaseline? = null
+    private var cacheTimestamp = 0L
+    private val CELL_CACHE_TTL = 60_000L
+
     // Latency anomaly detection
     private val latencyHistory = ConcurrentHashMap<String, MutableList<Long>>()
     private var lastLatencyCheckTime = 0L
@@ -681,16 +694,52 @@ class MiniICService : Service() {
 
             scope.launch(Dispatchers.IO) {
                 val currentLocation = getCurrentLocation()
-                
-                // Pre-fetch de historial para la heurística 11 (Geográfica/RF)
-                val preloadedHistory = if (activeRaw != null && activeRaw.cellId != "N/A" && currentLocation != null) {
-                    dbHelper.getPreviousCellHistory(activeRaw.cellId, activeRaw.mnc, activeRaw.tac, currentLocation)
-                } else emptyList()
 
-                // Pre-fetch de la línea base de potencia para la heurística 13 (baseline geográfico)
-                val signalBaseline = if (activeRaw != null && activeRaw.cellId != "N/A" && currentLocation != null) {
-                    dbHelper.getCellSignalBaseline(activeRaw.cellId, activeRaw.mnc, activeRaw.tac, currentLocation)
-                } else null
+                val canQuery = activeRaw != null && activeRaw.cellId != "N/A" && currentLocation != null
+
+                val preloadedHistory: List<HistoryRecord>
+                val signalBaseline: SignalBaseline?
+
+                if (canQuery) {
+                    val signature = "${activeRaw.cellId}|${activeRaw.mnc}|${activeRaw.tac}"
+                    val now = System.currentTimeMillis()
+                    // ¿Cuánto te has movido desde el último prefetch? (afecta al baseline, que
+                    // filtra muestras por cercanía). Si te mueves mucho, hay que reconsultar.
+                    val movedMeters = if (cachedCellSignature.isNotEmpty()) {
+                        val r = FloatArray(1)
+                        Location.distanceBetween(
+                            cachedLocationLat, cachedLocationLon,
+                            currentLocation.latitude, currentLocation.longitude, r
+                        )
+                        r[0]
+                    } else Float.MAX_VALUE
+
+                    val cacheValid = signature == cachedCellSignature &&
+                        (now - cacheTimestamp) < CELL_CACHE_TTL &&
+                        movedMeters < 150f
+
+                    if (cacheValid) {
+                        // Misma celda, mismo sitio y dentro del TTL: reutilizar (evita 2 queries).
+                        preloadedHistory = cachedHistory
+                        signalBaseline = cachedBaseline
+                    } else {
+                        preloadedHistory = dbHelper.getPreviousCellHistory(
+                            activeRaw.cellId, activeRaw.mnc, activeRaw.tac, currentLocation
+                        )
+                        signalBaseline = dbHelper.getCellSignalBaseline(
+                            activeRaw.cellId, activeRaw.mnc, activeRaw.tac, currentLocation
+                        )
+                        cachedCellSignature = signature
+                        cachedLocationLat = currentLocation.latitude
+                        cachedLocationLon = currentLocation.longitude
+                        cachedHistory = preloadedHistory
+                        cachedBaseline = signalBaseline
+                        cacheTimestamp = now
+                    }
+                } else {
+                    preloadedHistory = emptyList()
+                    signalBaseline = null
+                }
 
                 // FIX: analizar SOLO la celda activa (registrada). Antes se llamaba a
                 // analyzeThreats sobre cada celda, vecinas incluidas, y como `neighbors`
