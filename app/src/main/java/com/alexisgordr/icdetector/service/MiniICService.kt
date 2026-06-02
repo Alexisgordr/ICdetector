@@ -39,7 +39,7 @@ import java.util.concurrent.TimeUnit
 class MiniICService : Service() {
 
     private val binder = LocalBinder()
-    private val scope = CoroutineScope(Dispatchers.Main + Job())
+    private val scope = CoroutineScope(Dispatchers.Main + SupervisorJob())
     
     private val _cellFlow = MutableStateFlow<List<CellData>>(emptyList())
     val cellFlow: StateFlow<List<CellData>> = _cellFlow
@@ -199,30 +199,59 @@ class MiniICService : Service() {
             var wasAirplaneModeOn = false
             while (isActive && isServiceRunning) {
                 val delayTime = if (isScreenOn) 3000L else 10000L
-                
-                val isAirplaneModeOn = Settings.Global.getInt(
-                    contentResolver, 
-                    Settings.Global.AIRPLANE_MODE_ON, 0
-                ) != 0
 
-                if (isAirplaneModeOn) {
-                    _cellFlow.value = emptyList()
-                    updateNotificationText("Sin señal / Modo Avión")
-                    appendLog("[SYS]", "⚠️ Modo Avión activo. Suspendiendo escaneo.")
-                    wasAirplaneModeOn = true
-                } else {
-                    if (wasAirplaneModeOn) {
-                        appendLog("[SYS]", "Conexión restaurada. Analizando nueva celda activa...")
-                        // Limpiar cache no-verificada para forzar re-consulta a DB y APIs si corresponde
-                        verificationCache.entries.removeIf { it.value != VerificationStatus.VERIFIED }
-                        wasAirplaneModeOn = false
+                try {
+                    val isAirplaneModeOn = Settings.Global.getInt(
+                        contentResolver,
+                        Settings.Global.AIRPLANE_MODE_ON, 0
+                    ) != 0
+
+                    if (isAirplaneModeOn) {
+                        _cellFlow.value = emptyList()
+                        updateNotificationText("Sin señal / Modo Avión")
+                        appendLog("[SYS]", "⚠️ Modo Avión activo. Suspendiendo escaneo.")
+                        wasAirplaneModeOn = true
+                    } else {
+                        if (wasAirplaneModeOn) {
+                            appendLog("[SYS]", "Conexión restaurada. Analizando nueva celda activa...")
+                            // Limpiar cache no-verificada para forzar re-consulta a DB y APIs si corresponde
+                            verificationCache.entries.removeIf { it.value != VerificationStatus.VERIFIED }
+                            wasAirplaneModeOn = false
+                        }
+                        requestFreshCellInfo()
+                        checkLatencyAnomaly()
+                        pruneCaches()
                     }
-                    requestFreshCellInfo()
-                    checkLatencyAnomaly()
+                } catch (ce: CancellationException) {
+                    throw ce  // respetar la cancelación limpia del scope
+                } catch (e: Exception) {
+                    // Un fallo puntual de un ciclo NO debe detener el escaneo continuo.
+                    appendLog("[SYS]", "⚠️ Error en ciclo de escaneo (se continúa): ${e.message}")
                 }
 
                 delay(delayTime)
             }
+        }
+    }
+
+    /**
+     * Poda de mapas en memoria (NO toca la BD). Evita el crecimiento ilimitado de las
+     * cachés indexadas por celda en sesiones muy largas. Es barato: solo actúa cuando se
+     * supera el cap o hay errores caducados.
+     */
+    private fun pruneCaches() {
+        val now = System.currentTimeMillis()
+        // Errores de verificación de más de 1 h: ya no deben bloquear reintentos.
+        lastVerificationErrorTime.entries.removeIf { now - it.value > 3_600_000L }
+        // Cap de seguridad: si se excede, se descarta el exceso (las celdas afectadas
+        // simplemente vuelven a aprender baseline / re-verificarse; sin impacto de correctitud).
+        if (latencyHistory.size > MAX_TRACKED_CELLS) {
+            latencyHistory.keys.take(latencyHistory.size - MAX_TRACKED_CELLS)
+                .forEach { latencyHistory.remove(it) }
+        }
+        if (verificationCache.size > MAX_TRACKED_CELLS) {
+            verificationCache.keys.take(verificationCache.size - MAX_TRACKED_CELLS)
+                .forEach { verificationCache.remove(it) }
         }
     }
 
@@ -579,7 +608,9 @@ class MiniICService : Service() {
         isServiceRunning = false
         scope.cancel()
         toneGenerator?.release()
-        screenReceiver?.let { unregisterReceiver(it) }
+        screenReceiver?.let {
+            try { unregisterReceiver(it) } catch (_: Exception) {}
+        }
         try {
             locationManager.removeUpdates(locationListener)
         } catch (_: Exception) {}
@@ -1335,5 +1366,8 @@ class MiniICService : Service() {
         const val NOTIFICATION_ID = 202
         const val LATENCY_NOTIFICATION_ID = 3  // distinto al NOTIFICATION_ID principal
         const val ACTION_STOP = "com.alexisgordr.icdetector.STOP"
+        // Cap de seguridad para los mapas en memoria indexados por celda: evita crecimiento
+        // ilimitado en sesiones muy largas o viajes con miles de celdas distintas.
+        const val MAX_TRACKED_CELLS = 500
     }
 }

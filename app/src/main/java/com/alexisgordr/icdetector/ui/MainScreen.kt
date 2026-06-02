@@ -19,6 +19,7 @@ import androidx.compose.material.pullrefresh.pullRefresh
 import androidx.compose.material.pullrefresh.rememberPullRefreshState
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -140,10 +141,10 @@ fun MainScreenContent(dbHelper: CellDbHelper, service: MiniICService?) {
     val rsrqFlow = remember(service) { service?.rsrqHistory ?: MutableStateFlow<List<Int>>(emptyList()) }
     val geoFlow = remember(service) { service?.geoHistory ?: MutableStateFlow<List<Float>>(emptyList()) }
 
-    val cellList by cellFlow.collectAsState()
-    val dbmHistory by dbmFlow.collectAsState()
-    val rsrqHistory by rsrqFlow.collectAsState()
-    val geoHistory by geoFlow.collectAsState()
+    val cellList by cellFlow.collectAsStateWithLifecycle()
+    val dbmHistory by dbmFlow.collectAsStateWithLifecycle()
+    val rsrqHistory by rsrqFlow.collectAsStateWithLifecycle()
+    val geoHistory by geoFlow.collectAsStateWithLifecycle()
     
     var refreshing by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
@@ -477,7 +478,7 @@ fun MainScreenContent(dbHelper: CellDbHelper, service: MiniICService?) {
                         }
 
                         if (service != null) {
-                            val terminalLogs by service.liveLogs.collectAsState()
+                            val terminalLogs by service.liveLogs.collectAsStateWithLifecycle()
                             LiveTerminalPanel(logs = terminalLogs)
                         }
 
@@ -531,7 +532,7 @@ fun SecurityScorePanel(active: CellData, dbmHistory: List<Int>, geoHistory: List
     }
     
     val auditFlow = remember(service) { service?.auditStatus ?: MutableStateFlow("Iniciando...") }
-    val auditStatus by auditFlow.collectAsState()
+    val auditStatus by auditFlow.collectAsStateWithLifecycle()
     
     val scoreColor = if (active.securityScore >= 90) Color(0xFF4CAF50) else if (active.securityScore >= 70) Color(0xFFFFA000) else Color.Red
 
@@ -632,7 +633,7 @@ fun SecurityScorePanel(active: CellData, dbmHistory: List<Int>, geoHistory: List
             ) {
                 // Indicador RED — izquierda
                 val latencyFlow = remember(service) { service?.networkLatencyState ?: MutableStateFlow("OK") }
-                val netState by latencyFlow.collectAsState()
+                val netState by latencyFlow.collectAsStateWithLifecycle()
 
                 Text(
                     text = if (netState == "OK") "● RED OK" else "● RED ANÓMALA",
