@@ -77,6 +77,7 @@ class MiniICService : Service() {
     private var screenReceiver: BroadcastReceiver? = null
     private var lastDisplayInfo: TelephonyDisplayInfo? = null
     private var isScreenOn = true
+    private var locationUpdatesActive = false
     private var isServiceRunning = false
     private var lastAirplaneTriggerTime = 0L
     private var lastStrongSignalAlarmTime = 0L
@@ -116,6 +117,13 @@ class MiniICService : Service() {
         .connectTimeout(10, TimeUnit.SECONDS)
         .readTimeout(10, TimeUnit.SECONDS)
         .writeTimeout(10, TimeUnit.SECONDS)
+        .build()
+    // Cliente solo para los pings de latencia: timeout corto (4s) para que una medición
+    // no bloquee la coroutine. Reutiliza el connection pool del client general (eficiente).
+    private val latencyClient = client.newBuilder()
+        .connectTimeout(4, TimeUnit.SECONDS)
+        .readTimeout(4, TimeUnit.SECONDS)
+        .callTimeout(4, TimeUnit.SECONDS)
         .build()
     private val verificationCache = ConcurrentHashMap<String, VerificationStatus>()
     // Marca temporal del último ERROR por celda, para permitir reintentos sin saturar la API
@@ -185,27 +193,12 @@ class MiniICService : Service() {
         registerDisplayInfoCallback()
         registerScreenReceiver()
 
-        if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED) {
-            // GPS puro por satélite
-            if (locationManager.isProviderEnabled(LocationManager.GPS_PROVIDER)) {
-                locationManager.requestLocationUpdates(
-                    LocationManager.GPS_PROVIDER,
-                    3000L, 5f, locationListener
-                )
-            }
-            // Network/WiFi (GrapheneOS usa sus propios servidores, privado)
-            if (locationManager.isProviderEnabled(LocationManager.NETWORK_PROVIDER)) {
-                locationManager.requestLocationUpdates(
-                    LocationManager.NETWORK_PROVIDER,
-                    3000L, 5f, locationListener
-                )
-            }
-        }
+        startLocationUpdates()
 
         scope.launch(Dispatchers.Default) {
             var wasAirplaneModeOn = false
             while (isActive && isServiceRunning) {
-                val delayTime = if (isScreenOn) 2000L else 10000L
+                val delayTime = if (isScreenOn) 3000L else 10000L
                 
                 val isAirplaneModeOn = Settings.Global.getInt(
                     contentResolver, 
@@ -247,19 +240,24 @@ class MiniICService : Service() {
         lastLatencyCheckTime = now
 
         scope.launch(Dispatchers.IO) {
-            // Medir latencia en los 3 endpoints simultáneamente
-            val latencies = LATENCY_ENDPOINTS.mapNotNull { endpoint ->
-                try {
-                    val start = System.currentTimeMillis()
-                    val request = okhttp3.Request.Builder()
-                        .url(endpoint)
-                        .head()  // HEAD: sin body, mínimo tráfico
-                        .build()
-                    client.newCall(request).execute().use { }
-                    System.currentTimeMillis() - start
-                } catch (_: Exception) {
-                    null  // endpoint no disponible, ignorar
-                }
+            // Medir los 3 endpoints EN PARALELO (antes era secuencial pese al comentario).
+            // El resultado se sigue promediando en un único valor (una sola línea de log).
+            val latencies = coroutineScope {
+                LATENCY_ENDPOINTS.map { endpoint ->
+                    async {
+                        try {
+                            val start = System.currentTimeMillis()
+                            val request = okhttp3.Request.Builder()
+                                .url(endpoint)
+                                .head()  // HEAD: sin body, mínimo tráfico
+                                .build()
+                            latencyClient.newCall(request).execute().use { }
+                            System.currentTimeMillis() - start
+                        } catch (_: Exception) {
+                            null  // endpoint no disponible, ignorar
+                        }
+                    }
+                }.awaitAll().filterNotNull()
             }
 
             // Necesitamos al menos 2 de 3 endpoints respondiendo
@@ -333,10 +331,116 @@ class MiniICService : Service() {
         }
         screenReceiver = object : BroadcastReceiver() {
             override fun onReceive(context: Context?, intent: Intent?) {
-                isScreenOn = intent?.action == Intent.ACTION_SCREEN_ON
+                when (intent?.action) {
+                    Intent.ACTION_SCREEN_ON -> {
+                        isScreenOn = true
+                        startLocationUpdates()
+                    }
+                    Intent.ACTION_SCREEN_OFF -> {
+                        isScreenOn = false
+                        stopLocationUpdates()
+                    }
+                }
             }
         }
         registerReceiver(screenReceiver, filter)
+    }
+
+    /**
+     * Pide ubicación a GPS satelital + NETWORK. Intervalo relajado (15 s / 20 m) para
+     * ahorrar batería: las celdas no se mueven y no hace falta un fix cada pocos segundos.
+     * El GPS satelital se mantiene a propósito porque es independiente de la red, así que
+     * sigue siendo fiable ante un IMSI-catcher (a diferencia de la ubicación por red).
+     */
+    private fun startLocationUpdates() {
+        if (locationUpdatesActive) return
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION)
+            != PackageManager.PERMISSION_GRANTED) return
+        try {
+            if (locationManager.isProviderEnabled(LocationManager.GPS_PROVIDER)) {
+                locationManager.requestLocationUpdates(
+                    LocationManager.GPS_PROVIDER,
+                    15000L, 20f, locationListener
+                )
+            }
+            if (locationManager.isProviderEnabled(LocationManager.NETWORK_PROVIDER)) {
+                locationManager.requestLocationUpdates(
+                    LocationManager.NETWORK_PROVIDER,
+                    15000L, 20f, locationListener
+                )
+            }
+            locationUpdatesActive = true
+        } catch (_: SecurityException) {}
+    }
+
+    /**
+     * Suspende el stream de localización (se llama al apagar la pantalla). El escaneo de
+     * celdas sigue corriendo; para los chequeos de fondo se usa getLastKnownLocation, que
+     * no consume batería extra.
+     */
+    private fun stopLocationUpdates() {
+        if (!locationUpdatesActive) return
+        try {
+            locationManager.removeUpdates(locationListener)
+        } catch (_: Exception) {}
+        locationUpdatesActive = false
+    }
+
+    private var lastForcedFixTime = 0L
+    private var forcedFixListener: LocationListener? = null
+
+    /**
+     * Fase 2: ante una celda sospechosa, pide un fix GPS preciso de UN SOLO USO para
+     * "clavar" la coordenada del incidente, aunque el stream continuo esté pausado
+     * (pantalla apagada). El GPS satelital es independiente de la red, así que sigue
+     * siendo fiable frente a un IMSI-catcher. Reutiliza updateNullCoordinates (camino ya
+     * probado). Debounce de 30 s, timeout de 20 s y auto-desregistro al primer fix para
+     * no drenar batería.
+     */
+    private fun requestHighAccuracyFix() {
+        val now = System.currentTimeMillis()
+        if (now - lastForcedFixTime < 30000L) return
+        if (forcedFixListener != null) return  // ya hay una petición en curso
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION)
+            != PackageManager.PERMISSION_GRANTED) return
+        if (!locationManager.isProviderEnabled(LocationManager.GPS_PROVIDER)) return
+        lastForcedFixTime = now
+        appendLog("[GPS]", "Sospecha — solicitando fix GPS preciso para el incidente")
+
+        forcedFixListener = LocationListener { location ->
+            forcedFixListener?.let { try { locationManager.removeUpdates(it) } catch (_: Exception) {} }
+            forcedFixListener = null
+            if (location.accuracy > 100f) return@LocationListener  // ignorar fix impreciso
+            val cell = _cellFlow.value.firstOrNull { it.isRegistered } ?: return@LocationListener
+            scope.launch(Dispatchers.IO) {
+                val updated = dbHelper.updateNullCoordinates(
+                    cell.cellId, cell.mnc, cell.tac, cell.mcc,
+                    location.latitude, location.longitude
+                )
+                appendLog("[GPS]",
+                    if (updated > 0) "Incidente localizado: $updated registro(s) con coordenadas precisas"
+                    else "Fix preciso obtenido (sin registros pendientes de coordenadas)")
+            }
+        }
+
+        try {
+            locationManager.requestLocationUpdates(
+                LocationManager.GPS_PROVIDER, 0L, 0f, forcedFixListener!!
+            )
+        } catch (_: SecurityException) {
+            forcedFixListener = null
+            return
+        }
+
+        // Timeout: si no hay fix en 20 s, desregistrar para no dejar el GPS a tope.
+        scope.launch {
+            delay(20000L)
+            forcedFixListener?.let {
+                try { locationManager.removeUpdates(it) } catch (_: Exception) {}
+                forcedFixListener = null
+                appendLog("[GPS]", "Fix GPS preciso no disponible en 20 s (timeout)")
+            }
+        }
     }
 
     private fun registerTelephonyCallback() {
@@ -479,6 +583,10 @@ class MiniICService : Service() {
         try {
             locationManager.removeUpdates(locationListener)
         } catch (_: Exception) {}
+        forcedFixListener?.let {
+            try { locationManager.removeUpdates(it) } catch (_: Exception) {}
+            forcedFixListener = null
+        }
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
             telephonyCallback?.let {
                 telephonyManager.unregisterTelephonyCallback(it)
@@ -1052,6 +1160,7 @@ class MiniICService : Service() {
         if (cell.isSuspicious) {
             toneGenerator?.startTone(ToneGenerator.TONE_CDMA_SOFT_ERROR_LITE, 200)
             Log.e("MiniIC", "THREAT DETECTED: ${cell.suspiciousReason}")
+            requestHighAccuracyFix()
         }
 
         if (is3gAirplaneModeEnabled && (net.contains("3G") || net.contains("2G"))) {
