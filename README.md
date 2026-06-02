@@ -211,8 +211,45 @@ Like H11, it is fully offline, relies on no external database, and needs no labe
 
 Its scope is limited to cells with enough nearby historical samples, so a warm-up period is required: with no prior baseline for a location it stays silent. Only the "stronger than usual" direction is treated as suspicious, since weaker-than-usual readings are commonly caused by obstruction or distance rather than an attack.
 
+## 13. Intra-LTE Band Downgrade Analysis (H13)
+Detects aggressive and suspicious shifts from high-frequency capacity bands (e.g., Band 7) to low-frequency sub-GHz bands (e.g., Band 20). Attackers frequently attempt to push target devices into lower frequencies to maximize signal penetration and extend their sweeping area.
+
+This heuristic mathematically differentiates between a sudden, forced band downgrade (highly indicative of a Rogue BTS or IMSI-catcher attack) and a natural, progressive signal degradation (such as entering a basement or parking garage). By evaluating physical band properties through EARFCN mapping rather than abstract channel numbers, it accurately identifies malicious physical-layer manipulations while heavily reducing false positives during normal mobility.
+
 ## Temporal Confidence Decay
 Anomalies must persist across 3 consecutive analysis cycles before triggering a confirmed threat alert. Transient heuristic failures are logged but do not raise alarms, significantly reducing false positive alert fatigue in dynamic RF environments.
+
+---
+
+# 🔋 Battery Optimization & Exceptions
+
+ICdetection requires unoptimized battery settings (**"Battery optimization: Don't optimize"**) to ensure reliable 24/7 detection.
+
+The application runs a **continuous foreground service** that scans cells, registers telephony callbacks, and manages location fixes. Android's battery optimization (Doze and App Standby) is designed to throttle or kill this type of behavior when the phone is idle with the screen off—exactly the scenario where an IMSI-catcher might operate.
+
+To prevent detection gaps, the user must **manually** grant an optimization exception:
+
+**Settings → Apps → ICdetection → Battery → Battery optimization → Don't optimize**
+
+The app attempts to detect if it is optimized and guides the user to the appropriate settings screen. However, the **final exception grant is the user's responsibility**—it cannot be forced programmatically.
+
+---
+
+# 📈 Statistical Baseline Learning
+
+ICdetection employs a **statistical baseline learning** system to:
+- profile normal signal behavior
+- detect anomalous deviations
+- identify statistically significant outliers
+
+The system learns each cell's typical signal range (dBm) at a given physical location from the device's own historical observations. This allows it to:
+- flag anomalously strong readings (potential impersonation attacks)
+- reduce false positives from natural signal variation
+- adapt to the user's specific RF environment over time
+
+The learning is fully **unsupervised**: no labelled data or external databases are used. The system only learns from the device's own real-world telemetry.
+
+A **warm-up period** (typically a few days of varied usage) is required to build a stable baseline. During this period, some heuristics may remain silent to avoid premature alerting.
 
 ---
 
