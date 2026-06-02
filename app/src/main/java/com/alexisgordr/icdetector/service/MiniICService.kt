@@ -692,6 +692,15 @@ class MiniICService : Service() {
             val neighbors = list.filter { !it.isRegistered }
             val activeRaw = list.firstOrNull { it.isRegistered }
 
+            // Reset del estado de latencia ANTES del análisis si la celda ha cambiado
+            // (prevCid aún tiene el id anterior aquí; checkAlerts lo actualiza después).
+            // Esto evita que la heurística 12 lea el veredicto "ANOMALA" de la celda vieja
+            // en el primer ciclo de la nueva, antes de que tenga su propio baseline.
+            if (activeRaw != null && activeRaw.cellId != "N/A" && activeRaw.cellId != prevCid) {
+                _networkLatencyState.value = "OK"
+                latencyAnomalyStreak = 0
+            }
+
             scope.launch(Dispatchers.IO) {
                 val currentLocation = getCurrentLocation()
 
@@ -1154,6 +1163,12 @@ class MiniICService : Service() {
 
         if (cid != prevCid) {
             _dbmHistory.value = emptyList()
+            // Reset del estado de latencia en el handover: el veredicto de la celda anterior
+            // NO es válido para la nueva. Limpiamos "ANOMALA" (icono y heurística 12) y la
+            // racha; la celda nueva volverá a "OK"/"ANOMALA" según sus propias mediciones una
+            // vez aprenda su baseline. Evita que la heurística 12 se contamine con datos viejos.
+            _networkLatencyState.value = "OK"
+            latencyAnomalyStreak = 0
             appendLog("[RADIO]", "Handover celular completado -> Nueva celda CID: $cid ($net)")
             generateAuditLog(cell) 
 
