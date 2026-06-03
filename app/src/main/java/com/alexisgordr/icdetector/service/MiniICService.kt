@@ -176,6 +176,16 @@ class MiniICService : Service() {
         telephonyManager = getSystemService(TELEPHONY_SERVICE) as TelephonyManager
         dbHelper = CellDbHelper(this)
         locationManager = getSystemService(LOCATION_SERVICE) as LocationManager
+
+        // Poda de histórico antiguo al arrancar (en segundo plano, no bloquea onCreate).
+        // Evita que la tabla crezca sin límite registrando 24/7; conserva 60 días, muy por
+        // encima de la ventana de 30 días que usan las consultas, así que no afecta detección.
+        scope.launch(Dispatchers.IO) {
+            try {
+                val deleted = dbHelper.pruneOldRecords(60)
+                if (deleted > 0) appendLog("[SYS]", "Poda de histórico: $deleted registros antiguos eliminados.")
+            } catch (_: Exception) {}
+        }
         
         val prefs = getSharedPreferences("miniic_prefs", MODE_PRIVATE)
         openCellIdKey = prefs.getString("opencellid_key", "") ?: ""

@@ -225,6 +225,25 @@ class CellDbHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME, 
         db.execSQL("DELETE FROM $TABLE_HISTORY")
     }
 
+    /**
+     * Poda de registros antiguos: borra del historial las filas más viejas que [daysToKeep]
+     * días. Las consultas de detección solo miran los últimos 30 días, así que mantener un
+     * margen (60 por defecto) garantiza que NO se borra nada que las heurísticas puedan usar:
+     * esto solo evita que la tabla crezca sin límite registrando 24/7. No toca el esquema ni
+     * los datos recientes. Devuelve el número de filas borradas.
+     */
+    fun pruneOldRecords(daysToKeep: Int = 60): Int {
+        return try {
+            val cutoff = System.currentTimeMillis() - (daysToKeep.toLong() * 24 * 60 * 60 * 1000)
+            val sdf = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault())
+            val threshold = sdf.format(Date(cutoff))
+            val db = this.writableDatabase
+            db.delete(TABLE_HISTORY, "$COLUMN_TIMESTAMP < ?", arrayOf(threshold))
+        } catch (_: Exception) {
+            0
+        }
+    }
+
     fun updateNullCoordinates(
         cellId: String, mnc: String, tac: String, mcc: String,
         lat: Double, lon: Double
