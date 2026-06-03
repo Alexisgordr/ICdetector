@@ -91,6 +91,14 @@ class MiniICService : Service() {
     }
     private var lastGpsTriggerTime = 0L
 
+    // "Cola" de coordenadas frescas pendientes: cuando una celda se registra sin un fix
+    // fresco, queda marcada como pendiente. Cualquier fix fresco (stream, forzado o el
+    // despertar periódico en reposo) la rellena; en cuanto se rellena, se limpia. Así nunca
+    // estampamos coordenadas viejas y no nos rendimos hasta tener una real del momento.
+    private var awaitingFreshCoords = false
+    private var pendingCoordsSince = 0L
+    private var lastReposeCoordFixAttempt = 0L
+
     private val anomalyStreaks = ConcurrentHashMap<String, Int>()
     private var lastStreakCellId = ""
     private val CONFIRMATION_CYCLES = 3
@@ -249,6 +257,21 @@ class MiniICService : Service() {
                         requestFreshCellInfo()
                         checkLatencyAnomaly()
                         pruneCaches()
+
+                        // En reposo (pantalla apagada) con una celda esperando coordenadas
+                        // frescas: despertamos el GPS despacio (cada 90 s, hasta 10 min) hasta
+                        // conseguir un fix fresco que la rellene. Se detiene solo en cuanto se
+                        // resuelve (awaitingFreshCoords pasa a false). Con pantalla encendida lo
+                        // cubre el stream, así que esto es solo para reposo.
+                        if (!isScreenOn && awaitingFreshCoords) {
+                            val nowMs = System.currentTimeMillis()
+                            val pendingFor = nowMs - pendingCoordsSince
+                            if (pendingFor < 600000L && nowMs - lastReposeCoordFixAttempt > 90000L) {
+                                lastReposeCoordFixAttempt = nowMs
+                                appendLog("[GPS]", "Celda pendiente de coordenadas — despertando GPS para fix fresco")
+                                requestHighAccuracyFix()
+                            }
+                        }
                     }
                 } catch (ce: CancellationException) {
                     throw ce  // respetar la cancelación limpia del scope
@@ -468,6 +491,7 @@ class MiniICService : Service() {
             forcedFixListener?.let { try { locationManager.removeUpdates(it) } catch (_: Exception) {} }
             forcedFixListener = null
             if (location.accuracy > 100f) return@LocationListener  // ignorar fix impreciso
+            awaitingFreshCoords = false  // tenemos un fix fresco: pendiente resuelto
             val cell = _cellFlow.value.firstOrNull { it.isRegistered } ?: return@LocationListener
             scope.launch(Dispatchers.IO) {
                 val updated = dbHelper.updateNullCoordinates(
@@ -947,6 +971,7 @@ class MiniICService : Service() {
             // fix tan fresco, se omite y lo cubre el fix forzado (fresco por definición).
             val coordAgeMs = System.currentTimeMillis() - loc.time
             if (coordAgeMs < 15000L) {
+                awaitingFreshCoords = false  // fix fresco del stream: pendiente resuelto
                 scope.launch(Dispatchers.IO) {
                     val updated = dbHelper.updateNullCoordinates(
                         currentCell.cellId,
@@ -1211,10 +1236,14 @@ class MiniICService : Service() {
             _networkLatencyState.value = "OK"
             latencyAnomalyStreak = 0
             appendLog("[RADIO]", "Handover celular completado -> Nueva celda CID: $cid ($net)")
+            // Esta celda queda pendiente de coordenadas frescas hasta que un fix las rellene.
+            awaitingFreshCoords = true
+            pendingCoordsSince = System.currentTimeMillis()
             // Cambio de celda: pedimos un fix GPS fresco SOLO con la pantalla encendida (donde
             // el stream ya está activo). Con pantalla apagada el GPS está pausado a propósito y
             // NO queremos despertarlo en cada handover rutinario yendo en el bolsillo; si la
             // celda fuera sospechosa, el disparador de sospecha (más abajo) lo fuerza igualmente.
+            // En reposo, el reintento periódico del bucle se encarga mientras siga pendiente.
             // Debounce normal de 30 s.
             if (isScreenOn) requestHighAccuracyFix()
             generateAuditLog(cell) 
