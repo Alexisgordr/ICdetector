@@ -940,19 +940,28 @@ class MiniICService : Service() {
                 return@launch
             }
 
-            // NUEVO: rellenar registros históricos sin coordenadas
-            scope.launch(Dispatchers.IO) {
-                val updated = dbHelper.updateNullCoordinates(
-                    currentCell.cellId,
-                    currentCell.mnc,
-                    currentCell.tac,
-                    currentCell.mcc,
-                    loc.latitude,
-                    loc.longitude
-                )
-                if (updated > 0) {
-                    appendLog("[GPS]", "Coordenadas rellenadas en $updated registros históricos")
+            // Rellenar coordenadas SOLO con un fix realmente fresco (<30 s). getCurrentLocation
+            // acepta hasta 2 min (bien para las heurísticas), pero para estampar la posición de un
+            // cambio de celda / rebote a la misma celda queremos la real del momento, no una de
+            // hace minutos: ante un IMSI-catcher la frescura importa. Si no hay fix fresco aquí, el
+            // fix forzado (requestHighAccuracyFix), que es fresco por definición, se encarga.
+            val coordAgeMs = System.currentTimeMillis() - loc.time
+            if (coordAgeMs < 30000L) {
+                scope.launch(Dispatchers.IO) {
+                    val updated = dbHelper.updateNullCoordinates(
+                        currentCell.cellId,
+                        currentCell.mnc,
+                        currentCell.tac,
+                        currentCell.mcc,
+                        loc.latitude,
+                        loc.longitude
+                    )
+                    if (updated > 0) {
+                        appendLog("[GPS]", "Coordenadas frescas rellenadas en $updated registro(s)")
+                    }
                 }
+            } else {
+                appendLog("[GPS]", "Fix disponible pero no lo bastante fresco (${coordAgeMs / 1000}s) — se omite el relleno; espera al fix preciso")
             }
 
             // El relleno de coordenadas (arriba) se ejecuta SIEMPRE que haya GPS, esté la celda
