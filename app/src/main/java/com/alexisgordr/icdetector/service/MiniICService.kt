@@ -1202,11 +1202,12 @@ class MiniICService : Service() {
             _networkLatencyState.value = "OK"
             latencyAnomalyStreak = 0
             appendLog("[RADIO]", "Handover celular completado -> Nueva celda CID: $cid ($net)")
-            // Cambio de celda: pedimos un fix GPS fresco para fijar las coordenadas de la
-            // celda nueva (útil si veníamos sin GPS). Debounce normal de 30 s para no drenar
-            // batería si te mueves rápido encadenando handovers. Si la celda es además
-            // sospechosa, más abajo se vuelve a pedir igualmente.
-            requestHighAccuracyFix()
+            // Cambio de celda: pedimos un fix GPS fresco SOLO con la pantalla encendida (donde
+            // el stream ya está activo). Con pantalla apagada el GPS está pausado a propósito y
+            // NO queremos despertarlo en cada handover rutinario yendo en el bolsillo; si la
+            // celda fuera sospechosa, el disparador de sospecha (más abajo) lo fuerza igualmente.
+            // Debounce normal de 30 s.
+            if (isScreenOn) requestHighAccuracyFix()
             generateAuditLog(cell) 
 
             val currentTime = System.currentTimeMillis()
