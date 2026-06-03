@@ -3,6 +3,7 @@ package com.alexisgordr.icdetector.telephony
 import android.os.Build
 import android.telephony.*
 import com.alexisgordr.icdetector.models.CellData
+import com.alexisgordr.icdetector.core.BandPlan
 
 object CellParser {
 
@@ -30,7 +31,7 @@ object CellParser {
                         }
                     } catch (_: Exception) {}
                 }
-                CellData(reg, networkTypeString, id.ci.valOrNa(), cellMnc, id.tac.valOrNa(), dbm, cellMcc, timingAdvance = ta, arfcn = id.earfcn, pci = id.pci, rsrq = rsrq, sinr = sinr)
+                CellData(reg, networkTypeString, id.ci.valOrNa(), cellMnc, id.tac.valOrNa(), dbm, cellMcc, timingAdvance = ta, arfcn = id.earfcn, pci = id.pci, rsrq = rsrq, sinr = sinr, band = BandPlan.earfcnToBandLte(id.earfcn))
             }
             is CellInfoNr -> {
                 val id = info.cellIdentity as CellIdentityNr

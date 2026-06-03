@@ -1017,8 +1017,18 @@ class MiniICService : Service() {
             return
         }
 
-        // Marcamos como PENDING inmediatamente para evitar peticiones duplicadas (Race Condition)
-        verificationCache[cacheKey] = VerificationStatus.PENDING
+        // Reclamo atómico: solo un hilo puede pasar de (no-PENDING) a PENDING para esta
+        // celda. Re-comprobamos dentro del lock para cerrar la ventana de carrera si dos
+        // rutas llaman a verifyCell casi a la vez (evita peticiones a la API duplicadas).
+        synchronized(verificationCache) {
+            val current = verificationCache[cacheKey]
+            if (current != null && current != VerificationStatus.ERROR) return
+            if (current == VerificationStatus.ERROR) {
+                val last = lastVerificationErrorTime[cacheKey] ?: 0L
+                if (System.currentTimeMillis() - last < 60000L) return
+            }
+            verificationCache[cacheKey] = VerificationStatus.PENDING
+        }
 
         scope.launch(Dispatchers.IO) {
             // 2. Mirar Base de Datos (fuera del hilo principal)
