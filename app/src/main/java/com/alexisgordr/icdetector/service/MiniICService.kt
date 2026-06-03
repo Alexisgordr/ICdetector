@@ -940,13 +940,13 @@ class MiniICService : Service() {
                 return@launch
             }
 
-            // Rellenar coordenadas SOLO con un fix realmente fresco (<30 s). getCurrentLocation
-            // acepta hasta 2 min (bien para las heurísticas), pero para estampar la posición de un
-            // cambio de celda / rebote a la misma celda queremos la real del momento, no una de
-            // hace minutos: ante un IMSI-catcher la frescura importa. Si no hay fix fresco aquí, el
-            // fix forzado (requestHighAccuracyFix), que es fresco por definición, se encarga.
+            // Rellenar coordenadas SOLO con un fix casi de tiempo real (<15 s, la cadencia del
+            // stream). Antes de un cambio de celda / rebote a la misma celda queremos la posición
+            // real del momento: ante una clonación de Cell ID, la H11/H13 comparan contra estas
+            // coordenadas, así que una posición vieja podría enmascarar la incoherencia. Si no hay
+            // fix tan fresco, se omite y lo cubre el fix forzado (fresco por definición).
             val coordAgeMs = System.currentTimeMillis() - loc.time
-            if (coordAgeMs < 30000L) {
+            if (coordAgeMs < 15000L) {
                 scope.launch(Dispatchers.IO) {
                     val updated = dbHelper.updateNullCoordinates(
                         currentCell.cellId,
