@@ -358,9 +358,20 @@ object ThreatAnalyzer {
         // entre identidades AHORA, no de un cambio puntual ya asentado.
         rfStability?.let { st ->
             if (st.totalObservations >= 4) {
-                // Valores sólidos en 30d (descarta lecturas-glitch que aparecen una sola vez).
-                val solidPci = st.distinctPci.filter { it.second >= 2 }.map { it.first }.toSet()
-                val solidArfcn = st.distinctArfcn.filter { it.second >= 2 }.map { it.first }.toSet()
+                // Un valor cuenta como IDENTIDAD REAL (sólida) solo si: aparece >=2 veces (descarta
+                // glitches de una sola lectura) Y representa >=15% de las observaciones de ese campo
+                // (descarta lecturas-basura minoritarias: p.ej. un ARFCN espurio que sale 3 de 105
+                // veces = 2.9% es ruido de medición de Android, no una identidad alternante). Un clon
+                // real alternando identidades genera un porcentaje sustancial, no un 3%.
+                val MIN_SHARE = 0.15
+                fun solidSet(values: List<Pair<Int, Int>>): Set<Int> {
+                    val total = values.sumOf { it.second }
+                    if (total == 0) return emptySet()
+                    return values.filter { it.second >= 2 && it.second.toDouble() / total >= MIN_SHARE }
+                        .map { it.first }.toSet()
+                }
+                val solidPci = solidSet(st.distinctPci)
+                val solidArfcn = solidSet(st.distinctArfcn)
                 // Valores presentes en la ventana reciente (48h).
                 val recentPci = st.recentDistinctPci.map { it.first }.toSet()
                 val recentArfcn = st.recentDistinctArfcn.map { it.first }.toSet()

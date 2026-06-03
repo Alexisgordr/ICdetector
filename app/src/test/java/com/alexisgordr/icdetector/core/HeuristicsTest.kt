@@ -311,6 +311,31 @@ class HeuristicsTest {
         assertTrue(analyzeRf(rf).rfStabilityPassed)
     }
 
+    @Test fun `H15 NO dispara con ARFCN glitch minoritario (caso real 79362080)`() {
+        // Caso real: ARFCN 2850 (101), 1301 (3 = 2.9%), 3600 (1). PCI 178 estable.
+        // El 1301 aparece >=2 veces pero es solo el 2.9% -> ruido, no identidad. No debe disparar.
+        val rf = com.alexisgordr.icdetector.models.CellRfStability(
+            totalObservations = 105,
+            distinctPci = listOf(178 to 105),
+            distinctArfcn = listOf(2850 to 101, 1301 to 3, 3600 to 1),
+            recentDistinctPci = listOf(178 to 40),
+            recentDistinctArfcn = listOf(2850 to 38, 1301 to 2)
+        )
+        assertTrue(analyzeRf(rf).rfStabilityPassed)
+    }
+
+    @Test fun `H15 dispara si el segundo valor es una proporcion sustancial (clon real)`() {
+        // Dos ARFCN ambos sustanciales (60% y 40%) y recientes -> parpadeo real -> dispara.
+        val rf = com.alexisgordr.icdetector.models.CellRfStability(
+            totalObservations = 20,
+            distinctPci = listOf(178 to 20),
+            distinctArfcn = listOf(2850 to 12, 1301 to 8),
+            recentDistinctPci = listOf(178 to 10),
+            recentDistinctArfcn = listOf(2850 to 6, 1301 to 4)
+        )
+        assertFalse(analyzeRf(rf).rfStabilityPassed)
+    }
+
     @Test fun `H15 no dispara sin datos de estabilidad (null)`() {
         assertTrue(analyzeRf(null).rfStabilityPassed)
     }
