@@ -114,6 +114,9 @@ class MiniICService : Service() {
     private var cachedLocationLon = 0.0
     private var cachedHistory: List<HistoryRecord> = emptyList()
     private var cachedBaseline: SignalBaseline? = null
+    private var cachedRfStability: CellRfStability? = null
+    private var cachedRfSignature = ""
+    private var cachedRfTimestamp = 0L
     private var cacheTimestamp = 0L
     private val CELL_CACHE_TTL = 60_000L
 
@@ -753,6 +756,28 @@ class MiniICService : Service() {
                 val preloadedHistory: List<HistoryRecord>
                 val signalBaseline: SignalBaseline?
 
+                // rfStability (H15) solo depende de la IDENTIDAD de la celda (su historial de
+                // PCI/ARFCN), NO de la ubicación. Se calcula SIEMPRE que haya celda válida,
+                // haya GPS o no. Antes estaba dentro del gate canQuery (que exige currentLocation
+                // != null), así que parpadeaba 100<->70 al ritmo de la disponibilidad del GPS
+                // estando parado. Caché propia por firma de celda (sin depender del movimiento).
+                var rfStability: CellRfStability? = null
+                if (activeRaw != null && activeRaw.cellId != "N/A") {
+                    val rfSig = "${activeRaw.cellId}|${activeRaw.mnc}|${activeRaw.tac}|${activeRaw.mcc}"
+                    val nowRf = System.currentTimeMillis()
+                    rfStability = if (rfSig == cachedRfSignature && (nowRf - cachedRfTimestamp) < CELL_CACHE_TTL) {
+                        cachedRfStability
+                    } else {
+                        val st = dbHelper.getCellRfStability(
+                            activeRaw.cellId, activeRaw.mnc, activeRaw.tac, activeRaw.mcc
+                        )
+                        cachedRfSignature = rfSig
+                        cachedRfStability = st
+                        cachedRfTimestamp = nowRf
+                        st
+                    }
+                }
+
                 if (canQuery) {
                     val signature = "${activeRaw.cellId}|${activeRaw.mnc}|${activeRaw.tac}"
                     val now = System.currentTimeMillis()
@@ -815,7 +840,8 @@ class MiniICService : Service() {
                             signalBaseline = signalBaseline,
                             previousBand = prevBand,
                             previousDbm = prevRegisteredDbm,
-                            recentRegisteredDbm = recentRegisteredDbmTrend.toList()
+                            recentRegisteredDbm = recentRegisteredDbmTrend.toList(),
+                            rfStability = rfStability
                         )
                     } else {
                         // Las vecinas no se evalúan como amenaza; se mantienen como contexto.
@@ -1192,6 +1218,9 @@ class MiniICService : Service() {
         val sigBaseline = if (loc != null && cell.cellId != "N/A") {
             dbHelper.getCellSignalBaseline(cell.cellId, cell.mnc, cell.tac, loc)
         } else null
+        val rfStability = if (cell.cellId != "N/A") {
+            dbHelper.getCellRfStability(cell.cellId, cell.mnc, cell.tac, cell.mcc)
+        } else null
 
         val updatedActive = cell.copy(verified = VerificationStatus.VERIFIED, lat = lat, lon = lon)
         val analyzedActive = ThreatAnalyzer.analyzeThreats(
@@ -1207,7 +1236,8 @@ class MiniICService : Service() {
             signalBaseline = sigBaseline,
             previousBand = prevBand,
             previousDbm = prevRegisteredDbm,
-            recentRegisteredDbm = recentRegisteredDbmTrend.toList()
+            recentRegisteredDbm = recentRegisteredDbmTrend.toList(),
+            rfStability = rfStability
         )
         
         scope.launch(Dispatchers.Main) {
@@ -1428,7 +1458,7 @@ class MiniICService : Service() {
 
     private fun generateAuditLog(cell: CellData) {
         _auditStatus.value = "Auditoría en curso..."
-        appendLog("[AUDIT]", "--- INICIANDO CICLO DE AUDITORÍA (13 REGLAS) ---")
+        appendLog("[AUDIT]", "--- INICIANDO CICLO DE AUDITORÍA (14 REGLAS) ---")
         val report = cell.heuristicReport
         val results = mapOf(
             "1. Celda Aislada" to report.isolatedCellPassed,
@@ -1443,7 +1473,8 @@ class MiniICService : Service() {
             "10. Anti Ping-Pong" to report.pingPongPassed,
             "11. Consistencia Geográfica (Cell ID móvil)" to report.mobileCellIdPassed,
             "12. Potencia vs Histórico (Baseline geográfico)" to report.signalBaselinePassed,
-            "13. Downgrade de Banda (Intra-LTE)" to report.bandDowngradePassed
+            "13. Downgrade de Banda (Intra-LTE)" to report.bandDowngradePassed,
+            "14. Estabilidad de Identidad RF (PCI/ARFCN)" to report.rfStabilityPassed
         )
 
         results.forEach { (regla, pasado) ->

@@ -97,4 +97,37 @@ class BayesianScorerTest {
         val conLatencia = BayesianScorer.calculate(listOf("powerJump"), "PENDING", true)
         assertTrue("latencia (LR 1.8) debe subir algo el posterior", conLatencia > sinLatencia)
     }
+
+    // --- Bayesiano adaptativo al contexto (densidad de entorno) ---
+
+    @Test
+    fun `powerJump pesa menos en entorno disperso que en denso`() {
+        // Mismo indicio (salto de potencia) en rural (0 vecinas) vs urbano (muchas).
+        val denso = BayesianScorer.calculate(listOf("powerJump"), "PENDING", false, neighborCount = 12)
+        val disperso = BayesianScorer.calculate(listOf("powerJump"), "PENDING", false, neighborCount = 0)
+        assertTrue("en rural el salto de potencia debe pesar menos", disperso < denso)
+    }
+
+    @Test
+    fun `sin densidad (compat) se comporta como el modo denso`() {
+        // neighborCount = -1 (por defecto) no debe cambiar nada respecto al cálculo clásico.
+        val clasico = BayesianScorer.calculate(listOf("powerJump"), "PENDING", false)
+        val denso = BayesianScorer.calculate(listOf("powerJump"), "PENDING", false, neighborCount = 12)
+        assertEquals("desconocido debe igualar a denso", denso, clasico, 0.001f)
+    }
+
+    @Test
+    fun `las heuristicas fisicas NO se suavizan por densidad`() {
+        // MCC mismatch (físicamente sólida) debe valer igual en rural que en urbano.
+        val denso = BayesianScorer.calculate(listOf("mccMismatch"), "PENDING", false, neighborCount = 12)
+        val disperso = BayesianScorer.calculate(listOf("mccMismatch"), "PENDING", false, neighborCount = 0)
+        assertEquals("MCC no debe depender de la densidad", denso, disperso, 0.001f)
+    }
+
+    @Test
+    fun `el cifrado A5_0 NO se suaviza por densidad`() {
+        val denso = BayesianScorer.calculate(listOf("ciphering"), "PENDING", false, neighborCount = 12)
+        val disperso = BayesianScorer.calculate(listOf("ciphering"), "PENDING", false, neighborCount = 0)
+        assertEquals("el cifrado anulado vale igual en cualquier entorno", denso, disperso, 0.001f)
+    }
 }

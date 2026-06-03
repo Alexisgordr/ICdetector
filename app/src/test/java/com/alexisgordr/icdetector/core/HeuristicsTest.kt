@@ -229,4 +229,89 @@ class HeuristicsTest {
         ).securityScore
         assertTrue("con RF bueno, la latencia anómala no debe cambiar el score", withAnomaly == withoutAnomaly)
     }
+
+    // ---------- H15: Estabilidad de identidad RF (lifecycle) ----------
+    private fun analyzeRf(rf: com.alexisgordr.icdetector.models.CellRfStability?) =
+        ThreatAnalyzer.analyzeThreats(
+            active = active(dbm = -90),
+            neighbors = listOf(neighbor(-95)),
+            isHardwareCipheringActive = true,
+            cellChangeHistory = emptyList(),
+            currentLocation = null,
+            rfStability = rf
+        ).heuristicReport
+
+    @Test fun `H15 dispara con dos PCI solidos que siguen activos recientemente (parpadeo)`() {
+        // PCI 50 (x3) y PCI 120 (x2), ambos presentes en la ventana reciente -> clon parpadeando
+        val rf = com.alexisgordr.icdetector.models.CellRfStability(
+            totalObservations = 5,
+            distinctPci = listOf(50 to 3, 120 to 2),
+            distinctArfcn = listOf(1500 to 5),
+            recentDistinctPci = listOf(50 to 2, 120 to 2),
+            recentDistinctArfcn = listOf(1500 to 5)
+        )
+        assertFalse(analyzeRf(rf).rfStabilityPassed)
+    }
+
+    @Test fun `H15 dispara con dos ARFCN solidos activos recientemente`() {
+        val rf = com.alexisgordr.icdetector.models.CellRfStability(
+            totalObservations = 6,
+            distinctPci = listOf(50 to 6),
+            distinctArfcn = listOf(1500 to 4, 6300 to 2),
+            recentDistinctPci = listOf(50 to 3),
+            recentDistinctArfcn = listOf(1500 to 2, 6300 to 2)
+        )
+        assertFalse(analyzeRf(rf).rfStabilityPassed)
+    }
+
+    @Test fun `H15 NO dispara tras reconfiguracion permanente (PCI viejo solo en registros antiguos)`() {
+        // PCI 50 (x4, viejo, NO reciente) reemplazado por PCI 120 (x3, reciente). Solo 1 valor
+        // sólido sigue activo recientemente -> reconfiguración benigna, no parpadeo.
+        val rf = com.alexisgordr.icdetector.models.CellRfStability(
+            totalObservations = 7,
+            distinctPci = listOf(50 to 4, 120 to 3),
+            distinctArfcn = listOf(1500 to 7),
+            recentDistinctPci = listOf(120 to 3),   // solo el nuevo aparece reciente
+            recentDistinctArfcn = listOf(1500 to 3)
+        )
+        assertTrue(analyzeRf(rf).rfStabilityPassed)
+    }
+
+    @Test fun `H15 no dispara con PCI y ARFCN estables`() {
+        val rf = com.alexisgordr.icdetector.models.CellRfStability(
+            totalObservations = 10,
+            distinctPci = listOf(50 to 10),
+            distinctArfcn = listOf(1500 to 10),
+            recentDistinctPci = listOf(50 to 4),
+            recentDistinctArfcn = listOf(1500 to 4)
+        )
+        assertTrue(analyzeRf(rf).rfStabilityPassed)
+    }
+
+    @Test fun `H15 no dispara con un PCI distinto que aparece solo una vez (glitch)`() {
+        // PCI 120 aparece 1 sola vez -> no es sólido -> no debe disparar aunque sea reciente
+        val rf = com.alexisgordr.icdetector.models.CellRfStability(
+            totalObservations = 6,
+            distinctPci = listOf(50 to 5, 120 to 1),
+            distinctArfcn = listOf(1500 to 6),
+            recentDistinctPci = listOf(50 to 3, 120 to 1),
+            recentDistinctArfcn = listOf(1500 to 3)
+        )
+        assertTrue(analyzeRf(rf).rfStabilityPassed)
+    }
+
+    @Test fun `H15 no dispara con historial insuficiente`() {
+        val rf = com.alexisgordr.icdetector.models.CellRfStability(
+            totalObservations = 3,
+            distinctPci = listOf(50 to 2, 120 to 1),
+            distinctArfcn = listOf(1500 to 3),
+            recentDistinctPci = listOf(50 to 2, 120 to 1),
+            recentDistinctArfcn = listOf(1500 to 3)
+        )
+        assertTrue(analyzeRf(rf).rfStabilityPassed)
+    }
+
+    @Test fun `H15 no dispara sin datos de estabilidad (null)`() {
+        assertTrue(analyzeRf(null).rfStabilityPassed)
+    }
 }

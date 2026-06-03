@@ -5,6 +5,7 @@ import com.alexisgordr.icdetector.models.CellData
 import com.alexisgordr.icdetector.models.HeuristicReport
 import com.alexisgordr.icdetector.models.HistoryRecord
 import com.alexisgordr.icdetector.models.SignalBaseline
+import com.alexisgordr.icdetector.models.CellRfStability
 import com.alexisgordr.icdetector.models.VerificationStatus
 
 object ThreatAnalyzer {
@@ -126,7 +127,8 @@ object ThreatAnalyzer {
         signalBaseline: SignalBaseline? = null,
         previousBand: Int? = null,
         previousDbm: Int? = null,
-        recentRegisteredDbm: List<Int> = emptyList()
+        recentRegisteredDbm: List<Int> = emptyList(),
+        rfStability: CellRfStability? = null
     ): CellData {
         val reasons = mutableListOf<String>()
         var score = 100
@@ -143,6 +145,7 @@ object ThreatAnalyzer {
         var hMobileCellId = true
         var hSignalBaseline = true
         var hBandDowngrade = true
+        var hRfStability = true
 
         // 1. Neighbor analysis
         if (!isWifiActive && neighbors.isEmpty() && active.dbm >= -80) {
@@ -341,6 +344,42 @@ object ThreatAnalyzer {
             }
         }
 
+        // 15. Estabilidad de identidad RF (lifecycle): misma Cell ID con PCI/ARFCN mutados.
+        // Una antena legítima mantiene su PCI y su ARFCN FIJOS. Si la misma Cell ID
+        // (CID+MNC+TAC+MCC) presenta varios PCI o ARFCN, puede ser un clon reconfigurándose.
+        // Se detecta aunque estés parado (no usa distancia, solo el historial de la celda),
+        // cubriendo el hueco de H11 (que necesita cambio de posición).
+        //
+        // CLAVE anti-falsos-positivos (recencia): NO basta con que existan dos valores en el
+        // historial de 30 días — una RECONFIGURACIÓN permanente del operador deja el valor
+        // viejo en registros antiguos y el nuevo en los recientes (benigno). Solo es sospechoso
+        // si DOS valores sólidos (>=2 apariciones en 30d, lo que descarta glitches puntuales)
+        // SIGUEN apareciendo en la ventana reciente (48h): eso es la firma de un clon parpadeando
+        // entre identidades AHORA, no de un cambio puntual ya asentado.
+        rfStability?.let { st ->
+            if (st.totalObservations >= 4) {
+                // Valores sólidos en 30d (descarta lecturas-glitch que aparecen una sola vez).
+                val solidPci = st.distinctPci.filter { it.second >= 2 }.map { it.first }.toSet()
+                val solidArfcn = st.distinctArfcn.filter { it.second >= 2 }.map { it.first }.toSet()
+                // Valores presentes en la ventana reciente (48h).
+                val recentPci = st.recentDistinctPci.map { it.first }.toSet()
+                val recentArfcn = st.recentDistinctArfcn.map { it.first }.toSet()
+                // Sospechoso solo si >=2 valores sólidos siguen activos recientemente (parpadeo).
+                val pciFlapping = solidPci.intersect(recentPci).size >= 2
+                val arfcnFlapping = solidArfcn.intersect(recentArfcn).size >= 2
+                if (pciFlapping || arfcnFlapping) {
+                    hRfStability = false
+                    val what = when {
+                        pciFlapping && arfcnFlapping -> "PCI y ARFCN"
+                        pciFlapping -> "PCI"
+                        else -> "ARFCN"
+                    }
+                    reasons.add("Identidad RF inestable: misma Cell ID alternando $what recientemente (posible clon)")
+                    score -= 30
+                }
+            }
+        }
+
         // Probabilidad Bayesiana de amenaza
         val failedList = buildList {
             if (!hIsolated) add("isolated")
@@ -356,12 +395,14 @@ object ThreatAnalyzer {
             if (!hMobileCellId) add("h11")
             if (!hSignalBaseline) add("signalBaseline")
             if (!hBandDowngrade) add("bandDowngrade")
+            if (!hRfStability) add("rfStability")
         }
 
         val threatProbability = BayesianScorer.calculate(
             failedList,
             active.verified.name,
-            isNetworkLatencyAnomalous
+            isNetworkLatencyAnomalous,
+            neighborCount = neighbors.size
         )
 
         // Bonificadores y penalizadores por Base de Datos
@@ -388,7 +429,8 @@ object ThreatAnalyzer {
             pingPongPassed = hPingPong,
             mobileCellIdPassed = hMobileCellId,
             signalBaselinePassed = hSignalBaseline,
-            bandDowngradePassed = hBandDowngrade
+            bandDowngradePassed = hBandDowngrade,
+            rfStabilityPassed = hRfStability
         )
 
         return active.copy(

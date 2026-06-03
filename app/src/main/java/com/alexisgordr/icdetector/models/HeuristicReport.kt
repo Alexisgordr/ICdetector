@@ -14,5 +14,6 @@ data class HeuristicReport(
     val pingPongPassed: Boolean = true,
     val mobileCellIdPassed: Boolean = true,
     val signalBaselinePassed: Boolean = true,
-    val bandDowngradePassed: Boolean = true
+    val bandDowngradePassed: Boolean = true,
+    val rfStabilityPassed: Boolean = true
 )

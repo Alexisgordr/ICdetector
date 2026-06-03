@@ -43,6 +43,7 @@ object BayesianScorer {
         "pingPong"    to 3.0f,  // Baja especificidad standalone
         "h11"         to 6.0f,  // Compromiso móvil vs fijo
         "taDistance"  to 7.0f,  // Físicamente irrefutable con TA real
+        "rfStability" to 6.0f,  // Misma Cell ID con PCI/ARFCN mutados — clon reconfigurándose
 
         // Independientes
         // Expert-derived LR estimate — not directly reported by source paper
@@ -70,8 +71,11 @@ object BayesianScorer {
     // que solo cuente la LR más alta y no infle el posterior junto a powerJump.
     private val RF_DOMINANCE_GROUP = listOf("powerJump", "ghostCells", "isolated", "signalBaseline", "bandDowngrade")
 
-    // Movilidad — correlación moderada, comportamiento temporal
-    private val MOBILITY_GROUP = listOf("pingPong", "h11", "taDistance")
+    // Movilidad — correlación moderada, comportamiento temporal.
+    // rfStability (PCI/ARFCN mutados de una misma Cell ID) se agrupa aquí porque comparte
+    // con h11 el mismo fenómeno de identidad RF inconsistente; juntas no deben inflar el
+    // posterior, así que solo cuenta la LR más alta del grupo.
+    private val MOBILITY_GROUP = listOf("pingPong", "h11", "taDistance", "rfStability")
 
     // mncCount y tacDev — correlación débil entre sí
     // pueden aparecer juntos en estaciones mal configuradas
@@ -83,18 +87,44 @@ object BayesianScorer {
     private val ALL_GROUPS = listOf(RF_DOMINANCE_GROUP, MOBILITY_GROUP, WEAK_IDENTITY_GROUP)
     private val ALL_GROUPED = ALL_GROUPS.flatten()
 
+    // --- Bayesiano adaptativo al contexto (H6 de la lista de mejoras) ---
+    // Heurísticas de DOMINANCIA RF que dan falsos positivos en entornos dispersos (rural,
+    // macroceldas): una sola antena dominando sin vecinas es ANÓMALO en ciudad pero NORMAL en
+    // el campo. Suavizamos SOLO estas según la densidad del entorno (nº de vecinas visibles).
+    // NO se tocan las físicamente sólidas en cualquier contexto (MCC, ARFCN, cifrado, H11,
+    // H13/signalBaseline, H14/bandDowngrade, H15): esas valen igual en ciudad o campo.
+    private val ENV_SENSITIVE = setOf("isolated", "powerJump", "ghostCells")
+
+    // Factor [0..1] que escala la FUERZA de la evidencia (LR) de las heurísticas sensibles.
+    // 1.0 = sin cambios (urbano/denso o densidad desconocida). <1.0 = evidencia suavizada
+    // (disperso/rural). Nunca invierte la evidencia: el LR efectivo se acerca a 1.0 (neutro),
+    // no por debajo. neighborCount < 0 significa "desconocido" -> sin cambios (compatibilidad).
+    private fun densityFactor(neighborCount: Int): Float = when {
+        neighborCount < 0  -> 1.0f   // desconocido -> comportamiento clásico
+        neighborCount == 0 -> 0.5f   // muy disperso (rural / macrocelda dominante)
+        neighborCount <= 2 -> 0.7f   // disperso
+        else               -> 1.0f   // denso (urbano) -> sin cambios
+    }
+
     fun calculate(
         failedHeuristics: List<String>,
         verificationStatus: String,
-        isLatencyAnomalous: Boolean
+        isLatencyAnomalous: Boolean,
+        neighborCount: Int = -1
     ): Float {
         var posterior = PRIOR
+        val df = densityFactor(neighborCount)
 
-        // Para cada grupo — aplicar solo la LR más potente
+        // Para cada grupo — aplicar solo la LR más potente.
+        // Las heurísticas sensibles al entorno ven su LR suavizada hacia 1.0 (neutro) según
+        // la densidad: 1 + (LR - 1) * df. En denso/desconocido df=1.0 -> sin cambios.
         ALL_GROUPS.forEach { group ->
             val maxLr = failedHeuristics
                 .filter { it in group }
-                .maxOfOrNull { LIKELIHOOD_RATIOS[it] ?: 1.0f } ?: 1.0f
+                .maxOfOrNull { h ->
+                    val base = LIKELIHOOD_RATIOS[h] ?: 1.0f
+                    if (h in ENV_SENSITIVE) 1.0f + (base - 1.0f) * df else base
+                } ?: 1.0f
 
             if (maxLr > 1.0f) {
                 posterior = bayesUpdate(posterior, maxLr)

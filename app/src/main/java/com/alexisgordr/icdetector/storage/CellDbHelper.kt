@@ -8,6 +8,7 @@ import android.database.sqlite.SQLiteOpenHelper
 import android.location.Location
 import com.alexisgordr.icdetector.models.HistoryRecord
 import com.alexisgordr.icdetector.models.SignalBaseline
+import com.alexisgordr.icdetector.models.CellRfStability
 import com.alexisgordr.icdetector.models.VerificationStatus
 import kotlin.math.sqrt
 import java.text.SimpleDateFormat
@@ -419,6 +420,82 @@ class CellDbHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME, 
             stdDevDbm = stdDev,
             minDbm = samples.minOrNull()!!,
             maxDbm = samples.maxOrNull()!!
+        )
+    }
+
+    /**
+     * H15 (lifecycle): estabilidad de identidad RF de una Cell ID. Cuenta cuántos valores
+     * DISTINTOS de PCI y de ARFCN (no nulos) se han observado para esta identidad de celda
+     * (CID+MNC+TAC+MCC) en los últimos 30 días, con el nº de apariciones de cada uno y el
+     * total de observaciones. Una antena legítima mantiene PCI/ARFCN fijos; varios valores
+     * para una misma Cell ID sugieren un clon reconfigurándose.
+     *
+     * A diferencia de getPreviousCellHistory, NO filtra por ubicación ni por recencia: aquí
+     * actual). Solo lectura; no toca esquema ni escritura.
+     */
+    fun getCellRfStability(cellId: String, mnc: String, tac: String, mcc: String): CellRfStability {
+        val pciCounts = HashMap<Int, Int>()
+        val arfcnCounts = HashMap<Int, Int>()
+        val recentPciCounts = HashMap<Int, Int>()
+        val recentArfcnCounts = HashMap<Int, Int>()
+        var total = 0
+        val db = this.readableDatabase
+        val now = System.currentTimeMillis()
+        val thirtyDaysAgo = now - (30L * 24 * 60 * 60 * 1000)
+        val recentWindow = now - (48L * 60 * 60 * 1000)   // últimas 48 h
+        val dateFormat = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault())
+        val oldThreshold = dateFormat.format(Date(thirtyDaysAgo))
+        val recentThreshold = dateFormat.format(Date(recentWindow))
+
+        val query = """
+            SELECT $COLUMN_PCI, $COLUMN_ARFCN, $COLUMN_TIMESTAMP
+            FROM $TABLE_HISTORY
+            WHERE $COLUMN_CID = ?
+              AND $COLUMN_MNC = ?
+              AND $COLUMN_TAC = ?
+              AND $COLUMN_MCC = ?
+              AND $COLUMN_TIMESTAMP > ?
+        """.trimIndent()
+
+        val cursor = db.rawQuery(query, arrayOf(cellId, mnc, tac, mcc, oldThreshold))
+        try {
+            if (cursor.moveToFirst()) {
+                val pciIdx = cursor.getColumnIndexOrThrow(COLUMN_PCI)
+                val arfcnIdx = cursor.getColumnIndexOrThrow(COLUMN_ARFCN)
+                val tsIdx = cursor.getColumnIndexOrThrow(COLUMN_TIMESTAMP)
+                do {
+                    total++
+                    val ts = cursor.getString(tsIdx) ?: ""
+                    val isRecent = ts > recentThreshold   // formato "yyyy-MM-dd HH:mm:ss" ordena lexicográficamente
+                    if (!cursor.isNull(pciIdx)) {
+                        val pci = cursor.getInt(pciIdx)
+                        // PCI válido LTE/NR: 0..1007. Ignorar valores fuera de rango (lecturas basura).
+                        if (pci in 0..1007) {
+                            pciCounts[pci] = (pciCounts[pci] ?: 0) + 1
+                            if (isRecent) recentPciCounts[pci] = (recentPciCounts[pci] ?: 0) + 1
+                        }
+                    }
+                    if (!cursor.isNull(arfcnIdx)) {
+                        val arfcn = cursor.getInt(arfcnIdx)
+                        if (arfcn > 0) {
+                            arfcnCounts[arfcn] = (arfcnCounts[arfcn] ?: 0) + 1
+                            if (isRecent) recentArfcnCounts[arfcn] = (recentArfcnCounts[arfcn] ?: 0) + 1
+                        }
+                    }
+                } while (cursor.moveToNext())
+            }
+        } catch (_: Exception) {
+            // Lectura best-effort: ante cualquier problema, devolver lo acumulado.
+        } finally {
+            cursor.close()
+        }
+
+        return CellRfStability(
+            totalObservations = total,
+            distinctPci = pciCounts.map { it.key to it.value },
+            distinctArfcn = arfcnCounts.map { it.key to it.value },
+            recentDistinctPci = recentPciCounts.map { it.key to it.value },
+            recentDistinctArfcn = recentArfcnCounts.map { it.key to it.value }
         )
     }
 }
