@@ -19,7 +19,7 @@
       </ul>
     </td>
     <td width="40%" align="center">
-      <img src="https://github.com/user-attachments/assets/8ececc96-d7e6-41ba-beeb-f8dd9570619d" 
+      <img src="https://github.com/user-attachments/assets/e9213396-a62b-488f-9fab-b5067c6a555c"
            alt="ICdetection Screenshot"
            width="260" />
     </td>
@@ -215,6 +215,13 @@ Its scope is limited to cells with enough nearby historical samples, so a warm-u
 Detects aggressive and suspicious shifts from high-frequency capacity bands (e.g., Band 7) to low-frequency sub-GHz bands (e.g., Band 20). Attackers frequently attempt to push target devices into lower frequencies to maximize signal penetration and extend their sweeping area.
 
 This heuristic mathematically differentiates between a sudden, forced band downgrade (highly indicative of a Rogue BTS or IMSI-catcher attack) and a natural, progressive signal degradation (such as entering a basement or parking garage). By evaluating physical band properties through EARFCN mapping rather than abstract channel numbers, it accurately identifies malicious physical-layer manipulations while heavily reducing false positives during normal mobility.
+
+## 14. RF Identity Stability Analysis 
+A legitimate cell keeps its physical-layer identity — its PCI and ARFCN — fixed for its entire lifetime. This heuristic inspects the device's own historical record for a given Cell ID (CID + MNC + TAC + MCC) and flags it when that single identity has been observed alternating between multiple distinct PCI or ARFCN values. Such behavior is a strong indicator of a clone reusing a legitimate Cell ID while reconfiguring its radio parameters.
+
+Crucially, it complements H11: while Geographic Consistency Analysis requires the user to move (it compares the same cell seen from incompatible positions), RF Identity Stability can fire while the user is completely stationary — covering the scenario where a device is disconnected and reconnected to the same Cell ID with a different radio fingerprint. Like H11 and the baseline heuristics, it is fully offline and relies solely on the device's own observation history, with no external database.
+
+It is engineered to be conservative against false positives. A value is only treated as a genuine alternate identity when it (a) appears at least twice, (b) represents a meaningful share of observations (filtering out occasional measurement glitches, e.g. a spurious ARFCN read seen 3 times out of 105), and (c) is still present within a recent time window. This last condition distinguishes a benign permanent reconfiguration by the operator (where the old value lingers only in older records) from an active, currently-flapping clone. In the Bayesian engine it is grouped with H11 as correlated RF-identity evidence, so the two cannot double-count and inflate the score.
 
 ## Temporal Confidence Decay
 Anomalies must persist across 3 consecutive analysis cycles before triggering a confirmed threat alert. Transient heuristic failures are logged but do not raise alarms, significantly reducing false positive alert fatigue in dynamic RF environments.
