@@ -240,6 +240,11 @@ class MiniICService : Service() {
                             // Limpiar cache no-verificada para forzar re-consulta a DB y APIs si corresponde
                             verificationCache.entries.removeIf { it.value != VerificationStatus.VERIFIED }
                             wasAirplaneModeOn = false
+                            // Al salir de modo avión forzamos un fix GPS fresco SÍ o SÍ (sin
+                            // debounce): es un evento raro y crítico —si hubiera un IMSI-catcher
+                            // empujándote o saltando de celda, necesitamos coordenadas reales ya,
+                            // no cacheadas. El coste extra de batería puntual es aceptable.
+                            requestHighAccuracyFix(force = true)
                         }
                         requestFreshCellInfo()
                         checkLatencyAnomaly()
@@ -412,13 +417,13 @@ class MiniICService : Service() {
             if (locationManager.isProviderEnabled(LocationManager.GPS_PROVIDER)) {
                 locationManager.requestLocationUpdates(
                     LocationManager.GPS_PROVIDER,
-                    15000L, 20f, locationListener
+                    15000L, 20f, locationListener, Looper.getMainLooper()
                 )
             }
             if (locationManager.isProviderEnabled(LocationManager.NETWORK_PROVIDER)) {
                 locationManager.requestLocationUpdates(
                     LocationManager.NETWORK_PROVIDER,
-                    15000L, 20f, locationListener
+                    15000L, 20f, locationListener, Looper.getMainLooper()
                 )
             }
             locationUpdatesActive = true
@@ -449,15 +454,15 @@ class MiniICService : Service() {
      * probado). Debounce de 30 s, timeout de 20 s y auto-desregistro al primer fix para
      * no drenar batería.
      */
-    private fun requestHighAccuracyFix() {
+    private fun requestHighAccuracyFix(force: Boolean = false) {
         val now = System.currentTimeMillis()
-        if (now - lastForcedFixTime < 30000L) return
+        if (!force && now - lastForcedFixTime < 30000L) return
         if (forcedFixListener != null) return  // ya hay una petición en curso
         if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION)
             != PackageManager.PERMISSION_GRANTED) return
         if (!locationManager.isProviderEnabled(LocationManager.GPS_PROVIDER)) return
         lastForcedFixTime = now
-        appendLog("[GPS]", "Sospecha — solicitando fix GPS preciso para el incidente")
+        appendLog("[GPS]", "Solicitando fix GPS preciso (fresco) para fijar coordenadas")
 
         forcedFixListener = LocationListener { location ->
             forcedFixListener?.let { try { locationManager.removeUpdates(it) } catch (_: Exception) {} }
@@ -477,20 +482,25 @@ class MiniICService : Service() {
 
         try {
             locationManager.requestLocationUpdates(
-                LocationManager.GPS_PROVIDER, 0L, 0f, forcedFixListener!!
+                LocationManager.GPS_PROVIDER, 0L, 0f, forcedFixListener!!, Looper.getMainLooper()
             )
         } catch (_: SecurityException) {
             forcedFixListener = null
             return
         }
 
-        // Timeout: si no hay fix en 20 s, desregistrar para no dejar el GPS a tope.
+        // Timeout: desregistrar si no llega fix, para no dejar el GPS a tope. Con force
+        // (salida de modo avión) damos 90 s porque el GPS arranca "en frío" y puede tardar
+        // ~30-60 s en el primer fix; en el resto, 20 s basta (GPS ya caliente). En ambos casos
+        // el listener se desregistra ANTES si llega un fix válido, así que el GPS se apaga en
+        // cuanto tiene las coordenadas: el timeout es solo el límite, no un tiempo fijo.
+        val timeoutMs = if (force) 90000L else 20000L
         scope.launch {
-            delay(20000L)
+            delay(timeoutMs)
             forcedFixListener?.let {
                 try { locationManager.removeUpdates(it) } catch (_: Exception) {}
                 forcedFixListener = null
-                appendLog("[GPS]", "Fix GPS preciso no disponible en 20 s (timeout)")
+                appendLog("[GPS]", "Fix GPS preciso no disponible en ${timeoutMs / 1000} s (timeout)")
             }
         }
     }
@@ -918,13 +928,6 @@ class MiniICService : Service() {
         val cacheKey = "${currentCell.mcc}-${currentCell.mnc}-${currentCell.tac}-${currentCell.cellId}"
         val cachedStatus = verificationCache[cacheKey]
 
-        // Solo re-verificar si realmente está pendiente o con error
-        val needsReverification = cachedStatus == null ||
-                                  cachedStatus == VerificationStatus.PENDING ||
-                                  cachedStatus == VerificationStatus.ERROR
-
-        if (!needsReverification) return
-
         lastGpsTriggerTime = now
         scope.launch {
             delay(3000L)
@@ -951,6 +954,15 @@ class MiniICService : Service() {
                     appendLog("[GPS]", "Coordenadas rellenadas en $updated registros históricos")
                 }
             }
+
+            // El relleno de coordenadas (arriba) se ejecuta SIEMPRE que haya GPS, esté la celda
+            // verificada o no: una celda puede estar verificada y aun así no tener coordenadas si
+            // el GPS no estaba listo al registrarla. La RE-VERIFICACIÓN, en cambio, solo si hace
+            // falta (pendiente/error/desconocida); una celda ya verificada no se vuelve a consultar.
+            val needsReverification = cachedStatus == null ||
+                                      cachedStatus == VerificationStatus.PENDING ||
+                                      cachedStatus == VerificationStatus.ERROR
+            if (!needsReverification) return@launch
 
             val dbStatus = withContext(Dispatchers.IO) {
                 dbHelper.getKnownStatus(
@@ -1190,6 +1202,11 @@ class MiniICService : Service() {
             _networkLatencyState.value = "OK"
             latencyAnomalyStreak = 0
             appendLog("[RADIO]", "Handover celular completado -> Nueva celda CID: $cid ($net)")
+            // Cambio de celda: pedimos un fix GPS fresco para fijar las coordenadas de la
+            // celda nueva (útil si veníamos sin GPS). Debounce normal de 30 s para no drenar
+            // batería si te mueves rápido encadenando handovers. Si la celda es además
+            // sospechosa, más abajo se vuelve a pedir igualmente.
+            requestHighAccuracyFix()
             generateAuditLog(cell) 
 
             val currentTime = System.currentTimeMillis()
