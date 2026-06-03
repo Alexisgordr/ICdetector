@@ -35,7 +35,10 @@ object CellParser {
             is CellInfoNr -> {
                 val id = info.cellIdentity as CellIdentityNr
                 val strength = info.cellSignalStrength as CellSignalStrengthNr
-                val dbm = strength.ssRsrp
+                // ssRsrp puede ser Int.MAX_VALUE (no disponible). Si lo es, caemos al dbm
+                // normalizado del framework para no inyectar un valor absurdo (2147483647)
+                // que dispararía en falso todas las heurísticas de potencia.
+                val dbm = strength.ssRsrp.let { if (it == Int.MAX_VALUE) strength.dbm else it }
                 val cellMcc = id.mccString ?: mcc
                 val cellMnc = id.mncString ?: mnc
                 var ta: Int? = null

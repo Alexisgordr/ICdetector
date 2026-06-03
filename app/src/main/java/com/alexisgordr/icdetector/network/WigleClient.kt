@@ -5,7 +5,6 @@ import com.alexisgordr.icdetector.models.VerificationStatus
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import org.json.JSONObject
-import java.io.IOException
 import java.net.InetSocketAddress
 import java.net.Proxy
 
@@ -68,7 +67,8 @@ object WigleClient {
                     else Pair(VerificationStatus.ERROR, null)
                 }
             }
-        } catch (_: IOException) {
+        } catch (_: Exception) {
+            // IOException (red) o JSONException (respuesta malformada): tratar como ERROR.
             Pair(VerificationStatus.ERROR, null)
         }
     }

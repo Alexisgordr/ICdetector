@@ -120,6 +120,7 @@ class CellDbHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME, 
         
         val cursor = db.rawQuery(query, arrayOf(cid, mnc, tac, mcc))
         var status = VerificationStatus.PENDING
+        try {
         
         if (cursor.moveToFirst()) {
             val savedStatusStr = cursor.getString(0)
@@ -153,7 +154,9 @@ class CellDbHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME, 
                 }
             }
         }
-        cursor.close()
+        } finally {
+            cursor.close()
+        }
         return status
     }
 
@@ -174,6 +177,7 @@ class CellDbHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME, 
         val list = mutableListOf<HistoryRecord>()
         val db = this.readableDatabase
         val cursor: Cursor = db.rawQuery("SELECT * FROM $TABLE_HISTORY ORDER BY $COLUMN_ID DESC", null)
+        try {
         if (cursor.moveToFirst()) {
             do {
                 // Leer coordenadas (pueden ser NULL)
@@ -210,7 +214,9 @@ class CellDbHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME, 
                 )
             } while (cursor.moveToNext())
         }
-        cursor.close()
+        } finally {
+            cursor.close()
+        }
         return list
     }
 
@@ -277,6 +283,7 @@ class CellDbHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME, 
         """.trimIndent()
         
         val cursor = db.rawQuery(query, arrayOf(cellId, mnc, tac, recentThreshold, oldThreshold))
+        try {
         
         if (cursor.moveToFirst()) {
             do {
@@ -322,7 +329,9 @@ class CellDbHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME, 
                 }
             } while (cursor.moveToNext())
         }
-        cursor.close()
+        } finally {
+            cursor.close()
+        }
         
         return history
     }
@@ -360,6 +369,7 @@ class CellDbHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME, 
 
         val cursor = db.rawQuery(query, arrayOf(cellId, mnc, tac, oldThreshold))
         val samples = mutableListOf<Int>()
+        try {
         if (cursor.moveToFirst()) {
             do {
                 val dbm = cursor.getInt(0)
@@ -374,7 +384,9 @@ class CellDbHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME, 
                 }
             } while (cursor.moveToNext())
         }
-        cursor.close()
+        } finally {
+            cursor.close()
+        }
 
         if (samples.size < minSamples) return null
 
