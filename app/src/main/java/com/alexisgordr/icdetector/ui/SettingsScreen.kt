@@ -24,6 +24,7 @@ import androidx.compose.foundation.border
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Favorite
 import com.alexisgordr.icdetector.service.MiniICService
+import kotlin.time.Duration.Companion.milliseconds
 
 @Composable
 fun SettingsPanel(service: MiniICService?, onSave: () -> Unit) {
@@ -133,7 +134,7 @@ fun SettingsPanel(service: MiniICService?, onSave: () -> Unit) {
                         as android.net.ConnectivityManager
                     val caps = cm.getNetworkCapabilities(cm.activeNetwork)
                     value = caps?.hasTransport(android.net.NetworkCapabilities.TRANSPORT_WIFI) ?: false
-                    kotlinx.coroutines.delay(2000L) // comprueba cada 2 segundos
+                    kotlinx.coroutines.delay(2000L.milliseconds) // comprueba cada 2 segundos
                 }
             }
 

@@ -29,6 +29,7 @@ import com.alexisgordr.icdetector.telephony.CellParser
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlin.time.Duration.Companion.milliseconds
 import okhttp3.OkHttpClient
 import java.text.SimpleDateFormat
 import java.util.*
@@ -283,7 +284,7 @@ class MiniICService : Service() {
                     appendLog("[SYS]", "⚠️ Error en ciclo de escaneo (se continúa): ${e.message}")
                 }
 
-                delay(delayTime)
+                delay(delayTime.milliseconds)
             }
         }
     }
@@ -523,7 +524,7 @@ class MiniICService : Service() {
         // cuanto tiene las coordenadas: el timeout es solo el límite, no un tiempo fijo.
         val timeoutMs = if (force) 90000L else 20000L
         scope.launch {
-            delay(timeoutMs)
+            delay(timeoutMs.milliseconds)
             forcedFixListener?.let {
                 try { locationManager.removeUpdates(it) } catch (_: Exception) {}
                 forcedFixListener = null
@@ -980,7 +981,7 @@ class MiniICService : Service() {
 
         lastGpsTriggerTime = now
         scope.launch {
-            delay(3000L)
+            delay(3000L.milliseconds)
 
             // Verificar también en DB antes de lanzar
             val loc = getCurrentLocation()
@@ -1474,7 +1475,7 @@ class MiniICService : Service() {
             "11. Consistencia Geográfica (Cell ID móvil)" to report.mobileCellIdPassed,
             "12. Potencia vs Histórico (Baseline geográfico)" to report.signalBaselinePassed,
             "13. Downgrade de Banda (Intra-LTE)" to report.bandDowngradePassed,
-            "14. Estabilidad de Identidad RF (PCI/ARFCN)" to report.rfStabilityPassed
+            "14. Estabilidad de Identidad RF (PCI)" to report.rfStabilityPassed
         )
 
         results.forEach { (regla, pasado) ->

@@ -37,6 +37,7 @@ import com.alexisgordr.icdetector.models.*
 import com.alexisgordr.icdetector.service.MiniICService
 import com.alexisgordr.icdetector.storage.CellDbHelper
 import kotlinx.coroutines.delay
+import kotlin.time.Duration.Companion.milliseconds
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.launch
 
@@ -149,7 +150,7 @@ fun MainScreenContent(dbHelper: CellDbHelper, service: MiniICService?) {
     var refreshing by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
     val pullRefreshState = rememberPullRefreshState(refreshing = refreshing, onRefresh = {
-        scope.launch { refreshing = true; service?.forceRefresh(); delay(800); refreshing = false }
+        scope.launch { refreshing = true; service?.forceRefresh(); delay(800.milliseconds); refreshing = false }
     })
 
     val active = cellList.firstOrNull { it.isRegistered }
@@ -158,7 +159,7 @@ fun MainScreenContent(dbHelper: CellDbHelper, service: MiniICService?) {
 
     LaunchedEffect(service) {
         if (service != null) {
-            delay(500)
+            delay(500.milliseconds)
             service.forceRefresh()
         }
     }
@@ -618,7 +619,7 @@ fun SecurityScorePanel(active: CellData, dbmHistory: List<Int>, geoHistory: List
                             HeuristicItem("11. Consistencia Geográfica (Cell ID móvil)", active.heuristicReport.mobileCellIdPassed)
                             HeuristicItem("12. Potencia vs Histórico (Baseline geográfico)", active.heuristicReport.signalBaselinePassed)
                             HeuristicItem("13. Downgrade de Banda (Intra-LTE)", active.heuristicReport.bandDowngradePassed)
-                            HeuristicItem("14. Estabilidad de Identidad RF (PCI/ARFCN)", active.heuristicReport.rfStabilityPassed)
+                            HeuristicItem("14. Estabilidad de Identidad RF (PCI)", active.heuristicReport.rfStabilityPassed)
                         }
                     }
                 }
