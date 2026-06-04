@@ -97,6 +97,25 @@ The primary goal of the project is to provide:
 
 within the technical limitations imposed by Android.
 
+## On Transparency and AI-Assisted Development
+
+This project is built on honesty — about its detection limits, and about how it was made.
+
+The system design is mine: the decision to use a probabilistic engine instead of rigid rules,
+which heuristics to include or reject, how they are weighted and correlated, what counts as a
+false positive in real-world data, and the overall direction of the project. Many of those
+decisions were made by testing the app in the field, finding real false positives, and reasoning
+about why they happened.
+
+The code itself was written with substantial help from AI tools, which were also used to explore
+and refine several heuristic ideas. I treat AI the way any developer today treats their tooling:
+as an instrument that accelerates implementation, not as a replacement for understanding. Every
+heuristic, every detection decision, and every trade-off in this project I can explain and defend,
+because I understood the *why* behind each one as it was built.
+
+I document this openly because a security tool earns trust through transparency. Hiding the role
+of AI would contradict the same principle of honesty that the rest of this project is built on.
+
 ---
 
 # ⚠️ Important Technical Reality
@@ -197,26 +216,26 @@ Attempts to detect insecure or non-ciphered cellular states (A5/0) when exposed 
 ## 10. Anti Ping-Pong Analysis
 Detects aggressive reselection loops and repetitive handover behavior while applying mobility-aware filtering to reduce false positives during vehicular movement.
 
-## 11. Geographic Consistency Analysis 
+## 11. Geographic Consistency Analysis (H11)
 Validates Cell IDs against a local GPS-based historical database built from previous observations. Detects Cell IDs appearing from physically inconsistent locations over time — a strong indicator of mobile rogue infrastructure cloning legitimate tower identifiers.
 
 Because it is anchored to physical geography (the device's own GPS position), this heuristic is immune to RF parameter spoofing: no falsified radio parameter can alter the phone's real-world location. It is also fully offline and cannot be poisoned by registering fake towers in public databases, since it relies on no external database at all.
 
 Its scope is limited to cells for which prior history (and a valid GPS fix) already exists. As such, it detects **identifier cloning at a distance** — but it does not catch a catcher that uses an unknown/fresh Cell ID, one that operates physically next to the legitimate tower, or a cell observed for the first time with no historical baseline yet.
 
-## 12. Signal Baseline Anomaly 
+## 12. Signal Baseline Anomaly (H12)
 Learns each cell's typical signal level (dBm) at a given location from the device's own historical observations, then flags readings that are anomalously **strong** compared to that learned baseline. A nearby rogue transmitter impersonating a cell that is normally weaker at that spot will appear far stronger than its own history — a physical inconsistency that falsified radio parameters cannot hide, since the attacker cannot change how close their transmitter physically is to the device.
 
 Like H11, it is fully offline, relies on no external database, and needs no labelled data: it only learns from what the device has already observed. It is grouped with the RF-dominance heuristics in the Bayesian engine, so it cannot double-count with Signal Dominance Analysis and inflate the score.
 
 Its scope is limited to cells with enough nearby historical samples, so a warm-up period is required: with no prior baseline for a location it stays silent. Only the "stronger than usual" direction is treated as suspicious, since weaker-than-usual readings are commonly caused by obstruction or distance rather than an attack.
 
-## 13. Intra-LTE Band Downgrade Analysis 
+## 13. Intra-LTE Band Downgrade Analysis (H13)
 Detects aggressive and suspicious shifts from high-frequency capacity bands (e.g., Band 7) to low-frequency sub-GHz bands (e.g., Band 20). Attackers frequently attempt to push target devices into lower frequencies to maximize signal penetration and extend their sweeping area.
 
 This heuristic mathematically differentiates between a sudden, forced band downgrade (highly indicative of a Rogue BTS or IMSI-catcher attack) and a natural, progressive signal degradation (such as entering a basement or parking garage). By evaluating physical band properties through EARFCN mapping rather than abstract channel numbers, it accurately identifies malicious physical-layer manipulations while heavily reducing false positives during normal mobility.
 
-## 14. RF Identity Stability Analysis 
+## 14. RF Identity Stability Analysis (H14)
 A legitimate cell keeps its physical-layer identity — its PCI — fixed for its entire lifetime. This heuristic inspects the device's own historical record for a given Cell ID (CID + MNC + TAC + MCC) and flags it when that single identity has been observed alternating between multiple distinct PCI values that persist recently. Such behavior is a strong indicator of a clone reusing a legitimate Cell ID with a different physical-layer identity.
 
 Crucially, it complements H11: while Geographic Consistency Analysis requires the user to move (it compares the same cell seen from incompatible positions), RF Identity Stability can fire while the user is completely stationary — covering the scenario where a device is disconnected and reconnected to the same Cell ID with a different radio fingerprint. Like H11 and the baseline heuristics, it is fully offline and relies solely on the device's own observation history, with no external database.
