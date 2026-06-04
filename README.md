@@ -107,14 +107,12 @@ false positive in real-world data, and the overall direction of the project. Man
 decisions were made by testing the app in the field, finding real false positives, and reasoning
 about why they happened.
 
-The code itself was written with substantial help from AI tools, which were also used to explore
-and refine several heuristic ideas. I treat AI the way any developer today treats their tooling:
-as an instrument that accelerates implementation, not as a replacement for understanding. Every
-heuristic, every detection decision, and every trade-off in this project I can explain and defend,
-because I understood the *why* behind each one as it was built.
-
-I document this openly because a security tool earns trust through transparency. Hiding the role
-of AI would contradict the same principle of honesty that the rest of this project is built on.
+The code itself was written by AI tools — I do not program in Kotlin. AI was also used to
+explore and refine several heuristic ideas. What I bring is the design and the judgment: I
+direct the project, decide what it should do and why, choose which ideas survive and which
+get discarded, and validate the results against real-world data. Every heuristic and every
+detection decision in this project I can explain and defend, because I understood the *why*
+behind each one as it was built — even where I could not have written the implementation myself.
 
 ---
 
