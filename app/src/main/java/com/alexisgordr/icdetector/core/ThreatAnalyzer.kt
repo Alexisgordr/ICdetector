@@ -358,11 +358,14 @@ object ThreatAnalyzer {
         // entre identidades AHORA, no de un cambio puntual ya asentado.
         rfStability?.let { st ->
             if (st.totalObservations >= 4) {
-                // Un valor cuenta como IDENTIDAD REAL (sólida) solo si: aparece >=2 veces (descarta
-                // glitches de una sola lectura) Y representa >=15% de las observaciones de ese campo
-                // (descarta lecturas-basura minoritarias: p.ej. un ARFCN espurio que sale 3 de 105
-                // veces = 2.9% es ruido de medición de Android, no una identidad alternante). Un clon
-                // real alternando identidades genera un porcentaje sustancial, no un 3%.
+                // SOLO PCI. Los datos de campo demuestran que el ARFCN parpadea de forma benigna
+                // por AGREGACIÓN DE PORTADORAS (el móvil atribuye a la celda servidora el ARFCN de
+                // una portadora vecina): se vieron 7 celdas legítimas con el mismo puñado de ARFCN
+                // (1301/2850/3600/6400) mezclados, mientras el PCI permanecía FIJO en cada una. El
+                // PCI es la identidad real de capa física y nunca parpadea en una celda legítima,
+                // así que es la única señal fiable para esta heurística. Un clon con PCI distinto se
+                // detecta igual; uno que copie el PCI exacto cae fuera (limitación asumida a cambio
+                // de eliminar de raíz los falsos positivos por ARFCN).
                 val MIN_SHARE = 0.15
                 fun solidSet(values: List<Pair<Int, Int>>): Set<Int> {
                     val total = values.sumOf { it.second }
@@ -371,21 +374,12 @@ object ThreatAnalyzer {
                         .map { it.first }.toSet()
                 }
                 val solidPci = solidSet(st.distinctPci)
-                val solidArfcn = solidSet(st.distinctArfcn)
-                // Valores presentes en la ventana reciente (48h).
                 val recentPci = st.recentDistinctPci.map { it.first }.toSet()
-                val recentArfcn = st.recentDistinctArfcn.map { it.first }.toSet()
-                // Sospechoso solo si >=2 valores sólidos siguen activos recientemente (parpadeo).
+                // Sospechoso solo si >=2 PCI sólidos siguen activos recientemente (parpadeo real).
                 val pciFlapping = solidPci.intersect(recentPci).size >= 2
-                val arfcnFlapping = solidArfcn.intersect(recentArfcn).size >= 2
-                if (pciFlapping || arfcnFlapping) {
+                if (pciFlapping) {
                     hRfStability = false
-                    val what = when {
-                        pciFlapping && arfcnFlapping -> "PCI y ARFCN"
-                        pciFlapping -> "PCI"
-                        else -> "ARFCN"
-                    }
-                    reasons.add("Identidad RF inestable: misma Cell ID alternando $what recientemente (posible clon)")
+                    reasons.add("Identidad RF inestable: misma Cell ID alternando PCI recientemente (posible clon)")
                     score -= 30
                 }
             }

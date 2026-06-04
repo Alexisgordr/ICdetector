@@ -253,7 +253,9 @@ class HeuristicsTest {
         assertFalse(analyzeRf(rf).rfStabilityPassed)
     }
 
-    @Test fun `H15 dispara con dos ARFCN solidos activos recientemente`() {
+    @Test fun `H15 ya NO dispara por ARFCN (excluido agregacion de portadoras lo hace poco fiable)`() {
+        // Dos ARFCN "sólidos" pero PCI estable. Tras excluir el ARFCN de la heurística (datos de
+        // campo: el ARFCN parpadea por carrier aggregation), esto NO debe disparar.
         val rf = com.alexisgordr.icdetector.models.CellRfStability(
             totalObservations = 6,
             distinctPci = listOf(50 to 6),
@@ -261,7 +263,20 @@ class HeuristicsTest {
             recentDistinctPci = listOf(50 to 3),
             recentDistinctArfcn = listOf(1500 to 2, 6300 to 2)
         )
-        assertFalse(analyzeRf(rf).rfStabilityPassed)
+        assertTrue(analyzeRf(rf).rfStabilityPassed)
+    }
+
+    @Test fun `H15 NO dispara en el caso real 79362081 (ARFCN 2850 al 16 por ciento)`() {
+        // Caso real de campo: PCI 178 estable, ARFCN 3600 (79%) y 2850 (16%). El 2850 cruzaba el
+        // 15% por muestra pequeña, pero al excluir ARFCN ya no dispara. PCI estable -> limpio.
+        val rf = com.alexisgordr.icdetector.models.CellRfStability(
+            totalObservations = 19,
+            distinctPci = listOf(178 to 19),
+            distinctArfcn = listOf(3600 to 15, 2850 to 3, 1301 to 1),
+            recentDistinctPci = listOf(178 to 8),
+            recentDistinctArfcn = listOf(3600 to 6, 2850 to 2)
+        )
+        assertTrue(analyzeRf(rf).rfStabilityPassed)
     }
 
     @Test fun `H15 NO dispara tras reconfiguracion permanente (PCI viejo solo en registros antiguos)`() {
@@ -324,14 +339,14 @@ class HeuristicsTest {
         assertTrue(analyzeRf(rf).rfStabilityPassed)
     }
 
-    @Test fun `H15 dispara si el segundo valor es una proporcion sustancial (clon real)`() {
-        // Dos ARFCN ambos sustanciales (60% y 40%) y recientes -> parpadeo real -> dispara.
+    @Test fun `H15 dispara si hay dos PCI sustanciales y recientes (clon real)`() {
+        // Dos PCI ambos sustanciales (60% y 40%) y recientes -> parpadeo de identidad real -> dispara.
         val rf = com.alexisgordr.icdetector.models.CellRfStability(
             totalObservations = 20,
-            distinctPci = listOf(178 to 20),
-            distinctArfcn = listOf(2850 to 12, 1301 to 8),
-            recentDistinctPci = listOf(178 to 10),
-            recentDistinctArfcn = listOf(2850 to 6, 1301 to 4)
+            distinctPci = listOf(178 to 12, 290 to 8),
+            distinctArfcn = listOf(2850 to 20),
+            recentDistinctPci = listOf(178 to 6, 290 to 4),
+            recentDistinctArfcn = listOf(2850 to 10)
         )
         assertFalse(analyzeRf(rf).rfStabilityPassed)
     }
