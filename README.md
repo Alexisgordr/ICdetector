@@ -197,31 +197,32 @@ Attempts to detect insecure or non-ciphered cellular states (A5/0) when exposed 
 ## 10. Anti Ping-Pong Analysis
 Detects aggressive reselection loops and repetitive handover behavior while applying mobility-aware filtering to reduce false positives during vehicular movement.
 
-## 11. Geographic Consistency Analysis 
+## 11. Geographic Consistency Analysis (H11)
 Validates Cell IDs against a local GPS-based historical database built from previous observations. Detects Cell IDs appearing from physically inconsistent locations over time — a strong indicator of mobile rogue infrastructure cloning legitimate tower identifiers.
 
 Because it is anchored to physical geography (the device's own GPS position), this heuristic is immune to RF parameter spoofing: no falsified radio parameter can alter the phone's real-world location. It is also fully offline and cannot be poisoned by registering fake towers in public databases, since it relies on no external database at all.
 
 Its scope is limited to cells for which prior history (and a valid GPS fix) already exists. As such, it detects **identifier cloning at a distance** — but it does not catch a catcher that uses an unknown/fresh Cell ID, one that operates physically next to the legitimate tower, or a cell observed for the first time with no historical baseline yet.
 
-## 12. Signal Baseline Anomaly 
+## 12. Signal Baseline Anomaly (H12)
 Learns each cell's typical signal level (dBm) at a given location from the device's own historical observations, then flags readings that are anomalously **strong** compared to that learned baseline. A nearby rogue transmitter impersonating a cell that is normally weaker at that spot will appear far stronger than its own history — a physical inconsistency that falsified radio parameters cannot hide, since the attacker cannot change how close their transmitter physically is to the device.
 
 Like H11, it is fully offline, relies on no external database, and needs no labelled data: it only learns from what the device has already observed. It is grouped with the RF-dominance heuristics in the Bayesian engine, so it cannot double-count with Signal Dominance Analysis and inflate the score.
 
 Its scope is limited to cells with enough nearby historical samples, so a warm-up period is required: with no prior baseline for a location it stays silent. Only the "stronger than usual" direction is treated as suspicious, since weaker-than-usual readings are commonly caused by obstruction or distance rather than an attack.
 
-## 13. Intra-LTE Band Downgrade Analysis 
+## 13. Intra-LTE Band Downgrade Analysis (H13)
 Detects aggressive and suspicious shifts from high-frequency capacity bands (e.g., Band 7) to low-frequency sub-GHz bands (e.g., Band 20). Attackers frequently attempt to push target devices into lower frequencies to maximize signal penetration and extend their sweeping area.
 
 This heuristic mathematically differentiates between a sudden, forced band downgrade (highly indicative of a Rogue BTS or IMSI-catcher attack) and a natural, progressive signal degradation (such as entering a basement or parking garage). By evaluating physical band properties through EARFCN mapping rather than abstract channel numbers, it accurately identifies malicious physical-layer manipulations while heavily reducing false positives during normal mobility.
 
-## 14. RF Identity Stability Analysis 
-A legitimate cell keeps its physical-layer identity — its PCI and ARFCN — fixed for its entire lifetime. This heuristic inspects the device's own historical record for a given Cell ID (CID + MNC + TAC + MCC) and flags it when that single identity has been observed alternating between multiple distinct PCI or ARFCN values. Such behavior is a strong indicator of a clone reusing a legitimate Cell ID while reconfiguring its radio parameters.
+## 14. RF Identity Stability Analysis (H14)
+A legitimate cell keeps its physical-layer identity — its PCI — fixed for its entire lifetime. This heuristic inspects the device's own historical record for a given Cell ID (CID + MNC + TAC + MCC) and flags it when that single identity has been observed alternating between multiple distinct PCI values that persist recently. Such behavior is a strong indicator of a clone reusing a legitimate Cell ID with a different physical-layer identity.
 
 Crucially, it complements H11: while Geographic Consistency Analysis requires the user to move (it compares the same cell seen from incompatible positions), RF Identity Stability can fire while the user is completely stationary — covering the scenario where a device is disconnected and reconnected to the same Cell ID with a different radio fingerprint. Like H11 and the baseline heuristics, it is fully offline and relies solely on the device's own observation history, with no external database.
 
-It is engineered to be conservative against false positives. A value is only treated as a genuine alternate identity when it (a) appears at least twice, (b) represents a meaningful share of observations (filtering out occasional measurement glitches, e.g. a spurious ARFCN read seen 3 times out of 105), and (c) is still present within a recent time window. This last condition distinguishes a benign permanent reconfiguration by the operator (where the old value lingers only in older records) from an active, currently-flapping clone. In the Bayesian engine it is grouped with H11 as correlated RF-identity evidence, so the two cannot double-count and inflate the score.
+It is engineered to be conservative against false positives. A PCI is only treated as a genuine alternate identity when it (a) appears at least twice, (b) represents a meaningful share of observations, and (c) is still present within a recent time window — distinguishing a benign permanent reconfiguration (old value only in older records) from an active, currently-flapping clone. Field testing showed that ARFCN, unlike PCI, is unreliable for this purpose: carrier aggregation causes the serving cell to occasionally report a neighbor carrier's ARFCN, so this heuristic deliberately uses PCI only — the true, stable physical-layer cell identity. In the Bayesian engine it is grouped with H11 as correlated RF-identity evidence, so the two cannot double-count and inflate the score.
+
 
 ## Temporal Confidence Decay
 Anomalies must persist across 3 consecutive analysis cycles before triggering a confirmed threat alert. Transient heuristic failures are logged but do not raise alarms, significantly reducing false positive alert fatigue in dynamic RF environments.
