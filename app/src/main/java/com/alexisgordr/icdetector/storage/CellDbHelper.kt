@@ -9,6 +9,8 @@ import android.location.Location
 import com.alexisgordr.icdetector.models.HistoryRecord
 import com.alexisgordr.icdetector.models.SignalBaseline
 import com.alexisgordr.icdetector.models.CellRfStability
+import com.alexisgordr.icdetector.models.CellReputation
+import com.alexisgordr.icdetector.models.CellRfFingerprint
 import com.alexisgordr.icdetector.models.VerificationStatus
 import kotlin.math.sqrt
 import java.text.SimpleDateFormat
@@ -18,7 +20,7 @@ import java.util.Locale
 class CellDbHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME, null, DATABASE_VERSION) {
     companion object {
         private const val DATABASE_NAME = "icdetector_history.db"
-        private const val DATABASE_VERSION = 6
+        private const val DATABASE_VERSION = 7
         const val TABLE_HISTORY = "history"
         const val COLUMN_ID = "id"
         const val COLUMN_TIMESTAMP = "timestamp"
@@ -35,6 +37,8 @@ class CellDbHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME, 
         const val COLUMN_LON = "lon"
         const val COLUMN_PCI = "pci"
         const val COLUMN_ARFCN = "arfcn"
+        const val COLUMN_RSRQ = "rsrq"
+        const val COLUMN_SINR = "sinr"
     }
 
     override fun onCreate(db: SQLiteDatabase) {
@@ -54,7 +58,9 @@ class CellDbHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME, 
                     "$COLUMN_LAT REAL, " +
                     "$COLUMN_LON REAL, " +
                     "$COLUMN_PCI INTEGER, " +
-                    "$COLUMN_ARFCN INTEGER)",
+                    "$COLUMN_ARFCN INTEGER, " +
+                    "$COLUMN_RSRQ INTEGER, " +
+                    "$COLUMN_SINR INTEGER)",
         )
     }
 
@@ -73,6 +79,14 @@ class CellDbHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME, 
             db.execSQL("ALTER TABLE $TABLE_HISTORY ADD COLUMN $COLUMN_PCI INTEGER")
             db.execSQL("ALTER TABLE $TABLE_HISTORY ADD COLUMN $COLUMN_ARFCN INTEGER")
         }
+        if (oldVersion < 7) {
+            // Migración aditiva y NO destructiva: solo añade columnas para el fingerprint RF
+            // (RSRQ/SINR). Las filas existentes quedan intactas con estas columnas a NULL.
+            // Cada ALTER va en su propio try/catch para que, en el caso raro de que una columna
+            // ya existiera (instalación parcial), no aborte la migración ni la app.
+            try { db.execSQL("ALTER TABLE $TABLE_HISTORY ADD COLUMN $COLUMN_RSRQ INTEGER") } catch (_: Exception) {}
+            try { db.execSQL("ALTER TABLE $TABLE_HISTORY ADD COLUMN $COLUMN_SINR INTEGER") } catch (_: Exception) {}
+        }
     }
 
     fun logConnection(
@@ -88,7 +102,9 @@ class CellDbHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME, 
         lat: Double? = null,
         lon: Double? = null,
         pci: Int? = null,
-        arfcn: Int? = null
+        arfcn: Int? = null,
+        rsrq: Int? = null,
+        sinr: Int? = null
     ): Long {
         val db = this.writableDatabase
         val values = ContentValues().apply {
@@ -107,6 +123,8 @@ class CellDbHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME, 
             if (lon != null) put(COLUMN_LON, lon)
             if (pci != null) put(COLUMN_PCI, pci)
             if (arfcn != null) put(COLUMN_ARFCN, arfcn)
+            if (rsrq != null) put(COLUMN_RSRQ, rsrq)
+            if (sinr != null) put(COLUMN_SINR, sinr)
         }
         return db.insert(TABLE_HISTORY, null, values)
     }
@@ -190,6 +208,10 @@ class CellDbHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME, 
                           else cursor.getInt(cursor.getColumnIndexOrThrow(COLUMN_PCI))
                 val arfcn = if (cursor.isNull(cursor.getColumnIndexOrThrow(COLUMN_ARFCN))) null
                           else cursor.getInt(cursor.getColumnIndexOrThrow(COLUMN_ARFCN))
+                val rsrq = if (cursor.isNull(cursor.getColumnIndexOrThrow(COLUMN_RSRQ))) null
+                          else cursor.getInt(cursor.getColumnIndexOrThrow(COLUMN_RSRQ))
+                val sinr = if (cursor.isNull(cursor.getColumnIndexOrThrow(COLUMN_SINR))) null
+                          else cursor.getInt(cursor.getColumnIndexOrThrow(COLUMN_SINR))
                 
                 list.add(
                     HistoryRecord(
@@ -210,7 +232,9 @@ class CellDbHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME, 
                         lat = lat,
                         lon = lon,
                         pci = pci,
-                        arfcn = arfcn
+                        arfcn = arfcn,
+                        rsrq = rsrq,
+                        sinr = sinr
                     )
                 )
             } while (cursor.moveToNext())
@@ -414,12 +438,144 @@ class CellDbHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME, 
         val variance = samples.sumOf { (it - mean) * (it - mean) } / samples.size
         val stdDev = sqrt(variance)
 
+        // Percentiles calculados sobre las muestras YA cargadas en memoria (sin coste de BD).
+        // Robustos ante distribuciones no normales / outliers. 0 = sentinela "no fiable".
+        val sorted = samples.sorted()
+        fun percentile(p: Double): Int {
+            val idx = ((p / 100.0) * (sorted.size - 1)).toInt().coerceIn(0, sorted.size - 1)
+            return sorted[idx]
+        }
+        val p95 = percentile(95.0)
+        val p99 = percentile(99.0)
+
         return SignalBaseline(
             sampleCount = samples.size,
             meanDbm = mean,
             stdDevDbm = stdDev,
             minDbm = samples.minOrNull()!!,
-            maxDbm = samples.maxOrNull()!!
+            maxDbm = samples.maxOrNull()!!,
+            p95Dbm = p95,
+            p99Dbm = p99
+        )
+    }
+
+    /**
+     * Reputación de una celda derivada del historial propio (solo lectura, sin esquema nuevo).
+     * Lee la columna 'score' ya almacenada: una celda vista muchas veces, en varios días, y
+     * siempre con puntuación limpia, gana confianza. Esa confianza se usa SOLO para amortiguar
+     * heurísticas débiles sobre celdas probadas (ver CellReputation). Devuelve trustScore = -1
+     * (desconocida) si no hay historial suficiente para juzgar — en ese caso no se amortigua nada.
+     */
+    fun getCellReputation(cellId: String, mnc: String, tac: String): CellReputation {
+        val db = this.readableDatabase
+        val ninetyDaysAgo = System.currentTimeMillis() - (90L * 24 * 60 * 60 * 1000)
+        val dateFormat = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault())
+        val threshold = dateFormat.format(Date(ninetyDaysAgo))
+
+        val query = """
+            SELECT $COLUMN_SCORE, $COLUMN_TIMESTAMP
+            FROM $TABLE_HISTORY
+            WHERE $COLUMN_CID = ?
+              AND $COLUMN_MNC = ?
+              AND $COLUMN_TAC = ?
+              AND $COLUMN_TIMESTAMP > ?
+            ORDER BY $COLUMN_ID DESC
+            LIMIT 500
+        """.trimIndent()
+
+        var total = 0
+        var clean = 0
+        val days = HashSet<String>()
+        db.rawQuery(query, arrayOf(cellId, mnc, tac, threshold)).use { cursor ->
+            if (cursor.moveToFirst()) {
+                do {
+                    val score = cursor.getInt(0)
+                    val ts = cursor.getString(1) ?: ""
+                    total++
+                    if (score >= 85) clean++                 // observación "limpia"
+                    if (ts.length >= 10) days.add(ts.substring(0, 10))  // día calendario distinto
+                } while (cursor.moveToNext())
+            }
+        }
+
+        val distinctDays = days.size
+        val cleanRatio = if (total > 0) clean.toDouble() / total else 0.0
+
+        // Confianza: solo se gana con VOLUMEN (muchas observaciones) repartido en VARIOS días.
+        // Sin historial suficiente -> trustScore = -1 (desconocida) -> no se amortigua nada.
+        val trustScore = if (total < 10 || distinctDays < 2) {
+            -1
+        } else {
+            val volumeConf = minOf(1.0, total / 50.0)        // ~50 obs para confianza plena
+            val spreadConf = minOf(1.0, distinctDays / 5.0)  // repartidas en ~5 días
+            (cleanRatio * 100.0 * volumeConf * spreadConf).toInt().coerceIn(0, 100)
+        }
+
+        return CellReputation(
+            observations = total,
+            distinctDays = distinctDays,
+            cleanRatio = cleanRatio,
+            trustScore = trustScore
+        )
+    }
+
+    /**
+     * Huella RF (RSRQ/SINR) de una celda, derivada del historial propio (solo lectura). Lee solo
+     * las filas donde rsrq/sinr no son NULL (datos a partir de la migración v7). Devuelve null si
+     * no hay muestras suficientes — la firma "duerme" hasta acumular datos, evitando falsos
+     * positivos tempranos. Conservadora por diseño (RSRQ/SINR son métricas ruidosas).
+     */
+    fun getCellRfFingerprint(cellId: String, mnc: String, tac: String, minSamples: Int = 30): CellRfFingerprint? {
+        val db = this.readableDatabase
+        val ninetyDaysAgo = System.currentTimeMillis() - (90L * 24 * 60 * 60 * 1000)
+        val dateFormat = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault())
+        val threshold = dateFormat.format(Date(ninetyDaysAgo))
+
+        val query = """
+            SELECT $COLUMN_RSRQ, $COLUMN_SINR
+            FROM $TABLE_HISTORY
+            WHERE $COLUMN_CID = ?
+              AND $COLUMN_MNC = ?
+              AND $COLUMN_TAC = ?
+              AND $COLUMN_RSRQ IS NOT NULL
+              AND $COLUMN_SINR IS NOT NULL
+              AND $COLUMN_TIMESTAMP > ?
+            ORDER BY $COLUMN_ID DESC
+            LIMIT 200
+        """.trimIndent()
+
+        val rsrqs = mutableListOf<Int>()
+        val sinrs = mutableListOf<Int>()
+        db.rawQuery(query, arrayOf(cellId, mnc, tac, threshold)).use { cursor ->
+            if (cursor.moveToFirst()) {
+                do {
+                    val rsrq = cursor.getInt(0)
+                    val sinr = cursor.getInt(1)
+                    // Rangos físicos sensatos (descarta valores basura / no disponibles).
+                    if (rsrq in -30..-1 && sinr in -20..40) {
+                        rsrqs.add(rsrq)
+                        sinrs.add(sinr)
+                    }
+                } while (cursor.moveToNext())
+            }
+        }
+
+        if (rsrqs.size < minSamples) return null
+
+        fun meanStd(xs: List<Int>): Pair<Double, Double> {
+            val m = xs.average()
+            val v = xs.sumOf { (it - m) * (it - m) } / xs.size
+            return m to sqrt(v)
+        }
+        val (rMean, rStd) = meanStd(rsrqs)
+        val (sMean, sStd) = meanStd(sinrs)
+
+        return CellRfFingerprint(
+            sampleCount = rsrqs.size,
+            rsrqMean = rMean,
+            rsrqStd = rStd,
+            sinrMean = sMean,
+            sinrStd = sStd
         )
     }
 
@@ -431,7 +587,8 @@ class CellDbHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME, 
      * para una misma Cell ID sugieren un clon reconfigurándose.
      *
      * A diferencia de getPreviousCellHistory, NO filtra por ubicación ni por recencia: aquí
-     * actual). Solo lectura; no toca esquema ni escritura.
+     * interesa all el historial de la celda (incluidas reapariciones recientes y en el sitio actual)
+     * Solo lectura; no toca esquema ni escritura.
      */
     fun getCellRfStability(cellId: String, mnc: String, tac: String, mcc: String): CellRfStability {
         val pciCounts = HashMap<Int, Int>()

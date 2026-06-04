@@ -106,14 +106,29 @@ object BayesianScorer {
         else               -> 1.0f   // denso (urbano) -> sin cambios
     }
 
+    // Factor de reputación: una celda con historial limpio probado durante semanas merece
+    // menos sensibilidad en las heurísticas DÉBILES (ya ha demostrado ser legítima). Solo
+    // amortigua (<=1.0), nunca amplifica. trustScore < 0 (desconocida) o bajo -> sin cambios.
+    // No afecta a las heurísticas físicas (mismo conjunto ENV_SENSITIVE que densityFactor).
+    private fun trustFactor(trustScore: Int): Float = when {
+        trustScore < 0    -> 1.0f   // desconocida -> sin cambios
+        trustScore >= 80  -> 0.6f   // celda muy probada -> suaviza ruido débil
+        trustScore >= 60  -> 0.8f   // celda razonablemente probada
+        else              -> 1.0f   // poca confianza -> escrutinio completo
+    }
+
     fun calculate(
         failedHeuristics: List<String>,
         verificationStatus: String,
         isLatencyAnomalous: Boolean,
-        neighborCount: Int = -1
+        neighborCount: Int = -1,
+        trustScore: Int = -1
     ): Float {
         var posterior = PRIOR
-        val df = densityFactor(neighborCount)
+        // Las heurísticas DÉBILES (sensibles al entorno) se amortiguan por densidad Y por
+        // reputación: ambos factores son <=1.0 y se multiplican (un entorno disperso y/o una
+        // celda muy probada reducen el ruido de las señales débiles). Nunca por debajo de neutro.
+        val df = densityFactor(neighborCount) * trustFactor(trustScore)
 
         // Para cada grupo — aplicar solo la LR más potente.
         // Las heurísticas sensibles al entorno ven su LR suavizada hacia 1.0 (neutro) según

@@ -253,7 +253,7 @@ class HeuristicsTest {
         assertFalse(analyzeRf(rf).rfStabilityPassed)
     }
 
-    @Test fun `H15 ya NO dispara por ARFCN (excluido agregacion de portadoras lo hace poco fiable)`() {
+    @Test fun `H15 ya NO dispara por ARFCN (excluido por agregacion de portadoras)`() {
         // Dos ARFCN "sólidos" pero PCI estable. Tras excluir el ARFCN de la heurística (datos de
         // campo: el ARFCN parpadea por carrier aggregation), esto NO debe disparar.
         val rf = com.alexisgordr.icdetector.models.CellRfStability(
@@ -353,5 +353,43 @@ class HeuristicsTest {
 
     @Test fun `H15 no dispara sin datos de estabilidad (null)`() {
         assertTrue(analyzeRf(null).rfStabilityPassed)
+    }
+
+    // --- Fingerprint RF (RSRQ/SINR), reportado por el flag de H13 ---
+
+    private fun analyzeFp(
+        rsrq: Int?, sinr: Int?,
+        fp: com.alexisgordr.icdetector.models.CellRfFingerprint?
+    ) = ThreatAnalyzer.analyzeThreats(
+        active = active(dbm = -90, rsrq = rsrq, sinr = sinr),
+        neighbors = listOf(neighbor(-95)),
+        isHardwareCipheringActive = true,
+        cellChangeHistory = emptyList(),
+        currentLocation = null,
+        rfFingerprint = fp
+    ).heuristicReport
+
+    @Test fun `fingerprint dispara si RSRQ y SINR se desvian mucho de la firma`() {
+        val fp = com.alexisgordr.icdetector.models.CellRfFingerprint(
+            sampleCount = 50, rsrqMean = -10.0, rsrqStd = 1.0, sinrMean = 12.0, sinrStd = 2.0
+        )
+        // rsrq -20 (off 10 > 6) y sinr -5 (off 17 > 8): ambos anómalos -> dispara.
+        assertFalse(analyzeFp(rsrq = -20, sinr = -5, fp = fp).signalBaselinePassed)
+    }
+
+    @Test fun `fingerprint NO dispara si solo una metrica se desvia`() {
+        val fp = com.alexisgordr.icdetector.models.CellRfFingerprint(
+            sampleCount = 50, rsrqMean = -10.0, rsrqStd = 1.0, sinrMean = 12.0, sinrStd = 2.0
+        )
+        // rsrq muy desviado pero sinr normal -> exige AMBOS -> no dispara.
+        assertTrue(analyzeFp(rsrq = -20, sinr = 12, fp = fp).signalBaselinePassed)
+    }
+
+    @Test fun `fingerprint NO dispara sin firma (dormido) ni con valores normales`() {
+        assertTrue(analyzeFp(rsrq = -10, sinr = 12, fp = null).signalBaselinePassed)
+        val fp = com.alexisgordr.icdetector.models.CellRfFingerprint(
+            sampleCount = 50, rsrqMean = -10.0, rsrqStd = 1.0, sinrMean = 12.0, sinrStd = 2.0
+        )
+        assertTrue(analyzeFp(rsrq = -11, sinr = 11, fp = fp).signalBaselinePassed)
     }
 }

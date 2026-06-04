@@ -6,6 +6,8 @@ import com.alexisgordr.icdetector.models.HeuristicReport
 import com.alexisgordr.icdetector.models.HistoryRecord
 import com.alexisgordr.icdetector.models.SignalBaseline
 import com.alexisgordr.icdetector.models.CellRfStability
+import com.alexisgordr.icdetector.models.CellReputation
+import com.alexisgordr.icdetector.models.CellRfFingerprint
 import com.alexisgordr.icdetector.models.VerificationStatus
 
 object ThreatAnalyzer {
@@ -128,7 +130,9 @@ object ThreatAnalyzer {
         previousBand: Int? = null,
         previousDbm: Int? = null,
         recentRegisteredDbm: List<Int> = emptyList(),
-        rfStability: CellRfStability? = null
+        rfStability: CellRfStability? = null,
+        reputation: CellReputation? = null,
+        rfFingerprint: CellRfFingerprint? = null
     ): CellData {
         val reasons = mutableListOf<String>()
         var score = 100
@@ -302,7 +306,15 @@ object ThreatAnalyzer {
             // y exigimos una desviación grande Y estadísticamente significativa.
             val effectiveStd = maxOf(base.stdDevDbm, 4.0)
             val excessDb = active.dbm - base.meanDbm  // positivo = más fuerte de lo habitual
-            val significant = excessDb >= 18.0 && excessDb >= 3.0 * effectiveStd
+            var significant = excessDb >= 18.0 && excessDb >= 3.0 * effectiveStd
+            // Refuerzo por percentil (P99): con historial suficiente, exigimos ADEMÁS que la
+            // lectura supere el percentil 99 histórico de esta celda. Endurece H13 frente a
+            // celdas con cola alta legítima (que ocasionalmente se ven fuertes sin ataque),
+            // reduciendo falsos positivos. Con pocas muestras el percentil no es fiable, así
+            // que NO se aplica y el comportamiento es idéntico al anterior.
+            if (significant && base.sampleCount >= 20 && base.p99Dbm != 0) {
+                significant = active.dbm > base.p99Dbm
+            }
             if (!isWifiActive && significant && active.dbm >= -95) {
                 hSignalBaseline = false
                 reasons.add("Potencia anómala vs historial (+${excessDb.toInt()}dB)")
@@ -310,6 +322,30 @@ object ThreatAnalyzer {
                     excessDb >= 30 -> 25
                     excessDb >= 24 -> 18
                     else -> 12
+                }
+            }
+        }
+
+        // Huella RF (RSRQ/SINR) — extensión del baseline de señal (familia H13). Una celda
+        // suplantada por otro transmisor puede presentar una calidad de señal incoherente con
+        // su firma histórica. MUY conservador: RSRQ y SINR son ruidosos, así que exige muchas
+        // muestras (>=30, garantizado por la consulta) y desviación GRANDE en AMBAS métricas a
+        // la vez. Solo penaliza si H13-RSRP no disparó ya (no doble-cuenta: comparten flag).
+        // Nace dormido (columnas rsrq/sinr vacías tras la migración) hasta acumular semanas.
+        if (!isWifiActive && hSignalBaseline) {
+            rfFingerprint?.let { fp ->
+                val curRsrq = active.rsrq
+                val curSinr = active.sinr
+                if (curRsrq != null && curSinr != null) {
+                    val rsrqOff = kotlin.math.abs(curRsrq - fp.rsrqMean)
+                    val sinrOff = kotlin.math.abs(curSinr - fp.sinrMean)
+                    val rsrqAnom = rsrqOff > maxOf(6.0, 4.0 * fp.rsrqStd)
+                    val sinrAnom = sinrOff > maxOf(8.0, 4.0 * fp.sinrStd)
+                    if (rsrqAnom && sinrAnom) {
+                        hSignalBaseline = false
+                        reasons.add("Huella RF incoherente con el historial (RSRQ/SINR muy desviados)")
+                        score -= 15
+                    }
                 }
             }
         }
@@ -407,7 +443,8 @@ object ThreatAnalyzer {
             failedList,
             active.verified.name,
             isNetworkLatencyAnomalous,
-            neighborCount = neighbors.size
+            neighborCount = neighbors.size,
+            trustScore = reputation?.trustScore ?: -1
         )
 
         // Bonificadores y penalizadores por Base de Datos

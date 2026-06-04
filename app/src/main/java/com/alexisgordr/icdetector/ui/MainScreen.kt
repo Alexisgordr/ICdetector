@@ -617,7 +617,7 @@ fun SecurityScorePanel(active: CellData, dbmHistory: List<Int>, geoHistory: List
 
                             HeuristicItem("10. Estabilidad de Conexión (Anti Ping-Pong)", active.heuristicReport.pingPongPassed)
                             HeuristicItem("11. Consistencia Geográfica (Cell ID móvil)", active.heuristicReport.mobileCellIdPassed)
-                            HeuristicItem("12. Potencia vs Histórico (Baseline geográfico)", active.heuristicReport.signalBaselinePassed)
+                            HeuristicItem("12. Potencia vs Histórico (Baseline + huella RSRQ/SINR)", active.heuristicReport.signalBaselinePassed)
                             HeuristicItem("13. Downgrade de Banda (Intra-LTE)", active.heuristicReport.bandDowngradePassed)
                             HeuristicItem("14. Estabilidad de Identidad RF (PCI)", active.heuristicReport.rfStabilityPassed)
                         }

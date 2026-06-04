@@ -11,5 +11,7 @@ data class SignalBaseline(
     val meanDbm: Double,
     val stdDevDbm: Double,
     val minDbm: Int,
-    val maxDbm: Int
+    val maxDbm: Int,
+    val p95Dbm: Int = 0,   // percentil 95 del dBm histórico (0 = no calculado / pocas muestras)
+    val p99Dbm: Int = 0    // percentil 99 del dBm histórico (cola alta legítima de la celda)
 )

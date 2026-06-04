@@ -130,4 +130,35 @@ class BayesianScorerTest {
         val disperso = BayesianScorer.calculate(listOf("ciphering"), "PENDING", false, neighborCount = 0)
         assertEquals("el cifrado anulado vale igual en cualquier entorno", denso, disperso, 0.001f)
     }
+
+    // --- Reputación (trustScore) ---
+
+    @Test
+    fun `una celda muy probada amortigua el ruido de una heuristica debil`() {
+        val nueva = BayesianScorer.calculate(listOf("powerJump"), "PENDING", false, neighborCount = 12, trustScore = -1)
+        val probada = BayesianScorer.calculate(listOf("powerJump"), "PENDING", false, neighborCount = 12, trustScore = 100)
+        assertTrue("en celda probada el salto de potencia debe pesar menos", probada < nueva)
+    }
+
+    @Test
+    fun `trustScore desconocido (-1) no cambia nada`() {
+        val clasico = BayesianScorer.calculate(listOf("powerJump"), "PENDING", false, neighborCount = 12)
+        val conTrust = BayesianScorer.calculate(listOf("powerJump"), "PENDING", false, neighborCount = 12, trustScore = -1)
+        assertEquals("desconocido no debe alterar el cálculo", clasico, conTrust, 0.001f)
+    }
+
+    @Test
+    fun `la reputacion NO amortigua las heuristicas fisicas`() {
+        // MCC mismatch debe valer igual aunque la celda sea de máxima confianza.
+        val nueva = BayesianScorer.calculate(listOf("mccMismatch"), "PENDING", false, trustScore = -1)
+        val probada = BayesianScorer.calculate(listOf("mccMismatch"), "PENDING", false, trustScore = 100)
+        assertEquals("MCC no depende de la reputación", nueva, probada, 0.001f)
+    }
+
+    @Test
+    fun `el cifrado A5_0 NO se amortigua por reputacion`() {
+        val nueva = BayesianScorer.calculate(listOf("ciphering"), "PENDING", false, trustScore = -1)
+        val probada = BayesianScorer.calculate(listOf("ciphering"), "PENDING", false, trustScore = 100)
+        assertEquals("el cifrado anulado vale igual aunque la celda sea de confianza", nueva, probada, 0.001f)
+    }
 }

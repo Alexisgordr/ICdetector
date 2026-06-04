@@ -116,6 +116,8 @@ class MiniICService : Service() {
     private var cachedHistory: List<HistoryRecord> = emptyList()
     private var cachedBaseline: SignalBaseline? = null
     private var cachedRfStability: CellRfStability? = null
+    private var cachedReputation: CellReputation? = null
+    private var cachedFingerprint: CellRfFingerprint? = null
     private var cachedRfSignature = ""
     private var cachedRfTimestamp = 0L
     private var cacheTimestamp = 0L
@@ -772,12 +774,23 @@ class MiniICService : Service() {
                         val st = dbHelper.getCellRfStability(
                             activeRaw.cellId, activeRaw.mnc, activeRaw.tac, activeRaw.mcc
                         )
+                        // Reputación: misma identidad de celda -> se recalcula con la misma caché.
+                        // Solo lectura del historial (columna 'score'); amortigua ruido débil en
+                        // celdas probadas (ver CellReputation). No toca esquema.
+                        cachedReputation = dbHelper.getCellReputation(
+                            activeRaw.cellId, activeRaw.mnc, activeRaw.tac
+                        )
+                        cachedFingerprint = dbHelper.getCellRfFingerprint(
+                            activeRaw.cellId, activeRaw.mnc, activeRaw.tac
+                        )
                         cachedRfSignature = rfSig
                         cachedRfStability = st
                         cachedRfTimestamp = nowRf
                         st
                     }
                 }
+                val reputation: CellReputation? = cachedReputation
+                val rfFingerprint: CellRfFingerprint? = cachedFingerprint
 
                 if (canQuery) {
                     val signature = "${activeRaw.cellId}|${activeRaw.mnc}|${activeRaw.tac}"
@@ -842,7 +855,9 @@ class MiniICService : Service() {
                             previousBand = prevBand,
                             previousDbm = prevRegisteredDbm,
                             recentRegisteredDbm = recentRegisteredDbmTrend.toList(),
-                            rfStability = rfStability
+                            rfStability = rfStability,
+                            reputation = reputation,
+                            rfFingerprint = rfFingerprint
                         )
                     } else {
                         // Las vecinas no se evalúan como amenaza; se mantienen como contexto.
@@ -1222,6 +1237,12 @@ class MiniICService : Service() {
         val rfStability = if (cell.cellId != "N/A") {
             dbHelper.getCellRfStability(cell.cellId, cell.mnc, cell.tac, cell.mcc)
         } else null
+        val reputation = if (cell.cellId != "N/A") {
+            dbHelper.getCellReputation(cell.cellId, cell.mnc, cell.tac)
+        } else null
+        val rfFingerprint = if (cell.cellId != "N/A") {
+            dbHelper.getCellRfFingerprint(cell.cellId, cell.mnc, cell.tac)
+        } else null
 
         val updatedActive = cell.copy(verified = VerificationStatus.VERIFIED, lat = lat, lon = lon)
         val analyzedActive = ThreatAnalyzer.analyzeThreats(
@@ -1238,7 +1259,9 @@ class MiniICService : Service() {
             previousBand = prevBand,
             previousDbm = prevRegisteredDbm,
             recentRegisteredDbm = recentRegisteredDbmTrend.toList(),
-            rfStability = rfStability
+            rfStability = rfStability,
+            reputation = reputation,
+            rfFingerprint = rfFingerprint
         )
         
         scope.launch(Dispatchers.Main) {
@@ -1308,7 +1331,9 @@ class MiniICService : Service() {
                     lat = loc?.latitude,
                     lon = loc?.longitude,
                     pci = cell.pci,
-                    arfcn = cell.arfcn
+                    arfcn = cell.arfcn,
+                    rsrq = cell.rsrq,
+                    sinr = cell.sinr
                 )
             }
             // --------------------------------------------------
@@ -1473,7 +1498,7 @@ class MiniICService : Service() {
             "9. Cifrado Hardware" to report.hardwareCipheringPassed,
             "10. Anti Ping-Pong" to report.pingPongPassed,
             "11. Consistencia Geográfica (Cell ID móvil)" to report.mobileCellIdPassed,
-            "12. Potencia vs Histórico (Baseline geográfico)" to report.signalBaselinePassed,
+            "12. Potencia vs Histórico (Baseline + huella RSRQ/SINR)" to report.signalBaselinePassed,
             "13. Downgrade de Banda (Intra-LTE)" to report.bandDowngradePassed,
             "14. Estabilidad de Identidad RF (PCI)" to report.rfStabilityPassed
         )

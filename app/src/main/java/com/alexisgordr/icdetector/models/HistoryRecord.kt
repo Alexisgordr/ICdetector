@@ -14,5 +14,7 @@ data class HistoryRecord(
     val lat: Double? = null,
     val lon: Double? = null,
     val pci: Int? = null,
-    val arfcn: Int? = null
+    val arfcn: Int? = null,
+    val rsrq: Int? = null,
+    val sinr: Int? = null
 )
