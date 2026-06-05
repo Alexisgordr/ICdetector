@@ -1,381 +1,525 @@
 ![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)
 ![Platform](https://img.shields.io/badge/Platform-Android%2012%2B-green.svg)
 ![Root Required](https://img.shields.io/badge/Root-Not%20Required-brightgreen.svg)
-![Status](https://img.shields.io/badge/Status-Active-success.svg)
+![Status](https://img.shields.io/badge/Status-Stable%20v2.0-success.svg)
 
 <table>
   <tr>
     <td width="60%" valign="top">
-      <h3>📱 Forensic Cellular Monitoring Interface</h3>
+      <h3>Forensic Cellular Monitoring Interface</h3>
       <p>
-        ICdetection provides a minimalist forensic-oriented interface designed
-        for continuous mobile network auditing, anomaly analysis,
-        and real-time cellular telemetry visualization.
+        ICdetection is a local-first Android tool for cellular-network auditing,
+        anomaly analysis, and real-time radio telemetry visualization.
       </p>
       <ul>
-        <li><strong>Forensic Terminal:</strong> Event-driven structured security logging.</li>
-        <li><strong>Telemetry:</strong> Real-time RSRP and Timing Advance (TA) visualization.</li>
-        <li><strong>Security Engine:</strong> Continuous multi-heuristic cellular analysis.</li>
+        <li><strong>Forensic Terminal:</strong> structured security and radio-event logging.</li>
+        <li><strong>Telemetry:</strong> real-time RSRP, RSRQ, SINR and Timing Advance visualization when available.</li>
+        <li><strong>Security Engine:</strong> conservative multi-heuristic cellular anomaly analysis.</li>
       </ul>
     </td>
     <td width="40%" align="center">
-           <img src="https://github.com/user-attachments/assets/81bf1ed6-94c4-462e-8d13-828f7754f532"
+      <img src="https://github.com/user-attachments/assets/81bf1ed6-94c4-462e-8d13-828f7754f532"
            alt="ICdetection Screenshot"
            width="260" />
     </td>
   </tr>
 </table>
 
-# 📡 ICdetection — Open-Source Cellular Security Auditor
+# ICdetection — Open-Source Cellular Security Auditor
 
 ICdetection is an open-source Android application focused on:
+
 - cellular network auditing
 - heuristic anomaly detection
 - radio telemetry analysis
 - forensic mobile-network monitoring
+- local historical baseline learning
 
 The project is designed for:
+
 - researchers
 - privacy-conscious users
 - mobile security enthusiasts
 - forensic experimentation
 - cellular infrastructure auditing
+- GrapheneOS / Pixel users interested in radio-layer visibility
 
 ICdetection attempts to identify suspicious cellular behavior potentially associated with:
+
 - rogue base stations
 - fake BTS deployments
 - IMSI-catcher-like activity
 - downgrade attempts
 - abnormal reselection behavior
 - suspicious topology inconsistencies
+- cellular infrastructure impersonation patterns
 
 The application operates entirely from Android userland without requiring root or direct baseband access.
 
+**Important:** ICdetection is not an IMSI-catcher proof tool. It is a local-first cellular anomaly auditor. Alerts should be interpreted as signals that the cellular environment deserves closer attention, not as definitive proof of surveillance or interception.
+
 ---
 
-# 🛠️ Development Disclosure
+# Project Status
+
+ICdetection v2.0 is currently considered stable and feature-complete within the limits of Android userland telemetry.
+
+The project is intentionally entering a data-collection and observation phase. During this period, future work will focus on:
+
+- bug fixes
+- field validation
+- false-positive analysis
+- exported CSV review
+- small targeted corrections discovered in real-world usage
+
+No new detection claims should be assumed until they are validated against real-world data.
+
+---
+
+# Development Disclosure
 
 This project was developed using an AI-assisted workflow.
 
-The lead developer (**Alexis Gómez Rodríguez**) designed:
+The lead developer (**Alexis Gomez Rodriguez**) designed and directed:
+
 - heuristic logic
 - detection architecture
 - threat scoring behavior
 - forensic telemetry workflow
 - validation methodology
 - anomaly correlation logic
+- false-positive reduction strategy
+- project direction and operational philosophy
 
 AI assistance (Gemini, Claude, ChatGPT, DeepSeek) was used for:
+
 - Kotlin implementation support
 - Android API integration
 - architectural iteration
 - debugging assistance
 - refactoring support
+- documentation support
 
-All core detection logic, heuristics, and operational decisions were manually reviewed and validated.
+All core detection logic, heuristics, operational decisions, and false-positive tradeoffs were manually reviewed and validated.
+
+## On Transparency and AI-Assisted Development
+
+This project is built on honesty: honesty about its detection limits, and honesty about how it was made.
+
+The system design is mine: the decision to use a probabilistic engine instead of rigid rules, which heuristics to include or reject, how they are weighted and correlated, what counts as a false positive in real-world data, and the overall direction of the project. Many of those decisions were made by testing the app in the field, finding real false positives, and reasoning about why they happened.
+
+The code itself was written with AI assistance. I do not claim to be a Kotlin expert. What I bring is the design, judgment, validation, and direction: I decide what the system should do and why, choose which ideas survive and which are discarded, and validate results against real-world observations. Every heuristic and detection decision in this project is something I can explain and defend, because I understood the reason behind it as it was built.
 
 ---
 
-# 🔒 Project Philosophy
+# Project Philosophy
 
 ICdetection does **not** claim to provide definitive IMSI-catcher detection.
 
 Instead, the application follows a probabilistic forensic approach based on:
+
 - heuristic correlation
 - anomaly scoring
 - infrastructure consistency validation
 - timing analysis
-- telemetry verification
+- local telemetry verification
 - behavioral pattern analysis
+- historical baseline learning
 
-The primary goal of the project is to provide:
+The primary goal is to provide:
+
 - visibility
 - anomaly awareness
 - forensic logging
 - infrastructure auditing
 - radio telemetry analysis
+- local evidence for later review
 
 within the technical limitations imposed by Android.
 
-## On Transparency and AI-Assisted Development
-
-This project is built on honesty — about its detection limits, and about how it was made.
-
-The system design is mine: the decision to use a probabilistic engine instead of rigid rules,
-which heuristics to include or reject, how they are weighted and correlated, what counts as a
-false positive in real-world data, and the overall direction of the project. Many of those
-decisions were made by testing the app in the field, finding real false positives, and reasoning
-about why they happened.
-
-The code itself was written by AI tools — I do not program in Kotlin. AI was also used to
-explore and refine several heuristic ideas. What I bring is the design and the judgment: I
-direct the project, decide what it should do and why, choose which ideas survive and which
-get discarded, and validate the results against real-world data. Every heuristic and every
-detection decision in this project I can explain and defend, because I understood the *why*
-behind each one as it was built — even where I could not have written the implementation myself.
-
 ---
 
-# ⚠️ Important Technical Reality
+# Important Technical Reality
 
 Modern Android devices do not expose the complete cellular protocol stack to third-party applications.
 
 This means ICdetection cannot directly access:
+
 - complete RRC signaling
 - NAS messages
 - full modem telemetry
 - low-level baseband internals
 - complete LTE/5G control-plane traffic
+- cryptographic session details
+- all identity-request events
+- all ciphering state transitions
 
-As a result:
+As a result, detection is heuristic in nature and should never be interpreted as definitive proof of surveillance or interception.
 
-Detection is heuristic in nature and should never be interpreted as definitive proof of surveillance or interception.
-
-Sophisticated LTE/5G interception systems may emulate legitimate carrier infrastructure and remain difficult to distinguish from real towers using Android-only telemetry.
+Sophisticated LTE/5G interception systems may emulate legitimate carrier infrastructure and remain difficult, or impossible, to distinguish from real towers using Android-only telemetry.
 
 ---
 
-# 📱 Device & Hardware Compatibility
+# Device & Hardware Compatibility
 
-ICdetection relies heavily on Android radio callbacks and low-level telephony APIs. Hardware, firmware, and vendor implementations significantly affect telemetry quality.
+ICdetection relies heavily on Android radio callbacks and telephony APIs. Hardware, firmware, modem implementation, Android version, and vendor HAL behavior significantly affect telemetry quality.
 
-## Recommended: Google Pixel / GrapheneOS
+## Recommended: Google Pixel / GrapheneOS / Near-AOSP Android
 
-Google Pixel devices (especially Tensor-based models) running:
+Google Pixel devices running:
+
 - stock Android
 - GrapheneOS
-- near-AOSP environments
+- near-AOSP Android environments
 
-currently provide the most reliable telemetry exposure available in Android userland.
+generally provide cleaner and more consistent Android telephony behavior than heavily customized OEM builds.
 
-These environments allow improved access to:
-- ciphering-state callbacks
-- Timing Advance telemetry
-- radio event consistency
-- identifier disclosure events
+However, advanced radio-security signals such as ciphering state, identifier disclosure events, or modem-level security callbacks remain highly dependent on:
+
+- Android version
+- modem firmware
+- vendor HAL support
+- exposed Android APIs
+- required system permissions
+- device-specific implementation details
+
+If these signals are not exposed by the device, ICdetection marks or treats them as unavailable rather than assuming they are safe.
 
 ## OEM Firmware Limitations
 
-Manufacturers using heavily customized Android stacks (OneUI, MIUI, EMUI, etc.) frequently modify or restrict the radio HAL layer.
+Manufacturers using heavily customized Android stacks (OneUI, MIUI, EMUI, etc.) may modify or restrict radio HAL behavior.
 
 This may:
-- obfuscate radio metrics
-- block security callbacks
-- suppress Timing Advance visibility
-- hide ciphering-state information
 
-The application will still function normally on these devices, but some advanced heuristics may become partially degraded or unavailable.
+- obfuscate radio metrics
+- suppress Timing Advance visibility
+- hide or alter signal-quality values
+- limit telephony callback consistency
+- prevent access to ciphering or identifier-disclosure information
+
+The application may still function normally on these devices, but some advanced heuristics can become partially degraded or unavailable.
 
 ## Android Support
 
-- **Android 14+:** Best support currently available in Android userland.
-- **Android 12 / 13:** Fully supported in heuristic-analysis mode.
+- **Android 14+:** best practical support currently available in Android userland.
+- **Android 12 / 13:** supported in heuristic-analysis mode.
 
 ---
 
-# 🚀 Detection Engine
+# Detection Engine
 
 ICdetection continuously performs multi-layer heuristic analysis during:
+
 - cell reselections
 - handovers
 - signal transitions
 - topology changes
 - mobility events
+- observed changes in local radio behavior
 
-Current heuristics include:
+Current analysis layers include:
 
-## 1. Isolated Cell Detection
-Detects serving cells operating without coherent neighboring infrastructure. Useful against amateur rogue BTS deployments or isolated SDR configurations.
+## Isolated Cell Detection
 
-## 2. Signal Dominance Analysis
-Detects abnormal signal dominance deltas between serving and neighboring cells, potentially indicating forced camping behavior.
+Detects serving cells operating without coherent neighboring infrastructure. This can be useful against amateur rogue BTS deployments or isolated SDR configurations, but it can also occur in rural areas or unusual coverage environments.
 
-## 3. MCC Consistency Validation
-Detects Mobile Country Code inconsistencies between nearby cells.
+## Signal Dominance Analysis
 
-## 4. Multi-MNC Density Analysis
-Flags environments containing unusually high operator-code diversity.
+Detects abnormal signal dominance deltas between the serving cell and neighboring cells, potentially indicating forced camping behavior. This is environment-sensitive and is softened in sparse/rural contexts to reduce false positives.
 
-## 5. TAC Regional Consistency
-Validates Tracking Area Code coherence against surrounding infrastructure.
+## MCC Consistency Validation
 
-## 6. Timing Advance Geometric Analysis
-Attempts to correlate physical distance estimation using Timing Advance telemetry and tower-position validation. *(Highly device-dependent)*.
+Detects Mobile Country Code inconsistencies between nearby cells. This is a strong anomaly when observed in normal non-border environments, but still requires contextual interpretation.
 
-## 7. Ghost Neighbor Detection
-Detects invalid or incoherent neighboring-cell behavior.
+## Multi-MNC Density Analysis
 
-## 8. ARFCN / Frequency Sanity Validation
-Performs frequency-consistency analysis against expected radio behavior and regional allocations.
+Flags environments containing unusually high operator-code diversity. This is treated as weak evidence because MVNOs, roaming, transport hubs, and border regions can produce legitimate diversity.
 
-## 9. Ciphering Integrity Monitoring
-Attempts to detect insecure or non-ciphered cellular states (A5/0) when exposed by the Android framework or modem firmware.
+## TAC Regional Consistency
 
-## 10. Anti Ping-Pong Analysis
+Validates Tracking Area Code coherence against surrounding infrastructure. TAC deviations can be meaningful, but operator maintenance and regional network changes can also produce unusual values.
+
+## Timing Advance Geometric Analysis
+
+Attempts to correlate physical distance estimation using Timing Advance telemetry and tower-position validation when enough data is available. This is highly device-dependent and may be unavailable or unreliable on some hardware.
+
+## Ghost Neighbor Detection
+
+Detects cases where the serving cell is very strong while all visible neighboring cells are extremely weak. This may indicate an artificially controlled RF environment, but can also occur in difficult radio conditions.
+
+## ARFCN / Frequency Sanity Validation
+
+Performs frequency sanity checks against expected radio ranges and technology-specific limits. This is mostly a guard against impossible or malformed radio values, not a complete regional spectrum validator.
+
+## Ciphering Integrity Monitoring
+
+Attempts to detect insecure, null, or disabled cellular ciphering states when such information is exposed by Android, the modem firmware, or device-specific callbacks.
+
+If the device does not expose this information, ICdetection treats it as unavailable. It does not assume the network is safe simply because ciphering information cannot be read.
+
+## Anti Ping-Pong Analysis
+
 Detects aggressive reselection loops and repetitive handover behavior while applying mobility-aware filtering to reduce false positives during vehicular movement.
 
-## 11. Geographic Consistency Analysis (H11)
-Validates Cell IDs against a local GPS-based historical database built from previous observations. Detects Cell IDs appearing from physically inconsistent locations over time — a strong indicator of mobile rogue infrastructure cloning legitimate tower identifiers.
+## Geographic Consistency Analysis
 
-Because it is anchored to physical geography (the device's own GPS position), this heuristic is immune to RF parameter spoofing: no falsified radio parameter can alter the phone's real-world location. It is also fully offline and cannot be poisoned by registering fake towers in public databases, since it relies on no external database at all.
+Validates Cell IDs against a local GPS-based historical database built from previous observations. It detects cases where the same Cell ID appears from physically inconsistent locations over time, which can be consistent with mobile rogue infrastructure cloning legitimate tower identifiers.
 
-Its scope is limited to cells for which prior history (and a valid GPS fix) already exists. As such, it detects **identifier cloning at a distance** — but it does not catch a catcher that uses an unknown/fresh Cell ID, one that operates physically next to the legitimate tower, or a cell observed for the first time with no historical baseline yet.
+Because it is anchored to the device's own GPS position, this heuristic is resistant to spoofing of cellular broadcast parameters. It is fully offline and cannot be poisoned by registering fake towers in public databases, because it relies on no external database.
 
-## 12. Signal Baseline Anomaly (H12)
-Learns each cell's typical signal level (dBm) at a given location from the device's own historical observations, then flags readings that are anomalously **strong** compared to that learned baseline. A nearby rogue transmitter impersonating a cell that is normally weaker at that spot will appear far stronger than its own history — a physical inconsistency that falsified radio parameters cannot hide, since the attacker cannot change how close their transmitter physically is to the device.
+Its scope is limited to cells for which prior history and a valid GPS fix already exist. It can detect identifier cloning at a distance, but it does not catch a catcher that uses an unknown or fresh Cell ID, operates physically close to the legitimate tower, or appears before any historical baseline exists.
 
-Like H11, it is fully offline, relies on no external database, and needs no labelled data: it only learns from what the device has already observed. It is grouped with the RF-dominance heuristics in the Bayesian engine, so it cannot double-count with Signal Dominance Analysis and inflate the score.
+## Signal Baseline Anomaly
 
-Its scope is limited to cells with enough nearby historical samples, so a warm-up period is required: with no prior baseline for a location it stays silent. Only the "stronger than usual" direction is treated as suspicious, since weaker-than-usual readings are commonly caused by obstruction or distance rather than an attack.
+Learns each cell's typical signal level at a given location from the device's own historical observations, then flags readings that are anomalously strong compared to that learned baseline.
 
-## 13. Intra-LTE Band Downgrade Analysis (H13)
-Detects aggressive and suspicious shifts from high-frequency capacity bands (e.g., Band 7) to low-frequency sub-GHz bands (e.g., Band 20). Attackers frequently attempt to push target devices into lower frequencies to maximize signal penetration and extend their sweeping area.
+A nearby transmitter impersonating a cell that is normally weaker at that location may appear far stronger than its own history. This is a physical inconsistency that falsified broadcast identifiers alone cannot hide.
 
-This heuristic mathematically differentiates between a sudden, forced band downgrade (highly indicative of a Rogue BTS or IMSI-catcher attack) and a natural, progressive signal degradation (such as entering a basement or parking garage). By evaluating physical band properties through EARFCN mapping rather than abstract channel numbers, it accurately identifies malicious physical-layer manipulations while heavily reducing false positives during normal mobility.
+Like the geographic consistency layer, this is fully offline and relies on no external database. It requires enough historical samples, so a warm-up period is necessary. Only the "stronger than usual" direction is treated as suspicious, since weaker-than-usual readings are commonly caused by obstruction, distance, congestion, or environmental changes.
 
-## 14. RF Identity Stability Analysis (H14)
-A legitimate cell keeps its physical-layer identity — its PCI — fixed for its entire lifetime. This heuristic inspects the device's own historical record for a given Cell ID (CID + MNC + TAC + MCC) and flags it when that single identity has been observed alternating between multiple distinct PCI values that persist recently. Such behavior is a strong indicator of a clone reusing a legitimate Cell ID with a different physical-layer identity.
+## Intra-LTE Band Downgrade Analysis
 
-Crucially, it complements H11: while Geographic Consistency Analysis requires the user to move (it compares the same cell seen from incompatible positions), RF Identity Stability can fire while the user is completely stationary — covering the scenario where a device is disconnected and reconnected to the same Cell ID with a different radio fingerprint. Like H11 and the baseline heuristics, it is fully offline and relies solely on the device's own observation history, with no external database.
+Detects suspicious shifts from high-frequency capacity bands to lower-frequency sub-GHz bands when the previous signal was strong and there is no evidence of progressive signal degradation.
 
-It is engineered to be conservative against false positives. A PCI is only treated as a genuine alternate identity when it (a) appears at least twice, (b) represents a meaningful share of observations, and (c) is still present within a recent time window — distinguishing a benign permanent reconfiguration (old value only in older records) from an active, currently-flapping clone. Field testing showed that ARFCN, unlike PCI, is unreliable for this purpose: carrier aggregation causes the serving cell to occasionally report a neighbor carrier's ARFCN, so this heuristic deliberately uses PCI only — the true, stable physical-layer cell identity. In the Bayesian engine it is grouped with H11 as correlated RF-identity evidence, so the two cannot double-count and inflate the score.
+This can be consistent with forced camping or rogue-cell behavior, but it is not treated as proof by itself. The heuristic attempts to distinguish sudden forced band shifts from natural transitions caused by entering a basement, garage, elevator, or low-coverage area.
 
+## RF Identity Stability Analysis
 
-## Statistical and Historical Hardening
+Inspects the device's own historical record for a given cell identity (CID + MNC + TAC + MCC) and flags cases where that identity has recently alternated between multiple persistent PCI values.
 
-Beyond individual heuristics, the engine refines the *quality* of its existing evidence using the device's own accumulated history. These layers are fully offline and conservative by design.
+This can be consistent with a clone reusing a legitimate Cell ID with a different physical-layer identity. It complements geographic consistency because it can fire while the user is stationary.
 
-**Percentile-based baseline (H13).** In addition to mean and standard deviation, the per-cell power baseline now stores the 95th and 99th percentiles of historical RSRP. With sufficient samples, an anomaly must exceed the cell's own 99th percentile, making the heuristic robust against non-normal distributions and occasional legitimate strong readings — it strictly reduces false positives without ever loosening detection.
+The heuristic is intentionally conservative: a PCI is only treated as a genuine alternate identity when it appears repeatedly, represents a meaningful share of observations, and is still present within a recent time window. This helps distinguish benign permanent reconfiguration from active identity instability.
 
-**Cell reputation (trust score).** Each cell earns a trust score (0–100) derived purely from its own history (volume of observations, spread across distinct days, and the proportion of clean past scores). A cell observed cleanly many times over many days is almost certainly legitimate. This trust is used *only* to dampen the weight of the noisy, instantaneous heuristics (isolated cell, power jump, ghost neighbors) on well-established cells — it never increases suspicion and never affects the physics-anchored heuristics (MCC, ciphering, geographic consistency, RF identity). It is the same likelihood-ratio softening mechanism as the context-adaptive engine, applied to reputation instead of environment density.
+Field testing showed that ARFCN is not reliable enough for this identity-stability decision because carrier aggregation can cause serving-cell ARFCN values to appear inconsistent. Therefore this heuristic deliberately focuses on PCI.
 
-**RF fingerprint (RSRQ/SINR).** Complementing the RSRP baseline, the engine learns each cell's signal-quality signature (mean and deviation of RSRQ and SINR). A transmitter impersonating a known cell may present a signal quality incoherent with that cell's historical fingerprint. Because RSRQ and SINR are intrinsically noisier than RSRP, this check is deliberately strict: it requires many samples and a large deviation in *both* metrics simultaneously, and reports through the baseline heuristic so it cannot double-count. As these measurements are only collected from this version onward, the fingerprint remains dormant until weeks of history accumulate — by design, it cannot produce early false positives.
+## RF Quality Fingerprint
 
+Complementing the RSRP baseline, the engine can learn each cell's signal-quality signature using RSRQ and SINR. A transmitter impersonating a known cell may present signal quality incoherent with that cell's historical fingerprint.
 
-## Temporal Confidence Decay
-Anomalies must persist across 3 consecutive analysis cycles before triggering a confirmed threat alert. Transient heuristic failures are logged but do not raise alarms, significantly reducing false positive alert fatigue in dynamic RF environments.
+Because RSRQ and SINR are noisy, this check is deliberately strict. It requires many samples and a large deviation in both metrics simultaneously. It remains dormant until enough history accumulates.
 
 ---
 
-# 🔋 Battery Optimization & Exceptions
+# Statistical and Historical Hardening
 
-ICdetection requires unoptimized battery settings (**"Battery optimization: Don't optimize"**) to ensure reliable 24/7 detection.
+Beyond individual heuristics, the engine refines the quality of its evidence using the device's own accumulated history. These layers are fully offline and conservative by design.
 
-The application runs a **continuous foreground service** that scans cells, registers telephony callbacks, and manages location fixes. Android's battery optimization (Doze and App Standby) is designed to throttle or kill this type of behavior when the phone is idle with the screen off—exactly the scenario where an IMSI-catcher might operate.
+## Percentile-Based Baseline
 
-To prevent detection gaps, the user must **manually** grant an optimization exception:
+In addition to mean and standard deviation, the per-cell power baseline stores high-percentile historical values. With sufficient samples, an anomaly must exceed the cell's own high historical range, making the check more robust against non-normal distributions and occasional legitimate strong readings.
 
-**Settings → Apps → ICdetection → Battery → Battery optimization → Don't optimize**
+## Cell Reputation
 
-The app attempts to detect if it is optimized and guides the user to the appropriate settings screen. However, the **final exception grant is the user's responsibility**—it cannot be forced programmatically.
+Each cell earns a trust score derived from local history: observation volume, observations across distinct days, and the proportion of clean past scores.
+
+This trust is used only to dampen the weight of noisy instantaneous heuristics on well-established cells. It never increases suspicion and does not suppress physics-anchored evidence such as geographic inconsistency, MCC mismatch, ciphering failure, or RF identity instability.
+
+## Context-Aware Scoring
+
+Some heuristics are environment-sensitive. A strong isolated cell is much more suspicious in dense urban conditions than in a rural coverage area. ICdetection softens these weak signals based on neighbor density and local cell reputation.
+
+## Bayesian Threat Probability
+
+The app includes a Bayesian-inspired scorer that estimates threat probability from failed heuristics. Correlated evidence groups are handled conservatively so that multiple symptoms of the same physical phenomenon do not inflate the result unfairly.
+
+The values are expert-derived estimates, not scientifically measured likelihood ratios. They are used as a structured way to reason about uncertainty, not as a claim of mathematical certainty.
 
 ---
 
-# 📈 Statistical Baseline Learning
+# Temporal Confidence
 
-ICdetection employs a **statistical baseline learning** system to:
+Anomalies must persist across multiple analysis cycles before triggering a confirmed threat alert.
+
+Transient heuristic failures are logged but do not immediately raise confirmed alarms. This reduces false-positive fatigue in dynamic RF environments and makes the app more useful during daily use.
+
+---
+
+# Battery Optimization & Exceptions
+
+ICdetection requires unoptimized battery settings ("Battery optimization: Don't optimize") to ensure reliable long-running monitoring.
+
+The application runs a continuous foreground service that scans cells, registers telephony callbacks, and manages location fixes. Android's battery optimization mechanisms such as Doze and App Standby may throttle this behavior when the phone is idle with the screen off.
+
+To reduce detection gaps, the user should manually grant a battery optimization exception:
+
+**Settings -> Apps -> ICdetection -> Battery -> Battery optimization -> Don't optimize**
+
+The app may guide the user toward the relevant settings screen, but the final exception grant is controlled by Android and the user.
+
+---
+
+# Statistical Baseline Learning
+
+ICdetection employs statistical baseline learning to:
+
 - profile normal signal behavior
 - detect anomalous deviations
-- identify statistically significant outliers
+- identify significant outliers
+- adapt to the user's RF environment over time
 
-The system learns each cell's typical signal range (dBm) at a given physical location from the device's own historical observations. This allows it to:
-- flag anomalously strong readings (potential impersonation attacks)
-- reduce false positives from natural signal variation
-- adapt to the user's specific RF environment over time
+The system learns each cell's typical signal range at a given physical location from the device's own historical observations.
 
-The learning is fully **unsupervised**: no labelled data or external databases are used. The system only learns from the device's own real-world telemetry.
-
-A **warm-up period** (typically a few days of varied usage) is required to build a stable baseline. During this period, some heuristics may remain silent to avoid premature alerting.
+A warm-up period is required. During early use, some historical heuristics remain silent to avoid premature alerting. The app becomes more useful as it observes repeated locations, routes, and cells over time.
 
 ---
 
-# 📊 Telemetry & Visualization
+# Telemetry & Visualization
 
 ## Forensic Terminal
+
 Structured event-driven forensic logging designed to preserve meaningful security events while minimizing noisy output.
 
 ## Real-Time Signal Graphs
-Continuous RSRP visualization with contextual heuristic overlays.
+
+Continuous signal visualization with contextual heuristic overlays.
 
 ## Timing Advance Visualization
-Geometric TA visualization for distance-behavior analysis.
+
+Timing Advance visualization for distance-behavior analysis when TA is exposed by the device.
 
 ## Threat Scoring Engine
+
 Dynamic multi-factor anomaly scoring with contextual correlation.
 
 ## Persistent Telemetry History
-Session-aware logging and infrastructure observation tracking.
+
+Session-aware logging and local infrastructure observation tracking.
 
 ---
 
-# 🛡️ Infrastructure Verification
+# Infrastructure Verification
 
-ICdetection optionally cross-references observed infrastructure using:
+ICdetection can optionally cross-reference observed infrastructure using:
+
 - OpenCellID
 - WiGLE
 
-to compare nearby towers against publicly known crowdsourced databases.
+These services are used to compare observed cells against publicly known crowdsourced databases.
 
-### Important
+## Important
 
 Public tower databases are:
+
 - incomplete
 - community-maintained
 - occasionally outdated
+- uneven across regions and operators
 
 A "not found" result does **not** imply malicious infrastructure.
 
+External requests are only made when the user configures and enables infrastructure verification APIs.
+
 ---
 
-# 🌐 Privacy & Networking
+# Privacy & Networking
 
 ## Optional SOCKS5 Routing
 
-ICdetection supports optional SOCKS5 proxy routing:
-- Tor
-- Orbot
-- privacy-oriented VPN chains
-
-for infrastructure-verification requests.
+ICdetection supports optional SOCKS5 proxy routing for infrastructure-verification requests, including Tor / Orbot-style local proxy setups.
 
 ## Local-First Design
 
-The application follows a strict local-first privacy philosophy.
+The application follows a local-first privacy philosophy.
 
 By default:
+
 - no cloud synchronization exists
 - no analytics are collected
 - no advertising SDKs are included
 - no hidden telemetry exists
 - no user tracking exists
 
+All historical telemetry is stored locally on the device unless the user explicitly exports it.
+
 ---
 
-# 💾 Forensic Logging
+# Forensic Logging
 
 ## SQLite Event Storage
-All telemetry and forensic events remain stored locally on-device.
+
+Telemetry and forensic events are stored locally on-device in SQLite.
 
 ## CSV Export
-Export support exists for:
+
+CSV export is available for:
+
 - external analysis
 - mapping
 - reporting
 - research
 - archival workflows
 
+Exports may contain sensitive location and cellular metadata. Users should treat exported files as private forensic material.
+
 ---
 
-# 📚 Related Research & Inspiration
+# False Positives
+
+False positives are possible and expected.
+
+Legitimate situations that may trigger heuristic alerts include:
+
+- carrier maintenance
+- roaming environments
+- dense urban deployments
+- indoor DAS systems
+- femtocells
+- NSA/5G transitions
+- temporary spectrum reconfiguration
+- rural coverage gaps
+- public transport routes
+- tunnels, basements, elevators, and parking garages
+- vendor-specific Android radio behavior
+
+ICdetection should be interpreted as:
+
+- a forensic auditing tool
+- a telemetry analyzer
+- an anomaly detector
+- a local evidence collector
+
+not as definitive proof of surveillance activity.
+
+---
+
+# Security & Threat Model
+
+ICdetection is primarily useful against:
+
+- amateur rogue BTS deployments
+- poorly configured SDR towers
+- simple fake base stations
+- aggressive downgrade attempts
+- abnormal cellular behavior
+- topology inconsistencies
+- unstable Cell ID / PCI behavior
+
+The application is less reliable against:
+
+- sophisticated LTE/5G interception platforms
+- carrier-grade rogue infrastructure
+- systems that accurately emulate legitimate network parameters
+- attacks that do not expose anomalies through Android APIs
+- lawful intercept or surveillance occurring inside operator infrastructure
+
+These limitations are inherent to Android userland restrictions.
+
+---
+
+# Related Research & Inspiration
 
 This project was inspired by public research involving:
+
 - LTE security
 - IMSI-catcher detection
 - SDR rogue BTS analysis
 - Android telephony limitations
 - cellular anomaly detection
+- radio-layer privacy research
 
 Relevant public projects and research areas include:
+
 - SnoopSnitch
 - AIMSICD
 - LTEInspector
@@ -385,53 +529,12 @@ Relevant public projects and research areas include:
 
 ---
 
-# ⚠️ False Positives
-
-False positives are possible and expected.
-
-Legitimate situations that may trigger heuristic alerts include:
-- carrier maintenance
-- roaming environments
-- dense urban deployments
-- indoor DAS systems
-- femtocells
-- NSA/5G transitions
-- temporary spectrum reconfiguration
-- rural coverage gaps
-
-ICdetection should be interpreted as:
-- a forensic auditing tool
-- a telemetry analyzer
-- an anomaly detector
-
-—not as definitive proof of surveillance activity.
-
----
-
-# 🔐 Security & Threat Model
-
-ICdetection is primarily effective against:
-- amateur rogue BTS deployments
-- poorly configured SDR towers
-- simple fake base stations
-- aggressive downgrade attempts
-- abnormal cellular behavior
-- topology inconsistencies
-
-The application is significantly less reliable against:
-- sophisticated LTE/5G interception platforms
-- carrier-grade rogue infrastructure
-- advanced state-level systems
-
-These limitations are inherent to Android userland restrictions.
-
----
-
-# ⚖️ License
+# License
 
 Licensed under the **GNU General Public License v3.0 (GPL-3.0)**.
 
 You are free to:
+
 - use
 - study
 - modify
@@ -444,15 +547,14 @@ Derivative works must remain open-source under GPL-compatible licensing.
 
 ---
 
-# 🙏 Acknowledgements
+# Acknowledgements
 
-Thank you all for your understanding throughout the many iterations this project has gone through.
+Thank you to everyone who has followed the project through its many iterations.
 
-The project is now considered stable and feature-complete within the boundaries of what Android userland allows without root access.
+ICdetection is now considered stable and feature-complete within the boundaries of what Android userland allows without root or direct baseband access.
 
-Future updates will focus on bug fixes and minor improvements as they are discovered in real-world usage.
+Future updates will focus on bug fixes, field validation, false-positive analysis, and minor improvements discovered through real-world usage.
 
-This is the stable release. Thank you, and best regards to everyone who has followed the project.
-
+This project is my first Android application, built with a great deal of care, curiosity, and respect for the limits of the platform.
 
 -- Alexis
