@@ -20,7 +20,7 @@ import java.util.Locale
 class CellDbHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME, null, DATABASE_VERSION) {
     companion object {
         private const val DATABASE_NAME = "icdetector_history.db"
-        private const val DATABASE_VERSION = 7
+        private const val DATABASE_VERSION = 8
         const val TABLE_HISTORY = "history"
         const val COLUMN_ID = "id"
         const val COLUMN_TIMESTAMP = "timestamp"
@@ -62,6 +62,7 @@ class CellDbHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME, 
                     "$COLUMN_RSRQ INTEGER, " +
                     "$COLUMN_SINR INTEGER)",
         )
+        createIndexes(db)
     }
 
     override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {
@@ -87,6 +88,35 @@ class CellDbHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME, 
             try { db.execSQL("ALTER TABLE $TABLE_HISTORY ADD COLUMN $COLUMN_RSRQ INTEGER") } catch (_: Exception) {}
             try { db.execSQL("ALTER TABLE $TABLE_HISTORY ADD COLUMN $COLUMN_SINR INTEGER") } catch (_: Exception) {}
         }
+        if (oldVersion < 8) {
+            // Índices de rendimiento. NO tocan ni una sola fila de datos: solo crean estructuras
+            // de búsqueda para acelerar las consultas por identidad de celda y por tiempo, que se
+            // ejecutan en cada ciclo de análisis. Importante de cara a la fase de recolección,
+            // cuando la tabla crecerá a decenas de miles de filas. Imposible que pierdan datos.
+            createIndexes(db)
+        }
+    }
+
+    /**
+     * Crea los índices de la tabla de histórico. Usa CREATE INDEX IF NOT EXISTS, así que es
+     * idempotente y seguro: si un índice ya existe, no hace nada (no lanza error). Cada uno va
+     * en su try/catch por máxima robustez. NO es una operación destructiva — un índice es una
+     * estructura auxiliar de búsqueda; no modifica, mueve ni borra ninguna fila.
+     *
+     * - idx_cell_identity: acelera las búsquedas por (cid, mnc, tac, mcc) — H11, baseline,
+     *   reputación y fingerprint filtran por esta combinación en cada ciclo.
+     * - idx_timestamp: acelera el ordenado/filtrado temporal (historial reciente, podas).
+     */
+    private fun createIndexes(db: SQLiteDatabase) {
+        try {
+            db.execSQL(
+                "CREATE INDEX IF NOT EXISTS idx_cell_identity ON $TABLE_HISTORY " +
+                    "($COLUMN_CID, $COLUMN_MNC, $COLUMN_TAC, $COLUMN_MCC)"
+            )
+        } catch (_: Exception) {}
+        try {
+            db.execSQL("CREATE INDEX IF NOT EXISTS idx_timestamp ON $TABLE_HISTORY ($COLUMN_TIMESTAMP)")
+        } catch (_: Exception) {}
     }
 
     fun logConnection(
@@ -587,8 +617,8 @@ class CellDbHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME, 
      * para una misma Cell ID sugieren un clon reconfigurándose.
      *
      * A diferencia de getPreviousCellHistory, NO filtra por ubicación ni por recencia: aquí
-     * interesa all el historial de la celda (incluidas reapariciones recientes y en el sitio actual)
-     * Solo lectura; no toca esquema ni escritura.
+     * interesa all el historial de la celda (incluidas reapariciones recientes y en el sitio
+     * actual). Solo lectura; no toca esquema ni escritura.
      */
     fun getCellRfStability(cellId: String, mnc: String, tac: String, mcc: String): CellRfStability {
         val pciCounts = HashMap<Int, Int>()
