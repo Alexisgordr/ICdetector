@@ -19,7 +19,7 @@
       </ul>
     </td>
     <td width="40%" align="center">
-      <img src="https://github.com/user-attachments/assets/e9213396-a62b-488f-9fab-b5067c6a555c"
+      <img <img src="https://github.com/user-attachments/assets/81bf1ed6-94c4-462e-8d13-828f7754f532"
            alt="ICdetection Screenshot"
            width="260" />
     </td>
@@ -96,6 +96,23 @@ The primary goal of the project is to provide:
 - radio telemetry analysis
 
 within the technical limitations imposed by Android.
+
+## On Transparency and AI-Assisted Development
+
+This project is built on honesty — about its detection limits, and about how it was made.
+
+The system design is mine: the decision to use a probabilistic engine instead of rigid rules,
+which heuristics to include or reject, how they are weighted and correlated, what counts as a
+false positive in real-world data, and the overall direction of the project. Many of those
+decisions were made by testing the app in the field, finding real false positives, and reasoning
+about why they happened.
+
+The code itself was written by AI tools — I do not program in Kotlin. AI was also used to
+explore and refine several heuristic ideas. What I bring is the design and the judgment: I
+direct the project, decide what it should do and why, choose which ideas survive and which
+get discarded, and validate the results against real-world data. Every heuristic and every
+detection decision in this project I can explain and defend, because I understood the *why*
+behind each one as it was built — even where I could not have written the implementation myself.
 
 ---
 
@@ -222,6 +239,17 @@ A legitimate cell keeps its physical-layer identity — its PCI — fixed for it
 Crucially, it complements H11: while Geographic Consistency Analysis requires the user to move (it compares the same cell seen from incompatible positions), RF Identity Stability can fire while the user is completely stationary — covering the scenario where a device is disconnected and reconnected to the same Cell ID with a different radio fingerprint. Like H11 and the baseline heuristics, it is fully offline and relies solely on the device's own observation history, with no external database.
 
 It is engineered to be conservative against false positives. A PCI is only treated as a genuine alternate identity when it (a) appears at least twice, (b) represents a meaningful share of observations, and (c) is still present within a recent time window — distinguishing a benign permanent reconfiguration (old value only in older records) from an active, currently-flapping clone. Field testing showed that ARFCN, unlike PCI, is unreliable for this purpose: carrier aggregation causes the serving cell to occasionally report a neighbor carrier's ARFCN, so this heuristic deliberately uses PCI only — the true, stable physical-layer cell identity. In the Bayesian engine it is grouped with H11 as correlated RF-identity evidence, so the two cannot double-count and inflate the score.
+
+
+## Statistical and Historical Hardening
+
+Beyond individual heuristics, the engine refines the *quality* of its existing evidence using the device's own accumulated history. These layers are fully offline and conservative by design.
+
+**Percentile-based baseline (H13).** In addition to mean and standard deviation, the per-cell power baseline now stores the 95th and 99th percentiles of historical RSRP. With sufficient samples, an anomaly must exceed the cell's own 99th percentile, making the heuristic robust against non-normal distributions and occasional legitimate strong readings — it strictly reduces false positives without ever loosening detection.
+
+**Cell reputation (trust score).** Each cell earns a trust score (0–100) derived purely from its own history (volume of observations, spread across distinct days, and the proportion of clean past scores). A cell observed cleanly many times over many days is almost certainly legitimate. This trust is used *only* to dampen the weight of the noisy, instantaneous heuristics (isolated cell, power jump, ghost neighbors) on well-established cells — it never increases suspicion and never affects the physics-anchored heuristics (MCC, ciphering, geographic consistency, RF identity). It is the same likelihood-ratio softening mechanism as the context-adaptive engine, applied to reputation instead of environment density.
+
+**RF fingerprint (RSRQ/SINR).** Complementing the RSRP baseline, the engine learns each cell's signal-quality signature (mean and deviation of RSRQ and SINR). A transmitter impersonating a known cell may present a signal quality incoherent with that cell's historical fingerprint. Because RSRQ and SINR are intrinsically noisier than RSRP, this check is deliberately strict: it requires many samples and a large deviation in *both* metrics simultaneously, and reports through the baseline heuristic so it cannot double-count. As these measurements are only collected from this version onward, the fingerprint remains dormant until weeks of history accumulate — by design, it cannot produce early false positives.
 
 
 ## Temporal Confidence Decay
