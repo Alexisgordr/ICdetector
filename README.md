@@ -557,4 +557,8 @@ Future updates will focus on bug fixes, field validation, false-positive analysi
 
 This project is my first Android application, built with a great deal of care, curiosity, and respect for the limits of the platform.
 
+---
+
+This is the first app I've ever built, and I put a lot of care into it. I spent weeks researching telecommunications to make it work. If you have any questions or run into any issues, please open an issue and I'll do my best to fix it. Now it's time for me to take a break and gather data over the next few months so I can see how to improve it in the future. Best regards to everyone, and thank you for your understanding.
+
 -- Alexis
