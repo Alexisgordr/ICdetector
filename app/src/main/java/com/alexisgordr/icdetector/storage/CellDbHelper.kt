@@ -224,6 +224,7 @@ class CellDbHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME, 
 
     fun getRecords(): List<HistoryRecord> {
         val list = mutableListOf<HistoryRecord>()
+        try {
         val db = this.readableDatabase
         val cursor: Cursor = db.rawQuery("SELECT * FROM $TABLE_HISTORY ORDER BY $COLUMN_ID DESC", null)
         try {
@@ -272,6 +273,10 @@ class CellDbHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME, 
         } finally {
             cursor.close()
         }
+        } catch (_: Exception) {
+            // Si la BD fallara o una fila viniera malformada, devolvemos lo recogido hasta ahora
+            // (export parcial) en lugar de crashear. Leer el historial nunca debe tumbar la app.
+        }
         return list
     }
 
@@ -309,11 +314,21 @@ class CellDbHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME, 
                 put(COLUMN_LAT, lat)
                 put(COLUMN_LON, lon)
             }
+            // Ventana temporal: solo rellenar filas SIN coordenadas registradas en los últimos
+            // 10 minutos. Esto evita que un fix GPS fresco sobrescriba filas de la MISMA celda
+            // que se registraron antes en OTRO lugar (misma identidad, sitio distinto), lo que
+            // contaminaría el historial geográfico que alimenta H11/H13. El caso legítimo
+            // (rellenar una fila escrita hace unos segundos mientras el GPS aún no fijaba) entra
+            // de sobra en esa ventana; un registro de una visita anterior a esa celda, no.
+            val tenMinutesAgo = System.currentTimeMillis() - (10L * 60 * 1000)
+            val threshold = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault())
+                .format(Date(tenMinutesAgo))
             db.update(
                 TABLE_HISTORY,
                 values,
-                "$COLUMN_CID = ? AND $COLUMN_MNC = ? AND $COLUMN_TAC = ? AND $COLUMN_MCC = ? AND $COLUMN_LAT IS NULL",
-                arrayOf(cellId, mnc, tac, mcc)
+                "$COLUMN_CID = ? AND $COLUMN_MNC = ? AND $COLUMN_TAC = ? AND $COLUMN_MCC = ? " +
+                    "AND $COLUMN_LAT IS NULL AND $COLUMN_TIMESTAMP > ?",
+                arrayOf(cellId, mnc, tac, mcc, threshold)
             )
         } catch (_: Exception) {
             0
