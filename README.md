@@ -559,6 +559,11 @@ This project is my first Android application, built with a great deal of care, c
 
 ---
 
-This is the first app I've ever built, and I put a lot of care into it. I spent weeks researching telecommunications to make it work. If you have any questions or run into any issues, please open an issue and I'll do my best to fix it. Now it's time for me to take a break and gather data over the next few months so I can see how to improve it in the future. Best regards to everyone, and thank you for your understanding.
+This is the first app I have ever built, and I put a lot of care into it. I do not have a formal telecommunications or Android-development background, so I spent weeks researching cellular networks, Android telephony APIs, false positives, and the limits of userland detection.
+This project was built with AI-assisted development: I directed the design, selected and rejected heuristics, validated behavior through field testing, reviewed the detection logic, and made the project decisions, while AI tools helped me implement the Kotlin/Android code.
+If you have questions, find mistakes, or run into issues, please open an issue. I will do my best to review it honestly and fix what I can.
+The current version is now stable/frozen while I take a break and collect real-world data over the next few months. Future improvements will be based on observed behavior, false positives, and field data rather than adding features for their own sake.
+Best regards, and thank you for your understanding.
 
--- Alexis
+-- Alexis, Carpe diem
+
