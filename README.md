@@ -76,6 +76,28 @@ No new detection claims should be assumed until they are validated against real-
 
 ---
 
+## Table of Contents
+- [Development Disclosure](#development-disclosure)
+- [Project Philosophy](#project-philosophy)
+- [Important Technical Reality](#important-technical-reality)
+- [Device & Hardware Compatibility](#device--hardware-compatibility)
+- [Detection Engine](#detection-engine)
+- [Statistical and Historical Hardening](#statistical-and-historical-hardening)
+- [Temporal Confidence](#temporal-confidence)
+- [Battery Optimization & Exceptions](#battery-optimization--exceptions)
+- [Statistical Baseline Learning](#statistical-baseline-learning)
+- [Telemetry & Visualization](#telemetry--visualization)
+- [Infrastructure Verification](#infrastructure-verification)
+- [Privacy & Networking](#privacy--networking)
+- [Forensic Logging](#forensic-logging)
+- [False Positives](#false-positives)
+- [Security & Threat Model](#security--threat-model)
+- [Related Research & Inspiration](#related-research--inspiration)
+- [License](#license)
+- [Acknowledgements](#acknowledgements)
+
+---
+
 # Development Disclosure
 
 This project was developed using an AI-assisted workflow.
@@ -550,20 +572,17 @@ Derivative works must remain open-source under GPL-compatible licensing.
 # Acknowledgements
 
 Thank you to everyone who has followed the project through its many iterations.
-
 ICdetection is now considered stable and feature-complete within the boundaries of what Android userland allows without root or direct baseband access.
-
 Future updates will focus on bug fixes, field validation, false-positive analysis, and minor improvements discovered through real-world usage.
-
 This project is my first Android application, built with a great deal of care, curiosity, and respect for the limits of the platform.
 
 ---
 
-This is the first app I have ever built, and I put a lot of care into it. I do not have a formal telecommunications or Android-development background, so I spent weeks researching cellular networks, Android telephony APIs, false positives, and the limits of userland detection.
-This project was built with AI-assisted development: I directed the design, selected and rejected heuristics, validated behavior through field testing, reviewed the detection logic, and made the project decisions, while AI tools helped me implement the Kotlin/Android code.
-If you have questions, find mistakes, or run into issues, please open an issue. I will do my best to review it honestly and fix what I can.
-The current version is now stable/frozen while I take a break and collect real-world data over the next few months. Future improvements will be based on observed behavior, false positives, and field data rather than adding features for their own sake.
+This is the first app I have ever built, and I put a lot of care into it. I do not have a formal telecommunications or Android-development background, so I spent weeks researching cellular networks, Android telephony APIs, false positives, and the limits of userland detection. 
+This project was built with AI-assisted development: I directed the design, selected and rejected heuristics, validated behavior through field testing, reviewed the detection logic, and made the project decisions, while AI tools helped me implement the Kotlin/Android code. 
+If you have questions, find mistakes, or run into issues, please open an issue. I will do my best to review it honestly and fix what I can. 
+The current version is now stable/frozen while I take a break and collect real-world data over the next few months. Future improvements will be based on observed behavior, false positives, and field data rather than adding features for their own sake. 
+
 Best regards, and thank you for your understanding.
 
 -- Alexis, Carpe diem
-
