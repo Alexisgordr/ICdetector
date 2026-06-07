@@ -314,23 +314,26 @@ class CellDbHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME, 
                 put(COLUMN_LAT, lat)
                 put(COLUMN_LON, lon)
             }
-            // Rellena SOLO la observación actual: la última fila sin coordenadas de la celda en
-            // la que estás ahora (el id más alto). Esta función se llama justo cuando llega un
-            // fix fresco mientras se esperaban coordenadas, así que esa fila es la de "ahora
-            // mismo" -> se le estampa la posición que SÍ acabas de medir.
+            // Rellena SOLO la observación actual, y solo si de verdad le faltan coordenadas:
+            // toma la fila MÁS RECIENTE de la celda actual (el id más alto, la que sea) y la
+            // rellena únicamente si esa fila no tiene lat/lon. Esta función se llama justo cuando
+            // llega un fix fresco mientras se esperaban coordenadas, así que la última fila es la
+            // de "ahora mismo" -> se le estampa la posición que SÍ acabas de medir.
             //
-            // Deliberadamente NO se rellenan en masa todas las filas previas de la noche/estancia:
-            // estampar la posición actual sobre cientos de observaciones antiguas sería inventar
-            // una precisión que no se midió en cada momento y contaminaría el historial geográfico
-            // que alimenta H11/H13. Si una fila quedó sin GPS en su momento, lo honesto es dejarla
-            // sin coordenadas (dato "desconocido"), no rellenarla a posteriori. Las observaciones
-            // siguientes ya se guardan con coordenadas por el camino normal mientras haya GPS.
+            // Importante (más seguro que mirar "la última NULL"): si ya existiera una observación
+            // MÁS NUEVA de esta celda con coordenadas, no se toca nada — no se rebusca hacia atrás
+            // para rellenar una fila antigua que quedó sin GPS. Y deliberadamente NO se rellena en
+            // masa el historial: estampar la posición actual sobre observaciones antiguas sería
+            // inventar precisión no medida y contaminaría el historial geográfico (H11/H13). Una
+            // fila que quedó sin GPS en su momento se queda sin coordenadas (dato "desconocido"),
+            // que es lo honesto; las observaciones siguientes ya se guardan con coords por el
+            // camino normal mientras haya GPS.
             db.update(
                 TABLE_HISTORY,
                 values,
                 "$COLUMN_ID = (SELECT MAX($COLUMN_ID) FROM $TABLE_HISTORY " +
-                    "WHERE $COLUMN_CID = ? AND $COLUMN_MNC = ? AND $COLUMN_TAC = ? AND $COLUMN_MCC = ? " +
-                    "AND $COLUMN_LAT IS NULL)",
+                    "WHERE $COLUMN_CID = ? AND $COLUMN_MNC = ? AND $COLUMN_TAC = ? AND $COLUMN_MCC = ?) " +
+                    "AND $COLUMN_LAT IS NULL AND $COLUMN_LON IS NULL",
                 arrayOf(cellId, mnc, tac, mcc)
             )
         } catch (_: Exception) {
