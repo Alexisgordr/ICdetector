@@ -1,4 +1,4 @@
-# 📖 ICdetection Field Manual
+# 📖 ICdetection Field Manual (v2.0)
 
 This manual provides operational guidelines for using ICdetection. This tool is designed for network auditing and cellular threat detection. Understanding the data is as important as the code itself.
 
@@ -10,6 +10,8 @@ ICdetection is a passive, local-first auditing tool. It does not perform active 
 
 Most alerts are false positives caused by legitimate network conditions. This manual is intended for situations where alerts are **persistent, confirmed across multiple cycles, and geographically consistent**.
 
+ICdetection does not aim for instant verdicts. Its strength is **historical intelligence**: it learns your normal RF environment over time and flags what deviates from it. The longer you use it in your regular areas, the more accurate it becomes. It is a complement to prevention (end-to-end encryption, encryption-required settings), not a replacement for it.
+
 ---
 
 ## ⚠️ Important: False Positives
@@ -18,6 +20,8 @@ Cellular networks are complex. Terrain, building materials, and carrier maintena
 
 - **If you see a warning:** Do not panic. Observe the signal stability.
 - **If you see persistent alerts:** Take note of the time, location, and the Suspicious Reason provided by the app.
+
+The engine is deliberately tuned to favour fewer false positives over aggressive alerting. Several layers (percentiles, cell reputation, multi-cycle confirmation) exist specifically to keep it quiet unless something is genuinely off.
 
 ---
 
@@ -42,7 +46,7 @@ Transient anomalies that resolve within one cycle are logged but **do not trigge
 
 ### 3. Threat Analysis — The Red Flags
 
-When the status turns **SISTEMA EN COMPROMISO**, check the Suspicious Reason field:
+When the status turns **SISTEMA EN COMPROMISO**, check the Suspicious Reason field. The strongest, hardest-to-fool heuristics are the ones anchored to physics and your own history (H11, H13, H14, H15):
 
 - **"Celda aislada (sin vecinos)":** A tower broadcasting strongly but failing to report neighbors is a classic IMSI-Catcher trait. Common in amateur rogue BTS deployments.
 
@@ -50,9 +54,17 @@ When the status turns **SISTEMA EN COMPROMISO**, check the Suspicious Reason fie
 
 - **"TA vs Distancia GPS":** If the tower claims to be 5km away but the Timing Advance (TA) indicates it is 50 meters away, this is likely a spoofed tower. *Note: TA telemetry is highly device-dependent and may not be available on all hardware.*
 
-- **"Consistencia Geográfica (H11)":** The same Cell ID has been detected from physically inconsistent locations over time. This is a strong indicator of a **mobile rogue base station** cloning a legitimate tower. Unlike other heuristics, this cannot be defeated by RF parameter spoofing — it relies purely on physics and your local GPS history. This is the most reliable heuristic in the engine.
+- **"Consistencia Geográfica (H11)":** The same Cell ID has been detected from physically inconsistent locations over time. A strong indicator of a **mobile rogue base station** cloning a legitimate tower. Unlike other heuristics, this cannot be defeated by RF parameter spoofing — it relies purely on physics and your local GPS history. **The most reliable heuristic in the engine.**
+
+- **"Potencia vs Histórico (Baseline + huella RSRQ/SINR) (H13)":** The app learns each cell's typical signal level (RSRP) at a given location from your own history, and flags readings that are anomalously **strong** versus that baseline — a transmitter impersonating a normally-weaker cell will appear far closer than its history allows. With enough samples, an anomaly must also exceed the cell's own **99th percentile**, making the check robust against occasional legitimate spikes. It additionally learns each cell's **RSRQ/SINR signature** and flags a signal quality incoherent with that fingerprint. Fully offline; needs a warm-up period and stays silent until it has data.
+
+- **"Band Downgrade (H14)":** Detects a sudden, forced shift from a high-frequency capacity band to a low-frequency sub-GHz band. Attackers push devices to lower frequencies to extend coverage and penetration. The check uses real 3GPP band physics (via EARFCN) and distinguishes a forced downgrade from natural signal degradation (e.g. entering a garage), reducing false positives.
+
+- **"RF Identity / PCI (H15)":** A legitimate cell keeps its physical-layer identity (PCI) fixed for life. This flags a single Cell ID seen alternating between distinct PCI values that persist recently — a sign of a clone reusing a legitimate Cell ID with a different radio fingerprint. It can fire while you are stationary (unlike H11, which needs movement). It deliberately uses **PCI only, not ARFCN**, because field testing showed ARFCN fluctuates legitimately due to carrier aggregation.
 
 - **"Conexión celular NO CIFRADA":** CRITICAL. The network has forced a downgrade to plain-text communication. *Note: This check requires privileged system access or root. On standard devices without root, this heuristic is unavailable and shown as N/A in the interface.*
+
+> **Note on the scoring engine:** these heuristics are not simply added up. A Bayesian engine combines them, grouping correlated signals so they cannot double-count and inflate the score, and softening the noisy/environment-sensitive ones on cells with a long, clean local history (cell reputation). The probability is capped at 95% — on Android userland, certainty is never claimed.
 
 ---
 
@@ -60,7 +72,7 @@ When the status turns **SISTEMA EN COMPROMISO**, check the Suspicious Reason fie
 
 If you detect a credible, persistent threat:
 
-1. **Immediate Fallback:** The app will attempt to trigger Airplane Mode automatically. If it fails, manually toggle Airplane Mode from the system status bar. This is the most reliable countermeasure.
+1. **Immediate Fallback — Airplane Mode:** Manually toggle Airplane Mode from the system status bar. This is the most reliable countermeasure. *Note: the app can only toggle Airplane Mode automatically if it has been granted the privileged `WRITE_SECURE_SETTINGS` permission via ADB (`adb shell pm grant com.alexisgordr.icdetector android.permission.WRITE_SECURE_SETTINGS`). On a normal install this permission is **not** granted, so the automatic fallback will not fire and you should toggle Airplane Mode yourself.*
 
 2. **Physical Displacement:** Move away from the detected signal source. Depending on equipment power level, moving 200-500 meters may disconnect your device from the rogue base station. Professional-grade IMSI-catchers can cover up to 2km — Airplane Mode is more reliable than distance alone.
 
@@ -72,23 +84,23 @@ If you detect a credible, persistent threat:
 
 - **Use a Proxy:** If you are auditing in an area where you suspect you are being monitored, ensure the Tor (Orbot) proxy is enabled in the settings. This prevents the API (OpenCellID/WiGLE) from correlating your specific public IP with the CellIDs you are auditing.
 
-- **Monitor with Screen Off:** The app is designed to continue monitoring when the screen is off (polling every 10 seconds). You can keep the phone in your pocket and rely on the Audio Alert System.
+- **Monitor with Screen Off:** The app continues monitoring with the screen off (polling roughly every 10 seconds). You can keep the phone in your pocket and rely on the Audio Alert System. *Note on GPS in repose: with the screen off and the device stationary, Android Doze restricts the GPS, so fresh coordinates may not be recorded for every observation. This is an OS limitation, not a bug — and it matters little when stationary, since your position has not changed and H15 (PCI) needs no GPS.*
 
 - **Learn the tones:** The app uses specific tones for different threat levels. A confirmed threat sounds differently from a high-signal warning. Learn to distinguish them.
 
-- **Let H11 learn your environment:** The Geographic Consistency heuristic becomes more accurate over time as it builds a local GPS history of known cell towers. The more you use the app in your regular areas, the more precisely it can detect anomalies.
+- **Let the history learn your environment:** H11, H13, the cell reputation and the RSRQ/SINR fingerprint all become more accurate over time as they build local history. The more you use the app in your regular areas, the more precisely it detects anomalies — and the quieter it stays on cells it has learned to trust. Expect a warm-up period of days before the historical heuristics are fully effective; the RF fingerprint in particular stays dormant until weeks of data accumulate, by design.
 
 ---
 
 ## 📋 Forensic Workflow
 
-1. **Preparation:** Open the app and ensure you have valid API tokens for WiGLE and OpenCellID configured in Settings.
+1. **Preparation:** Open the app and (optionally) configure valid API tokens for WiGLE and OpenCellID in Settings. The app works offline without them; the tokens only enable external tower cross-referencing.
 
-2. **During Audit:** Keep the app running in the background. Ensure Airplane Mode fallback is enabled in Settings. The GPS indicator shows whether location data is being recorded.
+2. **During Audit:** Keep the app running in the background. The GPS indicator shows whether location data is being recorded.
 
-3. **Post-Audit:** If any alerts were logged, export the history to CSV from the History tab.
+3. **Post-Audit:** Export the history to CSV from the History tab.
 
-4. **Reporting:** Use the CSV data to identify patterns — specific times or locations where NOT FOUND or suspicious cells repeatedly appear. Pay special attention to the `Lat`, `Lon`, `PCI` and `ARFCN` columns for RF fingerprinting analysis.
+4. **Reporting:** Use the CSV data to identify patterns — specific times or locations where NOT FOUND or suspicious cells repeatedly appear. The export includes `Timestamp, NetType, CID, MNC, TAC, MCC, DBM, Verified, SecurityScore, FailedHeuristics, Lat, Lon, PCI, ARFCN, RSRQ, SINR`. Pay special attention to `Lat`, `Lon`, `PCI`, `ARFCN`, `RSRQ` and `SINR` for RF fingerprinting analysis. Fields are CSV-escaped (RFC 4180), so the file imports cleanly into spreadsheets and analysis tools.
 
 ---
 
@@ -99,9 +111,10 @@ ICdetection operates entirely in Android userland without root access. This mean
 - **Cipher state** cannot be read without privileged system permissions
 - **Timing Advance** values may be unavailable on some hardware (returns 0)
 - **Modem-level signaling** (RRC, NAS) is not accessible
+- **GPS in deep repose** (screen off + stationary) is throttled by Android Doze
 - **Legal interception** at the carrier level cannot be detected — it occurs inside the operator's infrastructure, not at the radio layer
 
-These are fundamental Android limitations, not application bugs.
+ICdetection is effective against amateur and semi-professional rogue base stations and abnormal network behaviour. It is **not** able to reliably detect a well-configured professional IMSI-catcher in real time — that requires baseband/modem access this tool does not have. These are fundamental Android limitations, not application bugs.
 
 ---
 
