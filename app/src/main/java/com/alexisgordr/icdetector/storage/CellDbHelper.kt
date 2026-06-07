@@ -314,21 +314,24 @@ class CellDbHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME, 
                 put(COLUMN_LAT, lat)
                 put(COLUMN_LON, lon)
             }
-            // Ventana temporal: solo rellenar filas SIN coordenadas registradas en los últimos
-            // 10 minutos. Esto evita que un fix GPS fresco sobrescriba filas de la MISMA celda
-            // que se registraron antes en OTRO lugar (misma identidad, sitio distinto), lo que
-            // contaminaría el historial geográfico que alimenta H11/H13. El caso legítimo
-            // (rellenar una fila escrita hace unos segundos mientras el GPS aún no fijaba) entra
-            // de sobra en esa ventana; un registro de una visita anterior a esa celda, no.
-            val tenMinutesAgo = System.currentTimeMillis() - (10L * 60 * 1000)
-            val threshold = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault())
-                .format(Date(tenMinutesAgo))
+            // Rellena SOLO la observación actual: la última fila sin coordenadas de la celda en
+            // la que estás ahora (el id más alto). Esta función se llama justo cuando llega un
+            // fix fresco mientras se esperaban coordenadas, así que esa fila es la de "ahora
+            // mismo" -> se le estampa la posición que SÍ acabas de medir.
+            //
+            // Deliberadamente NO se rellenan en masa todas las filas previas de la noche/estancia:
+            // estampar la posición actual sobre cientos de observaciones antiguas sería inventar
+            // una precisión que no se midió en cada momento y contaminaría el historial geográfico
+            // que alimenta H11/H13. Si una fila quedó sin GPS en su momento, lo honesto es dejarla
+            // sin coordenadas (dato "desconocido"), no rellenarla a posteriori. Las observaciones
+            // siguientes ya se guardan con coordenadas por el camino normal mientras haya GPS.
             db.update(
                 TABLE_HISTORY,
                 values,
-                "$COLUMN_CID = ? AND $COLUMN_MNC = ? AND $COLUMN_TAC = ? AND $COLUMN_MCC = ? " +
-                    "AND $COLUMN_LAT IS NULL AND $COLUMN_TIMESTAMP > ?",
-                arrayOf(cellId, mnc, tac, mcc, threshold)
+                "$COLUMN_ID = (SELECT MAX($COLUMN_ID) FROM $TABLE_HISTORY " +
+                    "WHERE $COLUMN_CID = ? AND $COLUMN_MNC = ? AND $COLUMN_TAC = ? AND $COLUMN_MCC = ? " +
+                    "AND $COLUMN_LAT IS NULL)",
+                arrayOf(cellId, mnc, tac, mcc)
             )
         } catch (_: Exception) {
             0
