@@ -16,24 +16,25 @@ object ExportUtils {
                     OutputStreamWriter(outputStream, StandardCharsets.UTF_8).use { writer ->
                         writer.append("Timestamp,NetType,CID,MNC,TAC,MCC,DBM,Verified,SecurityScore,FailedHeuristics,Lat,Lon,PCI,ARFCN,RSRQ,SINR\n")
                         items.forEach { item ->
-                            writer.append(
-                                "${item.timestamp}," +
-                                "${item.netType}," +
-                                "${item.cid}," +
-                                "${item.mnc}," +
-                                "${item.tac}," +
-                                "${item.mcc}," +
-                                "${item.dbm}," +
-                                "${item.verified.name}," +
-                                "${item.score}," +
-                                "\"${item.failedHeuristics}\"," +
-                                "${item.lat ?: ""}," +
-                                "${item.lon ?: ""}," +
-                                "${item.pci ?: ""}," +
-                                "${item.arfcn ?: ""}," +
-                                "${item.rsrq ?: ""}," +
-                                "${item.sinr ?: ""}\n"
-                            )
+                            val row = listOf(
+                                item.timestamp,
+                                item.netType,
+                                item.cid,
+                                item.mnc,
+                                item.tac,
+                                item.mcc,
+                                item.dbm,
+                                item.verified.name,
+                                item.score,
+                                item.failedHeuristics,
+                                item.lat ?: "",
+                                item.lon ?: "",
+                                item.pci ?: "",
+                                item.arfcn ?: "",
+                                item.rsrq ?: "",
+                                item.sinr ?: ""
+                            ).joinToString(",") { csvEscape(it) }
+                            writer.append(row).append("\n")
                         }
                         writer.flush()
                     }
@@ -43,6 +44,21 @@ object ExportUtils {
         } catch (e: Exception) {
             e.printStackTrace()
             Toast.makeText(context, "❌ Error al exportar: ${e.message}", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    /**
+     * Escapa un campo para CSV según RFC 4180: si contiene coma, comillas dobles o saltos de
+     * línea, lo envuelve entre comillas y duplica las comillas internas; si no, lo deja tal cual.
+     * Así ningún valor raro (p.ej. una razón con comillas o una coma) puede descuadrar una fila,
+     * y los datos llegan íntegros al análisis posterior.
+     */
+    private fun csvEscape(value: Any?): String {
+        val s = value?.toString() ?: ""
+        return if (s.contains('"') || s.contains(',') || s.contains('\n') || s.contains('\r')) {
+            "\"" + s.replace("\"", "\"\"") + "\""
+        } else {
+            s
         }
     }
 }
