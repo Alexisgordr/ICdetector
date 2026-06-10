@@ -565,7 +565,7 @@ class MiniICService : Service() {
             if (Build.VERSION.SDK_INT >= 34) {
                 val securityCallback = ImsiCatcherSecurityCallback()
                 telephonyManager.registerTelephonyCallback(mainExecutor, securityCallback)
-                appendLog("[SYS]", "Callback L3 registrado (esperando eventos del modem).")
+                appendLog("[SYS]", "Callback de telefonía registrado (detección de cifrado nulo/IMSI: pendiente API Android 16 — v2.1).")
             }
         } catch (e: Exception) {
             isHardwareCipheringAvailable = false
@@ -574,6 +574,11 @@ class MiniICService : Service() {
         }
     }
 
+    // Reservada para la ruta de alerta de la detección de cifrado nulo (A5/0) e identificadores
+    // (IMSI), planificada para v2.1 con las APIs de Android 16. Actualmente NO tiene llamadores
+    // porque esa detección aún no está implementada (ver ImsiCatcherSecurityCallback). Se mantiene
+    // completa y lista para conectarla cuando se implemente; el suppress evita el warning de "sin uso".
+    @Suppress("unused")
     private fun triggerSecurityAlert(message: String) {
         Log.e("MiniIC_Security", message)
         appendLog("[SEC]", "🚨 ALERTA: $message")
@@ -1504,7 +1509,14 @@ class MiniICService : Service() {
         )
 
         results.forEach { (regla, pasado) ->
-            val status = if (pasado) "PASSED" else "FAILED"
+            // El cifrado hardware se muestra como N/A cuando el dispositivo/SO no lo expone
+            // (siempre, hasta que se implemente la API de Android 16 en v2.1). No es PASSED ni
+            // FAILED: simplemente no hay dato. Mostrarlo como FAILED sería mentir.
+            val status = when {
+                regla.startsWith("9. Cifrado") && !report.hardwareCipheringAvailable -> "N/A"
+                pasado -> "PASSED"
+                else -> "FAILED"
+            }
             appendLog("[HEUR]", "$regla: $status")
         }
 
@@ -1514,48 +1526,25 @@ class MiniICService : Service() {
         _auditStatus.value = "Auditoría completada"
     }
 
+    // HONESTIDAD TÉCNICA — detección de cifrado nulo (A5/0) e identificadores (IMSI) NO implementada (pendiente v2.1).
+    //
+    // Versiones anteriores tenían aquí dos métodos (onCipheringStatusChanged / onCellularIdentifierDisclosure)
+    // con nombres inventados que se asumía que Android invocaría "por reflexión". Eso era un malentendido:
+    // registerTelephonyCallback despacha eventos SOLO a los métodos de las interfaces de listener que la clase
+    // implementa, con sus firmas exactas — nunca por nombre. Aquellos métodos eran código muerto: jamás se
+    // ejecutaban, así que no detectaban nada. Se han eliminado para no aparentar una capacidad que no existe.
+    //
+    // La detección REAL requiere las APIs de Android 16 (API 36):
+    //   - TelephonyCallback.SecurityAlgorithmsListener        -> onSecurityAlgorithmsChanged(...)
+    //   - TelephonyCallback.CellularIdentifierDisclosedListener -> onCellularIdentifierDisclosed(...)
+    // sujetas a permisos y a que el modem/HAL del dispositivo reporte esos eventos. Implementarlas bien
+    // requiere prueba en hardware Android 16+ y está planificada para v2.1.
+    //
+    // Hasta entonces: isHardwareCipheringAvailable permanece en false, ThreatAnalyzer omite ese factor y
+    // NO se genera ninguna alarma por cifrado/IMSI (falla de forma segura, sin falsos positivos).
     @RequiresApi(Build.VERSION_CODES.S)
-    inner class ImsiCatcherSecurityCallback : TelephonyCallback(), TelephonyCallback.CellInfoListener {
+    class ImsiCatcherSecurityCallback : TelephonyCallback(), TelephonyCallback.CellInfoListener {
         override fun onCellInfoChanged(cellInfo: MutableList<CellInfo>) {}
-        
-        @Suppress("unused")
-        fun onCipheringStatusChanged(params: Any) {
-            isHardwareCipheringAvailable = true
-            appendLog("[MODEM]", "Evento de cambio en estado de cifrado detectado (Reflexión).")
-            try {
-                val getStatusMethod = params::class.java.getMethod("getCipheringStatus")
-                val status = getStatusMethod.invoke(params) as Int
-                if (status == 0) {
-                    isHardwareCipheringActive = false
-                    appendLog("[MODEM]", "¡ALERTA L1! Protocolo de cifrado anulado (Reflexión)")
-                    triggerSecurityAlert("¡PELIGRO! Conexión celular NO CIFRADA (Cifrado nulo detectado)")
-                } else {
-                    isHardwareCipheringActive = true
-                    appendLog("[MODEM]", "SYS: Cifrado de hardware validado como ACTIVO.")
-                }
-            } catch (_: Exception) {
-                try {
-                    val statusField = params::class.java.getField("cipheringStatus")
-                    val status = statusField[params] as Int
-                    if (status == 0) {
-                        isHardwareCipheringActive = false
-                        appendLog("[MODEM]", "¡ALERTA L1! Protocolo de cifrado anulado (Reflexión)")
-                        triggerSecurityAlert("¡PELIGRO! Conexión celular NO CIFRADA (Cifrado nulo detectado)")
-                    } else {
-                        isHardwareCipheringActive = true
-                        appendLog("[MODEM]", "SYS: Cifrado de hardware validado como ACTIVO.")
-                    }
-                } catch (_: Exception) {
-                    // Ignored
-                }
-            }
-        }
-
-        @Suppress("unused", "UNUSED_PARAMETER")
-        fun onCellularIdentifierDisclosure(params: Any) {
-            appendLog("[MODEM]", "🚨 CRÍTICO: Detección de Disclosure de Identificador Celular (Reflexión)!")
-            triggerSecurityAlert("¡ALERTA CRÍTICA! Intento de extracción de IMSI detectado por la red")
-        }
     }
 
     companion object {

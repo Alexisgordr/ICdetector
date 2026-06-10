@@ -611,7 +611,7 @@ fun SecurityScorePanel(active: CellData, dbmHistory: List<Int>, geoHistory: List
                                 ) {
                                     Text("⚠", color = Color(0xFFFFA000), fontSize = 10.sp, fontFamily = FontFamily.Monospace)
                                     Spacer(modifier = Modifier.width(6.dp))
-                                    Text("9. Cifrado de Enlace (Hardware) — NO DISPONIBLE", color = Color(0xFFFFA000), fontSize = 10.sp, fontFamily = FontFamily.Monospace)
+                                    Text("9. Cifrado de Enlace (Hardware) — N/A", color = Color(0xFFFFA000), fontSize = 10.sp, fontFamily = FontFamily.Monospace)
                                 }
                             }
 
