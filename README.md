@@ -243,9 +243,9 @@ Performs frequency sanity checks against expected radio ranges and technology-sp
 
 ## Ciphering Integrity Monitoring
 
-Attempts to detect insecure, null, or disabled cellular ciphering states when such information is exposed by Android, the modem firmware, or device-specific callbacks.
+ICdetection v2.0 does not claim direct null-cipher or IMSI-disclosure detection on standard Android installs.
 
-If the device does not expose this information, ICdetection treats it as unavailable. It does not assume the network is safe simply because ciphering information cannot be read.
+Ciphering state is reported as unavailable unless the operating system exposes a supported and accessible signal. If the device does not expose this information, ICdetection treats it as N/A rather than PASSED or FAILED. It does not assume the network is safe simply because ciphering information cannot be read.
 
 ## Anti Ping-Pong Analysis
 

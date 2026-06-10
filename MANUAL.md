@@ -1,6 +1,6 @@
 # 📖 ICdetection Field Manual (v2.0)
 
-This manual provides operational guidelines for using ICdetection. This tool is designed for network auditing and cellular threat detection. Understanding the data is as important as the code itself.
+This manual provides operational guidelines for using ICdetection. This tool is designed for network auditing and cellular anomaly analysis. Understanding the data is as important as the code itself.
 
 ---
 
@@ -48,13 +48,13 @@ Transient anomalies that resolve within one cycle are logged but **do not trigge
 
 When the status turns **SISTEMA EN COMPROMISO**, check the Suspicious Reason field. The strongest, hardest-to-fool heuristics are the ones anchored to physics and your own history (H11, H13, H14, H15):
 
-- **"Celda aislada (sin vecinos)":** A tower broadcasting strongly but failing to report neighbors is a classic IMSI-Catcher trait. Common in amateur rogue BTS deployments.
+- **"Celda aislada (sin vecinos)":** A tower broadcasting strongly while showing no coherent neighbors is a known red flag in amateur rogue BTS scenarios, but it is not proof by itself. Rural coverage, indoor deployments and unusual radio conditions can also produce this pattern.
 
 - **"Salto de potencia anómalo (>35dB)":** An attacker might be boosting power to force your phone to latch onto their signal over legitimate ones.
 
 - **"TA vs Distancia GPS":** If the tower claims to be 5km away but the Timing Advance (TA) indicates it is 50 meters away, this is likely a spoofed tower. *Note: TA telemetry is highly device-dependent and may not be available on all hardware.*
 
-- **"Consistencia Geográfica (H11)":** The same Cell ID has been detected from physically inconsistent locations over time. A strong indicator of a **mobile rogue base station** cloning a legitimate tower. Unlike other heuristics, this cannot be defeated by RF parameter spoofing — it relies purely on physics and your local GPS history. **The most reliable heuristic in the engine.**
+- **"Consistencia Geográfica (H11)":** The same Cell ID has been detected from physically inconsistent locations over time. This is one of the strongest contextual indicators in the engine because it relies on physics and local GPS history rather than public tower databases. It can be consistent with a mobile rogue base station cloning a legitimate tower, but it still requires careful interpretation.
 
 - **"Potencia vs Histórico (Baseline + huella RSRQ/SINR) (H13)":** The app learns each cell's typical signal level (RSRP) at a given location from your own history, and flags readings that are anomalously **strong** versus that baseline — a transmitter impersonating a normally-weaker cell will appear far closer than its history allows. With enough samples, an anomaly must also exceed the cell's own **99th percentile**, making the check robust against occasional legitimate spikes. It additionally learns each cell's **RSRQ/SINR signature** and flags a signal quality incoherent with that fingerprint. Fully offline; needs a warm-up period and stays silent until it has data.
 
@@ -62,7 +62,7 @@ When the status turns **SISTEMA EN COMPROMISO**, check the Suspicious Reason fie
 
 - **"RF Identity / PCI (H15)":** A legitimate cell keeps its physical-layer identity (PCI) fixed for life. This flags a single Cell ID seen alternating between distinct PCI values that persist recently — a sign of a clone reusing a legitimate Cell ID with a different radio fingerprint. It can fire while you are stationary (unlike H11, which needs movement). It deliberately uses **PCI only, not ARFCN**, because field testing showed ARFCN fluctuates legitimately due to carrier aggregation.
 
-- **"Conexión celular NO CIFRADA":** CRITICAL. The network has forced a downgrade to plain-text communication. *Note: This check requires privileged system access or root. On standard devices without root, this heuristic is unavailable and shown as N/A in the interface.*
+- **"Cifrado de enlace (Hardware)":** N/A on standard v2.0 installs unless the operating system exposes a supported ciphering-state signal. ICdetection v2.0 does not claim direct null-cipher or IMSI-disclosure detection on normal no-root Android installs.
 
 > **Note on the scoring engine:** these heuristics are not simply added up. A Bayesian engine combines them, grouping correlated signals so they cannot double-count and inflate the score, and softening the noisy/environment-sensitive ones on cells with a long, clean local history (cell reputation). The probability is capped at 95% — on Android userland, certainty is never claimed.
 
@@ -108,13 +108,13 @@ If you detect a credible, persistent threat:
 
 ICdetection operates entirely in Android userland without root access. This means:
 
-- **Cipher state** cannot be read without privileged system permissions
+- **Direct null-cipher / IMSI-disclosure detection** is not implemented on standard v2.0 installs and requires privileged OS APIs/permissions that normal no-root apps do not receive
 - **Timing Advance** values may be unavailable on some hardware (returns 0)
 - **Modem-level signaling** (RRC, NAS) is not accessible
 - **GPS in deep repose** (screen off + stationary) is throttled by Android Doze
 - **Legal interception** at the carrier level cannot be detected — it occurs inside the operator's infrastructure, not at the radio layer
 
-ICdetection is effective against amateur and semi-professional rogue base stations and abnormal network behaviour. It is **not** able to reliably detect a well-configured professional IMSI-catcher in real time — that requires baseband/modem access this tool does not have. These are fundamental Android limitations, not application bugs.
+ICdetection is most useful against amateur rogue base stations, poorly configured setups, some semi-professional scenarios, and abnormal network behaviour visible through Android APIs. It is **not** able to reliably detect a well-configured professional IMSI-catcher in real time — that requires baseband/modem access this tool does not have. These are fundamental Android limitations, not application bugs.
 
 ---
 

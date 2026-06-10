@@ -207,7 +207,7 @@ fun SettingsPanel(service: MiniICService?, onSave: () -> Unit) {
 
             Text("AVISO TÉCNICO", color = Color(0xFFCF6679), fontSize = 12.sp, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Bold)
             Text(
-                "Las alertas de Cifrado Hardware e IMSI Disclosure requieren que la app tenga privilegios del sistema (Root o System App). En dispositivos estándar, estas funciones se ejecutan en modo experimental por reflexión y podrían no recibir eventos del módem.",
+                "La detección directa de cifrado nulo e IMSI Disclosure no está implementada en v2.0 para instalaciones Android estándar. Requiere APIs/permisos privilegiados que una app no-root no recibe; por eso esta regla se muestra como N/A cuando el sistema no expone el dato.",
                 color = Color(0xFF888888),
                 fontSize = 9.sp,
                 fontFamily = FontFamily.Monospace,
