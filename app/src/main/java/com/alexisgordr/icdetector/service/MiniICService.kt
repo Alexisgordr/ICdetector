@@ -40,7 +40,13 @@ import java.util.concurrent.TimeUnit
 class MiniICService : Service() {
 
     private val binder = LocalBinder()
-    private val scope = CoroutineScope(Dispatchers.Main + SupervisorJob())
+    // Red de seguridad: si alguna corrutina lanzara una excepción no capturada, se registra y la
+    // app sigue viva, en vez de que el handler por defecto la tumbe. Con SupervisorJob, además, el
+    // fallo de una corrutina no cancela a las demás.
+    private val coroutineErrorHandler = CoroutineExceptionHandler { _, throwable ->
+        Log.e("MiniIC", "Excepción no capturada en corrutina: ${throwable.message}", throwable)
+    }
+    private val scope = CoroutineScope(Dispatchers.Main + SupervisorJob() + coroutineErrorHandler)
     
     private val _cellFlow = MutableStateFlow<List<CellData>>(emptyList())
     val cellFlow: StateFlow<List<CellData>> = _cellFlow
@@ -222,11 +228,20 @@ class MiniICService : Service() {
         }
 
         createNotificationChannel()
-        // En Android 14+ es obligatorio pasar el foregroundServiceType en startForeground
-        if (Build.VERSION.SDK_INT >= 34) {
-            startForeground(NOTIFICATION_ID, buildNotification("Sondeo activo"), ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION)
-        } else {
-            startForeground(NOTIFICATION_ID, buildNotification("Sondeo activo"))
+        // En Android 14+ es obligatorio pasar el foregroundServiceType en startForeground.
+        // Además, startForeground puede lanzar excepción (p. ej. ForegroundServiceStartNotAllowed
+        // o SecurityException) si el permiso de ubicación no está concedido o el SO reinicia el
+        // servicio en un estado restringido. Si eso ocurre, paramos limpiamente en vez de crashear.
+        try {
+            if (Build.VERSION.SDK_INT >= 34) {
+                startForeground(NOTIFICATION_ID, buildNotification("Sondeo activo"), ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION)
+            } else {
+                startForeground(NOTIFICATION_ID, buildNotification("Sondeo activo"))
+            }
+        } catch (e: Exception) {
+            Log.e("MiniIC", "No se pudo iniciar el servicio en primer plano: ${e.message}", e)
+            stopSelf()
+            return
         }
 
         registerTelephonyCallback()
