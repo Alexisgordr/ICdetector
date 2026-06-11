@@ -163,6 +163,9 @@ class MiniICService : Service() {
     var isLatencyDetectionEnabled: Boolean = false
 
     private var prevCid: String? = null
+    // Fix #1: guarda el cellId cuya alarma ya se ha persistido en el episodio actual, para no
+    // registrar la misma evidencia en cada ciclo. Se resetea en cada cambio de celda (handover).
+    private var lastAlarmLoggedCellId: String? = null
     private var prevNetType: String? = null
     private var prevDbm: Int? = null
     // Estado para heurística 14 (band downgrade intra-LTE). Guardan la última celda
@@ -921,6 +924,34 @@ class MiniICService : Service() {
         }
     }
 
+    // Fix #2: último fix GPS aceptado como bueno, para validar plausibilidad del siguiente.
+    private var lastAcceptedLocation: Location? = null
+    private var implausibleFixCount = 0
+
+    // ¿Es plausible este fix respecto al último aceptado? Un fix puede pasar los filtros de
+    // precisión y antigüedad y aun así situarte a cientos de km por un error del GPS (visto en
+    // campo: una observación en Pamplona con coordenada en los Países Bajos, ~1.100 km). Si la
+    // velocidad implícita respecto al último fix bueno supera 400 km/h —por encima de cualquier
+    // desplazamiento terrestre normal (coche/tren)— el fix es basura y se descarta. Si se
+    // rechazan varios seguidos, la referencia es la sospechosa: se suelta y se acepta el nuevo
+    // para no quedarnos bloqueados sin coordenada indefinidamente (auto-recuperación).
+    private fun isPlausibleFix(candidate: Location): Boolean {
+        val prev = lastAcceptedLocation ?: return true
+        val meters = prev.distanceTo(candidate)
+        val seconds = ((candidate.time - prev.time) / 1000.0).coerceAtLeast(1.0)
+        val speedKmh = (meters / seconds) * 3.6
+        if (speedKmh <= 400.0) {
+            implausibleFixCount = 0
+            return true
+        }
+        implausibleFixCount++
+        if (implausibleFixCount >= 3) {
+            implausibleFixCount = 0
+            return true
+        }
+        return false
+    }
+
     private fun getCurrentLocation(): Location? {
         return try {
             if (ContextCompat.checkSelfPermission(
@@ -946,12 +977,23 @@ class MiniICService : Service() {
             }
 
             // Preferir el más preciso de los dos
-            when {
+            val best = when {
                 validGps != null && validNet != null ->
                     if (validGps.accuracy <= validNet.accuracy) validGps else validNet
                 validGps != null -> validGps
                 validNet != null -> validNet
                 else -> null
+            }
+
+            // Fix #2: descartar fixes físicamente imposibles (saltos absurdos = GPS corrupto).
+            // Si es plausible, se acepta y pasa a ser la nueva referencia; si no, se devuelve null
+            // y la coordenada queda desconocida, en vez de contaminar el historial y las heurísticas
+            // geográficas (H11/H13) con una posición falsa.
+            if (best != null && isPlausibleFix(best)) {
+                lastAcceptedLocation = best
+                best
+            } else {
+                null
             }
         } catch (_: Exception) { null }
     }
@@ -1294,6 +1336,7 @@ class MiniICService : Service() {
             // vez aprenda su baseline. Evita que la heurística 12 se contamine con datos viejos.
             _networkLatencyState.value = "OK"
             latencyAnomalyStreak = 0
+            lastAlarmLoggedCellId = null  // Fix #1: nuevo episodio de celda -> permitir registrar su alarma
             appendLog("[RADIO]", "Handover celular completado -> Nueva celda CID: $cid ($net)")
             // Esta celda queda pendiente de coordenadas frescas hasta que un fix las rellene.
             awaitingFreshCoords = true
@@ -1393,6 +1436,36 @@ class MiniICService : Service() {
             toneGenerator?.startTone(ToneGenerator.TONE_CDMA_SOFT_ERROR_LITE, 200)
             Log.e("MiniIC", "THREAT DETECTED: ${cell.suspiciousReason}")
             requestHighAccuracyFix()
+
+            // Fix #1: persistir la evidencia de la alarma en el historial. El registro normal
+            // (más arriba) solo ocurre al CAMBIAR de celda, pero una amenaza se confirma en la
+            // MISMA celda durante 3 ciclos sin cambio, así que la alarma quedaba sin rastro en el
+            // CSV (la celda figuraba con su score 100 / OK inicial). Aquí grabamos la observación
+            // que disparó la alarma con su score real y su motivo. Una sola vez por episodio
+            // (mismo cellId, reseteado en cada handover) para no inundar la BD ciclo a ciclo.
+            if (lastAlarmLoggedCellId != cid) {
+                lastAlarmLoggedCellId = cid
+                scope.launch(Dispatchers.IO) {
+                    val loc = getCurrentLocation()
+                    dbHelper.logConnection(
+                        netType = net,
+                        cid = cid,
+                        mnc = cell.mnc,
+                        tac = cell.tac,
+                        mcc = cell.mcc,
+                        dbm = dbm,
+                        verified = cell.verified,
+                        score = cell.securityScore,
+                        failedHeuristics = cell.suspiciousReason ?: "ALARMA CONFIRMADA",
+                        lat = loc?.latitude,
+                        lon = loc?.longitude,
+                        pci = cell.pci,
+                        arfcn = cell.arfcn,
+                        rsrq = cell.rsrq,
+                        sinr = cell.sinr
+                    )
+                }
+            }
         }
 
         if (is3gAirplaneModeEnabled && (net.contains("3G") || net.contains("2G"))) {
