@@ -889,7 +889,7 @@ class MiniICService : Service() {
                         val confirmedActive = applyTemporalConfidence(active)
 
                         // 2. Lanzar alertas y registro con el estado actual
-                        checkAlerts(confirmedActive.copy(verified = knownStatus))
+                        checkAlerts(confirmedActive.copy(verified = knownStatus), confirmed = true)
 
                         // 3. Iniciar proceso de verificación (solo si es necesario)
                         verifyCell(active, neighbors)
@@ -1323,7 +1323,7 @@ class MiniICService : Service() {
         }
     }
 
-    private fun checkAlerts(cell: CellData) {
+    private fun checkAlerts(cell: CellData, confirmed: Boolean = false) {
         val cid = cell.cellId
         val dbm = cell.dbm
         val net = cell.networkType
@@ -1443,7 +1443,12 @@ class MiniICService : Service() {
             // CSV (la celda figuraba con su score 100 / OK inicial). Aquí grabamos la observación
             // que disparó la alarma con su score real y su motivo. Una sola vez por episodio
             // (mismo cellId, reseteado en cada handover) para no inundar la BD ciclo a ciclo.
-            if (lastAlarmLoggedCellId != cid) {
+            //
+            // Coherencia (confirmed): SOLO se persiste si la alarma viene de la ruta que pasó por
+            // applyTemporalConfidence() (los 3 ciclos). La ruta de re-análisis tras verificación
+            // API llama a checkAlerts con sospecha CRUDA (1 ciclo): mantiene su tono/aviso, pero
+            // NO graba evidencia, para que el historial forense solo contenga alarmas confirmadas.
+            if (confirmed && lastAlarmLoggedCellId != cid) {
                 lastAlarmLoggedCellId = cid
                 scope.launch(Dispatchers.IO) {
                     val loc = getCurrentLocation()
