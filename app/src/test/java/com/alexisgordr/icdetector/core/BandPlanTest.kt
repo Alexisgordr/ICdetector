@@ -26,8 +26,12 @@ class BandPlanTest {
     }
 
     @Test
+    fun `EARFCN 0 mapea a Banda 1`() {
+        assertEquals(1, BandPlan.earfcnToBandLte(0))     // 0 es el primer canal de Banda 1 (2110 MHz)
+    }
+
+    @Test
     fun `EARFCN fuera de rango o invalido devuelve null`() {
-        assertNull(BandPlan.earfcnToBandLte(0))         // 0 no es válido
         assertNull(BandPlan.earfcnToBandLte(-10))       // negativo
         assertNull(BandPlan.earfcnToBandLte(9_999_999)) // fuera de toda la tabla
         assertNull(BandPlan.earfcnToBandLte(5000))      // hueco entre B4 y B12

@@ -153,8 +153,11 @@ class HeuristicsTest {
     @Test fun `H8 dispara con EARFCN LTE fuera del maximo teorico`() {
         assertFalse(analyze(active(networkType = "4G LTE", arfcn = 300000)).arfcnSanityPassed)
     }
-    @Test fun `H8 dispara con ARFCN igual a cero`() {
-        assertFalse(analyze(active(networkType = "4G LTE", arfcn = 0)).arfcnSanityPassed)
+    @Test fun `H8 NO dispara con EARFCN 0 en LTE (Banda 1 valida)`() {
+        assertTrue(analyze(active(networkType = "4G LTE", arfcn = 0)).arfcnSanityPassed)
+    }
+    @Test fun `H8 dispara con NR-ARFCN 0 en 5G (no valido)`() {
+        assertFalse(analyze(active(networkType = "5G", arfcn = 0)).arfcnSanityPassed)
     }
     @Test fun `H8 no dispara con EARFCN valido`() {
         assertTrue(analyze(active(networkType = "4G LTE", arfcn = 1500)).arfcnSanityPassed)

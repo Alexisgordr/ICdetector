@@ -42,7 +42,7 @@ object BandPlan {
 
     /** Devuelve el número de banda LTE para un EARFCN, o null si está fuera de tabla. */
     fun earfcnToBandLte(earfcn: Int): Int? {
-        if (earfcn <= 0) return null
+        if (earfcn < 0) return null  // EARFCN 0 es válido (Banda 1, rango 0..599); solo el negativo es imposible
         return LTE_BANDS.entries.firstOrNull { (_, range) ->
             earfcn in range.first..range.second
         }?.key

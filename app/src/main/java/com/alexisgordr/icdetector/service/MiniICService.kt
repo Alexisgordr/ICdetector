@@ -180,7 +180,13 @@ class MiniICService : Service() {
     private var prevBand: Int? = null
     private var prevRegisteredDbm: Int? = null
     private val recentRegisteredDbmTrend = CopyOnWriteArrayList<Int>()
-    private var isCallbackWorking = false
+    // Watchdog del callback de telefonía: marca de tiempo del ÚLTIMO evento recibido. Antes se usaba
+    // un booleano (isCallbackWorking) que se quedaba clavado en true tras el primer evento, así que el
+    // watchdog nunca volvía a dispararse: si el HAL del módem colgaba el callback (típico tras Doze o
+    // en sesiones de varios días), se dejaba de registrar datos EN SILENCIO. Con la marca de tiempo
+    // detectamos esa muerte: si pasan más de callbackTimeoutMs sin ningún evento, re-registramos.
+    private var lastCallbackTime = 0L
+    private val callbackTimeoutMs = 30_000L
     private var connectionRetryCount = 0
     private val cellChangeHistory = CopyOnWriteArrayList<Pair<String, Long>>()
 
@@ -559,7 +565,7 @@ class MiniICService : Service() {
                 try {
                     val callback = object : TelephonyCallback(), TelephonyCallback.CellInfoListener {
                         override fun onCellInfoChanged(cellInfo: MutableList<CellInfo>) {
-                            isCallbackWorking = true
+                            lastCallbackTime = System.currentTimeMillis()
                             processCellInfo(cellInfo)
                         }
                     }
@@ -624,7 +630,7 @@ class MiniICService : Service() {
                 try {
                     displayInfoCallback = object : TelephonyCallback(), TelephonyCallback.DisplayInfoListener {
                         override fun onDisplayInfoChanged(displayInfo: TelephonyDisplayInfo) {
-                            isCallbackWorking = true
+                            lastCallbackTime = System.currentTimeMillis()
                             lastDisplayInfo = displayInfo
                             requestFreshCellInfo()
                         }
@@ -640,7 +646,12 @@ class MiniICService : Service() {
     }
 
     private fun requestFreshCellInfo() {
-        if (!isCallbackWorking && (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S)) {
+        // Si no llega ningún evento del callback en callbackTimeoutMs, el módem probablemente lo
+        // colgó (Doze / sesión larga / reinicio del HAL): lo desregistramos y re-registramos. Al
+        // arranque, lastCallbackTime = 0 => se considera "colgado" hasta el primer evento, igual que
+        // antes hacía el booleano en false (preserva el reintento de registro inicial).
+        val callbackStale = (System.currentTimeMillis() - lastCallbackTime) > callbackTimeoutMs
+        if (callbackStale && (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S)) {
             connectionRetryCount++
             if (connectionRetryCount >= 4) {
                 connectionRetryCount = 0
@@ -717,7 +728,7 @@ class MiniICService : Service() {
     private fun processCellInfo(infoList: List<CellInfo>?) {
         try {
             if (!infoList.isNullOrEmpty()) {
-                isCallbackWorking = true
+                lastCallbackTime = System.currentTimeMillis()
                 connectionRetryCount = 0
             }
 

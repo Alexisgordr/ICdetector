@@ -167,7 +167,7 @@ object ThreatAnalyzer {
         }
 
         // 3. MNC/MCC Inconsistency
-        val differentMcc = neighbors.filter { it.mcc != "N/A" && it.mcc != active.mcc }
+        val differentMcc = neighbors.filter { it.mcc != "N/A" && active.mcc != "N/A" && it.mcc != active.mcc }
         if (differentMcc.isNotEmpty()) {
             hMcc = false
             reasons.add("Inconsistencia MCC")
@@ -249,7 +249,7 @@ object ThreatAnalyzer {
                     score -= 15
                 }
             } else if (active.networkType.contains("4G") || active.networkType.contains("LTE")) {
-                if (arfcn > 262143 || arfcn == 0) {  // ← máximo teórico 3GPP
+                if (arfcn > 262143) {  // EARFCN 0 es válido (Banda 1, 2110 MHz); el "no disponible" llega como > 262143
                     hArfcn = false
                     reasons.add("Frecuencia (EARFCN) 4G sospechosa")
                     score -= 15
