@@ -286,7 +286,11 @@ class MiniICService : Service() {
                         }
                         requestFreshCellInfo()
                         checkLatencyAnomaly()
-                        pruneCaches()
+                        val activeForPrune = _cellFlow.value.firstOrNull { it.isRegistered }
+                        pruneCaches(
+                            activeForPrune?.cellId,
+                            activeForPrune?.let { "${it.mcc}-${it.mnc}-${it.tac}-${it.cellId}" }
+                        )
 
                         // En reposo (pantalla apagada) con una celda esperando coordenadas
                         // frescas: despertamos el GPS despacio (cada 90 s, hasta 10 min) hasta
@@ -320,18 +324,27 @@ class MiniICService : Service() {
      * cachés indexadas por celda en sesiones muy largas. Es barato: solo actúa cuando se
      * supera el cap o hay errores caducados.
      */
-    private fun pruneCaches() {
+    private fun pruneCaches(activeCellId: String?, activeCacheKey: String?) {
         val now = System.currentTimeMillis()
         // Errores de verificación de más de 1 h: ya no deben bloquear reintentos.
         lastVerificationErrorTime.entries.removeIf { now - it.value > 3_600_000L }
         // Cap de seguridad: si se excede, se descarta el exceso (las celdas afectadas
         // simplemente vuelven a aprender baseline / re-verificarse; sin impacto de correctitud).
+        // Estas son ConcurrentHashMap (sin orden de inserción), así que la purga por .take() es
+        // ARBITRARIA. Por eso EXCLUIMOS la celda activa, para no borrar justo su baseline / estado y
+        // forzar una re-verificación innecesaria en viajes largos (>MAX_TRACKED_CELLS celdas).
+        // OJO: cada caché usa una CLAVE distinta:
+        //   - latencyHistory   -> clave = cellId pelado
+        //   - verificationCache -> clave = "mcc-mnc-tac-cellId" (compuesta)
+        // por eso se pasan y comparan las dos por separado.
         if (latencyHistory.size > MAX_TRACKED_CELLS) {
-            latencyHistory.keys.take(latencyHistory.size - MAX_TRACKED_CELLS)
+            latencyHistory.keys.filter { it != activeCellId }
+                .take(latencyHistory.size - MAX_TRACKED_CELLS)
                 .forEach { latencyHistory.remove(it) }
         }
         if (verificationCache.size > MAX_TRACKED_CELLS) {
-            verificationCache.keys.take(verificationCache.size - MAX_TRACKED_CELLS)
+            verificationCache.keys.filter { it != activeCacheKey }
+                .take(verificationCache.size - MAX_TRACKED_CELLS)
                 .forEach { verificationCache.remove(it) }
         }
     }
