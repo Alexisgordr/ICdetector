@@ -531,10 +531,19 @@ class MiniICService : Service() {
         appendLog("[GPS]", "Solicitando fix GPS preciso (fresco) para fijar coordenadas")
 
         forcedFixListener = LocationListener { location ->
+            // Validar el fix ANTES de aceptarlo: precisión, frescura y plausibilidad (el mismo
+            // isPlausibleFix anti-salto que protege getCurrentLocation). Si NO sirve, dejamos el
+            // listener VIVO para esperar uno mejor hasta el timeout, en vez de cancelar a la primera.
+            val freshFix = (System.currentTimeMillis() - location.time) < 120000L
+            if (location.accuracy > 100f || !freshFix || !isPlausibleFix(location)) return@LocationListener
+
+            // Fix válido: ahora sí lo aceptamos. Quitamos el listener, fijamos la referencia de
+            // plausibilidad (para que getCurrentLocation y esta ruta compartan el último fix bueno)
+            // y rellenamos la BD. Así un fix "preciso pero corrupto" (salto imposible) ya no contamina.
             forcedFixListener?.let { try { locationManager.removeUpdates(it) } catch (_: Exception) {} }
             forcedFixListener = null
-            if (location.accuracy > 100f) return@LocationListener  // ignorar fix impreciso
-            awaitingFreshCoords = false  // tenemos un fix fresco: pendiente resuelto
+            lastAcceptedLocation = location
+            awaitingFreshCoords = false  // tenemos un fix fresco y válido: pendiente resuelto
             val cell = _cellFlow.value.firstOrNull { it.isRegistered } ?: return@LocationListener
             scope.launch(Dispatchers.IO) {
                 val updated = dbHelper.updateNullCoordinates(
