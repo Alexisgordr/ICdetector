@@ -486,12 +486,10 @@ class MiniICService : Service() {
                     15000L, 20f, locationListener, Looper.getMainLooper()
                 )
             }
-            if (locationManager.isProviderEnabled(LocationManager.NETWORK_PROVIDER)) {
-                locationManager.requestLocationUpdates(
-                    LocationManager.NETWORK_PROVIDER,
-                    15000L, 20f, locationListener, Looper.getMainLooper()
-                )
-            }
+            // GPS-only por diseño: NO nos suscribimos a NETWORK_PROVIDER. La localización de red se
+            // deriva en parte de las propias torres (circular para un detector de antenas) y devolvía
+            // una posición fija/cacheada falsa cuando el GPS no llegaba, envenenando el historial y
+            // las heurísticas geográficas (H11/H13). Sin GPS válido, la coordenada queda desconocida.
             locationUpdatesActive = true
         } catch (_: SecurityException) {}
     }
@@ -1006,31 +1004,19 @@ class MiniICService : Service() {
                     this, Manifest.permission.ACCESS_FINE_LOCATION
                 ) != PackageManager.PERMISSION_GRANTED) return null
 
+            // GPS-only por diseño: NO usamos NETWORK_PROVIDER (ver requestLocationUpdates). La
+            // localización de red es circular para validar antenas y devolvía posiciones falsas
+            // cuando el GPS no llegaba. Sin fix GPS válido devolvemos null y se falla seguro.
             val gpsLoc = locationManager.getLastKnownLocation(LocationManager.GPS_PROVIDER)
-            val netLoc = locationManager.getLastKnownLocation(LocationManager.NETWORK_PROVIDER)
 
             val now = System.currentTimeMillis()
             val maxAge = 120000L    // 2 minutos
             val maxAccuracy = 100f  // 100 metros
 
-            // Filtrar por antigüedad y precisión
-            val validGps = gpsLoc?.takeIf {
+            // Filtrar por antigüedad y precisión (solo GPS)
+            val best = gpsLoc?.takeIf {
                 it.accuracy < maxAccuracy &&
                 (now - it.time) < maxAge
-            }
-
-            val validNet = netLoc?.takeIf {
-                it.accuracy < maxAccuracy &&
-                (now - it.time) < maxAge
-            }
-
-            // Preferir el más preciso de los dos
-            val best = when {
-                validGps != null && validNet != null ->
-                    if (validGps.accuracy <= validNet.accuracy) validGps else validNet
-                validGps != null -> validGps
-                validNet != null -> validNet
-                else -> null
             }
 
             // Fix #2: descartar fixes físicamente imposibles (saltos absurdos = GPS corrupto).
