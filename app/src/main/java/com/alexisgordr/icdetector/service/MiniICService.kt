@@ -895,8 +895,17 @@ class MiniICService : Service() {
                 // está dentro de `neighbors`, así que ya no hay auto-comparación.
                 val analyzedList = list.map { cell ->
                     if (cell.isRegistered) {
+                        // FIX (coherencia de score): resolver el estado de verificación conocido
+                        // (caché) ANTES de analizar, para que el bonus de VERIFIED / la penalización
+                        // de NOT_FOUND y las heurísticas que dependen de `verified` (p.ej. la supresión
+                        // de "Proximidad anómala TA") se apliquen en el MISMO ciclo. Antes se aplicaba
+                        // después, así que el securityScore registrado no reflejaba la verificación y
+                        // una celda VERIFIED podía perder hasta +15 y quedar marcada sospechosa sin
+                        // serlo. Una celda nueva sigue siendo PENDING aquí (aún no verificada): correcto.
+                        val knownCk = "${cell.mcc}-${cell.mnc}-${cell.tac}-${cell.cellId}"
+                        val knownVerified = verificationCache[knownCk] ?: VerificationStatus.PENDING
                         ThreatAnalyzer.analyzeThreats(
-                            active = cell,
+                            active = cell.copy(verified = knownVerified),
                             neighbors = neighbors,
                             isHardwareCipheringActive = isHardwareCipheringActive,
                             isHardwareCipheringAvailable = isHardwareCipheringAvailable,
