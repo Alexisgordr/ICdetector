@@ -16,5 +16,22 @@ If you find a bug, unexpected behavior, or something that does not look right, p
 
 Thank you very much to everyone testing the app. I really appreciate your patience during this data collection phase.
 
-Best regards,  
-Alexis
+---
+
+Spanish
+
+En español:
+
+Esta app ha sido creada con mucho cariño, cuidado y respeto por sus límites técnicos.
+
+Esto no significa que detecte IMSI-catchers de forma garantizada, pero sí puede servir para visualizar anomalías en redes celulares y ayudar a observar comportamientos inusuales desde un dispositivo Android sin root.
+
+Me he esforzado mucho para llegar a este punto y para que todo sea lo más estable, honesto y útil posible.
+
+Estoy contento con el estado actual de la app y me alegra poder compartirla con todos vosotros. Antes de nada, quiero explicar que este proyecto nació como una herramienta personal, pensada inicialmente solo para mí, pero he decidido publicarla por si puede servir de ayuda a otras personas.
+
+Con esto doy por cerrada la versión actual y comienzo una fase de recolección de datos durante los próximos dos o tres meses. Después de ese periodo evaluaré si hay margen para mejorarla todavía más.
+
+Un saludo a todos y muchas gracias por vuestra comprensión.
+
+Alexis.
