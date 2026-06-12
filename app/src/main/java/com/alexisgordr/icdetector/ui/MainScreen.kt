@@ -516,18 +516,14 @@ fun SecurityScorePanel(active: CellData, dbmHistory: List<Int>, geoHistory: List
                 val maxAge = 120000L
                 val maxAccuracy = 100f
 
+                // GPS-only: coherente con el servicio (que ya no usa NETWORK_PROVIDER). Si contáramos
+                // la ubicación de red aquí, la UI diría "ubicación disponible" mientras el registro
+                // forense (GPS-only) escribe null — un indicador engañoso.
                 val gpsLoc = lm.getLastKnownLocation(LocationManager.GPS_PROVIDER)
-                val netLoc = lm.getLastKnownLocation(LocationManager.NETWORK_PROVIDER)
 
-                val validGps = gpsLoc?.let {
+                gpsLoc?.let {
                     it.accuracy < maxAccuracy && (now - it.time) < maxAge
                 } ?: false
-
-                val validNet = netLoc?.let {
-                    it.accuracy < maxAccuracy && (now - it.time) < maxAge
-                } ?: false
-
-                validGps || validNet
             } else false
         } catch (_: Exception) { false }
     }
