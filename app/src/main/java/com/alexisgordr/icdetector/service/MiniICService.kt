@@ -1085,9 +1085,9 @@ class MiniICService : Service() {
         val now = System.currentTimeMillis()
         if (now - lastGpsTriggerTime < 60000L) return
 
-        val currentCell = _cellFlow.value.firstOrNull { it.isRegistered } ?: return
-        val cacheKey = "${currentCell.mcc}-${currentCell.mnc}-${currentCell.tac}-${currentCell.cellId}"
-        val cachedStatus = verificationCache[cacheKey]
+        // Solo comprobamos que HAY alguna celda activa; la celda concreta se recaptura DESPUÉS del
+        // delay (puede haber handover en esos 3 s).
+        if (_cellFlow.value.none { it.isRegistered }) return
 
         lastGpsTriggerTime = now
         scope.launch {
@@ -1100,6 +1100,14 @@ class MiniICService : Service() {
                 lastGpsTriggerTime = 0L
                 return@launch
             }
+
+            // FIX race condition: recapturar la celda activa AHORA, no la de hace 3 s. Si hubo
+            // handover durante la espera, las coordenadas y la (re)verificación deben ir a nombre de
+            // la celda REALMENTE activa, no de la anterior — si no, inyectaríamos un GPS fresco en
+            // los registros de la antena equivocada (ruido para H11/H13).
+            val currentCell = _cellFlow.value.firstOrNull { it.isRegistered } ?: return@launch
+            val cacheKey = "${currentCell.mcc}-${currentCell.mnc}-${currentCell.tac}-${currentCell.cellId}"
+            val cachedStatus = verificationCache[cacheKey]
 
             // Rellenar coordenadas SOLO con un fix casi de tiempo real (<15 s, la cadencia del
             // stream). Antes de un cambio de celda / rebote a la misma celda queremos la posición
@@ -1560,7 +1568,16 @@ class MiniICService : Service() {
         updateNotificationText(content)
     }
 
+    private var lastNotificationTime = 0L
     private fun updateNotificationText(text: String) {
+        // Throttle: no repintar la notificación más de una vez cada 2 s. El callback de telefonía
+        // puede dispararse muchas veces por segundo en zonas de transición; repintar cada vez satura
+        // el System Server (IPC + batería) y Android acaba silenciando con "rate limit exceeded".
+        // Los datos (BD, logs y el TONO de alarma) van en tiempo real por su cuenta: esto solo
+        // limita el DIBUJO visual de la notificación, no la detección ni el registro.
+        val now = System.currentTimeMillis()
+        if (now - lastNotificationTime < 2000L) return
+        lastNotificationTime = now
         val nm = getSystemService(NOTIFICATION_SERVICE) as NotificationManager
         nm.notify(NOTIFICATION_ID, buildNotification(text))
     }
