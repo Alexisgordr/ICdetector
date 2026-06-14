@@ -161,6 +161,14 @@ class MiniICService : Service() {
     private val verificationCache = ConcurrentHashMap<String, VerificationStatus>()
     // Marca temporal del último ERROR por celda, para permitir reintentos sin saturar la API
     private val lastVerificationErrorTime = ConcurrentHashMap<String, Long>()
+    // Marca temporal del último NOT_FOUND por celda. A diferencia de ERROR (fallo de red
+    // transitorio, reintento a 60s), NOT_FOUND es una respuesta afirmativa de la API ("no está
+    // en la base"). Reintentamos en vivo cada 1h por si una torre legítima recién desplegada se
+    // incorpora a WiGLE/OpenCellID y debe reclasificarse a VERIFIED. Una vez VERIFIED, el guard
+    // deja de consultarla para siempre (no hay reintento sobre celdas verificadas).
+    private val lastNotFoundTime = ConcurrentHashMap<String, Long>()
+    // TTL de reverificación de NOT_FOUND: 1h. En caliente, sin reiniciar la app.
+    private val NOT_FOUND_REVERIFY_TTL = 60L * 60L * 1000L
 
     var alarmThreshold = -50f
     var isStrongSignalAlarmEnabled = true
@@ -328,6 +336,9 @@ class MiniICService : Service() {
         val now = System.currentTimeMillis()
         // Errores de verificación de más de 1 h: ya no deben bloquear reintentos.
         lastVerificationErrorTime.entries.removeIf { now - it.value > 3_600_000L }
+        // NOT_FOUND de más de 1h (el TTL): se retira la marca para acotar el mapa; al volver a
+        // observar la celda, el guard la reverificará (last ausente = fuera de ventana).
+        lastNotFoundTime.entries.removeIf { now - it.value > NOT_FOUND_REVERIFY_TTL }
         // Cap de seguridad: si se excede, se descarta el exceso (las celdas afectadas
         // simplemente vuelven a aprender baseline / re-verificarse; sin impacto de correctitud).
         // Estas son ConcurrentHashMap (sin orden de inserción), así que la purga por .take() es
@@ -1193,12 +1204,22 @@ class MiniICService : Service() {
         
         // 1. Mirar caché rápida
         val cached = verificationCache[cacheKey]
-        if (cached != null && cached != VerificationStatus.ERROR) return
+        // VERIFIED y PENDING nunca se reverifican aquí (return inmediato). ERROR y NOT_FOUND
+        // sí tienen camino de reintento, cada uno con su propia ventana temporal (abajo).
+        if (cached != null &&
+            cached != VerificationStatus.ERROR &&
+            cached != VerificationStatus.NOT_FOUND) return
         // Si la última vez fue ERROR (p. ej. sin red), reintentar solo pasados 60s
         // para no machacar la API en cada ciclo de escaneo (~2s).
         if (cached == VerificationStatus.ERROR) {
             val last = lastVerificationErrorTime[cacheKey] ?: 0L
             if (System.currentTimeMillis() - last < 60000L) return
+        }
+        // Si la última vez fue NOT_FOUND, reintentar en vivo solo pasada 1h, por si una torre
+        // legítima recién desplegada ya está en WiGLE/OpenCellID y debe pasar a VERIFIED.
+        if (cached == VerificationStatus.NOT_FOUND) {
+            val last = lastNotFoundTime[cacheKey] ?: 0L
+            if (System.currentTimeMillis() - last < NOT_FOUND_REVERIFY_TTL) return
         }
 
         // Verificar credenciales
@@ -1218,10 +1239,16 @@ class MiniICService : Service() {
         // rutas llaman a verifyCell casi a la vez (evita peticiones a la API duplicadas).
         synchronized(verificationCache) {
             val current = verificationCache[cacheKey]
-            if (current != null && current != VerificationStatus.ERROR) return
+            if (current != null &&
+                current != VerificationStatus.ERROR &&
+                current != VerificationStatus.NOT_FOUND) return
             if (current == VerificationStatus.ERROR) {
                 val last = lastVerificationErrorTime[cacheKey] ?: 0L
                 if (System.currentTimeMillis() - last < 60000L) return
+            }
+            if (current == VerificationStatus.NOT_FOUND) {
+                val last = lastNotFoundTime[cacheKey] ?: 0L
+                if (System.currentTimeMillis() - last < NOT_FOUND_REVERIFY_TTL) return
             }
             verificationCache[cacheKey] = VerificationStatus.PENDING
         }
@@ -1233,6 +1260,11 @@ class MiniICService : Service() {
             
             if (statusFromDb != VerificationStatus.PENDING) {
                 verificationCache[cacheKey] = statusFromDb
+                // Si la DB ya lo tenía como NOT_FOUND, arrancamos la ventana de 1h desde ahora
+                // para no reconsultar la DB cada ciclo; se reverificará pasado el TTL.
+                if (statusFromDb == VerificationStatus.NOT_FOUND) {
+                    lastNotFoundTime[cacheKey] = System.currentTimeMillis()
+                }
                 updateFlowWithStatus(cell.cellId, statusFromDb)
                 // Actualizar la fila recién insertada que quedó en PENDING
                 dbHelper.updateVerificationStatus(
@@ -1282,8 +1314,9 @@ class MiniICService : Service() {
             // Guardar resultado negativo si ninguna lo encontró
             if (finalStatus == VerificationStatus.NOT_FOUND) {
                 verificationCache[cacheKey] = VerificationStatus.NOT_FOUND
+                lastNotFoundTime[cacheKey] = System.currentTimeMillis()
                 dbHelper.updateVerificationStatus(cell.mnc, cell.tac, cell.cellId, VerificationStatus.NOT_FOUND, mcc = cell.mcc)
-                appendLog("[API]", "Antena no identificada en bases públicas.")
+                appendLog("[API]", "Antena no identificada en bases públicas. Se reintentará en 1h.")
                 updateFlowWithStatus(cell.cellId, VerificationStatus.NOT_FOUND)
             } else if (finalStatus == VerificationStatus.ERROR) {
                 // FIX: antes la celda se quedaba atascada en PENDING para siempre tras
