@@ -138,6 +138,25 @@ fun SettingsPanel(service: MiniICService?, onSave: () -> Unit) {
                 }
             }
 
+            // Leer estado VPN de forma reactiva (mismo patrón que WiFi). La latencia no es
+            // representativa con VPN activa: el tráfico va por el túnel, no por la red
+            // celular directa, así que el toggle se deshabilita.
+            val isVpnActive by produceState(initialValue = false) {
+                while (true) {
+                    val cm = context.getSystemService(Context.CONNECTIVITY_SERVICE)
+                        as android.net.ConnectivityManager
+                    val caps = cm.getNetworkCapabilities(cm.activeNetwork)
+                    value = caps != null && (
+                        caps.hasTransport(android.net.NetworkCapabilities.TRANSPORT_VPN) ||
+                        !caps.hasCapability(android.net.NetworkCapabilities.NET_CAPABILITY_NOT_VPN)
+                    )
+                    kotlinx.coroutines.delay(2000L.milliseconds)
+                }
+            }
+
+            // La latencia se bloquea con WiFi o VPN activos.
+            val latencyBlocked = isWifiActive || isVpnActive
+
             HorizontalDivider(color = Color(0xFF222222), modifier = Modifier.padding(vertical = 4.dp))
 
             Row(
@@ -148,15 +167,16 @@ fun SettingsPanel(service: MiniICService?, onSave: () -> Unit) {
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
                         "Detección de Latencia (Experimental)",
-                        color = if (isWifiActive) Color(0xFF444444) else Color.White,
+                        color = if (latencyBlocked) Color(0xFF444444) else Color.White,
                         fontSize = 14.sp,
                         fontFamily = FontFamily.Monospace
                     )
                     Text(
-                        if (isWifiActive)
-                            "No disponible con WiFi activo."
-                        else
-                            "3 peticiones HEAD cada 30s. Incompatible con Proxy Tor.",
+                        when {
+                            isWifiActive -> "No disponible con WiFi activo."
+                            isVpnActive -> "No disponible con VPN activa."
+                            else -> "3 peticiones HEAD cada 30s. Incompatible con Proxy Tor."
+                        },
                         color = Color(0xFF666666),
                         fontSize = 9.sp,
                         fontFamily = FontFamily.Monospace,
@@ -166,7 +186,7 @@ fun SettingsPanel(service: MiniICService?, onSave: () -> Unit) {
                 Spacer(Modifier.width(8.dp))
                 Switch(
                     checked = latencyDetectionEnabled,
-                    enabled = !isWifiActive,
+                    enabled = !latencyBlocked,
                     onCheckedChange = {
                         latencyDetectionEnabled = it
                         if (it) proxyEnabled = false

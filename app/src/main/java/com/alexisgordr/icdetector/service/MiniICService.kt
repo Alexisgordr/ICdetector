@@ -66,7 +66,8 @@ class MiniICService : Service() {
     private val _auditStatus = MutableStateFlow("")
     val auditStatus: StateFlow<String> = _auditStatus
 
-    private val _networkLatencyState = MutableStateFlow<String>("OK")
+    // Arranca en "N/A": hasta que la sonda mida algo de verdad no se afirma "OK".
+    private val _networkLatencyState = MutableStateFlow<String>("N/A")
     val networkLatencyState: StateFlow<String> = _networkLatencyState
 
     private fun appendLog(type: String, message: String) {
@@ -361,9 +362,14 @@ class MiniICService : Service() {
     }
 
     private fun checkLatencyAnomaly() {
-        // Solo medir si el usuario lo ha activado explícitamente
-        if (!isLatencyDetectionEnabled) return
-        if (isWifiConnected()) return
+        // La sonda solo mide si está activada y NO hay WiFi, VPN ni Tor (SOCKS5):
+        // en esos casos la latencia no es representativa de la red celular. Cuando no
+        // puede medir, el indicador refleja "N/A" (no un "OK" sin verificar) y no se mide.
+        if (!isLatencyProbeActive()) {
+            _networkLatencyState.value = "N/A"   // StateFlow no re-emite si el valor no cambia
+            latencyAnomalyStreak = 0
+            return
+        }
 
         val now = System.currentTimeMillis()
         if (now - lastLatencyCheckTime < LATENCY_CHECK_INTERVAL) return
@@ -812,7 +818,7 @@ class MiniICService : Service() {
             // Esto evita que la heurística 12 lea el veredicto "ANOMALA" de la celda vieja
             // en el primer ciclo de la nueva, antes de que tenga su propio baseline.
             if (activeRaw != null && activeRaw.cellId != "N/A" && activeRaw.cellId != prevCid) {
-                _networkLatencyState.value = "OK"
+                _networkLatencyState.value = idleLatencyState()
                 latencyAnomalyStreak = 0
             }
 
@@ -1058,6 +1064,28 @@ class MiniICService : Service() {
         val capabilities = cm.getNetworkCapabilities(network) ?: return false
         return capabilities.hasTransport(NetworkCapabilities.TRANSPORT_WIFI)
     }
+
+    // Detecta si hay una VPN activa en la red por defecto del sistema.
+    // Doble comprobación: transporte VPN o ausencia de la capability NOT_VPN (robusto
+    // ante distintos modos de túnel). La latencia hacia endpoints externos viajaría por
+    // el túnel y no reflejaría la red celular local, así que no debe medirse.
+    private fun isVpnActive(): Boolean {
+        val cm = getSystemService(CONNECTIVITY_SERVICE) as ConnectivityManager
+        val network = cm.activeNetwork ?: return false
+        val capabilities = cm.getNetworkCapabilities(network) ?: return false
+        return capabilities.hasTransport(NetworkCapabilities.TRANSPORT_VPN) ||
+            !capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_NOT_VPN)
+    }
+
+    // La sonda de latencia solo es representativa si está activada y la salida es la red
+    // celular directa: sin WiFi, sin VPN y sin Tor (proxy SOCKS5). En cualquier otro caso
+    // el indicador debe ser "N/A", no "OK".
+    private fun isLatencyProbeActive(): Boolean =
+        isLatencyDetectionEnabled && !isWifiConnected() && !isVpnActive() && !isProxyEnabled
+
+    // Estado "idle" del indicador tras un handover: "OK" solo si la sonda puede medir;
+    // si no, "N/A" para no afirmar un estado de red sin verificación.
+    private fun idleLatencyState(): String = if (isLatencyProbeActive()) "OK" else "N/A"
 
     private fun applyTemporalConfidence(cell: CellData): CellData {
         // Si cambia la celda activa, resetear todos los streaks
@@ -1418,7 +1446,7 @@ class MiniICService : Service() {
             // NO es válido para la nueva. Limpiamos "ANOMALA" (icono y heurística 12) y la
             // racha; la celda nueva volverá a "OK"/"ANOMALA" según sus propias mediciones una
             // vez aprenda su baseline. Evita que la heurística 12 se contamine con datos viejos.
-            _networkLatencyState.value = "OK"
+            _networkLatencyState.value = idleLatencyState()
             latencyAnomalyStreak = 0
             lastAlarmLoggedCellId = null  // Fix #1: nuevo episodio de celda -> permitir registrar su alarma
             appendLog("[RADIO]", "Handover celular completado -> Nueva celda CID: $cid ($net)")

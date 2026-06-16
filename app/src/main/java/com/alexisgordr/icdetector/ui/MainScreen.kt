@@ -630,12 +630,20 @@ fun SecurityScorePanel(active: CellData, dbmHistory: List<Int>, geoHistory: List
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 // Indicador RED — izquierda
-                val latencyFlow = remember(service) { service?.networkLatencyState ?: MutableStateFlow("OK") }
+                val latencyFlow = remember(service) { service?.networkLatencyState ?: MutableStateFlow("N/A") }
                 val netState by latencyFlow.collectAsStateWithLifecycle()
 
+                // Tres estados: OK (verde) / ANÓMALA (rojo) / N/A (gris, sin medir:
+                // latencia desactivada, o WiFi/VPN/Tor activos). El gris evita afirmar
+                // un "OK" que ninguna medición respalda.
+                val (netText, netColor) = when (netState) {
+                    "OK" -> "● RED OK" to Color(0xFF4CAF50)
+                    "ANOMALA" -> "● RED ANÓMALA" to Color(0xFFCF6679)
+                    else -> "● RED N/A" to Color(0xFF888888)
+                }
                 Text(
-                    text = if (netState == "OK") "● RED OK" else "● RED ANÓMALA",
-                    color = if (netState == "OK") Color(0xFF4CAF50) else Color(0xFFCF6679),
+                    text = netText,
+                    color = netColor,
                     fontSize = 9.sp,
                     fontFamily = FontFamily.Monospace
                 )
