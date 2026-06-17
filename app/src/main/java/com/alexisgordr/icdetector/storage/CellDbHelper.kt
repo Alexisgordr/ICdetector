@@ -349,6 +349,7 @@ class CellDbHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME, 
         cellId: String,
         mnc: String,
         tac: String,
+        mcc: String,
         excludeCurrentLocation: Location
     ): List<HistoryRecord> {
         val history = mutableListOf<HistoryRecord>()
@@ -371,13 +372,14 @@ class CellDbHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME, 
               AND $COLUMN_TAC = ?
               AND $COLUMN_LAT IS NOT NULL 
               AND $COLUMN_LON IS NOT NULL
+              AND $COLUMN_MCC = ?
               AND $COLUMN_TIMESTAMP < ?
               AND $COLUMN_TIMESTAMP > ?
             ORDER BY $COLUMN_ID DESC
             LIMIT 20
         """.trimIndent()
         
-        val cursor = db.rawQuery(query, arrayOf(cellId, mnc, tac, recentThreshold, oldThreshold))
+        val cursor = db.rawQuery(query, arrayOf(cellId, mnc, tac, mcc, recentThreshold, oldThreshold))
         try {
         
         if (cursor.moveToFirst()) {
@@ -440,6 +442,7 @@ class CellDbHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME, 
         cellId: String,
         mnc: String,
         tac: String,
+        mcc: String,
         nearLocation: Location,
         radiusMeters: Float = 500f,
         minSamples: Int = 5
@@ -457,12 +460,13 @@ class CellDbHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME, 
               AND $COLUMN_TAC = ?
               AND $COLUMN_LAT IS NOT NULL
               AND $COLUMN_LON IS NOT NULL
+              AND $COLUMN_MCC = ?
               AND $COLUMN_TIMESTAMP > ?
             ORDER BY $COLUMN_ID DESC
             LIMIT 200
         """.trimIndent()
 
-        val cursor = db.rawQuery(query, arrayOf(cellId, mnc, tac, oldThreshold))
+        val cursor = db.rawQuery(query, arrayOf(cellId, mnc, tac, mcc, oldThreshold))
         val samples = mutableListOf<Int>()
         try {
         if (cursor.moveToFirst()) {
@@ -517,7 +521,7 @@ class CellDbHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME, 
      * heurísticas débiles sobre celdas probadas (ver CellReputation). Devuelve trustScore = -1
      * (desconocida) si no hay historial suficiente para juzgar — en ese caso no se amortigua nada.
      */
-    fun getCellReputation(cellId: String, mnc: String, tac: String): CellReputation {
+    fun getCellReputation(cellId: String, mnc: String, tac: String, mcc: String): CellReputation {
         val db = this.readableDatabase
         val ninetyDaysAgo = System.currentTimeMillis() - (90L * 24 * 60 * 60 * 1000)
         val dateFormat = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault())
@@ -529,6 +533,7 @@ class CellDbHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME, 
             WHERE $COLUMN_CID = ?
               AND $COLUMN_MNC = ?
               AND $COLUMN_TAC = ?
+              AND $COLUMN_MCC = ?
               AND $COLUMN_TIMESTAMP > ?
             ORDER BY $COLUMN_ID DESC
             LIMIT 500
@@ -537,7 +542,7 @@ class CellDbHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME, 
         var total = 0
         var clean = 0
         val days = HashSet<String>()
-        db.rawQuery(query, arrayOf(cellId, mnc, tac, threshold)).use { cursor ->
+        db.rawQuery(query, arrayOf(cellId, mnc, tac, mcc, threshold)).use { cursor ->
             if (cursor.moveToFirst()) {
                 do {
                     val score = cursor.getInt(0)
@@ -576,7 +581,7 @@ class CellDbHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME, 
      * no hay muestras suficientes — la firma "duerme" hasta acumular datos, evitando falsos
      * positivos tempranos. Conservadora por diseño (RSRQ/SINR son métricas ruidosas).
      */
-    fun getCellRfFingerprint(cellId: String, mnc: String, tac: String, minSamples: Int = 30): CellRfFingerprint? {
+    fun getCellRfFingerprint(cellId: String, mnc: String, tac: String, mcc: String, minSamples: Int = 30): CellRfFingerprint? {
         val db = this.readableDatabase
         val ninetyDaysAgo = System.currentTimeMillis() - (90L * 24 * 60 * 60 * 1000)
         val dateFormat = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault())
@@ -588,6 +593,7 @@ class CellDbHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME, 
             WHERE $COLUMN_CID = ?
               AND $COLUMN_MNC = ?
               AND $COLUMN_TAC = ?
+              AND $COLUMN_MCC = ?
               AND $COLUMN_RSRQ IS NOT NULL
               AND $COLUMN_SINR IS NOT NULL
               AND $COLUMN_TIMESTAMP > ?
@@ -597,7 +603,7 @@ class CellDbHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME, 
 
         val rsrqs = mutableListOf<Int>()
         val sinrs = mutableListOf<Int>()
-        db.rawQuery(query, arrayOf(cellId, mnc, tac, threshold)).use { cursor ->
+        db.rawQuery(query, arrayOf(cellId, mnc, tac, mcc, threshold)).use { cursor ->
             if (cursor.moveToFirst()) {
                 do {
                     val rsrq = cursor.getInt(0)

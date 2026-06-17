@@ -231,6 +231,7 @@ class MiniICService : Service() {
         wigleApiToken = prefs.getString("wigle_api_token", "") ?: ""
         isProxyEnabled = prefs.getBoolean("proxy_enabled", false)
         isLatencyDetectionEnabled = prefs.getBoolean("latency_detection_enabled", false)
+        loadPersistedLastAcceptedLocation()  // referencia de plausibilidad superviviente a reinicios
 
         if (wigleApiName.isNotBlank() || openCellIdKey.isNotBlank()) {
             hasLoggedMissingCredentials = false
@@ -557,7 +558,7 @@ class MiniICService : Service() {
             // y rellenamos la BD. Así un fix "preciso pero corrupto" (salto imposible) ya no contamina.
             forcedFixListener?.let { try { locationManager.removeUpdates(it) } catch (_: Exception) {} }
             forcedFixListener = null
-            lastAcceptedLocation = location
+            acceptLocation(location)
             awaitingFreshCoords = false  // tenemos un fix fresco y válido: pendiente resuelto
             val cell = _cellFlow.value.firstOrNull { it.isRegistered } ?: return@LocationListener
             scope.launch(Dispatchers.IO) {
@@ -849,10 +850,10 @@ class MiniICService : Service() {
                         // Solo lectura del historial (columna 'score'); amortigua ruido débil en
                         // celdas probadas (ver CellReputation). No toca esquema.
                         cachedReputation = dbHelper.getCellReputation(
-                            activeRaw.cellId, activeRaw.mnc, activeRaw.tac
+                            activeRaw.cellId, activeRaw.mnc, activeRaw.tac, activeRaw.mcc
                         )
                         cachedFingerprint = dbHelper.getCellRfFingerprint(
-                            activeRaw.cellId, activeRaw.mnc, activeRaw.tac
+                            activeRaw.cellId, activeRaw.mnc, activeRaw.tac, activeRaw.mcc
                         )
                         cachedRfSignature = rfSig
                         cachedRfStability = st
@@ -864,7 +865,7 @@ class MiniICService : Service() {
                 val rfFingerprint: CellRfFingerprint? = cachedFingerprint
 
                 if (canQuery) {
-                    val signature = "${activeRaw.cellId}|${activeRaw.mnc}|${activeRaw.tac}"
+                    val signature = "${activeRaw.cellId}|${activeRaw.mnc}|${activeRaw.tac}|${activeRaw.mcc}"
                     val now = System.currentTimeMillis()
                     // ¿Cuánto te has movido desde el último prefetch? (afecta al baseline, que
                     // filtra muestras por cercanía). Si te mueves mucho, hay que reconsultar.
@@ -887,10 +888,10 @@ class MiniICService : Service() {
                         signalBaseline = cachedBaseline
                     } else {
                         preloadedHistory = dbHelper.getPreviousCellHistory(
-                            activeRaw.cellId, activeRaw.mnc, activeRaw.tac, currentLocation
+                            activeRaw.cellId, activeRaw.mnc, activeRaw.tac, activeRaw.mcc, currentLocation
                         )
                         signalBaseline = dbHelper.getCellSignalBaseline(
-                            activeRaw.cellId, activeRaw.mnc, activeRaw.tac, currentLocation
+                            activeRaw.cellId, activeRaw.mnc, activeRaw.tac, activeRaw.mcc, currentLocation
                         )
                         cachedCellSignature = signature
                         cachedLocationLat = currentLocation.latitude
@@ -999,6 +1000,7 @@ class MiniICService : Service() {
     // Fix #2: último fix GPS aceptado como bueno, para validar plausibilidad del siguiente.
     private var lastAcceptedLocation: Location? = null
     private var implausibleFixCount = 0
+    private var lastPersistedLocTime = 0L  // evita reescribir prefs con el mismo getLastKnownLocation
 
     // ¿Es plausible este fix respecto al último aceptado? Un fix puede pasar los filtros de
     // precisión y antigüedad y aun así situarte a cientos de km por un error del GPS (visto en
@@ -1022,6 +1024,44 @@ class MiniICService : Service() {
             return true
         }
         return false
+    }
+
+    // Acepta un fix como nueva referencia de plausibilidad y lo persiste, de modo que la
+    // referencia sobreviva a un reinicio del servicio. Solo reescribe prefs si el fix es más
+    // nuevo que el último persistido (getLastKnownLocation devuelve el mismo fix repetido).
+    private fun acceptLocation(loc: Location) {
+        lastAcceptedLocation = loc
+        if (loc.time > lastPersistedLocTime) {
+            lastPersistedLocTime = loc.time
+            try {
+                getSharedPreferences("miniic_prefs", MODE_PRIVATE).edit()
+                    .putString(KEY_LAST_LOC, "${loc.latitude},${loc.longitude},${loc.time}")
+                    .apply()
+            } catch (_: Exception) {}
+        }
+    }
+
+    // Carga la referencia persistida al arrancar, salvo que sea muy vieja o tenga marca de
+    // tiempo en el futuro (clock raro): en ese caso se deja null y el próximo fix es bootstrap.
+    private fun loadPersistedLastAcceptedLocation() {
+        try {
+            val raw = getSharedPreferences("miniic_prefs", MODE_PRIVATE)
+                .getString(KEY_LAST_LOC, null) ?: return
+            val parts = raw.split(",")
+            if (parts.size != 3) return
+            val lat = parts[0].toDoubleOrNull() ?: return
+            val lon = parts[1].toDoubleOrNull() ?: return
+            val t = parts[2].toLongOrNull() ?: return
+            val age = System.currentTimeMillis() - t
+            if (age in 0..LOCATION_REFERENCE_MAX_AGE) {
+                lastAcceptedLocation = Location(LocationManager.GPS_PROVIDER).apply {
+                    latitude = lat
+                    longitude = lon
+                    time = t
+                }
+                lastPersistedLocTime = t
+            }
+        } catch (_: Exception) {}
     }
 
     private fun getCurrentLocation(): Location? {
@@ -1050,7 +1090,7 @@ class MiniICService : Service() {
             // y la coordenada queda desconocida, en vez de contaminar el historial y las heurísticas
             // geográficas (H11/H13) con una posición falsa.
             if (best != null && isPlausibleFix(best)) {
-                lastAcceptedLocation = best
+                acceptLocation(best)
                 best
             } else {
                 null
@@ -1388,19 +1428,19 @@ class MiniICService : Service() {
         
         val loc = getCurrentLocation()
         val history = if (loc != null && cell.cellId != "N/A") {
-            dbHelper.getPreviousCellHistory(cell.cellId, cell.mnc, cell.tac, loc)
+            dbHelper.getPreviousCellHistory(cell.cellId, cell.mnc, cell.tac, cell.mcc, loc)
         } else emptyList()
         val sigBaseline = if (loc != null && cell.cellId != "N/A") {
-            dbHelper.getCellSignalBaseline(cell.cellId, cell.mnc, cell.tac, loc)
+            dbHelper.getCellSignalBaseline(cell.cellId, cell.mnc, cell.tac, cell.mcc, loc)
         } else null
         val rfStability = if (cell.cellId != "N/A") {
             dbHelper.getCellRfStability(cell.cellId, cell.mnc, cell.tac, cell.mcc)
         } else null
         val reputation = if (cell.cellId != "N/A") {
-            dbHelper.getCellReputation(cell.cellId, cell.mnc, cell.tac)
+            dbHelper.getCellReputation(cell.cellId, cell.mnc, cell.tac, cell.mcc)
         } else null
         val rfFingerprint = if (cell.cellId != "N/A") {
-            dbHelper.getCellRfFingerprint(cell.cellId, cell.mnc, cell.tac)
+            dbHelper.getCellRfFingerprint(cell.cellId, cell.mnc, cell.tac, cell.mcc)
         } else null
 
         val updatedActive = cell.copy(verified = VerificationStatus.VERIFIED, lat = lat, lon = lon)
@@ -1754,5 +1794,11 @@ class MiniICService : Service() {
         // Cap de seguridad para los mapas en memoria indexados por celda: evita crecimiento
         // ilimitado en sesiones muy largas o viajes con miles de celdas distintas.
         const val MAX_TRACKED_CELLS = 500
+        // Persistencia de la referencia de plausibilidad GPS entre reinicios (cierra el hueco
+        // de arranque de isPlausibleFix, donde el primer fix se aceptaba sin comparar).
+        private const val KEY_LAST_LOC = "last_accepted_loc"
+        // Si la referencia persistida es más vieja que esto (p. ej. viaje largo con la app
+        // cerrada), se ignora y el próximo fix se trata como bootstrap, evitando falsos rechazos.
+        private const val LOCATION_REFERENCE_MAX_AGE = 6L * 60 * 60 * 1000  // 6 h
     }
 }
