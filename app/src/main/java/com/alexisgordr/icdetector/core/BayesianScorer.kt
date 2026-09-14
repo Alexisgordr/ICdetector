@@ -19,6 +19,16 @@ package com.alexisgordr.icdetector.core
  *
  * Heurísticas agrupadas por correlación física para evitar
  * inflación del posterior por dependencia implícita en Naive Bayes.
+ *
+ * CÓMO DEBE LLAMARSE ESTO (v2.1). El resultado NO es una probabilidad en sentido estadístico:
+ * es un posterior calculado con likelihood ratios estimados por criterio experto sobre un prior
+ * asumido. Nombrarlo "probabilidad de amenaza" invitaba a leer un "88,9 %" como si saliera de una
+ * validación empírica que no se ha hecho. Por eso la UI y el CSV lo llaman ahora **confianza de
+ * anomalía (no calibrada)**. El número no ha cambiado; la etiqueta ha dejado de prometer de más.
+ *
+ * Solo podrá llamarse probabilidad calibrada cuando existan suficientes observaciones etiquetadas
+ * de escenarios benignos y adversarios como para medir estas LR en lugar de razonarlas. Ese es el
+ * punto #7 del roadmap, y el banco de escenarios de ScenarioTest es el primer paso hacia él.
  */
 object BayesianScorer {
 
@@ -53,11 +63,23 @@ object BayesianScorer {
         "bandDowngrade" to 2.5f  // Downgrade forzado a banda baja
     )
 
+    /**
+     * Razones de verosimilitud del estado de verificación externa. **Todas neutras (1.0) desde
+     * v2.1**, por la misma razón por la que la verificación dejó de sumar y restar puntos en
+     * [ThreatAnalyzer]: no medían la antena, medían la cobertura de una base colaborativa. Un 1.4
+     * para NOT_FOUND en una zona poco mapeada se lo llevaban todas las celdas, y una LR que se
+     * aplica a todo el mundo no discrimina a nadie — solo desplaza la escala entera.
+     *
+     * Se mantienen como mapa, y no se borra el factor, porque la pregunta sigue abierta: la fase de
+     * recolección existe precisamente para medir si este estado aporta señal. Cuando haya datos
+     * para estimar estas razones en vez de suponerlas, se ponen aquí. Mientras tanto, neutro es la
+     * única cifra honesta.
+     */
     private val DB_RATIOS = mapOf(
-        "VERIFIED"  to 0.4f,
-        "NOT_FOUND" to 1.4f,
+        "VERIFIED"  to 1.0f,
+        "NOT_FOUND" to 1.0f,
         "PENDING"   to 1.0f,
-        "ERROR"     to 1.1f
+        "ERROR"     to 1.0f
     )
 
     // Grupos de heurísticas correlacionadas

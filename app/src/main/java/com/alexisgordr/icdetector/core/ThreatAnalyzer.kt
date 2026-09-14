@@ -197,30 +197,57 @@ object ThreatAnalyzer {
         }
 
         // 6. Timing Advance Audit
-        // Fix: 5G NSA usa celda LTE ancla → multiplicador 78m/TA igual que LTE
-        // Solo 5G SA puro usa 150m/TA
-        active.timingAdvance?.let { ta ->
-            val is5gSA = active.networkType.contains("5G") &&
-                         !active.networkType.contains("NSA")
-            val taMultiplier = if (is5gSA) 150 else 78
-            val taDistanceMeters = ta * taMultiplier
-
+        //
+        // v2.1 — La distancia implícita se calcula a partir de la UNIDAD que viaja con el valor
+        // (CellData.timingAdvanceUnit, fijada por CellParser), no del nombre de la red.
+        //
+        // Antes el multiplicador se elegía con `networkType.contains("5G") && !contains("NSA")`.
+        // Esa cadena viene de TelephonyDisplayInfo: describe el icono que enseña el móvil, no la
+        // clase de CellInfo de la que se leyó el TA. En el historial de campo hay 54 celdas que
+        // aparecen etiquetadas unas veces como 4G y otras como 5G sin cambiar de identidad, así
+        // que las dos cosas se desincronizan de forma rutinaria — y un índice LTE tratado como
+        // microsegundos (o al revés) desplaza la distancia por un factor cercano a 2. H6 lleva la
+        // penalización más alta del sistema (-40) y la LR más alta tras el cifrado (7.0): es el
+        // último sitio donde conviene deducir una unidad.
+        //
+        // Si la unidad no es determinable (valor raspado del toString() del fabricante), no hay
+        // conversión y H6 NO JUZGA. Abstenerse es correcto: una geometría inventada aquí es peor
+        // que no tener geometría.
+        val taMeters = active.timingAdvance?.let { active.timingAdvanceUnit.toMeters(it) }
+        if (taMeters != null) {
             if (active.lat != null && active.lon != null && currentLocation != null) {
-                if (ta > 0) {
+                if (taMeters > 0) {
                     val results = FloatArray(1)
                     Location.distanceBetween(
                         currentLocation.latitude, currentLocation.longitude,
                         active.lat, active.lon, results
                     )
-                    if (results[0] > 2000 && taDistanceMeters < 500) {
+                    // La antena dice estar a >2 km pero el TA implica <500 m: incoherencia física.
+                    if (results[0] > 2000 && taMeters < 500) {
                         hTa = false
                         reasons.add("Suplantación TA")
                         score -= 40
                     }
                 }
             } else {
-                if (!is5gSA && ta <= 1 && active.dbm >= -60
-                    && active.verified != VerificationStatus.VERIFIED) {
+                // Sin posición de la antena: solo el caso "estoy pegado al emisor". El umbral de
+                // 100 m equivale exactamente al `ta <= 1` anterior en LTE (0 m y 78 m), y ahora
+                // se expresa en metros para que signifique lo mismo en cualquier tecnología.
+                //
+                // No hace falta excluir NR aquí: si hemos llegado a este punto es porque la unidad
+                // produjo metros, y NR nunca los produce (ver TimingAdvanceUnit.NR_RAW).
+                //
+                // Aquí había una excepción: la celda se libraba de la penalización si estaba
+                // VERIFIED. Se ha quitado — y no por poco importante, sino por lo contrario. Era la
+                // ÚLTIMA vía por la que el estado de verificación entraba en la puntuación, y la
+                // hacía entrar en silencio: misma celda, mismo TA, misma señal, distinto score
+                // según lo que contestara una base pública. Con ella dentro, la pregunta que la
+                // fase de recolección tiene que responder —¿aporta señal la verificación externa?—
+                // se contestaba en parte a sí misma.
+                //
+                // Desde v2.1 `ThreatAnalyzer` **no lee `active.verified` en ninguna heurística**.
+                // El detector y la etiqueta externa son ortogonales, y por eso podrán cruzarse.
+                if (taMeters <= 100 && active.dbm >= -60) {
                     hTa = false
                     reasons.add("Proximidad anómala (TA)")
                     score -= 15
@@ -479,7 +506,10 @@ object ThreatAnalyzer {
             if (!hRfStability) add("rfStability")
         }
 
-        val threatProbability = BayesianScorer.calculate(
+        // El estado de verificación se le sigue pasando al bayesiano, pero sus razones de
+        // verosimilitud están todas en 1.0 (neutro) desde v2.1: el parámetro queda como el hueco
+        // donde encajarán las razones MEDIDAS cuando la fase de recolección permita estimarlas.
+        val anomalyConfidence = BayesianScorer.calculate(
             failedList,
             active.verified.name,
             isNetworkLatencyAnomalous,
@@ -487,12 +517,35 @@ object ThreatAnalyzer {
             trustScore = reputation?.trustScore ?: -1
         )
 
-        // Bonificadores y penalizadores por Base de Datos
-        if (active.verified == VerificationStatus.VERIFIED) {
-            score += 15
-        } else if (active.verified == VerificationStatus.NOT_FOUND) {
-            score -= 10
-        }
+        // La verificación externa NO puntúa. Se observa y se registra — v2.1.
+        //
+        // Hasta aquí una celda verificada se llevaba +15 y una no encontrada -10. Las dos cifras
+        // han caído por el mismo motivo: **no medían la antena, medían la base de datos**.
+        //
+        //  - El -10 se aplicaba a cualquier celda que WiGLE/OpenCellID no conocieran, y esas bases
+        //    son colaborativas e irregulares: en una zona poco mapeada lo cobraban TODAS las
+        //    antenas, legítimas incluidas. Una penalización que le toca a todo el mundo no
+        //    distingue a nadie.
+        //  - El +15, en una celda limpia, no subía nada (ya estaba en 100): lo que hacía era dar un
+        //    colchón de 15 puntos contra penalizaciones reales de las heurísticas. Es decir, estar
+        //    en una base colaborativa excusaba un comportamiento de radio anómalo. Al revés de como
+        //    debería ser.
+        //
+        // Y hay una razón metodológica que pesa más que las dos: durante la fase de recolección
+        // queremos AVERIGUAR si el estado de verificación aporta señal. Eso no se puede medir si ya
+        // está metido dentro de la puntuación que sirve de referencia — se estaría contrastando el
+        // dato consigo mismo. Queda como etiqueta independiente (columna `Verified` del CSV) junto
+        // a un score que sale solo de las 14 heurísticas. Al final de los tres meses se podrá
+        // cruzar una cosa con la otra y contestar la pregunta con datos.
+        //
+        // La ortogonalidad es completa: ninguna heurística lee `active.verified`. La última que lo
+        // hacía era H6 —una celda verificada no disparaba la rama de proximidad del TA— y se quitó
+        // por esto mismo. `VerificationNeutralityTest` lo comprueba con una celda que SÍ dispara
+        // esa rama, que es el caso donde el acoplamiento se escondía.
+        //
+        // El motivo tampoco se añade ya a `reasons`: sin penalización no es una observación sobre
+        // la antena, y aparecería en pantalla como si algo fuera mal. Dónde consta: en la columna
+        // `Verified` del historial y en la cabecera, que lo dice con todas las letras.
 
         val finalScore = score.coerceIn(0, 100)
         val isSuspicious = finalScore < 70
@@ -520,7 +573,7 @@ object ThreatAnalyzer {
             suspiciousReason = if (reasons.isNotEmpty()) reasons.joinToString(" | ") else null,
             heuristicReport = report,
             securityScore = finalScore,
-            threatProbability = threatProbability
+            anomalyConfidence = anomalyConfidence
         )
     }
 }

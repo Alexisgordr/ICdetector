@@ -53,7 +53,9 @@ The application operates from Android userland without requiring root or direct 
 
 ICdetection v2.1 is currently considered stable and feature-complete within the limits of Android userland telemetry.
 
-v2.1 is a **data-integrity release**. It adds no new detection claims. It exists because the first two months of field collection surfaced problems that made that very collection unable to answer the questions it was designed to answer: sub-threshold heuristic failures were recorded with their reason erased, API-supplied tower coordinates were overwriting the device's own GPS positions in the history, two heuristics were firing on carrier-aggregation artifacts, and the history was so sparse that the RF fingerprint never woke up. See `CHANGELOG-v2.1.md` for the full evidence and the fixes.
+v2.1 is a **data-integrity release**. It adds no new heuristics and no new detection claims. It exists because the first two months of field collection surfaced problems that made that very collection unable to answer the questions it was designed to answer: sub-threshold heuristic failures were recorded with their reason erased, API-supplied tower coordinates were overwriting the device's own GPS positions in the history, two heuristics were firing on carrier-aggregation artifacts, and the history was so sparse that the RF fingerprint never woke up. `Status.md` and `v2.1Roadmap.md` carry the full evidence and the fixes.
+
+**The code is now frozen for a three-month field-collection phase.** What the project needs next is not features — it is data: which heuristics carry signal, what the real false-positive rate looks like over months, and whether the Bayesian likelihood ratios hold up against reality. None of that can be answered by reading code.
 
 Future work continues to focus on:
 
@@ -429,12 +431,16 @@ CSV export is available for:
 - research
 - archival workflows
 
-Columns: `Timestamp, NetType, CID, MNC, TAC, MCC, DBM, Verified, SecurityScore, FailedHeuristics, Lat, Lon, PCI, ARFCN, RSRQ, SINR, ThreatProb, ApiLat, ApiLon`.
+Columns: `Timestamp, NetType, CID, MNC, TAC, MCC, DBM, Verified, SecurityScore, FailedHeuristics, Lat, Lon, PCI, ARFCN, RSRQ, SINR, AnomalyConfidence, ApiLat, ApiLon, TA, TAUnit, TAMeters`.
+
+Validate any export with `python3 tools/check_export.py <file.csv>` — it checks the invariants the
+design guarantees and prints how mature the history is.
 
 Two points matter for analysis:
 
 - **`Lat` / `Lon` are the device's own GPS position** at the moment of the observation, and nothing else. The antenna position reported by WiGLE/OpenCellID lives in its own `ApiLat` / `ApiLon` columns. Before v2.1 both were written to the same pair of columns, which silently mixed two different quantities.
 - **`FailedHeuristics` entries prefixed with `[sub-umbral]`** are heuristics that failed without reaching the alarm threshold. They are observations, not alerts, and they are recorded precisely so that false positives can be studied. Before v2.1 they were stored as `OK`.
+- **`Verified` is a label, not a verdict, and it has five values.** `VERIFIED` (a public database returned *this* cell — identity checked field by field — with a credible coordinate), `NOT_FOUND` (an explicit, reliable negative: OpenCellID's documented "cell not found", or WiGLE answering successfully with zero results), `REJECTED` (a reply arrived but did not survive the checks — wrong identity, sentinel or impossible coordinate, incomplete body), `ERROR` (no interpretable reply: quota, rejected key, timeout, 404) and `PENDING`. Since v2.1 **none of them changes `SecurityScore`**: the score comes only from the 14 heuristics, so that the label and the detector stay independent and can be cross-tabulated at the end of the collection phase. A `VERIFIED` older than 30 days is re-checked; the historical rows are kept either way.
 
 Exports may contain sensitive location and cellular metadata. Users should treat exported files as private forensic material.
 

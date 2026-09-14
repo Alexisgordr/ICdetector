@@ -1,0 +1,1397 @@
+diff -ruN '--exclude=v2.1-InformeCampo.md' '--exclude=CHANGELOG-v2.1.md' orig/MANUAL.md /home/claude/ic/MANUAL.md
+--- a/MANUAL.md	2026-09-14 13:26:17.000000000 +0000
++++ b/MANUAL.md	2026-09-14 14:02:11.712447171 +0000
+@@ -1,4 +1,4 @@
+-# 📖 ICdetection Field Manual (v2.0)
++# 📖 ICdetection Field Manual (v2.1)
+ 
+ This manual provides operational guidelines for using ICdetection. This tool is designed for network auditing and cellular anomaly analysis. Understanding the data is as important as the code itself.
+ 
+@@ -60,9 +60,9 @@
+ 
+ - **"Band Downgrade (H14)":** Detects a sudden, forced shift from a high-frequency capacity band to a low-frequency sub-GHz band. Attackers push devices to lower frequencies to extend coverage and penetration. The check uses real 3GPP band physics (via EARFCN) and distinguishes a forced downgrade from natural signal degradation (e.g. entering a garage), reducing false positives.
+ 
+-- **"RF Identity / PCI (H15)":** A legitimate cell keeps its physical-layer identity (PCI) fixed for life. This flags a single Cell ID seen alternating between distinct PCI values that persist recently — a sign of a clone reusing a legitimate Cell ID with a different radio fingerprint. It can fire while you are stationary (unlike H11, which needs movement). It deliberately uses **PCI only, not ARFCN**, because field testing showed ARFCN fluctuates legitimately due to carrier aggregation.
++- **"RF Identity / PCI (H15)":** A legitimate cell keeps its physical-layer identity (PCI) fixed for life. This flags a single Cell ID seen alternating between distinct PCI values that persist recently — a sign of a clone reusing a legitimate Cell ID with a different radio fingerprint. It can fire while you are stationary (unlike H11, which needs movement). It deliberately uses **PCI only, not ARFCN**, because field testing showed ARFCN fluctuates legitimately due to carrier aggregation. Since v2.1 it also compares PCI values **only within the same carrier**: longer field data showed the modem attributes a secondary carrier's PCI to the serving cell just as it does with the ARFCN, so comparing PCIs across carriers was producing false positives.
+ 
+-- **"Cifrado de enlace (Hardware)":** N/A on standard v2.0 installs unless the operating system exposes a supported ciphering-state signal. ICdetection v2.0 does not claim direct null-cipher or IMSI-disclosure detection on normal no-root Android installs.
++- **"Cifrado de enlace (Hardware)":** N/A on standard v2.1 installs unless the operating system exposes a supported ciphering-state signal. ICdetection v2.1 does not claim direct null-cipher or IMSI-disclosure detection on normal no-root Android installs.
+ 
+ > **Note on the scoring engine:** these heuristics are not simply added up. A Bayesian engine combines them, grouping correlated signals so they cannot double-count and inflate the score, and softening the noisy/environment-sensitive ones on cells with a long, clean local history (cell reputation). The probability is capped at 95% — on Android userland, certainty is never claimed.
+ 
+@@ -84,7 +84,7 @@
+ 
+ - **Use a Proxy:** If you are auditing in an area where you suspect you are being monitored, ensure the Tor (Orbot) proxy is enabled in the settings. This prevents the API (OpenCellID/WiGLE) from correlating your specific public IP with the CellIDs you are auditing.
+ 
+-- **Monitor with Screen Off:** The app continues monitoring with the screen off (polling roughly every 10 seconds). You can keep the phone in your pocket and rely on the Audio Alert System. *Note on GPS in repose: with the screen off and the device stationary, Android Doze restricts the GPS, so fresh coordinates may not be recorded for every observation. This is an OS limitation, not a bug — and it matters little when stationary, since your position has not changed and H15 (PCI) needs no GPS.*
++- **Monitor with Screen Off:** The app continues monitoring with the screen off (polling roughly every 10 seconds). You can keep the phone in your pocket and rely on the Audio Alert System. *Note on GPS in repose: with the screen off and the device stationary, Android Doze restricts the GPS, so fresh coordinates may not be recorded for every observation. This is an OS limitation, not a bug — and it matters little when stationary, since your position has not changed and H15 (PCI) needs no GPS.* Since v2.1 the app also records a periodic sample of the serving cell while you stay camped on it (about every 5 minutes with the screen on, every 15 with it off). This does **not** wake the GPS or force extra radio reads; it simply persists the analysis the service was already performing, and it is what allows the signal baselines and the RSRQ/SINR fingerprint to actually accumulate enough samples to become useful.
+ 
+ - **Learn the tones:** The app uses specific tones for different threat levels. A confirmed threat sounds differently from a high-signal warning. Learn to distinguish them.
+ 
+@@ -100,7 +100,7 @@
+ 
+ 3. **Post-Audit:** Export the history to CSV from the History tab.
+ 
+-4. **Reporting:** Use the CSV data to identify patterns — specific times or locations where NOT FOUND or suspicious cells repeatedly appear. The export includes `Timestamp, NetType, CID, MNC, TAC, MCC, DBM, Verified, SecurityScore, FailedHeuristics, Lat, Lon, PCI, ARFCN, RSRQ, SINR`. Pay special attention to `Lat`, `Lon`, `PCI`, `ARFCN`, `RSRQ` and `SINR` for RF fingerprinting analysis. Fields are CSV-escaped (RFC 4180), so the file imports cleanly into spreadsheets and analysis tools.
++4. **Reporting:** Use the CSV data to identify patterns — specific times or locations where NOT FOUND or suspicious cells repeatedly appear. The export includes `Timestamp, NetType, CID, MNC, TAC, MCC, DBM, Verified, SecurityScore, FailedHeuristics, Lat, Lon, PCI, ARFCN, RSRQ, SINR, ThreatProb, ApiLat, ApiLon`. Pay special attention to `Lat`, `Lon`, `PCI`, `ARFCN`, `RSRQ` and `SINR` for RF fingerprinting analysis. Note that `Lat`/`Lon` are **your** GPS position when the observation was recorded, while `ApiLat`/`ApiLon` are where WiGLE/OpenCellID claim the antenna is — two different things, kept in separate columns since v2.1. `ThreatProb` is the Bayesian posterior at that moment, and rows whose `FailedHeuristics` starts with `[sub-umbral]` are heuristics that failed without reaching the alarm threshold (observations, not alerts). Fields are CSV-escaped (RFC 4180), so the file imports cleanly into spreadsheets and analysis tools.
+ 
+ ---
+ 
+@@ -108,7 +108,7 @@
+ 
+ ICdetection operates entirely in Android userland without root access. This means:
+ 
+-- **Direct null-cipher / IMSI-disclosure detection** is not implemented on standard v2.0 installs and requires privileged OS APIs/permissions that normal no-root apps do not receive
++- **Direct null-cipher / IMSI-disclosure detection** is not implemented on standard v2.1 installs and requires privileged OS APIs/permissions that normal no-root apps do not receive
+ - **Timing Advance** values may be unavailable on some hardware (returns 0)
+ - **Modem-level signaling** (RRC, NAS) is not accessible
+ - **GPS in deep repose** (screen off + stationary) is throttled by Android Doze
+diff -ruN '--exclude=v2.1-InformeCampo.md' '--exclude=CHANGELOG-v2.1.md' orig/README.md /home/claude/ic/README.md
+--- a/README.md	2026-09-14 13:26:17.000000000 +0000
++++ b/README.md	2026-09-14 14:01:56.060510067 +0000
+@@ -1,7 +1,7 @@
+ ![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)
+ ![Platform](https://img.shields.io/badge/Platform-Android%2010%2B-green.svg)
+ ![Root Required](https://img.shields.io/badge/Root-Not%20Required-brightgreen.svg)
+-![Status](https://img.shields.io/badge/Status-Stable%20v2.0-success.svg)
++![Status](https://img.shields.io/badge/Status-Stable%20v2.1-success.svg)
+ 
+ <table>
+   <tr>
+@@ -49,9 +49,11 @@
+ 
+ # Project Status
+ 
+-ICdetection v2.0 is currently considered stable and feature-complete within the limits of Android userland telemetry.
++ICdetection v2.1 is currently considered stable and feature-complete within the limits of Android userland telemetry.
+ 
+-The project is intentionally entering a data-collection and observation phase. During this period, future work will focus on:
++v2.1 is a **data-integrity release**. It adds no new detection claims. It exists because the first two months of field collection surfaced problems that made that very collection unable to answer the questions it was designed to answer: sub-threshold heuristic failures were recorded with their reason erased, API-supplied tower coordinates were overwriting the device's own GPS positions in the history, two heuristics were firing on carrier-aggregation artifacts, and the history was so sparse that the RF fingerprint never woke up. See `CHANGELOG-v2.1.md` for the full evidence and the fixes.
++
++Future work continues to focus on:
+ 
+ - bug fixes
+ - field validation
+@@ -283,6 +285,8 @@
+ 
+ Field testing showed that ARFCN is not reliable enough for this identity-stability decision because carrier aggregation can cause serving-cell ARFCN values to appear inconsistent. Therefore this heuristic deliberately focuses on PCI.
+ 
++**v2.1 correction.** Longer field data showed that carrier aggregation affects the reported PCI in exactly the same way: when the modem attributes a secondary carrier's ARFCN to the serving cell, it attributes that carrier's PCI too. Across 59 days the correlation was perfect — a given PCI appeared only ever on one ARFCN, with no crossover. The heuristic therefore now compares PCI values **only within the same carrier (ARFCN)**. A clone that reconfigures its PCI does so on its own carrier, so real detection is unaffected; what disappears is a false positive caused by the device's own reporting.
++
+ ## RF Quality Fingerprint
+ 
+ Complementing the signal-power baseline, the engine can learn each cell's signal-quality signature using RSRQ and SINR.
+@@ -423,6 +427,13 @@
+ - research
+ - archival workflows
+ 
++Columns: `Timestamp, NetType, CID, MNC, TAC, MCC, DBM, Verified, SecurityScore, FailedHeuristics, Lat, Lon, PCI, ARFCN, RSRQ, SINR, ThreatProb, ApiLat, ApiLon`.
++
++Two points matter for analysis:
++
++- **`Lat` / `Lon` are the device's own GPS position** at the moment of the observation, and nothing else. The antenna position reported by WiGLE/OpenCellID lives in its own `ApiLat` / `ApiLon` columns. Before v2.1 both were written to the same pair of columns, which silently mixed two different quantities.
++- **`FailedHeuristics` entries prefixed with `[sub-umbral]`** are heuristics that failed without reaching the alarm threshold. They are observations, not alerts, and they are recorded precisely so that false positives can be studied. Before v2.1 they were stored as `OK`.
++
+ Exports may contain sensitive location and cellular metadata. Users should treat exported files as private forensic material.
+ 
+ ---
+diff -ruN '--exclude=v2.1-InformeCampo.md' '--exclude=CHANGELOG-v2.1.md' orig/Status.md /home/claude/ic/Status.md
+--- a/Status.md	2026-09-14 13:26:17.000000000 +0000
++++ b/Status.md	2026-09-14 14:03:34.670971647 +0000
+@@ -1,20 +1,22 @@
+ # ICdetection Status
+ 
+-## v2.0 Fully Frozen
++## v2.1 — Data-integrity release
+ 
+-The v2.0 fix phase is now finished.
++The first field-collection phase is finished. It produced 1,065 records over 59 days, and reviewing that export against the source code showed something uncomfortable but useful: the collection could not answer the questions it was designed to answer.
+ 
+-ICdetection is entering a field data collection phase. For the next 2 to 3 months, the main goal is to collect real-world antenna history and observe how the app behaves across different places, routes, operators, and radio conditions.
++Sub-threshold heuristic failures were being written to history with their reason erased, so the false-positive study had no material. Antenna coordinates returned by the verification APIs were being written over the device's own GPS positions, which is where the impossible ~1,100 km coordinates came from — they never passed through the GPS at all, which is why the v2.0 GPS hardening could not stop them. Two heuristics were firing on carrier-aggregation artifacts. And the history was so sparse (median: 2 samples per cell) that the RSRQ/SINR fingerprint had been dormant for the entire period.
+ 
+-Because several important stability and data-integrity fixes have been applied, I recommend clearing the local database and starting fresh before beginning this collection phase. This helps ensure that the new baseline is built only from clean data.
++v2.1 fixes all of that. It adds **no new detection claims and no new heuristics**. Every change is backed by a measurement from the field data — the full evidence and reasoning is in `CHANGELOG-v2.1.md`.
+ 
+-No more fixes or feature changes are planned until v2.1, unless a truly critical bug is discovered.
++**Before collecting again, please clear the local database.** Rows written before v2.1 may hold an antenna coordinate where the GPS position belongs, and there is no reliable way to tell them apart afterwards. A clean baseline is worth more than a long contaminated one.
+ 
+-I have done my best to make this version as stable, honest, and useful as possible. This is still a defensive anomaly detector, not a guaranteed IMSI-catcher detector, and real-world data is necessary to understand its strengths and limitations.
++What changes for you in daily use:
+ 
+-If you find a bug, unexpected behavior, or something that does not look right, please open an issue and report it with as much detail as possible.
++- The history now records observations that failed a heuristic without reaching the alarm threshold, marked `[sub-umbral]` and shown in grey. These are **not** alerts — nothing sounds, nothing is flagged as a threat. They exist so false positives can be studied.
++- The app records a periodic sample of the serving cell while you stay on it (~5 min screen on, ~15 min screen off). It does not wake the GPS and does not force extra radio reads.
++- The CSV export has three new columns: `ThreatProb`, `ApiLat`, `ApiLon`. `Lat`/`Lon` are now your GPS position and nothing else.
+ 
+-Thank you very much to everyone testing the app. I really appreciate your patience during this data collection phase.
++This remains a defensive anomaly detector, not a guaranteed IMSI-catcher detector. If you find a bug or something that does not look right, please open an issue with as much detail as possible.
+ 
+ ---
+ 
+@@ -22,16 +24,14 @@
+ 
+ En español:
+ 
+-Esta app ha sido creada con mucho cariño, cuidado y respeto por sus límites técnicos.
++Se acabó la primera fase de recolección, y ha servido justo para lo que tenía que servir: enseñar dónde fallaba la app de verdad.
+ 
+-Esto no significa que detecte IMSI-catchers de forma garantizada, pero sí puede servir para visualizar anomalías en redes celulares y ayudar a observar comportamientos inusuales desde un dispositivo Android sin root.
++Los datos (1.065 registros en 59 días) mostraron cuatro cosas. Que el historial borraba el motivo de casi todas las anomalías antes de guardarlas, así que no había material para estudiar falsos positivos. Que las coordenadas imposibles de los Países Bajos no venían del GPS, sino de la respuesta de las APIs de verificación, que se escribía encima de la posición del dispositivo — por eso ninguno de los arreglos de GPS de v2.0 podía cazarlas. Que dos heurísticas estaban disparando por agregación de portadoras. Y que con una mediana de 2 muestras por celda, la huella RF llevaba dos meses dormida y así iba a seguir.
+ 
+-Me he esforzado mucho para llegar a este punto y para que todo sea lo más estable, honesto y útil posible.
++v2.1 arregla todo eso. No añade ni una detección nueva. Todo lo que cambia está justificado con una medición de los datos de campo; el detalle completo está en `CHANGELOG-v2.1.md`.
+ 
+-Estoy contento con el estado actual de la app y me alegra poder compartirla con todos vosotros. Antes de nada, quiero explicar que este proyecto nació como una herramienta personal, pensada inicialmente solo para mí, pero he decidido publicarla por si puede servir de ayuda a otras personas.
++**Antes de volver a recolectar, borrad el historial.** Las filas anteriores a v2.1 pueden llevar en `lat`/`lon` la posición de la antena en lugar de la vuestra, y después no hay forma fiable de distinguirlas. Vale más una base limpia que una larga y contaminada.
+ 
+-Con esto doy por cerrada la versión actual y comienzo una fase de recolección de datos durante los próximos dos o tres meses. Después de ese periodo evaluaré si hay margen para mejorarla todavía más.
+-
+-Un saludo a todos y muchas gracias por vuestra comprensión.
++Gracias a todos los que estáis probando la app. Vuestros datos son literalmente lo que ha hecho posible esta versión.
+ 
+ Alexis.
+diff -ruN '--exclude=v2.1-InformeCampo.md' '--exclude=CHANGELOG-v2.1.md' orig/app/build.gradle.kts /home/claude/ic/app/build.gradle.kts
+--- a/app/build.gradle.kts	2026-09-14 13:26:17.000000000 +0000
++++ b/app/build.gradle.kts	2026-09-14 13:55:44.546943701 +0000
+@@ -29,8 +29,8 @@
+         applicationId = "com.alexisgordr.icdetector"
+         minSdk = 29
+         targetSdk = 37
+-        versionCode = 2
+-        versionName = "2.0"
++        versionCode = 3
++        versionName = "2.1"
+ 
+         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+         vectorDrawables {
+diff -ruN '--exclude=v2.1-InformeCampo.md' '--exclude=CHANGELOG-v2.1.md' orig/app/src/main/java/com/alexisgordr/icdetector/core/ThreatAnalyzer.kt /home/claude/ic/app/src/main/java/com/alexisgordr/icdetector/core/ThreatAnalyzer.kt
+--- a/app/src/main/java/com/alexisgordr/icdetector/core/ThreatAnalyzer.kt	2026-09-14 13:26:17.000000000 +0000
++++ b/app/src/main/java/com/alexisgordr/icdetector/core/ThreatAnalyzer.kt	2026-09-14 13:52:05.342930671 +0000
+@@ -370,7 +370,28 @@
+                 val prevStrong = previousDbm != null && previousDbm >= -90
+                 // ¿Estaba la señal degradándose progresivamente? -> movimiento físico legítimo.
+                 val degrading = isSignalDegrading(recentRegisteredDbm)
+-                if (prevStrong && !degrading) {
++
++                // v2.1 — DOS CONDICIONES NUEVAS, a partir de datos de campo.
++                //
++                // En 59 días, 12 de las 34 penalizaciones del historial fueron transiciones de
++                // banda alta a sub-GHz con la celda nueva a -101, -108, -111, incluso -116 dBm.
++                // Eso no es un downgrade forzado: es salir de la cobertura de una microcelda
++                // urbana y caer a la capa sub-GHz, el handover más corriente que existe en LTE.
++                //
++                // El modelo de ataque que esta heurística persigue es otro: un transmisor táctico
++                // CERCANO que te arrastra a una banda de gran alcance. Si te arrastra, es porque
++                // te ofrece una señal buena — no una agonizante. De ahí:
++                //
++                //   newStrong           -> la celda nueva se ve FUERTE en términos absolutos.
++                //   notCoverageFallback -> y no es más débil que la que tenías, que es la firma
++                //                          inequívoca de "he perdido la celda anterior".
++                //
++                // Ambas son condiciones NECESARIAS del ataque, así que no se pierde detección
++                // real; lo que se elimina es el handover rutinario a la capa de cobertura.
++                val newStrong = active.dbm >= -95
++                val notCoverageFallback = previousDbm != null && active.dbm >= previousDbm
++
++                if (prevStrong && newStrong && notCoverageFallback && !degrading) {
+                     hBandDowngrade = false
+                     val from = BandPlan.approxFreqMhz(previousBand) ?: 0
+                     val to = BandPlan.approxFreqMhz(curBand) ?: 0
+@@ -394,14 +415,20 @@
+         // entre identidades AHORA, no de un cambio puntual ya asentado.
+         rfStability?.let { st ->
+             if (st.totalObservations >= 4) {
+-                // SOLO PCI. Los datos de campo demuestran que el ARFCN parpadea de forma benigna
+-                // por AGREGACIÓN DE PORTADORAS (el móvil atribuye a la celda servidora el ARFCN de
+-                // una portadora vecina): se vieron 7 celdas legítimas con el mismo puñado de ARFCN
+-                // (1301/2850/3600/6400) mezclados, mientras el PCI permanecía FIJO en cada una. El
+-                // PCI es la identidad real de capa física y nunca parpadea en una celda legítima,
+-                // así que es la única señal fiable para esta heurística. Un clon con PCI distinto se
+-                // detecta igual; uno que copie el PCI exacto cae fuera (limitación asumida a cambio
+-                // de eliminar de raíz los falsos positivos por ARFCN).
++                // SOLO PCI, y SOLO DENTRO DE LA MISMA PORTADORA (ARFCN).
++                //
++                // v2.0 ya había descartado el ARFCN como señal de identidad porque parpadea de
++                // forma benigna con AGREGACIÓN DE PORTADORAS: el módem atribuye a la celda
++                // servidora el ARFCN de una portadora secundaria. v2.1 corrige el hueco que
++                // quedaba: el módem hace lo MISMO con el PCI. En 59 días de datos reales, las
++                // celdas con varios PCI mostraban correlación PERFECTA entre PCI y ARFCN (PCI 200
++                // siempre en ARFCN 6400, PCI 473 siempre en 3600, sin un solo cruce). No eran dos
++                // identidades alternándose: era una antena vista por dos portadoras. La regla
++                // global disparaba ahí un -30 que era un falso positivo puro.
++                //
++                // Comparando dentro de cada portadora, ese caso desaparece y la detección real no
++                // se pierde: un clon que reconfigura su PCI lo hace en su propia portadora, así
++                // que sigue apareciendo como dos PCI sólidos en el MISMO ARFCN.
+                 val MIN_SHARE = 0.15
+                 fun solidSet(values: List<Pair<Int, Int>>): Set<Int> {
+                     val total = values.sumOf { it.second }
+@@ -409,13 +436,26 @@
+                     return values.filter { it.second >= 2 && it.second.toDouble() / total >= MIN_SHARE }
+                         .map { it.first }.toSet()
+                 }
+-                val solidPci = solidSet(st.distinctPci)
+-                val recentPci = st.recentDistinctPci.map { it.first }.toSet()
++
+                 // Sospechoso solo si >=2 PCI sólidos siguen activos recientemente (parpadeo real).
+-                val pciFlapping = solidPci.intersect(recentPci).size >= 2
++                val pciFlapping = if (st.pciByArfcn.isNotEmpty()) {
++                    st.pciByArfcn.any { (carrier, counts) ->
++                        val solid = solidSet(counts)
++                        if (solid.size < 2) return@any false
++                        val recent = st.recentPciByArfcn[carrier].orEmpty().map { it.first }.toSet()
++                        solid.intersect(recent).size >= 2
++                    }
++                } else {
++                    // Compatibilidad: historial sin desglose por portadora (p. ej. tests o filas
++                    // muy antiguas sin ARFCN). Se mantiene la regla global de v2.0.
++                    val solidPci = solidSet(st.distinctPci)
++                    val recentPci = st.recentDistinctPci.map { it.first }.toSet()
++                    solidPci.intersect(recentPci).size >= 2
++                }
++
+                 if (pciFlapping) {
+                     hRfStability = false
+-                    reasons.add("Identidad RF inestable: misma Cell ID alternando PCI recientemente (posible clon)")
++                    reasons.add("Identidad RF inestable: misma Cell ID alternando PCI en la misma portadora (posible clon)")
+                     score -= 30
+                 }
+             }
+diff -ruN '--exclude=v2.1-InformeCampo.md' '--exclude=CHANGELOG-v2.1.md' orig/app/src/main/java/com/alexisgordr/icdetector/models/CellRfStability.kt /home/claude/ic/app/src/main/java/com/alexisgordr/icdetector/models/CellRfStability.kt
+--- a/app/src/main/java/com/alexisgordr/icdetector/models/CellRfStability.kt	2026-09-14 13:26:17.000000000 +0000
++++ b/app/src/main/java/com/alexisgordr/icdetector/models/CellRfStability.kt	2026-09-14 13:49:06.290920027 +0000
+@@ -14,11 +14,34 @@
+  * confundir una RECONFIGURACIÓN permanente del operador (el valor viejo desaparece y solo el
+  * nuevo aparece reciente → benigno) con un CLON parpadeando (dos valores intercalados que
+  * siguen apareciendo recientes → sospechoso). Cada par es (valor, nº de observaciones).
++ *
++ * v2.1 — DESGLOSE POR PORTADORA (pciByArfcn / recentPciByArfcn).
++ * Los datos de campo (59 días, 173 celdas) demostraron que el PCI SÍ "parpadea" de forma
++ * benigna, por el mismo motivo que ya se descartó el ARFCN como señal de identidad: con
++ * AGREGACIÓN DE PORTADORAS el módem atribuye a la celda servidora el PCI *y* el ARFCN de una
++ * portadora secundaria. La correlación observada es perfecta — p. ej. una celda con PCI 200
++ * visto SIEMPRE en ARFCN 6400 y PCI 473 visto SIEMPRE en ARFCN 3600, sin un solo cruce. No son
++ * dos identidades alternándose: es una antena vista a través de dos portadoras.
++ *
++ * Por eso H15 pasa a comparar PCI ÚNICAMENTE dentro de una misma portadora. Un clon real que
++ * reconfigura su PCI lo hace en su propia portadora, así que no se pierde detección.
++ *
++ * Clave del mapa = ARFCN observado; [UNKNOWN_ARFCN] agrupa las filas antiguas sin ARFCN
++ * registrado. Vacío = historial sin datos de portadora → H15 usa la lógica global anterior.
+  */
+ data class CellRfStability(
+     val totalObservations: Int,
+     val distinctPci: List<Pair<Int, Int>>,
+     val distinctArfcn: List<Pair<Int, Int>>,
+     val recentDistinctPci: List<Pair<Int, Int>> = emptyList(),
+-    val recentDistinctArfcn: List<Pair<Int, Int>> = emptyList()
+-)
++    val recentDistinctArfcn: List<Pair<Int, Int>> = emptyList(),
++    /** ARFCN -> lista de (PCI, nº de observaciones) en los últimos 30 días. */
++    val pciByArfcn: Map<Int, List<Pair<Int, Int>>> = emptyMap(),
++    /** ARFCN -> lista de (PCI, nº de observaciones) en la ventana reciente (48 h). */
++    val recentPciByArfcn: Map<Int, List<Pair<Int, Int>>> = emptyMap()
++) {
++    companion object {
++        /** Clave para observaciones sin ARFCN registrado (filas anteriores a la migración v6). */
++        const val UNKNOWN_ARFCN = -1
++    }
++}
+diff -ruN '--exclude=v2.1-InformeCampo.md' '--exclude=CHANGELOG-v2.1.md' orig/app/src/main/java/com/alexisgordr/icdetector/models/HistoryRecord.kt /home/claude/ic/app/src/main/java/com/alexisgordr/icdetector/models/HistoryRecord.kt
+--- a/app/src/main/java/com/alexisgordr/icdetector/models/HistoryRecord.kt	2026-09-14 13:26:17.000000000 +0000
++++ b/app/src/main/java/com/alexisgordr/icdetector/models/HistoryRecord.kt	2026-09-14 13:52:22.182931672 +0000
+@@ -1,5 +1,19 @@
+ package com.alexisgordr.icdetector.models
+ 
++/**
++ * Prefijo con el que se marcan en el historial las observaciones que SÍ fallaron alguna
++ * heurística pero no llegaron al umbral de sospecha (score >= 70).
++ *
++ * v2.1: antes esas observaciones se guardaban con el score real pero con el motivo borrado
++ * ("OK"), porque applyTemporalConfidence ponía suspiciousReason a null cuando la celda no era
++ * sospechosa. Resultado: 33 de las 34 filas penalizadas de dos meses de campo eran filas del
++ * tipo "85 / OK" — una contradicción interna que hacía imposible estudiar falsos positivos o
++ * recalibrar nada. Ahora el motivo se conserva SIEMPRE, marcado con este prefijo para que quede
++ * claro que NO es una alarma: la separación forense (solo se alerta lo confirmado en 3 ciclos)
++ * se mantiene intacta, pero la evidencia deja de tirarse a la basura.
++ */
++const val SUBTHRESHOLD_PREFIX = "[sub-umbral]"
++
+ data class HistoryRecord(
+     val timestamp: String,
+     val netType: String,
+@@ -16,5 +30,20 @@
+     val pci: Int? = null,
+     val arfcn: Int? = null,
+     val rsrq: Int? = null,
+-    val sinr: Int? = null
++    val sinr: Int? = null,
++    /**
++     * Probabilidad bayesiana de amenaza calculada por BayesianScorer en el momento de la
++     * observación (0..95). v2.1: se persiste y se exporta para poder RECALIBRAR los likelihood
++     * ratios con datos reales — antes se calculaba en cada ciclo y se perdía al salir de la UI,
++     * así que no había nada que calibrar (roadmap #7).
++     */
++    val threatProbability: Float = 0f,
++    /**
++     * Coordenada de la ANTENA según WiGLE/OpenCellID. v2.1: vive en su propia columna y NO
++     * se mezcla nunca con [lat]/[lon], que son y solo son la posición GPS del dispositivo en
++     * el momento de la observación. Mezclar ambas magnitudes en la misma columna era la causa
++     * real de las coordenadas imposibles (~1.100 km) que aparecían en el historial.
++     */
++    val apiLat: Double? = null,
++    val apiLon: Double? = null
+ )
+diff -ruN '--exclude=v2.1-InformeCampo.md' '--exclude=CHANGELOG-v2.1.md' orig/app/src/main/java/com/alexisgordr/icdetector/network/WigleClient.kt /home/claude/ic/app/src/main/java/com/alexisgordr/icdetector/network/WigleClient.kt
+--- a/app/src/main/java/com/alexisgordr/icdetector/network/WigleClient.kt	2026-09-14 13:26:17.000000000 +0000
++++ b/app/src/main/java/com/alexisgordr/icdetector/network/WigleClient.kt	2026-09-14 13:55:46.130943795 +0000
+@@ -41,7 +41,7 @@
+         val request = Request.Builder()
+             .url(url)
+             .header("Authorization", credentials)
+-            .header("User-Agent", "ICdetection/1.0 (Android)")
++            .header("User-Agent", "ICdetection/2.1 (Android)")
+             .header("Accept", "application/json")
+             .build()
+         
+diff -ruN '--exclude=v2.1-InformeCampo.md' '--exclude=CHANGELOG-v2.1.md' orig/app/src/main/java/com/alexisgordr/icdetector/service/MiniICService.kt /home/claude/ic/app/src/main/java/com/alexisgordr/icdetector/service/MiniICService.kt
+--- a/app/src/main/java/com/alexisgordr/icdetector/service/MiniICService.kt	2026-09-14 13:26:17.000000000 +0000
++++ b/app/src/main/java/com/alexisgordr/icdetector/service/MiniICService.kt	2026-09-14 13:54:59.394941017 +0000
+@@ -852,8 +852,14 @@
+                         cachedReputation = dbHelper.getCellReputation(
+                             activeRaw.cellId, activeRaw.mnc, activeRaw.tac, activeRaw.mcc
+                         )
++                        // v2.1: se pasa la ubicación para acotar la huella RF a la zona actual.
++                        // Con el muestreo periódico, el sitio donde más tiempo pasas aporta la
++                        // mayoría de las muestras; sin acotar, la media se desplazaría hacia ese
++                        // sitio y la misma celda vista desde otro punto parecería "incoherente".
++                        // Con ubicación desconocida se mantiene el comportamiento clásico.
+                         cachedFingerprint = dbHelper.getCellRfFingerprint(
+-                            activeRaw.cellId, activeRaw.mnc, activeRaw.tac, activeRaw.mcc
++                            activeRaw.cellId, activeRaw.mnc, activeRaw.tac, activeRaw.mcc,
++                            nearLocation = currentLocation
+                         )
+                         cachedRfSignature = rfSig
+                         cachedRfStability = st
+@@ -1128,18 +1134,24 @@
+     private fun idleLatencyState(): String = if (isLatencyProbeActive()) "OK" else "N/A"
+ 
+     private fun applyTemporalConfidence(cell: CellData): CellData {
++        // Clave de racha por IDENTIDAD COMPLETA (roadmap Tier 1 #1). Antes se usaba el cellId
++        // pelado, así que una transición con el MISMO CID bajo distinto MNC/TAC/MCC (frontera,
++        // roaming, red compartida, multi-SIM) podía arrastrar la racha de otra celda. El resto de
++        // consultas ya usaban CID+MNC+TAC+MCC; esto cierra el último sitio que no lo hacía.
++        val streakKey = "${cell.mcc}-${cell.mnc}-${cell.tac}-${cell.cellId}"
++
+         // Si cambia la celda activa, resetear todos los streaks
+-        if (cell.cellId != lastStreakCellId) {
++        if (streakKey != lastStreakCellId) {
+             anomalyStreaks.clear()
+-            lastStreakCellId = cell.cellId
++            lastStreakCellId = streakKey
+         }
+ 
+         val currentStreak = if (cell.isSuspicious) {
+-            val newStreak = (anomalyStreaks[cell.cellId] ?: 0) + 1
+-            anomalyStreaks[cell.cellId] = newStreak
++            val newStreak = (anomalyStreaks[streakKey] ?: 0) + 1
++            anomalyStreaks[streakKey] = newStreak
+             newStreak
+         } else {
+-            anomalyStreaks.remove(cell.cellId)
++            anomalyStreaks.remove(streakKey)
+             0
+         }
+ 
+@@ -1150,6 +1162,12 @@
+             suspiciousReason = when {
+                 isConfirmed -> cell.suspiciousReason
+                 cell.isSuspicious -> "[$currentStreak/$CONFIRMATION_CYCLES ciclos confirmando] ${cell.suspiciousReason}"
++                // v2.1: la celda no llega al umbral de sospecha, pero SÍ falló heurísticas. Antes
++                // esto era `null` y el motivo se perdía para siempre: la fila acababa en el
++                // historial como "85 / OK". Ahora se conserva marcado como sub-umbral. No cambia
++                // nada del comportamiento de alarma (isSuspicious sigue siendo false, no suena
++                // nada, no se muestra como amenaza): solo deja de destruirse la evidencia.
++                cell.suspiciousReason != null -> "$SUBTHRESHOLD_PREFIX ${cell.suspiciousReason}"
+                 else -> null
+             }
+         )
+@@ -1238,28 +1256,66 @@
+         }
+     }
+ 
++    /**
++     * ¿Es creíble la coordenada que ha devuelto WiGLE/OpenCellID para esta antena?
++     *
++     * v2.1 — reescrita a partir de los datos de campo. La versión anterior hacía un chequeo de
++     * distancia de 50 km, pero SOLO si había un fix GPS vivo; sin fix, aceptaba cualquier cosa.
++     * Y "sin fix" es justo el caso frecuente (la app es GPS-only por diseño y bajo techo no hay
++     * fix), así que una coordenada constante y absurda —la misma, hasta el sexto decimal, para
++     * 46 celdas distintas y a ~1.100 km— entraba sin oposición y marcaba esas celdas como
++     * VERIFIED (+15 de score). Eso no es un problema estético: es una vía de FALSO NEGATIVO,
++     * porque una celda verificada por error queda mucho más difícil de marcar después.
++     *
++     * Ahora hay tres barreras, de más fuerte a más débil:
++     *  1. Centinela: una coordenada que ya consta para varias Cell ID distintas no identifica a
++     *     ninguna antena — es un valor por defecto de la API. Se rechaza. No necesita GPS.
++     *  2. Distancia contra el fix GPS vivo (50 km), como antes.
++     *  3. Si no hay fix vivo, se usa la última posición aceptada (persistida, máx. 6 h) con un
++     *     margen mucho más generoso (500 km) para no rechazar nada legítimo tras un viaje. Un
++     *     salto de 1.100 km sigue cayendo.
++     * Sin ninguna referencia disponible, se acepta (comportamiento clásico): la barrera 1 sigue
++     * activa igualmente.
++     */
+     private fun isValidCoordinate(lat: Double, lon: Double): Boolean {
+         if (lat == 0.0 && lon == 0.0) return false
+         if (lat < -90 || lat > 90) return false
+         if (lon < -180 || lon > 180) return false
+-        
+-        val currentLoc = getCurrentLocation()
+-        if (currentLoc == null) {
+-            // FIX: sin fix GPS no podemos validar la distancia, pero eso NO significa
+-            // que la coordenada de la API sea inválida. Antes se devolvía false y la
+-            // celda —aunque la API la verificara— se quedaba atascada en PENDING.
+-            // Aceptamos la coordenada (pasa los chequeos básicos); el sanity de
+-            // distancia se omite hasta tener un fix GPS fiable.
+-            return true
++
++        // 1. Coordenada centinela: la misma respuesta para varias celdas distintas.
++        try {
++            val sharedBy = dbHelper.countDistinctCellsWithApiCoordinate(lat, lon)
++            if (sharedBy >= API_SENTINEL_MIN_CELLS) {
++                appendLog("[API]", "Coordenada rechazada: ya consta para $sharedBy celdas distintas (valor por defecto de la API, no identifica ninguna antena).")
++                return false
++            }
++        } catch (_: Exception) {
++            // Si la consulta fallara, seguimos con las barreras de distancia.
++        }
++
++        // 2 y 3. Distancia contra la mejor referencia disponible.
++        val liveLoc = getCurrentLocation()
++        val reference: Location?
++        val maxDistanceMeters: Float
++        if (liveLoc != null) {
++            reference = liveLoc
++            maxDistanceMeters = 50_000f
++        } else {
++            val fallback = lastAcceptedLocation
++            val age = if (fallback != null) System.currentTimeMillis() - fallback.time else Long.MAX_VALUE
++            reference = if (fallback != null && age in 0..LOCATION_REFERENCE_MAX_AGE) fallback else null
++            maxDistanceMeters = 500_000f
+         }
+ 
++        if (reference == null) return true
++
+         val results = FloatArray(1)
+         Location.distanceBetween(
+-            currentLoc.latitude, currentLoc.longitude,
++            reference.latitude, reference.longitude,
+             lat, lon, results
+         )
+-        if (results[0] > 50000f) {
+-            appendLog("[API]", "Coordenadas rechazadas: a ${results[0].toInt()}m de tu posición")
++        if (results[0] > maxDistanceMeters) {
++            appendLog("[API]", "Coordenada rechazada: a ${(results[0] / 1000f).toInt()} km de tu posición de referencia.")
+             return false
+         }
+         return true
+@@ -1353,14 +1409,25 @@
+                 if (s == VerificationStatus.VERIFIED && data != null) {
+                     val lat = data.optDouble("trilat", data.optDouble("lat", Double.NaN))
+                     val lon = data.optDouble("trilong", data.optDouble("lon", Double.NaN))
+-                    if (!lat.isNaN() && !lon.isNaN() && isValidCoordinate(lat, lon)) {
++                    val hasCoords = !lat.isNaN() && !lon.isNaN()
++                    if (hasCoords && isValidCoordinate(lat, lon)) {
+                         processSuccessfulVerification(lat, lon, cell, cacheKey, neighbors, "WiGLE")
+                         return@launch
++                    } else if (hasCoords) {
++                        // v2.1: la API respondió con una coordenada que NO es creíble (centinela o
++                        // a distancia imposible). Antes esto caía igualmente en la rama "VERIFIED
++                        // sin coordenada" y la celda se llevaba el +15 de verificación por una
++                        // respuesta basura. Una verificación que no se sostiene no es una
++                        // verificación: se trata como no encontrada (se reintentará en 1 h).
++                        appendLog("[API]", "WiGLE: respuesta descartada por coordenada no creíble. La celda NO se da por verificada.")
++                        finalStatus = VerificationStatus.NOT_FOUND
+                     } else {
+-                        appendLog("[API]", "WiGLE: coordenadas inválidas descartadas.")
++                        appendLog("[API]", "WiGLE: respuesta sin coordenadas.")
++                        finalStatus = s
+                     }
++                } else {
++                    finalStatus = s
+                 }
+-                finalStatus = s
+             }
+             
+             // Fallback OpenCellID
+@@ -1369,14 +1436,21 @@
+                 if (s == VerificationStatus.VERIFIED && data != null) {
+                     val lat = data.optDouble("lat", Double.NaN)
+                     val lon = data.optDouble("lon", Double.NaN)
+-                    if (!lat.isNaN() && !lon.isNaN() && isValidCoordinate(lat, lon)) {
++                    val hasCoords = !lat.isNaN() && !lon.isNaN()
++                    if (hasCoords && isValidCoordinate(lat, lon)) {
+                         processSuccessfulVerification(lat, lon, cell, cacheKey, neighbors, "OpenCellID")
+                         return@launch
++                    } else if (hasCoords) {
++                        // Mismo criterio que en WiGLE: coordenada no creíble -> no se verifica.
++                        appendLog("[API]", "OpenCellID: respuesta descartada por coordenada no creíble. La celda NO se da por verificada.")
++                        finalStatus = VerificationStatus.NOT_FOUND
+                     } else {
+-                        appendLog("[API]", "OpenCellID: coordenadas inválidas descartadas.")
++                        appendLog("[API]", "OpenCellID: respuesta sin coordenadas.")
++                        finalStatus = s
+                     }
++                } else {
++                    finalStatus = s
+                 }
+-                finalStatus = s
+             }
+ 
+             // Guardar resultado negativo si ninguna lo encontró
+@@ -1440,7 +1514,7 @@
+             dbHelper.getCellReputation(cell.cellId, cell.mnc, cell.tac, cell.mcc)
+         } else null
+         val rfFingerprint = if (cell.cellId != "N/A") {
+-            dbHelper.getCellRfFingerprint(cell.cellId, cell.mnc, cell.tac, cell.mcc)
++            dbHelper.getCellRfFingerprint(cell.cellId, cell.mnc, cell.tac, cell.mcc, nearLocation = loc)
+         } else null
+ 
+         val updatedActive = cell.copy(verified = VerificationStatus.VERIFIED, lat = lat, lon = lon)
+@@ -1475,6 +1549,59 @@
+         }
+     }
+ 
++    // v2.1 — Marca del último registro de muestreo periódico (ver maybeLogPeriodicSample).
++    private var lastPeriodicLogTime = 0L
++
++    /**
++     * MUESTREO PERIÓDICO DE LA CELDA SERVIDORA (v2.1).
++     *
++     * Hasta v2.0 el historial solo se escribía en el handover. Consecuencia medida en 59 días de
++     * campo: MEDIANA DE 2 MUESTRAS POR CELDA, el 38 % de las celdas vistas una sola vez, y solo 6
++     * celdas de 173 llegando a las 30 muestras que exige la huella RF — es decir, la huella RF
++     * llevaba dos meses dormida y a ese ritmo lo habría seguido estando en marzo. Estar ocho horas
++     * en casa camping en la misma celda producía CERO muestras.
++     *
++     * Esto registra una observación cada pocos minutos mientras sigues en la misma celda, que es
++     * lo que de verdad alimenta los baselines (H13, huella RSRQ/SINR, reputación). Coste real:
++     *  - Batería: ninguna apreciable. NO despierta el GPS (usa getLastKnownLocation, que es lo que
++     *    ya haya) y NO fuerza lecturas de radio: se limita a persistir el análisis que el bucle
++     *    acaba de hacer de todas formas.
++     *  - Disco: ~150 filas/día, unas 9.000 en los 60 días de retención. Trivial para SQLite.
++     *
++     * La cadencia es más lenta con la pantalla apagada, coherente con el diseño de bajo consumo.
++     */
++    private fun maybeLogPeriodicSample(cell: CellData) {
++        if (cell.cellId == "N/A") return
++        if (cell.dbm == -999 || cell.dbm == Int.MAX_VALUE) return
++
++        val now = System.currentTimeMillis()
++        val interval = if (isScreenOn) PERIODIC_LOG_INTERVAL_SCREEN_ON else PERIODIC_LOG_INTERVAL_SCREEN_OFF
++        if (now - lastPeriodicLogTime < interval) return
++        lastPeriodicLogTime = now
++
++        scope.launch(Dispatchers.IO) {
++            val loc = getCurrentLocation()
++            dbHelper.logConnection(
++                netType = cell.networkType,
++                cid = cell.cellId,
++                mnc = cell.mnc,
++                tac = cell.tac,
++                mcc = cell.mcc,
++                dbm = cell.dbm,
++                verified = cell.verified,
++                score = cell.securityScore,
++                failedHeuristics = cell.suspiciousReason ?: "OK",
++                lat = loc?.latitude,
++                lon = loc?.longitude,
++                pci = cell.pci,
++                arfcn = cell.arfcn,
++                rsrq = cell.rsrq,
++                sinr = cell.sinr,
++                threatProbability = cell.threatProbability
++            )
++        }
++    }
++
+     private fun checkAlerts(cell: CellData, confirmed: Boolean = false) {
+         val cid = cell.cellId
+         val dbm = cell.dbm
+@@ -1533,12 +1660,20 @@
+                     pci = cell.pci,
+                     arfcn = cell.arfcn,
+                     rsrq = cell.rsrq,
+-                    sinr = cell.sinr
++                    sinr = cell.sinr,
++                    threatProbability = cell.threatProbability
+                 )
+             }
+             // --------------------------------------------------
+ 
+             prevCid = cid
++            // El registro del handover ya es una muestra: reinicia el reloj del muestreo periódico.
++            lastPeriodicLogTime = System.currentTimeMillis()
++        } else if (confirmed) {
++            // Misma celda que en el ciclo anterior: muestreo periódico (ver más abajo). Solo en la
++            // ruta del bucle principal (confirmed = true), nunca en la de re-análisis tras la API,
++            // para no duplicar filas por el mismo instante.
++            maybeLogPeriodicSample(cell)
+         }
+ 
+         if (dbm != -999 && dbm != Int.MAX_VALUE) {
+@@ -1619,7 +1754,8 @@
+                         pci = cell.pci,
+                         arfcn = cell.arfcn,
+                         rsrq = cell.rsrq,
+-                        sinr = cell.sinr
++                        sinr = cell.sinr,
++                        threatProbability = cell.threatProbability
+                     )
+                 }
+             }
+@@ -1760,8 +1896,15 @@
+         }
+ 
+         appendLog("[AUDIT]", "Resultado Global: ${cell.securityScore}% de seguridad.")
+-        if (cell.isSuspicious) appendLog("[SEC]", "🚨 CRÍTICO: Antena sospechosa detectada: ${cell.suspiciousReason}")
+-        else appendLog("[SYS]", "✅ Entorno validado como SEGURO.")
++        if (cell.isSuspicious) {
++            appendLog("[SEC]", "🚨 CRÍTICO: Antena sospechosa detectada: ${cell.suspiciousReason}")
++        } else if (cell.suspiciousReason != null) {
++            // v2.1: la celda no alcanza el umbral de alarma pero SÍ ha fallado heurísticas.
++            // Decir "SEGURO" aquí sería tan deshonesto como lo era guardar la fila como "OK".
++            appendLog("[SYS]", "Sin alarma, pero con observaciones: ${cell.suspiciousReason}")
++        } else {
++            appendLog("[SYS]", "✅ Entorno validado como SEGURO.")
++        }
+         _auditStatus.value = "Auditoría completada"
+     }
+ 
+@@ -1800,5 +1943,13 @@
+         // Si la referencia persistida es más vieja que esto (p. ej. viaje largo con la app
+         // cerrada), se ignora y el próximo fix se trata como bootstrap, evitando falsos rechazos.
+         private const val LOCATION_REFERENCE_MAX_AGE = 6L * 60 * 60 * 1000  // 6 h
++        // v2.1 — Una coordenada de API que ya consta para este nº de Cell ID distintas es un
++        // valor por defecto de la API, no la posición de una antena. Umbral bajo a propósito:
++        // dos antenas reales nunca comparten coordenada exacta.
++        private const val API_SENTINEL_MIN_CELLS = 3
++        // v2.1 — Cadencia del muestreo periódico de la celda servidora (ver maybeLogPeriodicSample).
++        // Más lenta con la pantalla apagada, coherente con el diseño de bajo consumo.
++        private const val PERIODIC_LOG_INTERVAL_SCREEN_ON = 5L * 60 * 1000    // 5 min
++        private const val PERIODIC_LOG_INTERVAL_SCREEN_OFF = 15L * 60 * 1000  // 15 min
+     }
+ }
+diff -ruN '--exclude=v2.1-InformeCampo.md' '--exclude=CHANGELOG-v2.1.md' orig/app/src/main/java/com/alexisgordr/icdetector/storage/CellDbHelper.kt /home/claude/ic/app/src/main/java/com/alexisgordr/icdetector/storage/CellDbHelper.kt
+--- a/app/src/main/java/com/alexisgordr/icdetector/storage/CellDbHelper.kt	2026-09-14 13:26:17.000000000 +0000
++++ b/app/src/main/java/com/alexisgordr/icdetector/storage/CellDbHelper.kt	2026-09-14 13:51:23.210928166 +0000
+@@ -20,7 +20,7 @@
+ class CellDbHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME, null, DATABASE_VERSION) {
+     companion object {
+         private const val DATABASE_NAME = "icdetector_history.db"
+-        private const val DATABASE_VERSION = 8
++        private const val DATABASE_VERSION = 9
+         const val TABLE_HISTORY = "history"
+         const val COLUMN_ID = "id"
+         const val COLUMN_TIMESTAMP = "timestamp"
+@@ -39,6 +39,14 @@
+         const val COLUMN_ARFCN = "arfcn"
+         const val COLUMN_RSRQ = "rsrq"
+         const val COLUMN_SINR = "sinr"
++        // v2.1 — Probabilidad bayesiana en el momento de la observación (0..95).
++        const val COLUMN_THREAT_PROB = "threat_prob"
++        // v2.1 — Coordenada de la ANTENA devuelta por la API (WiGLE/OpenCellID). Separada de
++        // lat/lon a propósito: lat/lon es SIEMPRE la posición GPS del dispositivo. Antes la
++        // coordenada de la API se escribía encima de lat/lon y contaminaba el historial
++        // geográfico (H11/H13) con posiciones a cientos de km.
++        const val COLUMN_API_LAT = "api_lat"
++        const val COLUMN_API_LON = "api_lon"
+     }
+ 
+     override fun onCreate(db: SQLiteDatabase) {
+@@ -60,7 +68,10 @@
+                     "$COLUMN_PCI INTEGER, " +
+                     "$COLUMN_ARFCN INTEGER, " +
+                     "$COLUMN_RSRQ INTEGER, " +
+-                    "$COLUMN_SINR INTEGER)",
++                    "$COLUMN_SINR INTEGER, " +
++                    "$COLUMN_THREAT_PROB REAL DEFAULT 0, " +
++                    "$COLUMN_API_LAT REAL, " +
++                    "$COLUMN_API_LON REAL)",
+         )
+         createIndexes(db)
+     }
+@@ -95,6 +106,20 @@
+             // cuando la tabla crecerá a decenas de miles de filas. Imposible que pierdan datos.
+             createIndexes(db)
+         }
++        if (oldVersion < 9) {
++            // Migración v2.1, aditiva y NO destructiva: tres columnas nuevas. Las filas
++            // existentes quedan intactas (threat_prob = 0, api_lat/api_lon = NULL). Cada ALTER
++            // en su propio try/catch por si una columna ya existiera en una instalación parcial.
++            //
++            // NOTA sobre el histórico anterior a v2.1: las filas viejas pueden tener en
++            // lat/lon la coordenada de la ANTENA (bug corregido en esta versión) en lugar de la
++            // posición GPS. No se tocan aquí — borrarlas o moverlas automáticamente sería
++            // adivinar. Se recomienda partir de un historial limpio (Ajustes > borrar historial)
++            // para que el baseline geográfico se construya solo con datos correctos.
++            try { db.execSQL("ALTER TABLE $TABLE_HISTORY ADD COLUMN $COLUMN_THREAT_PROB REAL DEFAULT 0") } catch (_: Exception) {}
++            try { db.execSQL("ALTER TABLE $TABLE_HISTORY ADD COLUMN $COLUMN_API_LAT REAL") } catch (_: Exception) {}
++            try { db.execSQL("ALTER TABLE $TABLE_HISTORY ADD COLUMN $COLUMN_API_LON REAL") } catch (_: Exception) {}
++        }
+     }
+ 
+     /**
+@@ -134,7 +159,8 @@
+         pci: Int? = null,
+         arfcn: Int? = null,
+         rsrq: Int? = null,
+-        sinr: Int? = null
++        sinr: Int? = null,
++        threatProbability: Float = 0f
+     ): Long {
+         val db = this.writableDatabase
+         val values = ContentValues().apply {
+@@ -155,14 +181,21 @@
+             if (arfcn != null) put(COLUMN_ARFCN, arfcn)
+             if (rsrq != null) put(COLUMN_RSRQ, rsrq)
+             if (sinr != null) put(COLUMN_SINR, sinr)
++            put(COLUMN_THREAT_PROB, threatProbability)
++            // api_lat / api_lon NO se escriben aquí: son un dato de verificación, no de la
++            // observación. Los rellena updateVerificationStatus cuando la API responde.
+         }
+         return db.insert(TABLE_HISTORY, null, values)
+     }
+ 
+     fun getKnownStatus(mnc: String, tac: String, cid: String, mcc: String, currentLat: Double? = null, currentLon: Double? = null): VerificationStatus {
+         val db = this.readableDatabase
+-        // Buscamos cualquier registro previo de esta antena que no sea PENDING o ERROR
+-        val query = "SELECT $COLUMN_VERIFIED, $COLUMN_LAT, $COLUMN_LON, $COLUMN_TIMESTAMP FROM $TABLE_HISTORY " +
++        // Buscamos cualquier registro previo de esta antena que no sea PENDING o ERROR.
++        // v2.1: la comprobación de cercanía usa api_lat/api_lon (posición de la ANTENA según la
++        // API), que es lo que esta función siempre quiso comparar. Antes leía lat/lon, donde la
++        // coordenada de la API acababa mezclada con la del GPS: la semántica era ambigua y
++        // dependía de por qué camino se hubiera escrito esa fila.
++        val query = "SELECT $COLUMN_VERIFIED, $COLUMN_API_LAT, $COLUMN_API_LON, $COLUMN_TIMESTAMP FROM $TABLE_HISTORY " +
+                     "WHERE $COLUMN_CID=? AND $COLUMN_MNC=? AND $COLUMN_TAC=? AND $COLUMN_MCC=? " +
+                     "AND $COLUMN_VERIFIED IN ('VERIFIED', 'NOT_FOUND') " +
+                     "ORDER BY CASE WHEN $COLUMN_VERIFIED='VERIFIED' THEN 1 ELSE 2 END ASC, $COLUMN_ID DESC LIMIT 1"
+@@ -209,12 +242,24 @@
+         return status
+     }
+ 
++    /**
++     * Marca como [status] las observaciones aún PENDING de esta celda y, si la API devolvió la
++     * posición de la antena, la guarda en [COLUMN_API_LAT]/[COLUMN_API_LON].
++     *
++     * v2.1 — CAMBIO IMPORTANTE: antes escribía esa coordenada en lat/lon, es decir, ENCIMA de la
++     * posición GPS del dispositivo (o rellenando las filas que se habían guardado sin GPS). Ese
++     * era el origen real de las coordenadas imposibles en el historial: no venían del GPS —
++     * nunca pasaban por isPlausibleFix() — sino de la respuesta de WiGLE/OpenCellID. Y contaminaba
++     * el baseline geográfico de H11/H13, que interpreta lat/lon como "dónde estaba yo".
++     *
++     * Ahora lat/lon es intocable: solo la escribe el GPS. Las dos magnitudes viven separadas.
++     */
+     fun updateVerificationStatus(mnc: String, tac: String, cid: String, status: VerificationStatus, lat: Double? = null, lon: Double? = null, mcc: String? = null) {
+         val db = this.writableDatabase
+         val values = ContentValues().apply {
+             put(COLUMN_VERIFIED, status.name)
+-            if (lat != null) put(COLUMN_LAT, lat)
+-            if (lon != null) put(COLUMN_LON, lon)
++            if (lat != null) put(COLUMN_API_LAT, lat)
++            if (lon != null) put(COLUMN_API_LON, lon)
+         }
+         val where = if (mcc != null) "$COLUMN_CID=? AND $COLUMN_MNC=? AND $COLUMN_TAC=? AND $COLUMN_MCC=? AND $COLUMN_VERIFIED='PENDING'"
+                     else "$COLUMN_CID=? AND $COLUMN_MNC=? AND $COLUMN_TAC=? AND $COLUMN_VERIFIED='PENDING'"
+@@ -243,7 +288,15 @@
+                           else cursor.getInt(cursor.getColumnIndexOrThrow(COLUMN_RSRQ))
+                 val sinr = if (cursor.isNull(cursor.getColumnIndexOrThrow(COLUMN_SINR))) null
+                           else cursor.getInt(cursor.getColumnIndexOrThrow(COLUMN_SINR))
+-                
++                // Columnas v2.1. getColumnIndex (sin OrThrow) para que un export nunca falle si
++                // la migración no se hubiera aplicado por cualquier motivo: -1 -> valor por defecto.
++                val tpIdx = cursor.getColumnIndex(COLUMN_THREAT_PROB)
++                val threatProb = if (tpIdx >= 0 && !cursor.isNull(tpIdx)) cursor.getFloat(tpIdx) else 0f
++                val apiLatIdx = cursor.getColumnIndex(COLUMN_API_LAT)
++                val apiLat = if (apiLatIdx >= 0 && !cursor.isNull(apiLatIdx)) cursor.getDouble(apiLatIdx) else null
++                val apiLonIdx = cursor.getColumnIndex(COLUMN_API_LON)
++                val apiLon = if (apiLonIdx >= 0 && !cursor.isNull(apiLonIdx)) cursor.getDouble(apiLonIdx) else null
++
+                 list.add(
+                     HistoryRecord(
+                         timestamp = cursor.getString(cursor.getColumnIndexOrThrow(COLUMN_TIMESTAMP)),
+@@ -265,7 +318,10 @@
+                         pci = pci,
+                         arfcn = arfcn,
+                         rsrq = rsrq,
+-                        sinr = sinr
++                        sinr = sinr,
++                        threatProbability = threatProb,
++                        apiLat = apiLat,
++                        apiLon = apiLon
+                     )
+                 )
+             } while (cursor.moveToNext())
+@@ -344,6 +400,14 @@
+     /**
+      * Obtiene registros previos de una misma Cell ID (excluyendo la ubicación actual)
+      * Limitado a los últimos 30 días para evitar datos obsoletos.
++     *
++     * v2.1: el LIMIT de SQL sube de 20 a 300 y el recorte a 20 pasa a hacerse DESPUÉS del filtro
++     * de distancia (>50 m). Motivo: con el muestreo periódico introducido en v2.1 hay muchas más
++     * observaciones desde el MISMO sitio, y todas ellas caen por el filtro de 50 m. Con el LIMIT
++     * antiguo, esas 20 filas recientes del mismo sitio se llevaban todo el cupo y H11 se quedaba
++     * sin registros útiles — es decir, más datos habrían DEGRADADO la heurística. Ahora se leen
++     * hasta 300 filas y se conservan las 20 primeras que de verdad aportan (otro emplazamiento),
++     * que es exactamente lo que H11 espera recibir.
+      */
+     fun getPreviousCellHistory(
+         cellId: String,
+@@ -376,14 +440,16 @@
+               AND $COLUMN_TIMESTAMP < ?
+               AND $COLUMN_TIMESTAMP > ?
+             ORDER BY $COLUMN_ID DESC
+-            LIMIT 20
++            LIMIT 300
+         """.trimIndent()
+-        
++
++        val maxUsableRecords = 20
+         val cursor = db.rawQuery(query, arrayOf(cellId, mnc, tac, mcc, recentThreshold, oldThreshold))
+         try {
+-        
++
+         if (cursor.moveToFirst()) {
+             do {
++                if (history.size >= maxUsableRecords) break
+                 val lat = cursor.getDouble(cursor.getColumnIndexOrThrow(COLUMN_LAT))
+                 val lon = cursor.getDouble(cursor.getColumnIndexOrThrow(COLUMN_LON))
+                 
+@@ -581,14 +647,22 @@
+      * no hay muestras suficientes — la firma "duerme" hasta acumular datos, evitando falsos
+      * positivos tempranos. Conservadora por diseño (RSRQ/SINR son métricas ruidosas).
+      */
+-    fun getCellRfFingerprint(cellId: String, mnc: String, tac: String, mcc: String, minSamples: Int = 30): CellRfFingerprint? {
++    fun getCellRfFingerprint(
++        cellId: String,
++        mnc: String,
++        tac: String,
++        mcc: String,
++        minSamples: Int = 30,
++        nearLocation: Location? = null,
++        radiusMeters: Float = 1000f
++    ): CellRfFingerprint? {
+         val db = this.readableDatabase
+         val ninetyDaysAgo = System.currentTimeMillis() - (90L * 24 * 60 * 60 * 1000)
+         val dateFormat = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault())
+         val threshold = dateFormat.format(Date(ninetyDaysAgo))
+ 
+         val query = """
+-            SELECT $COLUMN_RSRQ, $COLUMN_SINR
++            SELECT $COLUMN_RSRQ, $COLUMN_SINR, $COLUMN_LAT, $COLUMN_LON
+             FROM $TABLE_HISTORY
+             WHERE $COLUMN_CID = ?
+               AND $COLUMN_MNC = ?
+@@ -609,7 +683,7 @@
+                     val rsrq = cursor.getInt(0)
+                     val sinr = cursor.getInt(1)
+                     // Rangos físicos sensatos (descarta valores basura / no disponibles).
+-                    if (rsrq in -30..-1 && sinr in -20..40) {
++                    if (rsrq in -30..-1 && sinr in -20..40 && isSampleInZone(cursor, 2, 3, nearLocation, radiusMeters)) {
+                         rsrqs.add(rsrq)
+                         sinrs.add(sinr)
+                     }
+@@ -637,6 +711,65 @@
+     }
+ 
+     /**
++     * ¿Esta muestra del historial pertenece a la "zona" actual? Se usa para acotar la huella RF
++     * a un mismo emplazamiento (idea opcional del roadmap #5), necesario a partir de v2.1 porque
++     * el muestreo periódico acumula muchísimas muestras del sitio donde más tiempo pasas y, sin
++     * acotar, la media se desplazaría hacia ese sitio y la misma celda vista desde otro punto
++     * podría parecer "incoherente" sin motivo.
++     *
++     * Reglas: sin ubicación de referencia -> se aceptan todas (comportamiento clásico). Una fila
++     * SIN coordenadas se acepta (no se puede afirmar que sea de otra zona; excluirlas dejaría
++     * fuera casi todas las muestras de interior, que son justo las que dan volumen). Una fila CON
++     * coordenadas solo se acepta si está dentro del radio.
++     */
++    private fun isSampleInZone(
++        cursor: Cursor,
++        latIdx: Int,
++        lonIdx: Int,
++        nearLocation: Location?,
++        radiusMeters: Float
++    ): Boolean {
++        if (nearLocation == null) return true
++        if (cursor.isNull(latIdx) || cursor.isNull(lonIdx)) return true
++        val results = FloatArray(1)
++        Location.distanceBetween(
++            nearLocation.latitude, nearLocation.longitude,
++            cursor.getDouble(latIdx), cursor.getDouble(lonIdx), results
++        )
++        return results[0] <= radiusMeters
++    }
++
++    /**
++     * ¿Cuántas Cell ID DISTINTAS tienen ya registrada esta misma coordenada de API?
++     *
++     * v2.1 — detector de coordenadas "centinela". Los datos de campo mostraron una coordenada
++     * devuelta idéntica hasta el sexto decimal para 46 celdas distintas: eso no es la posición de
++     * ninguna antena, es un valor por defecto de la API. Una coordenada legítima pertenece a UNA
++     * antena; si aparece para varias, no verifica nada y no debe aceptarse.
++     *
++     * Tolerancia de ~11 m (0,0001°) para absorber redondeos entre respuestas.
++     */
++    fun countDistinctCellsWithApiCoordinate(lat: Double, lon: Double, toleranceDeg: Double = 0.0001): Int {
++        return try {
++            val db = this.readableDatabase
++            val query = """
++                SELECT COUNT(DISTINCT $COLUMN_CID || '-' || $COLUMN_MNC || '-' || $COLUMN_TAC || '-' || $COLUMN_MCC)
++                FROM $TABLE_HISTORY
++                WHERE $COLUMN_API_LAT IS NOT NULL
++                  AND $COLUMN_API_LON IS NOT NULL
++                  AND ABS($COLUMN_API_LAT - ?) <= ?
++                  AND ABS($COLUMN_API_LON - ?) <= ?
++            """.trimIndent()
++            db.rawQuery(
++                query,
++                arrayOf(lat.toString(), toleranceDeg.toString(), lon.toString(), toleranceDeg.toString())
++            ).use { c -> if (c.moveToFirst()) c.getInt(0) else 0 }
++        } catch (_: Exception) {
++            0
++        }
++    }
++
++    /**
+      * H15 (lifecycle): estabilidad de identidad RF de una Cell ID. Cuenta cuántos valores
+      * DISTINTOS de PCI y de ARFCN (no nulos) se han observado para esta identidad de celda
+      * (CID+MNC+TAC+MCC) en los últimos 30 días, con el nº de apariciones de cada uno y el
+@@ -652,6 +785,9 @@
+         val arfcnCounts = HashMap<Int, Int>()
+         val recentPciCounts = HashMap<Int, Int>()
+         val recentArfcnCounts = HashMap<Int, Int>()
++        // v2.1: mismo recuento de PCI, pero desglosado por portadora (ARFCN). Ver CellRfStability.
++        val pciByArfcn = HashMap<Int, HashMap<Int, Int>>()
++        val recentPciByArfcn = HashMap<Int, HashMap<Int, Int>>()
+         var total = 0
+         val db = this.readableDatabase
+         val now = System.currentTimeMillis()
+@@ -681,20 +817,30 @@
+                     total++
+                     val ts = cursor.getString(tsIdx) ?: ""
+                     val isRecent = ts > recentThreshold   // formato "yyyy-MM-dd HH:mm:ss" ordena lexicográficamente
+-                    if (!cursor.isNull(pciIdx)) {
+-                        val pci = cursor.getInt(pciIdx)
+-                        // PCI válido LTE/NR: 0..1007. Ignorar valores fuera de rango (lecturas basura).
+-                        if (pci in 0..1007) {
+-                            pciCounts[pci] = (pciCounts[pci] ?: 0) + 1
+-                            if (isRecent) recentPciCounts[pci] = (recentPciCounts[pci] ?: 0) + 1
++
++                    // PCI válido LTE/NR: 0..1007. Ignorar valores fuera de rango (lecturas basura).
++                    val pci = if (!cursor.isNull(pciIdx)) cursor.getInt(pciIdx).takeIf { it in 0..1007 } else null
++                    val arfcn = if (!cursor.isNull(arfcnIdx)) cursor.getInt(arfcnIdx).takeIf { it > 0 } else null
++
++                    if (pci != null) {
++                        pciCounts[pci] = (pciCounts[pci] ?: 0) + 1
++                        if (isRecent) recentPciCounts[pci] = (recentPciCounts[pci] ?: 0) + 1
++
++                        // Desglose por portadora. Las filas sin ARFCN (histórico anterior a la
++                        // migración v6) se agrupan bajo UNKNOWN_ARFCN, así que siguen contando
++                        // entre ellas y no se mezclan con las que sí tienen portadora conocida.
++                        val carrier = arfcn ?: CellRfStability.UNKNOWN_ARFCN
++                        pciByArfcn.getOrPut(carrier) { HashMap() }
++                            .let { it[pci] = (it[pci] ?: 0) + 1 }
++                        if (isRecent) {
++                            recentPciByArfcn.getOrPut(carrier) { HashMap() }
++                                .let { it[pci] = (it[pci] ?: 0) + 1 }
+                         }
+                     }
+-                    if (!cursor.isNull(arfcnIdx)) {
+-                        val arfcn = cursor.getInt(arfcnIdx)
+-                        if (arfcn > 0) {
+-                            arfcnCounts[arfcn] = (arfcnCounts[arfcn] ?: 0) + 1
+-                            if (isRecent) recentArfcnCounts[arfcn] = (recentArfcnCounts[arfcn] ?: 0) + 1
+-                        }
++
++                    if (arfcn != null) {
++                        arfcnCounts[arfcn] = (arfcnCounts[arfcn] ?: 0) + 1
++                        if (isRecent) recentArfcnCounts[arfcn] = (recentArfcnCounts[arfcn] ?: 0) + 1
+                     }
+                 } while (cursor.moveToNext())
+             }
+@@ -709,7 +855,9 @@
+             distinctPci = pciCounts.map { it.key to it.value },
+             distinctArfcn = arfcnCounts.map { it.key to it.value },
+             recentDistinctPci = recentPciCounts.map { it.key to it.value },
+-            recentDistinctArfcn = recentArfcnCounts.map { it.key to it.value }
++            recentDistinctArfcn = recentArfcnCounts.map { it.key to it.value },
++            pciByArfcn = pciByArfcn.mapValues { (_, counts) -> counts.map { it.key to it.value } },
++            recentPciByArfcn = recentPciByArfcn.mapValues { (_, counts) -> counts.map { it.key to it.value } }
+         )
+     }
+ }
+diff -ruN '--exclude=v2.1-InformeCampo.md' '--exclude=CHANGELOG-v2.1.md' orig/app/src/main/java/com/alexisgordr/icdetector/ui/HistoryScreen.kt /home/claude/ic/app/src/main/java/com/alexisgordr/icdetector/ui/HistoryScreen.kt
+--- a/app/src/main/java/com/alexisgordr/icdetector/ui/HistoryScreen.kt	2026-09-14 13:26:17.000000000 +0000
++++ b/app/src/main/java/com/alexisgordr/icdetector/ui/HistoryScreen.kt	2026-09-14 13:55:29.094942782 +0000
+@@ -23,6 +23,7 @@
+ import androidx.activity.compose.rememberLauncherForActivityResult
+ import androidx.activity.result.contract.ActivityResultContracts
+ import com.alexisgordr.icdetector.models.HistoryRecord
++import com.alexisgordr.icdetector.models.SUBTHRESHOLD_PREFIX
+ import com.alexisgordr.icdetector.storage.CellDbHelper
+ import com.alexisgordr.icdetector.utils.ExportUtils
+ import kotlinx.coroutines.Dispatchers
+@@ -192,10 +193,21 @@
+                                             }
+                                         }
+                                         
+-                                        // Fallos de heurísticas (si los hay)
++                                        // Fallos de heurísticas (si los hay). v2.1: las
++                                        // observaciones sub-umbral (heurísticas que fallaron sin
++                                        // llegar a alarma) se registran desde esta versión y se
++                                        // muestran en gris, claramente separadas de una alarma
++                                        // real en rojo. Antes no se guardaban: la fila decía "OK".
+                                         if ((record.failedHeuristics.isNotBlank()) && (record.failedHeuristics != "OK")) {
+                                             Spacer(Modifier.height(4.dp))
+-                                            Text("⚠️ Fallo: ${record.failedHeuristics}", color = Color(0xFFCF6679), fontSize = 10.sp, fontFamily = FontFamily.Monospace)
++                                            val isSubThreshold = record.failedHeuristics.startsWith(SUBTHRESHOLD_PREFIX)
++                                            Text(
++                                                if (isSubThreshold) "· ${record.failedHeuristics.removePrefix(SUBTHRESHOLD_PREFIX).trim()}"
++                                                else "⚠️ Fallo: ${record.failedHeuristics}",
++                                                color = if (isSubThreshold) Color(0xFF777777) else Color(0xFFCF6679),
++                                                fontSize = 10.sp,
++                                                fontFamily = FontFamily.Monospace
++                                            )
+                                         }
+                                     }
+                                     if (record != records.last()) {
+@@ -267,8 +279,15 @@
+     val notFoundCells = groupedItems.count { (_, r) -> r.any { it.verified.name == "NOT_FOUND" } }
+     val recordsWithGps = items.count { it.lat != null && it.lon != null }
+     val mostSeenCell = groupedItems.maxByOrNull { it.second.size }
++    // "Celdas anómalas" cuenta SOLO alarmas reales. Las observaciones sub-umbral que v2.1 empieza
++    // a registrar son material de análisis, no anomalías: incluirlas aquí inflaría el contador
++    // sin que hubiera pasado nada nuevo en la red.
+     val anomalousCells = groupedItems.count { (_, r) ->
+-        r.any { it.failedHeuristics.isNotBlank() && it.failedHeuristics != "OK" }
++        r.any {
++            it.failedHeuristics.isNotBlank() &&
++                it.failedHeuristics != "OK" &&
++                !it.failedHeuristics.startsWith(SUBTHRESHOLD_PREFIX)
++        }
+     }
+     val networkTypes = items.groupBy { it.netType }
+         .mapValues { it.value.size }
+diff -ruN '--exclude=v2.1-InformeCampo.md' '--exclude=CHANGELOG-v2.1.md' orig/app/src/main/java/com/alexisgordr/icdetector/ui/MainScreen.kt /home/claude/ic/app/src/main/java/com/alexisgordr/icdetector/ui/MainScreen.kt
+--- a/app/src/main/java/com/alexisgordr/icdetector/ui/MainScreen.kt	2026-09-14 13:26:17.000000000 +0000
++++ b/app/src/main/java/com/alexisgordr/icdetector/ui/MainScreen.kt	2026-09-14 13:55:05.754941395 +0000
+@@ -554,6 +554,17 @@
+                             fontFamily = FontFamily.Monospace,
+                             letterSpacing = 0.5.sp
+                         )
++                    } else if (streakText != null && streakText.startsWith(SUBTHRESHOLD_PREFIX)) {
++                        // v2.1: heurísticas fallidas que NO llegan al umbral de alarma. Se muestran
++                        // en gris, como observación, nunca como amenaza: informar sin alarmar.
++                        Spacer(Modifier.height(4.dp))
++                        Text(
++                            streakText.removePrefix(SUBTHRESHOLD_PREFIX).trim(),
++                            color = Color(0xFF777777),
++                            fontSize = 9.sp,
++                            fontFamily = FontFamily.Monospace,
++                            letterSpacing = 0.5.sp
++                        )
+                     }
+ 
+                     Spacer(Modifier.height(4.dp))
+diff -ruN '--exclude=v2.1-InformeCampo.md' '--exclude=CHANGELOG-v2.1.md' orig/app/src/main/java/com/alexisgordr/icdetector/utils/ExportUtils.kt /home/claude/ic/app/src/main/java/com/alexisgordr/icdetector/utils/ExportUtils.kt
+--- a/app/src/main/java/com/alexisgordr/icdetector/utils/ExportUtils.kt	2026-09-14 13:26:17.000000000 +0000
++++ b/app/src/main/java/com/alexisgordr/icdetector/utils/ExportUtils.kt	2026-09-14 13:55:39.750943416 +0000
+@@ -14,7 +14,15 @@
+             resolver.openOutputStream(uri).use { outputStream ->
+                 if (outputStream != null) {
+                     OutputStreamWriter(outputStream, StandardCharsets.UTF_8).use { writer ->
+-                        writer.append("Timestamp,NetType,CID,MNC,TAC,MCC,DBM,Verified,SecurityScore,FailedHeuristics,Lat,Lon,PCI,ARFCN,RSRQ,SINR\n")
++                        // v2.1 — tres columnas nuevas al final (se añaden al final a propósito,
++                        // para no romper scripts que leyeran el CSV por posición):
++                        //   ThreatProb     probabilidad bayesiana en el momento de la observación.
++                        //                  Sin ella no había forma de recalibrar los likelihood
++                        //                  ratios con datos de campo (roadmap #7).
++                        //   ApiLat/ApiLon  posición de la ANTENA según WiGLE/OpenCellID. Lat/Lon
++                        //                  son y solo son la posición GPS del dispositivo; antes
++                        //                  ambas magnitudes se mezclaban en las mismas columnas.
++                        writer.append("Timestamp,NetType,CID,MNC,TAC,MCC,DBM,Verified,SecurityScore,FailedHeuristics,Lat,Lon,PCI,ARFCN,RSRQ,SINR,ThreatProb,ApiLat,ApiLon\n")
+                         items.forEach { item ->
+                             val row = listOf(
+                                 item.timestamp,
+@@ -32,7 +40,10 @@
+                                 item.pci ?: "",
+                                 item.arfcn ?: "",
+                                 item.rsrq ?: "",
+-                                item.sinr ?: ""
++                                item.sinr ?: "",
++                                String.format(java.util.Locale.ROOT, "%.1f", item.threatProbability),
++                                item.apiLat ?: "",
++                                item.apiLon ?: ""
+                             ).joinToString(",") { csvEscape(it) }
+                             writer.append(row).append("\n")
+                         }
+diff -ruN '--exclude=v2.1-InformeCampo.md' '--exclude=CHANGELOG-v2.1.md' orig/app/src/test/java/com/alexisgordr/icdetector/core/BandDowngradeTest.kt /home/claude/ic/app/src/test/java/com/alexisgordr/icdetector/core/BandDowngradeTest.kt
+--- a/app/src/test/java/com/alexisgordr/icdetector/core/BandDowngradeTest.kt	2026-09-14 13:26:17.000000000 +0000
++++ b/app/src/test/java/com/alexisgordr/icdetector/core/BandDowngradeTest.kt	2026-09-14 13:56:24.306946064 +0000
+@@ -47,29 +47,31 @@
+ 
+     @Test
+     fun `dispara en downgrade forzado de banda alta a baja con senal fuerte`() {
+-        // Veníamos de B7 (alta, 2600 MHz) con -70 dBm (fuerte) y nos tiran a B20 (baja).
+-        // Señal previa no degradándose (lista vacía => sin evidencia de caída).
++        // Veníamos de B7 (alta, 2600 MHz) con -80 dBm (buena señal) y acabamos en B20 (baja)
++        // a -75 dBm: la celda nueva es FUERTE y no más débil que la anterior, que es la firma
++        // del "tirón" de un transmisor cercano. Señal previa no degradándose (lista vacía).
+         val result = analyze(
+-            active = lowBandCell(),
++            active = lowBandCell(),      // -75 dBm
+             previousBand = 7,
+-            previousDbm = -70,
++            previousDbm = -80,
+             recentDbm = emptyList()
+         )
+         assertFalse(
+-            "un salto alta->baja con señal previa fuerte debe marcar la heurística como fallida",
++            "un salto alta->baja con señal previa buena y celda nueva fuerte debe marcar la heurística como fallida",
+             result.heuristicReport.bandDowngradePassed
+         )
+     }
+ 
+     @Test
+     fun `NO dispara si la senal venia degradandose (excepcion del sotano)`() {
+-        // Mismo salto B7 -> B20, pero la señal venía cayendo progresivamente
+-        // (entrando a un garaje/sótano): es un movimiento físico legítimo.
++        // Mismo salto B7 -> B20 y mismas condiciones de potencia que el test anterior, pero la
++        // señal venía cayendo progresivamente (entrando a un garaje/sótano): movimiento físico
++        // legítimo. Aísla la excepción de degradación como única diferencia.
+         val degrading = listOf(-60, -72, -84, -96)
+         val result = analyze(
+             active = lowBandCell(),
+             previousBand = 7,
+-            previousDbm = -70,
++            previousDbm = -80,
+             recentDbm = degrading
+         )
+         assertTrue(
+@@ -77,6 +79,59 @@
+             result.heuristicReport.bandDowngradePassed
+         )
+     }
++
++    // ---------- v2.1: condiciones nuevas contra el handover rutinario a la capa de cobertura ----
++
++    @Test
++    fun `NO dispara si la celda nueva se ve debil (caida a la capa de cobertura)`() {
++        // Caso REAL del historial de campo: -85 dBm en B7 -> B20 a -108 dBm. Eso no es un
++        // transmisor cercano tirando de ti: es quedarte sin la microcelda y caer a la macro.
++        // Un catcher que te arrastra a banda baja se ve FUERTE, porque está cerca.
++        val weakLowBand = lowBandCell().copy(dbm = -108)
++        val result = analyze(
++            active = weakLowBand,
++            previousBand = 7,
++            previousDbm = -85,
++            recentDbm = emptyList()
++        )
++        assertTrue(
++            "una celda nueva a -108 dBm no puede ser un transmisor táctico cercano",
++            result.heuristicReport.bandDowngradePassed
++        )
++    }
++
++    @Test
++    fun `NO dispara si la celda nueva es mas debil que la anterior aunque sea fuerte`() {
++        // -84 dBm -> -90 dBm: la celda nueva supera el mínimo absoluto (-95) pero es MÁS DÉBIL
++        // que la que teníamos. Perder potencia al cambiar de banda es la firma de perder la
++        // celda anterior, no la de que alguien te capture.
++        val result = analyze(
++            active = lowBandCell().copy(dbm = -90),
++            previousBand = 7,
++            previousDbm = -84,
++            recentDbm = emptyList()
++        )
++        assertTrue(
++            "si la nueva banda baja se ve peor que la anterior, es repliegue a cobertura",
++            result.heuristicReport.bandDowngradePassed
++        )
++    }
++
++    @Test
++    fun `dispara si la celda nueva en banda baja se ve mas fuerte que la anterior`() {
++        // -85 dBm en B3 -> -70 dBm en B20: ganas 15 dB bajando a sub-GHz. Ese "tirón" de
++        // potencia es exactamente el modelo de ataque que la heurística persigue.
++        val result = analyze(
++            active = lowBandCell().copy(dbm = -70),
++            previousBand = 3,
++            previousDbm = -85,
++            recentDbm = emptyList()
++        )
++        assertFalse(
++            "ganar potencia al bajar a sub-GHz sí es el patrón sospechoso",
++            result.heuristicReport.bandDowngradePassed
++        )
++    }
+ 
+     @Test
+     fun `NO dispara sin banda previa (primer ciclo, sin referencia)`() {
+diff -ruN '--exclude=v2.1-InformeCampo.md' '--exclude=CHANGELOG-v2.1.md' orig/app/src/test/java/com/alexisgordr/icdetector/core/HeuristicsTest.kt /home/claude/ic/app/src/test/java/com/alexisgordr/icdetector/core/HeuristicsTest.kt
+--- a/app/src/test/java/com/alexisgordr/icdetector/core/HeuristicsTest.kt	2026-09-14 13:26:17.000000000 +0000
++++ b/app/src/test/java/com/alexisgordr/icdetector/core/HeuristicsTest.kt	2026-09-14 13:56:55.450947916 +0000
+@@ -354,6 +354,76 @@
+         assertFalse(analyzeRf(rf).rfStabilityPassed)
+     }
+ 
++    // ---------- v2.1: H15 compara PCI DENTRO de la misma portadora (ARFCN) ----------
++
++    @Test fun `H15 NO dispara si cada PCI vive en su propia portadora (caso real 79482913)`() {
++        // Caso real del historial de campo, el ÚNICO que disparaba H15 en 59 días:
++        // PCI 200 visto SIEMPRE en ARFCN 6400 y PCI 473 visto SIEMPRE en ARFCN 3600, sin un solo
++        // cruce. Es agregación de portadoras —una antena vista por dos portadoras—, no un clon.
++        // Con la regla global de v2.0 esto costaba -30 puntos de forma injustificada.
++        val rf = com.alexisgordr.icdetector.models.CellRfStability(
++            totalObservations = 13,
++            distinctPci = listOf(200 to 6, 473 to 7),
++            distinctArfcn = listOf(6400 to 6, 3600 to 7),
++            recentDistinctPci = listOf(200 to 3, 473 to 3),
++            recentDistinctArfcn = listOf(6400 to 3, 3600 to 3),
++            pciByArfcn = mapOf(6400 to listOf(200 to 6), 3600 to listOf(473 to 7)),
++            recentPciByArfcn = mapOf(6400 to listOf(200 to 3), 3600 to listOf(473 to 3))
++        )
++        assertTrue(
++            "dos PCI correlacionados 1:1 con dos ARFCN son agregación de portadoras, no un clon",
++            analyzeRf(rf).rfStabilityPassed
++        )
++    }
++
++    @Test fun `H15 SIGUE disparando si los dos PCI alternan en la MISMA portadora`() {
++        // Mismo reparto global de PCI que el test anterior, pero ambos valores conviven en la
++        // misma portadora: eso ya no se explica por agregación. Es el clon que H15 busca.
++        val rf = com.alexisgordr.icdetector.models.CellRfStability(
++            totalObservations = 13,
++            distinctPci = listOf(200 to 6, 473 to 7),
++            distinctArfcn = listOf(6400 to 13),
++            recentDistinctPci = listOf(200 to 3, 473 to 3),
++            recentDistinctArfcn = listOf(6400 to 6),
++            pciByArfcn = mapOf(6400 to listOf(200 to 6, 473 to 7)),
++            recentPciByArfcn = mapOf(6400 to listOf(200 to 3, 473 to 3))
++        )
++        assertFalse(
++            "dos PCI sólidos y recientes en la misma portadora siguen siendo sospechosos",
++            analyzeRf(rf).rfStabilityPassed
++        )
++    }
++
++    @Test fun `H15 no dispara si el segundo PCI de la portadora no es reciente`() {
++        // Reconfiguración asentada: el PCI viejo solo aparece en registros antiguos.
++        val rf = com.alexisgordr.icdetector.models.CellRfStability(
++            totalObservations = 12,
++            distinctPci = listOf(200 to 5, 473 to 7),
++            distinctArfcn = listOf(6400 to 12),
++            recentDistinctPci = listOf(473 to 4),
++            recentDistinctArfcn = listOf(6400 to 4),
++            pciByArfcn = mapOf(6400 to listOf(200 to 5, 473 to 7)),
++            recentPciByArfcn = mapOf(6400 to listOf(473 to 4))
++        )
++        assertTrue(analyzeRf(rf).rfStabilityPassed)
++    }
++
++    @Test fun `H15 agrupa bajo portadora desconocida las filas antiguas sin ARFCN`() {
++        // Historial anterior a la migración v6 (sin ARFCN): los PCI se comparan entre ellos bajo
++        // UNKNOWN_ARFCN, así que un parpadeo real se sigue detectando.
++        val unknown = com.alexisgordr.icdetector.models.CellRfStability.UNKNOWN_ARFCN
++        val rf = com.alexisgordr.icdetector.models.CellRfStability(
++            totalObservations = 10,
++            distinctPci = listOf(50 to 6, 120 to 4),
++            distinctArfcn = emptyList(),
++            recentDistinctPci = listOf(50 to 3, 120 to 2),
++            recentDistinctArfcn = emptyList(),
++            pciByArfcn = mapOf(unknown to listOf(50 to 6, 120 to 4)),
++            recentPciByArfcn = mapOf(unknown to listOf(50 to 3, 120 to 2))
++        )
++        assertFalse(analyzeRf(rf).rfStabilityPassed)
++    }
++
+     @Test fun `H15 no dispara sin datos de estabilidad (null)`() {
+         assertTrue(analyzeRf(null).rfStabilityPassed)
+     }
+diff -ruN '--exclude=v2.1-InformeCampo.md' '--exclude=CHANGELOG-v2.1.md' orig/v2.1Roadmap.md /home/claude/ic/v2.1Roadmap.md
+--- a/v2.1Roadmap.md	2026-09-14 13:26:17.000000000 +0000
++++ b/v2.1Roadmap.md	2026-09-14 14:04:00.493018597 +0000
+@@ -1,8 +1,23 @@
+-# ICdetection — v2.1 Roadmap
++# ICdetection — Roadmap (v2.1 shipped, v2.2 pending)
+ 
+-**Status:** v2.0 is frozen. No code changes are planned for the next 2–3 months except genuine bug fixes.
++**Status:** v2.1 is released. The first field-collection phase (1,065 records / 59 days) is complete and has been analysed against the source code; `CHANGELOG-v2.1.md` holds the full evidence.
+ 
+-The goal of this frozen period is to collect field data, export CSVs, study false positives, and decide future changes with real evidence instead of guessing.
++The freeze did its job, though not the way it was expected to: the most valuable result was discovering that the collection itself was broken in four ways. Those are now fixed, and a second collection phase can produce data that actually answers the remaining questions.
++
++### Shipped in v2.1 (see CHANGELOG-v2.1.md)
++
++- **Tier 1 #1 — full identity in temporal-confirmation keys.** Done.
++- **Tier 2 #6 — more mature H15 PCI logic.** Answered with data: PCI is compared only within the same carrier (ARFCN). The field evidence showed carrier aggregation affects the reported PCI exactly as it affects the ARFCN.
++- **H14 (band downgrade) false-positive control.** The new low-band cell must read strong and must not be weaker than the previous one.
++- **Forensic reason preserved for sub-threshold observations**, which is what unblocks #5 and #7 below.
++- **API tower coordinates separated from GPS positions**, with sentinel and distance validation.
++- **Periodic sampling of the serving cell**, which is what unblocks the RF fingerprint and the baselines.
++- **`ThreatProb` persisted and exported**, required before #7 is even possible.
++- Housekeeping: WiGLE `User-Agent` updated to 2.1.
++
++### Still open — and now actually answerable
++
++The items below were data-dependent and the first collection could not feed them. With v2.1's logging in place, a second 2–3 month phase should.
+ 
+ The remaining improvement margin is not a magic new signal against sophisticated IMSI-catchers. ICdetection is limited by Android userland: it cannot inspect RRC/NAS/baseband traffic like dedicated hardware tools can. The realistic goal for v2.1 is to improve internal coherence, reduce false positives, and make better use of local history.
+ 
+@@ -36,7 +51,7 @@
+ 
+ ## Tier 1 — Low Risk, High Value
+ 
+-### 1. Full Identity in Temporal-Confirmation Keys (residual of the MCC work)
++### 1. Full Identity in Temporal-Confirmation Keys (residual of the MCC work) — ✅ SHIPPED in v2.1
+ 
+ The history queries and the prefetch cache signature now use the full `CID + MNC + TAC + MCC` identity (shipped — see Already Shipped). The one remaining spot is the temporal-confirmation streak map (`anomalyStreaks` / `lastStreakCellId` in `applyTemporalConfidence()`), which still keys on bare `cellId` and resets only when `cellId` changes.
+ 
+@@ -63,6 +78,8 @@
+ 
+ **Expected effect:** better user interpretation and more conservative trust handling.
+ 
++**Revision after the field data.** Calendar age is the wrong axis. With the v2.0 sampling rate, a "90-day" cell could have 3 samples — the tier would have been lying. Tiers must be defined by **sample count and number of distinct days with observations**, not by how long ago the cell was first seen. v2.1's periodic sampling makes those numbers meaningful for the first time.
++
+ ---
+ 
+ ### 3. Advanced Modem Security Callbacks
+@@ -91,7 +108,7 @@
+ 
+ ---
+ 
+-### 6. More Mature H15 PCI Logic
++### 6. More Mature H15 PCI Logic — ✅ ANSWERED in v2.1 (kept for the record)
+ 
+ H15 currently focuses on PCI stability and ignores ARFCN because field data showed ARFCN can fluctuate legitimately due to carrier aggregation.
+ 
+@@ -112,6 +129,8 @@
+ 
+ **Goal:** review which heuristics fire often, which normalize quickly, and which persist.
+ 
++**Unblocked in v2.1.** This was impossible before: the reason for every sub-threshold failure was being erased at write time, and the Bayesian posterior was never persisted. Both are now in the export (`FailedHeuristics` with the `[sub-umbral]` prefix, and `ThreatProb`).
++
+ **Expected effect:** reduce overweighted noisy signals and preserve strong physical/contextual indicators.
+ 
+ ---
+@@ -217,7 +236,7 @@
+ These items have no detection impact but may improve polish or maintainability:
+ 
+ - Update minor lint warnings. (Several were already cleared: the redundant `inner` modifier and the now-callerless `triggerSecurityAlert`, kept `@Suppress("unused")` as the reserved v2.1 cipher-alert path.)
+-- Update WiGLE `User-Agent` from `ICdetection/1.0` to current version.
++- ~~Update WiGLE `User-Agent` from `ICdetection/1.0` to current version.~~ Done in v2.1.
+ - Add monochrome launcher icon.
+ - Consider moving user-facing strings to `strings.xml`.
+ - Consider instrumented/Robolectric tests for Android API paths.

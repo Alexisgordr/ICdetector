@@ -106,7 +106,11 @@ fun HeuristicItem(label: String, passed: Boolean) {
 fun VerificationBadge(status: VerificationStatus) {
     val (text, color) = when (status) {
         VerificationStatus.VERIFIED -> "REGISTRADA" to Color(0xFF4CAF50)
-        VerificationStatus.NOT_FOUND -> "NO ENCONTRADA" to Color(0xFFF44336)
+        // "NO ENCONTRADA" en rojo era otra herencia de cuando no estar en una base pública se
+        // trataba como un indicio. No lo es: las bases están incompletas. Gris, como corresponde a
+        // un dato de contexto que no acusa a nadie.
+        VerificationStatus.NOT_FOUND -> "SIN REGISTRO" to Color(0xFF888888)
+        VerificationStatus.REJECTED -> "RESPUESTA DESCARTADA" to Color(0xFFFFA000)
         VerificationStatus.PENDING -> "PENDIENTE" to Color(0xFF888888)
         VerificationStatus.ERROR -> "ERROR API" to Color(0xFFFFA000)
     }

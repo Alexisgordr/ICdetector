@@ -8,12 +8,23 @@
     <uses-permission android:name="android.permission.READ_PHONE_STATE" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
 
-    <!-- Required to turn on Airplane Mode -->
-    <uses-permission
-        android:name="android.permission.WRITE_SECURE_SETTINGS"
-        tools:ignore="ProtectedPermissions" />
+    <!-- WRITE_SECURE_SETTINGS eliminado en v2.1.
+         Era el camino "automático" del fallback de Modo Avión ante 2G/3G, pero nunca se concede
+         en una instalación normal (requiere adb), así que en la práctica siempre se ejecutaba la
+         rama de reserva: capturar la SecurityException y abrir los ajustes de Modo Avión para que
+         lo active la persona. Esa rama sigue intacta y el comportamiento observable no cambia.
+         Declarar un permiso privilegiado que no se usa contradice el principio de mínimo
+         privilegio que este proyecto dice defender, y es de lo primero que mira cualquiera que
+         audite el manifiesto de una app de seguridad. -->
 
-    <!-- Foreground service and notifications -->
+    <!-- Foreground service and notifications.
+
+         La supresión de ForegroundServiceType está acotada a este elemento (v2.1; antes estaba
+         desactivada para todo el módulo desde build.gradle.kts). Justificación: el servicio declara
+         android:foregroundServiceType="location", tiene FOREGROUND_SERVICE_LOCATION y pasa el tipo
+         en startForeground() en Android 14+, así que cumple los requisitos técnicos. Lo que el
+         aviso recuerda es la justificación de uso ante la tienda, que es un paso de publicación y
+         no de código — y que sigue pendiente mientras la app se distribuya por sideload. -->
     <uses-permission
         android:name="android.permission.FOREGROUND_SERVICE"
         tools:ignore="ForegroundServicePermission,ForegroundServiceType" />

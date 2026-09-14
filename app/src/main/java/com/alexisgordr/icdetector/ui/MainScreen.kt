@@ -41,6 +41,25 @@ import kotlin.time.Duration.Companion.milliseconds
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.launch
 
+/**
+ * Umbrales de presentación del score. Son sólo eso: cómo se pinta un número, no cómo se decide.
+ * Viven aquí, una vez, porque tenerlos duplicados fue precisamente el fallo de v2.0 — la cabecera
+ * y el panel de auditoría llegaban a conclusiones distintas sobre la misma celda.
+ */
+private const val SCORE_SAFE = 90
+private const val SCORE_WATCH = 70
+
+/**
+ * Color de un score de seguridad. **Único** criterio de color de toda la pantalla: si algo muestra
+ * un score, lo pinta con esto. Cualquier otro camino vuelve a abrir la puerta a que dos partes de
+ * la interfaz digan cosas distintas del mismo dato.
+ */
+internal fun securityScoreColor(score: Int): Color = when {
+    score >= SCORE_SAFE -> Color(0xFF4CAF50)
+    score >= SCORE_WATCH -> Color(0xFFFFA000)
+    else -> Color(0xFFCF6679)
+}
+
 @Composable
 fun MainLayout(context: Context, dbHelper: CellDbHelper, service: MiniICService?) {
     var hasLoc by remember {
@@ -207,11 +226,35 @@ fun MainScreenContent(dbHelper: CellDbHelper, service: MiniICService?) {
         } else {
             Box(modifier = Modifier.fillMaxSize().pullRefresh(pullRefreshState)) {
                 Column(modifier = Modifier.fillMaxSize()) {
+                    // v2.1 — Una sola verdad en pantalla.
+                    //
+                    // Hasta aquí esta cabecera decidía su color por `verified == VERIFIED` y el
+                    // panel de auditoría de abajo lo decidía por el score. Con el mismo dato —una
+                    // celda limpia que las bases públicas no conocen, 90%— la cabecera pintaba
+                    // ámbar y el panel verde. Dos veredictos para un único número: exactamente la
+                    // clase de contradicción que v2.1 existe para eliminar.
+                    //
+                    // El score es la salida del motor, así que el color sale del score, por la
+                    // misma función que usa el panel. Lo que las bases públicas contestaron no es
+                    // un veredicto de seguridad: es un dato de contexto, y va en su propia línea.
                     val (statusText, statusColor) = when {
                         active == null -> "BUSCANDO SEÑAL..." to Color(0xFF888888)
                         active.isSuspicious -> "SISTEMA EN COMPROMISO" to Color(0xFFCF6679)
-                        active.verified == VerificationStatus.VERIFIED -> "ENTORNO SEGURO" to Color(0xFF4CAF50)
-                        else -> "MONITORIZANDO — ${active.securityScore}%" to Color(0xFFFFA000)
+                        active.securityScore >= SCORE_SAFE -> "ENTORNO SEGURO — ${active.securityScore}%" to securityScoreColor(active.securityScore)
+                        active.securityScore >= SCORE_WATCH -> "OBSERVANDO — ${active.securityScore}%" to securityScoreColor(active.securityScore)
+                        else -> "ANOMALÍA SIN CONFIRMAR — ${active.securityScore}%" to securityScoreColor(active.securityScore)
+                    }
+
+                    // Contexto, no veredicto: qué contestaron WiGLE/OpenCellID. Que una celda no
+                    // esté en una base pública no la hace sospechosa —las bases están incompletas
+                    // y las celdas nuevas tardan meses en aparecer—, sólo la deja sin respaldo.
+                    val verificationNote = when (active?.verified) {
+                        VerificationStatus.VERIFIED -> "Registrada en bases públicas"
+                        VerificationStatus.NOT_FOUND -> "Sin registro en bases públicas (no implica amenaza)"
+                        VerificationStatus.REJECTED -> "Respuesta de las bases descartada; se reintentará"
+                        VerificationStatus.PENDING -> "Consultando bases públicas…"
+                        VerificationStatus.ERROR -> "Bases públicas sin respuesta"
+                        null -> null
                     }
 
                     // STICKY: Card de estado
@@ -233,6 +276,10 @@ fun MainScreenContent(dbHelper: CellDbHelper, service: MiniICService?) {
                             Column {
                                 Text("ESTADO DEL SECTOR", color = Color(0xFF666666), fontFamily = FontFamily.Monospace, fontSize = 10.sp)
                                 Text(statusText, color = statusColor, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Bold, fontSize = 16.sp, letterSpacing = 1.sp)
+                                if (verificationNote != null) {
+                                    Spacer(Modifier.height(2.dp))
+                                    Text(verificationNote, color = Color(0xFF777777), fontFamily = FontFamily.Monospace, fontSize = 9.sp)
+                                }
                             }
                             if (active?.isSuspicious == true) {
                                 Icon(Icons.Default.Warning, contentDescription = null, tint = Color.Red, modifier = Modifier.size(24.dp))
@@ -531,7 +578,7 @@ fun SecurityScorePanel(active: CellData, dbmHistory: List<Int>, geoHistory: List
     val auditFlow = remember(service) { service?.auditStatus ?: MutableStateFlow("Iniciando...") }
     val auditStatus by auditFlow.collectAsStateWithLifecycle()
     
-    val scoreColor = if (active.securityScore >= 90) Color(0xFF4CAF50) else if (active.securityScore >= 70) Color(0xFFFFA000) else Color.Red
+    val scoreColor = securityScoreColor(active.securityScore)
 
     Card(modifier = Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = Color(0xFF111111)), border = BorderStroke(0.5.dp, Color(0xFF222222)), shape = RoundedCornerShape(4.dp)) {
         Column(modifier = Modifier.padding(16.dp)) {
@@ -572,12 +619,16 @@ fun SecurityScorePanel(active: CellData, dbmHistory: List<Int>, geoHistory: List
 
                     // Probabilidad Bayesiana de amenaza
                     val threatColor = when {
-                        active.threatProbability >= 50f -> Color(0xFFCF6679)
-                        active.threatProbability >= 20f -> Color(0xFFFFA000)
+                        active.anomalyConfidence >= 50f -> Color(0xFFCF6679)
+                        active.anomalyConfidence >= 20f -> Color(0xFFFFA000)
                         else -> Color(0xFF555555)
                     }
+                    // v2.1 — "Amenaza estimada" sugería una probabilidad estadística validada.
+                    // El número sale de un posterior bayesiano con likelihood ratios estimados por
+                    // criterio experto, no medidos: es una confianza heurística, y la etiqueta
+                    // ahora lo dice. El valor no cambia, solo deja de prometer lo que no es.
                     Text(
-                        "Amenaza estimada: ${String.format(java.util.Locale.ROOT, "%.1f", active.threatProbability)}%",
+                        "Confianza de anomalía (no calibrada): ${String.format(java.util.Locale.ROOT, "%.1f", active.anomalyConfidence)}%",
                         color = threatColor,
                         fontSize = 9.sp,
                         fontFamily = FontFamily.Monospace

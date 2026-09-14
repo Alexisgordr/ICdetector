@@ -20,6 +20,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.alexisgordr.icdetector.models.CellData
+import com.alexisgordr.icdetector.models.TimingAdvanceUnit
 import com.alexisgordr.icdetector.core.BandPlan
 import java.util.Locale
 
@@ -54,16 +55,27 @@ fun SignalVisualizer(active: CellData, neighbors: List<CellData>) {
 
 @Composable
 fun GeoGraph(active: CellData, geoHistory: List<Float>) {
+    // v2.1 — La UI usa EXACTAMENTE la misma fuente de verdad que H6.
+    //
+    // Aquí quedaba el último resto de un error ya eliminado del motor: `if (is5g) 150 else 78`,
+    // decidiendo el factor por la cadena de tipo de red. El resultado era una incoherencia fea —
+    // ThreatAnalyzer podía concluir "no puedo afirmar esta distancia" y abstenerse, mientras esta
+    // pantalla le enseñaba al usuario un "3.000 m" muy convincente calculado con un multiplicador
+    // inventado. Enseñar una distancia que el propio motor considera indemostrable es peor que no
+    // enseñar ninguna: en una herramienta forense, la pantalla no puede afirmar más que el motor.
+    //
+    // Ahora ambos preguntan a TimingAdvanceUnit.toMeters(), así que no pueden discrepar.
     val isTaAvailable = active.timingAdvance != null && active.timingAdvance != Int.MAX_VALUE
-    val taValue = active.timingAdvance ?: -1 
-    
-    val is5g = active.networkType.contains("5G")
-    val multiplier = if (is5g) 150 else 78
-    val distanceMeters = taValue * multiplier
-    
+    val taValue = active.timingAdvance ?: -1
+    val taUnit = active.timingAdvanceUnit
+    val distanceMeters: Int? = active.timingAdvance?.let { taUnit.toMeters(it) }
+    // Resolución de la unidad: lo que vale "1" en esta tecnología. Solo para el texto "< X m".
+    val unitStep: Int? = taUnit.toMeters(1)
+
     val distanceText = when {
         !isTaAvailable || taValue < 0 -> "NO DISPONIBLE"
-        taValue == 0 -> "< $multiplier m"
+        distanceMeters == null -> "SIN CONVERSIÓN"
+        distanceMeters == 0 && unitStep != null -> "< $unitStep m"
         distanceMeters >= 1000 -> String.format(Locale.ROOT, "%.2f km", distanceMeters / 1000f)
         else -> "$distanceMeters m"
     }
@@ -74,17 +86,39 @@ fun GeoGraph(active: CellData, geoHistory: List<Float>) {
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.Bottom) {
             Column {
                 Text("TELEMETRÍA GEOMÉTRICA (TA)", color = Color(0xFF555555), fontFamily = FontFamily.Monospace, fontSize = 10.sp, fontWeight = FontWeight.Bold)
-                Text(if (isTaAvailable && taValue >= 0) "Timing Advance: $taValue" else "Timing Advance: BLOQUEADO", color = Color(0xFFFFA000), fontFamily = FontFamily.Monospace, fontSize = 14.sp, fontWeight = FontWeight.Bold)
+                Text(
+                    if (isTaAvailable && taValue >= 0) "Timing Advance: $taValue (${taUnit.name})"
+                    else "Timing Advance: BLOQUEADO",
+                    color = Color(0xFFFFA000), fontFamily = FontFamily.Monospace, fontSize = 14.sp, fontWeight = FontWeight.Bold
+                )
             }
             Column(horizontalAlignment = Alignment.End) {
-                Text("DISTANCIA FÍSICA APROX.", color = Color(0xFF444444), fontSize = 8.sp, fontFamily = FontFamily.Monospace)
-                Text(distanceText, color = if (isTaAvailable && taValue >= 0) Color.White else Color(0xFF888888), fontFamily = FontFamily.Monospace, fontSize = 16.sp, fontWeight = FontWeight.ExtraBold)
+                Text("DISTANCIA POR TA", color = Color(0xFF444444), fontSize = 8.sp, fontFamily = FontFamily.Monospace)
+                Text(distanceText, color = if (distanceMeters != null) Color.White else Color(0xFF888888), fontFamily = FontFamily.Monospace, fontSize = 16.sp, fontWeight = FontWeight.ExtraBold)
+
+                // v2.1 — Segunda estimación, por una vía completamente distinta: la coordenada
+                // que las bases públicas atribuyen a esta antena frente a tu fix GPS. Se muestra
+                // aparte y con su procedencia a la vista porque su precisión NO es comparable con
+                // la del TA: una coordenada colaborativa puede estar a cientos de metros del
+                // emplazamiento real. Presentarlas como si fueran lo mismo sería engañar.
+                val towerDistance = active.distanceToTowerMeters
+                if (towerDistance != null) {
+                    Spacer(Modifier.height(6.dp))
+                    Text("DISTANCIA SEGÚN BASE PÚBLICA", color = Color(0xFF444444), fontSize = 8.sp, fontFamily = FontFamily.Monospace)
+                    Text(
+                        if (towerDistance >= 1000) String.format(Locale.ROOT, "%.2f km", towerDistance / 1000f)
+                        else "$towerDistance m",
+                        color = Color(0xFF4CAF50), fontFamily = FontFamily.Monospace, fontSize = 16.sp, fontWeight = FontWeight.ExtraBold
+                    )
+                }
             }
         }
 
         Canvas(modifier = Modifier.fillMaxWidth().height(100.dp).padding(vertical = 8.dp)) {
-            if (geoHistory.isEmpty() || !isTaAvailable || taValue < 0) {
-                 drawContext.canvas.nativeCanvas.drawText("SENSOR DE TA BLOQUEADO POR HARDWARE", 20f, 50f, android.graphics.Paint().apply { color = android.graphics.Color.DKGRAY; textSize = 30f })
+            if (geoHistory.isEmpty() || !isTaAvailable || taValue < 0 || distanceMeters == null) {
+                 val motivo = if (isTaAvailable && distanceMeters == null) "TA SIN UNIDAD CONVERTIBLE (${taUnit.name})"
+                              else "SENSOR DE TA BLOQUEADO POR HARDWARE"
+                 drawContext.canvas.nativeCanvas.drawText(motivo, 20f, 50f, android.graphics.Paint().apply { color = android.graphics.Color.DKGRAY; textSize = 26f })
                  return@Canvas
             }
             
@@ -106,9 +140,13 @@ fun GeoGraph(active: CellData, geoHistory: List<Float>) {
         }
         
         if (!isTaAvailable || taValue < 0) {
-             Text("⚠️ NOTA: El chipset Tensor de Google restringe el acceso al TA en ciertas celdas para ahorrar energía. Esto no es un fallo de tu app, es una limitación de seguridad del hardware.", color = Color(0xFFCF6679), fontSize = 9.sp, fontFamily = FontFamily.Monospace)
+             Text("⚠️ NOTA: el módem no está reportando Timing Advance en esta celda. Es una limitación del firmware del teléfono, no un fallo de la app: sin ese dato H6 no juzga geometría.", color = Color(0xFFCF6679), fontSize = 9.sp, fontFamily = FontFamily.Monospace)
+        } else if (taUnit == TimingAdvanceUnit.STUB_ZERO) {
+             Text("⚠️ Tu módem devuelve 0 en todas las celdas: no es una medida, es un campo que el firmware no rellena. Sin root no hay forma de obtener el TA real en este teléfono. La distancia verde de arriba viene de otra fuente y no depende del TA.", color = Color(0xFFCF6679), fontSize = 9.sp, fontFamily = FontFamily.Monospace)
+        } else if (distanceMeters == null) {
+             Text("⚠️ TA recibido (${taUnit.name}) pero sin conversión a distancia demostrable. Se registra en el historial en crudo; no se usa para geometría ni se dibuja.", color = Color(0xFFCF6679), fontSize = 9.sp, fontFamily = FontFamily.Monospace)
         } else if (taValue == 0) {
-            Text("⚠️ TA=0: Distancia < $multiplier m o limitación del modem", color = Color(0xFFCF6679), fontSize = 9.sp, fontFamily = FontFamily.Monospace)
+            Text("⚠️ TA=0: distancia menor que un paso de ${unitStep ?: 0} m, o limitación del módem", color = Color(0xFFCF6679), fontSize = 9.sp, fontFamily = FontFamily.Monospace)
         } else {
              Text("NARANJA = VARIACIÓN DE DISTANCIA (TA)", color = Color(0xFFFFA000), fontSize = 9.sp, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Bold)
         }

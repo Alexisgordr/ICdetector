@@ -52,7 +52,7 @@ When the status turns **SISTEMA EN COMPROMISO**, check the Suspicious Reason fie
 
 - **"Salto de potencia anómalo (>35dB)":** An attacker might be boosting power to force your phone to latch onto their signal over legitimate ones.
 
-- **"TA vs Distancia GPS":** If the tower claims to be 5km away but the Timing Advance (TA) indicates it is 50 meters away, this is likely a spoofed tower. *Note: TA telemetry is highly device-dependent and may not be available on all hardware.*
+- **"TA vs Distancia GPS":** If the tower claims to be 5km away but the Timing Advance (TA) indicates it is 50 meters away, this is likely a spoofed tower. *Note: TA telemetry is highly device-dependent. If your modem reports a constant 0 the app marks it `STUB_ZERO` and this check simply does not run — abstaining is correct, an invented distance would be worse.*
 
 - **"Consistencia Geográfica (H11)":** The same Cell ID has been detected from physically inconsistent locations over time. This is one of the strongest contextual indicators in the engine because it relies on physics and local GPS history rather than public tower databases. It can be consistent with a mobile rogue base station cloning a legitimate tower, but it still requires careful interpretation.
 
@@ -100,7 +100,7 @@ If you detect a credible, persistent threat:
 
 3. **Post-Audit:** Export the history to CSV from the History tab.
 
-4. **Reporting:** Use the CSV data to identify patterns — specific times or locations where NOT FOUND or suspicious cells repeatedly appear. The export includes `Timestamp, NetType, CID, MNC, TAC, MCC, DBM, Verified, SecurityScore, FailedHeuristics, Lat, Lon, PCI, ARFCN, RSRQ, SINR, ThreatProb, ApiLat, ApiLon`. Pay special attention to `Lat`, `Lon`, `PCI`, `ARFCN`, `RSRQ` and `SINR` for RF fingerprinting analysis. Note that `Lat`/`Lon` are **your** GPS position when the observation was recorded, while `ApiLat`/`ApiLon` are where WiGLE/OpenCellID claim the antenna is — two different things, kept in separate columns since v2.1. `ThreatProb` is the Bayesian posterior at that moment, and rows whose `FailedHeuristics` starts with `[sub-umbral]` are heuristics that failed without reaching the alarm threshold (observations, not alerts). Fields are CSV-escaped (RFC 4180), so the file imports cleanly into spreadsheets and analysis tools.
+4. **Reporting:** Use the CSV data to identify patterns — specific times or locations where NOT FOUND or suspicious cells repeatedly appear. The export includes `Timestamp, NetType, CID, MNC, TAC, MCC, DBM, Verified, SecurityScore, FailedHeuristics, Lat, Lon, PCI, ARFCN, RSRQ, SINR, AnomalyConfidence, ApiLat, ApiLon, TA, TAUnit, TAMeters`. Pay special attention to `Lat`, `Lon`, `PCI`, `ARFCN`, `RSRQ` and `SINR` for RF fingerprinting analysis. Note that `Lat`/`Lon` are **your** GPS position when the observation was recorded, while `ApiLat`/`ApiLon` are where WiGLE/OpenCellID claim the antenna is — two different things, kept in separate columns since v2.1. `AnomalyConfidence` is the Bayesian posterior at that moment — a confidence from reasoned likelihood ratios, not a measured probability. `TA` is the raw Timing Advance with the unit it came in (`TAUnit`) and the distance derived from it (`TAMeters`, empty when the unit does not allow a defensible conversion). Rows whose `FailedHeuristics` starts with `[sub-umbral]` are heuristics that failed without reaching the alarm threshold (observations, not alerts). Validate any export with `python3 tools/check_export.py <file.csv>` — and blank `Lat`, `Lon`, `ApiLat` and `ApiLon` before sharing one with anybody. Fields are CSV-escaped (RFC 4180), so the file imports cleanly into spreadsheets and analysis tools.
 
 ---
 
@@ -109,7 +109,7 @@ If you detect a credible, persistent threat:
 ICdetection operates entirely in Android userland without root access. This means:
 
 - **Direct null-cipher / IMSI-disclosure detection** is not implemented on standard v2.1 installs and requires privileged OS APIs/permissions that normal no-root apps do not receive
-- **Timing Advance** values may be unavailable on some hardware (returns 0)
+- **Timing Advance** is unavailable on a lot of hardware. Many modems do not implement it and return a constant 0 instead of declaring it unavailable; the app detects that (three distinct cells all reporting 0) and marks the unit `STUB_ZERO`, deriving no geometry from it. There is no way around this without root — `getTimingAdvance()` is the only public API there is. When TA is unusable, the GEOM panel still shows a distance to the antenna taken from the public databases, clearly labelled as such
 - **Modem-level signaling** (RRC, NAS) is not accessible
 - **GPS in deep repose** (screen off + stationary) is throttled by Android Doze
 - **Legal interception** at the carrier level cannot be detected — it occurs inside the operator's infrastructure, not at the radio layer

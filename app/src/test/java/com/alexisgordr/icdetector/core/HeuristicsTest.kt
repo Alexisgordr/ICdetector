@@ -2,7 +2,9 @@ package com.alexisgordr.icdetector.core
 
 import com.alexisgordr.icdetector.models.CellData
 import com.alexisgordr.icdetector.models.VerificationStatus
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -30,6 +32,10 @@ class HeuristicsTest {
         mcc: String = "214",
         arfcn: Int? = 1500,            // B3, EARFCN válido
         timingAdvance: Int? = null,
+        // v2.1: la unidad del TA viaja con el valor. Por defecto se simula LTE, que es lo que
+        // hacían implícitamente los tests anteriores (multiplicador 78 m/índice).
+        timingAdvanceUnit: com.alexisgordr.icdetector.models.TimingAdvanceUnit =
+            com.alexisgordr.icdetector.models.TimingAdvanceUnit.LTE_INDEX,
         verified: VerificationStatus = VerificationStatus.PENDING,
         rsrq: Int? = null,
         sinr: Int? = null
@@ -43,6 +49,7 @@ class HeuristicsTest {
         mcc = mcc,
         arfcn = arfcn,
         timingAdvance = timingAdvance,
+        timingAdvanceUnit = timingAdvanceUnit,
         verified = verified,
         rsrq = rsrq,
         sinr = sinr
@@ -134,10 +141,90 @@ class HeuristicsTest {
             analyze(active(dbm = -55, timingAdvance = 0, verified = VerificationStatus.PENDING)).taDistancePassed
         )
     }
-    @Test fun `H6 no dispara si la celda esta verificada`() {
-        assertTrue(
+    /**
+     * v2.1 — H6 dispara igual esté la celda verificada o no.
+     *
+     * Este test afirmaba lo contrario: que una celda VERIFIED se libraba de la penalización de
+     * proximidad. Esa excepción era la última vía por la que el estado de verificación entraba en
+     * la puntuación, y en silencio. Se quitó para que el detector y la etiqueta externa sean
+     * ortogonales y puedan cruzarse al final de la fase de recolección sin circularidad.
+     * Ver VerificationNeutralityTest.
+     */
+    @Test fun `H6 dispara igual aunque la celda este verificada`() {
+        assertFalse(
             analyze(active(dbm = -55, timingAdvance = 0, verified = VerificationStatus.VERIFIED)).taDistancePassed
         )
+    }
+
+    // ---------- H6 y la unidad del Timing Advance ----------
+    private val TA_UNKNOWN = com.alexisgordr.icdetector.models.TimingAdvanceUnit.UNKNOWN
+    private val TA_NR_RAW = com.alexisgordr.icdetector.models.TimingAdvanceUnit.NR_RAW
+    private val TA_LTE = com.alexisgordr.icdetector.models.TimingAdvanceUnit.LTE_INDEX
+
+    @Test fun `H6 NO juzga si la unidad del TA es desconocida`() {
+        // Valor raspado del toString() del fabricante: no se sabe si es índice o microsegundos.
+        // Abstenerse es lo correcto — inventar la unidad erraba por un factor cercano a 2.
+        assertTrue(
+            "con unidad desconocida H6 debe abstenerse, no penalizar",
+            analyze(active(dbm = -55, timingAdvance = 0, timingAdvanceUnit = TA_UNKNOWN,
+                verified = VerificationStatus.PENDING)).taDistancePassed
+        )
+    }
+
+    @Test fun `H6 NO juzga con un TA de NR (conversion no defendible)`() {
+        // v2.1: el valor de getTimingAdvanceMicros() no admite una conversión defendible —su
+        // documentación declara microsegundos pero con el rango de un índice LTE (0..1282) y
+        // citando una especificación de LTE, y llega por reflexión. H6 se abstiene, igual que con
+        // una unidad desconocida.
+        assertTrue(
+            "NR no debe producir geometría mientras la conversión no sea verificable",
+            analyze(active(dbm = -55, timingAdvance = 0, timingAdvanceUnit = TA_NR_RAW,
+                verified = VerificationStatus.PENDING)).taDistancePassed
+        )
+        assertTrue(
+            analyze(active(dbm = -55, timingAdvance = 3, timingAdvanceUnit = TA_NR_RAW,
+                verified = VerificationStatus.PENDING)).taDistancePassed
+        )
+    }
+
+    @Test fun `H6 conserva el comportamiento LTE exacto de v2 1 (TA 0 y 1 disparan, 2 no)`() {
+        // El umbral pasó de `ta <= 1` a `metros <= 100`. En LTE son equivalentes: 0 m, 78 m, 156 m.
+        assertFalse(analyze(active(dbm = -55, timingAdvance = 0, timingAdvanceUnit = TA_LTE,
+            verified = VerificationStatus.PENDING)).taDistancePassed)
+        assertFalse(analyze(active(dbm = -55, timingAdvance = 1, timingAdvanceUnit = TA_LTE,
+            verified = VerificationStatus.PENDING)).taDistancePassed)
+        assertTrue(analyze(active(dbm = -55, timingAdvance = 2, timingAdvanceUnit = TA_LTE,
+            verified = VerificationStatus.PENDING)).taDistancePassed)
+    }
+
+    @Test fun `solo las unidades con conversion firme producen metros`() {
+        val gsm = com.alexisgordr.icdetector.models.TimingAdvanceUnit.GSM_INDEX
+
+        // LTE: 16·Ts de ida y vuelta ≈ 78,12 m por índice. El extremo del rango (1282) da los
+        // ~100 km que son el radio máximo real de una celda LTE: la física encaja.
+        assertEquals(0, TA_LTE.toMeters(0)!!)
+        assertEquals(78, TA_LTE.toMeters(1)!!)
+        assertEquals(99_996, TA_LTE.toMeters(1282)!!)   // ≈100 km, el radio máximo de una celda LTE
+
+        // GSM: periodo de bit de 3,69 µs ida y vuelta ≈ 554 m.
+        assertEquals(554, gsm.toMeters(1)!!)
+
+        // NR y desconocida: sin conversión defendible, no hay metros. Ninguna cantidad de
+        // ingenio en la heurística arregla un número cuya unidad no se puede afirmar.
+        assertNull("NR no debe convertirse mientras la unidad no sea verificable",
+            TA_NR_RAW.toMeters(1))
+        assertNull(TA_NR_RAW.toMeters(1282))
+        assertNull(TA_UNKNOWN.toMeters(5))
+
+        // Un TA negativo no es físico en ninguna unidad.
+        assertNull("un TA negativo no es físico", TA_LTE.toMeters(-1))
+        assertNull(gsm.toMeters(-1))
+
+        // Y la propiedad que las heurísticas usan para preguntarlo de un vistazo.
+        assertTrue(TA_LTE.isUsableForGeometry)
+        assertTrue(gsm.isUsableForGeometry)
+        assertFalse(TA_NR_RAW.isUsableForGeometry)
+        assertFalse(TA_UNKNOWN.isUsableForGeometry)
     }
 
     // ---------- H7: Vecinos fantasma ----------

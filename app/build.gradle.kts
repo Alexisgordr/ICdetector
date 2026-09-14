@@ -52,12 +52,11 @@ android {
     }
 
     lint {
-        // El servicio ya declara foregroundServiceType="location", tiene el permiso
-        // FOREGROUND_SERVICE_LOCATION y pasa el tipo en startForeground() (Android 14+),
-        // así que cumple todos los requisitos técnicos. Este aviso es solo un recordatorio
-        // de la justificación ante Google Play (un paso de publicación, no de código), por
-        // lo que se desactiva para no dejar ruido en builds.
-        disable += "ForegroundServiceType"
+        // v2.1 — Aquí había un `disable += "ForegroundServiceType"` a nivel de proyecto.
+        // Apagar globalmente un aviso sobre el uso de ubicación en primer plano es justo lo que
+        // no debe hacer una app que pide ser auditada: silencia el aviso en TODO el módulo,
+        // incluido el código que se escriba mañana. La supresión vive ahora donde corresponde,
+        // acotada al elemento concreto del manifiesto y con su justificación al lado.
     }
 
     packaging {

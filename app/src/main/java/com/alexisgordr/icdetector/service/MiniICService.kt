@@ -107,9 +107,11 @@ class MiniICService : Service() {
     private var pendingCoordsSince = 0L
     private var lastReposeCoordFixAttempt = 0L
 
-    private val anomalyStreaks = ConcurrentHashMap<String, Int>()
-    private var lastStreakCellId = ""
-    private val CONFIRMATION_CYCLES = 3
+    // v2.1: la confirmación temporal vive en core/TemporalConfidence para poder testearla de
+    // extremo a extremo (ver ScenarioTest). El servicio solo la usa.
+    private val temporalConfidence = com.alexisgordr.icdetector.core.TemporalConfidence(CONFIRMATION_CYCLES)
+    // v2.1 — ¿el TA de este módem es una medida o un campo sin rellenar? Ver TimingAdvanceSanity.
+    private val taSanity = com.alexisgordr.icdetector.core.TimingAdvanceSanity()
     private var hasLoggedMissingCredentials = false
 
     // Caché del prefetch de BD (heurísticas 11 y 13) para no repetir las consultas SQLite
@@ -125,6 +127,8 @@ class MiniICService : Service() {
     private var cachedRfStability: CellRfStability? = null
     private var cachedReputation: CellReputation? = null
     private var cachedFingerprint: CellRfFingerprint? = null
+    // v2.1 — Posición de la antena (api_lat/api_lon) para mostrar la distancia. Solo display.
+    private var cachedApiLocation: Pair<Double, Double>? = null
     private var cachedRfSignature = ""
     private var cachedRfTimestamp = 0L
     private var cacheTimestamp = 0L
@@ -181,6 +185,13 @@ class MiniICService : Service() {
     // Fix #1: guarda el cellId cuya alarma ya se ha persistido en el episodio actual, para no
     // registrar la misma evidencia en cada ciclo. Se resetea en cada cambio de celda (handover).
     private var lastAlarmLoggedCellId: String? = null
+    // Identidad y estado de verificación de la celda cuya auditoría está escrita ahora mismo en el
+    // terminal. El terminal es un buffer corrido de 40 líneas: mezcla celdas y momentos, y la
+    // auditoría se escribe en el handover, cuando la celda todavía está PENDING. La respuesta de
+    // las bases públicas llega después y cambia la puntuación, así que sin esto el último veredicto
+    // escrito podía decir "100% — SEGURO" mientras la cabecera ya mostraba la cifra definitiva.
+    private var auditedCellKey: String? = null
+    private var auditedVerified: VerificationStatus? = null
     private var prevNetType: String? = null
     private var prevDbm: Int? = null
     // Estado para heurística 14 (band downgrade intra-LTE). Guardan la última celda
@@ -299,7 +310,7 @@ class MiniICService : Service() {
                         val activeForPrune = _cellFlow.value.firstOrNull { it.isRegistered }
                         pruneCaches(
                             activeForPrune?.cellId,
-                            activeForPrune?.let { "${it.mcc}-${it.mnc}-${it.tac}-${it.cellId}" }
+                            activeForPrune?.identityKey
                         )
 
                         // En reposo (pantalla apagada) con una celda esperando coordenadas
@@ -627,7 +638,7 @@ class MiniICService : Service() {
             if (Build.VERSION.SDK_INT >= 34) {
                 val securityCallback = ImsiCatcherSecurityCallback()
                 telephonyManager.registerTelephonyCallback(mainExecutor, securityCallback)
-                appendLog("[SYS]", "Callback de telefonía registrado (detección de cifrado nulo/IMSI: pendiente API Android 16 — v2.1).")
+                appendLog("[SYS]", "Callback de telefonía registrado (detección de cifrado nulo/IMSI: pendiente API Android 16).")
             }
         } catch (e: Exception) {
             isHardwareCipheringAvailable = false
@@ -637,7 +648,7 @@ class MiniICService : Service() {
     }
 
     // Reservada para la ruta de alerta de la detección de cifrado nulo (A5/0) e identificadores
-    // (IMSI), planificada para v2.1 con las APIs de Android 16. Actualmente NO tiene llamadores
+    // (IMSI), pendiente de las APIs de Android 16. Actualmente NO tiene llamadores
     // porque esa detección aún no está implementada (ver ImsiCatcherSecurityCallback). Se mantiene
     // completa y lista para conectarla cuando se implemente; el suppress evita el warning de "sin uso".
     @Suppress("unused")
@@ -770,7 +781,7 @@ class MiniICService : Service() {
                 connectionRetryCount = 0
             }
 
-            var list = mutableListOf<CellData>()
+            val list = mutableListOf<CellData>()   // v2.1: ya no se reasigna (el TA no se comparte entre celdas)
             infoList?.forEach { info ->
                 val networkTypeString = if (info.isRegistered && info is CellInfoLte) {
                     getLteSpecificType()
@@ -801,14 +812,50 @@ class MiniICService : Service() {
                 return
             }
 
-            val bestTa = list.firstOrNull { it.timingAdvance != null && it.timingAdvance >= 0 }?.timingAdvance
-            
-            if (bestTa != null) {
-                list = list.asSequence().map { cell -> 
-                    if (cell.isRegistered && cell.timingAdvance == null) {
-                        cell.copy(timingAdvance = bestTa)
-                    } else cell
-                }.toMutableList()
+            // v2.1 — EL TIMING ADVANCE NO SE COMPARTE ENTRE CELDAS.
+            //
+            // Antes se cogía el PRIMER TA disponible de toda la lista (vecinas incluidas) y se le
+            // estampaba a la celda registrada si ella no tenía. Un TA es la distancia de ida y
+            // vuelta a UNA antena concreta: atribuírselo a otra es inventar una geometría. Y esa
+            // geometría alimenta H6, que penaliza -40 (lo máximo del sistema) por "Suplantación
+            // TA" — es decir, la señal más cara del motor podía estar midiendo otra antena.
+            //
+            // Se mantiene el único caso legítimo que esto cubría: que la MISMA celda aparezca
+            // duplicada en la lista (pasa con NSA y con algunos módems) y solo una de las entradas
+            // traiga el TA. Ahí sí es el mismo emisor, así que se copia junto con su unidad.
+            val activeIndex = list.indexOfFirst { it.isRegistered }
+            if (activeIndex >= 0) {
+                val activeCell = list[activeIndex]
+                if (activeCell.timingAdvance == null && activeCell.cellId != "N/A") {
+                    val sameCellWithTa = list.firstOrNull { c ->
+                        !c.isRegistered &&
+                            c.timingAdvance != null && c.timingAdvance >= 0 &&
+                            c.cellId == activeCell.cellId &&
+                            c.mnc == activeCell.mnc &&
+                            c.tac == activeCell.tac &&
+                            c.mcc == activeCell.mcc
+                    }
+                    if (sameCellWithTa != null) {
+                        list[activeIndex] = activeCell.copy(
+                            timingAdvance = sameCellWithTa.timingAdvance,
+                            timingAdvanceUnit = sameCellWithTa.timingAdvanceUnit
+                        )
+                    }
+                }
+
+                // v2.1 — Un módem que no implementa el TA suele devolver 0 en lugar de declarar
+                // "no disponible", y ese 0 es indistinguible de "estás pegado a la antena" en una
+                // sola lectura. Si varias celdas distintas solo dan 0, es un campo sin rellenar:
+                // se marca STUB_ZERO y deja de producir geometría por el camino de siempre. Sin
+                // esto, cualquier celda fuerte sin verificar arrastraría un -15 perpetuo por
+                // "Proximidad anómala (TA)" originado en el firmware, no en la red.
+                val current = list[activeIndex]
+                val taKey = current.identityKey
+                taSanity.observe(taKey, current.timingAdvance)
+                val effectiveUnit = taSanity.effectiveUnit(current.timingAdvanceUnit, current.timingAdvance)
+                if (effectiveUnit != current.timingAdvanceUnit) {
+                    list[activeIndex] = current.copy(timingAdvanceUnit = effectiveUnit)
+                }
             }
 
             val neighbors = list.filter { !it.isRegistered }
@@ -860,6 +907,13 @@ class MiniICService : Service() {
                         cachedFingerprint = dbHelper.getCellRfFingerprint(
                             activeRaw.cellId, activeRaw.mnc, activeRaw.tac, activeRaw.mcc,
                             nearLocation = currentLocation
+                        )
+                        // v2.1 — Posición de la antena según las bases públicas, para poder
+                        // MOSTRAR la distancia de forma continua (no solo en el ciclo posterior a
+                        // la verificación). Misma caché por identidad de celda: una consulta más
+                        // cada 60 s como mucho.
+                        cachedApiLocation = dbHelper.getCellApiLocation(
+                            activeRaw.cellId, activeRaw.mnc, activeRaw.tac, activeRaw.mcc
                         )
                         cachedRfSignature = rfSig
                         cachedRfStability = st
@@ -917,6 +971,18 @@ class MiniICService : Service() {
                 // misma. Además, el análisis de amenazas está pensado para la celda
                 // servidora, no para las vecinas (que solo son contexto). La activa nunca
                 // está dentro de `neighbors`, así que ya no hay auto-comparación.
+                // Distancia a la antena según las bases públicas. Se calcula DESPUÉS del análisis
+                // y no se le pasa a ninguna heurística: su precisión depende de lo buena que sea
+                // una coordenada colaborativa, que no es comparable con la geometría del TA.
+                // Mezclarlas sería juntar dos magnitudes de fiabilidad muy distinta.
+                val towerDistance: Int? = cachedApiLocation?.let { (tLat, tLon) ->
+                    currentLocation?.let { loc ->
+                        val r = FloatArray(1)
+                        Location.distanceBetween(loc.latitude, loc.longitude, tLat, tLon, r)
+                        r[0].toInt()
+                    }
+                }
+
                 val analyzedList = list.map { cell ->
                     if (cell.isRegistered) {
                         // FIX (coherencia de score): resolver el estado de verificación conocido
@@ -926,7 +992,7 @@ class MiniICService : Service() {
                         // después, así que el securityScore registrado no reflejaba la verificación y
                         // una celda VERIFIED podía perder hasta +15 y quedar marcada sospechosa sin
                         // serlo. Una celda nueva sigue siendo PENDING aquí (aún no verificada): correcto.
-                        val knownCk = "${cell.mcc}-${cell.mnc}-${cell.tac}-${cell.cellId}"
+                        val knownCk = cell.identityKey
                         val knownVerified = verificationCache[knownCk] ?: VerificationStatus.PENDING
                         ThreatAnalyzer.analyzeThreats(
                             active = cell.copy(verified = knownVerified),
@@ -945,7 +1011,7 @@ class MiniICService : Service() {
                             rfStability = rfStability,
                             reputation = reputation,
                             rfFingerprint = rfFingerprint
-                        )
+                        ).copy(distanceToTowerMeters = towerDistance)
                     } else {
                         // Las vecinas no se evalúan como amenaza; se mantienen como contexto.
                         cell
@@ -961,11 +1027,11 @@ class MiniICService : Service() {
                     val active = sorted.firstOrNull { it.isRegistered }
                     if (active != null) {
                         // 1. Obtener estado conocido (Caché o DB) para no mostrar PENDING si ya existe
-                        val cacheKey = "${active.mcc}-${active.mnc}-${active.tac}-${active.cellId}"
+                        val cacheKey = active.identityKey
                         val knownStatus = verificationCache[cacheKey] ?: VerificationStatus.PENDING
 
                         // Aplicar confirmación temporal antes de alertas
-                        val confirmedActive = applyTemporalConfidence(active)
+                        val confirmedActive = temporalConfidence.apply(active)
 
                         // 2. Lanzar alertas y registro con el estado actual
                         checkAlerts(confirmedActive.copy(verified = knownStatus), confirmed = true)
@@ -1133,46 +1199,6 @@ class MiniICService : Service() {
     // si no, "N/A" para no afirmar un estado de red sin verificación.
     private fun idleLatencyState(): String = if (isLatencyProbeActive()) "OK" else "N/A"
 
-    private fun applyTemporalConfidence(cell: CellData): CellData {
-        // Clave de racha por IDENTIDAD COMPLETA (roadmap Tier 1 #1). Antes se usaba el cellId
-        // pelado, así que una transición con el MISMO CID bajo distinto MNC/TAC/MCC (frontera,
-        // roaming, red compartida, multi-SIM) podía arrastrar la racha de otra celda. El resto de
-        // consultas ya usaban CID+MNC+TAC+MCC; esto cierra el último sitio que no lo hacía.
-        val streakKey = "${cell.mcc}-${cell.mnc}-${cell.tac}-${cell.cellId}"
-
-        // Si cambia la celda activa, resetear todos los streaks
-        if (streakKey != lastStreakCellId) {
-            anomalyStreaks.clear()
-            lastStreakCellId = streakKey
-        }
-
-        val currentStreak = if (cell.isSuspicious) {
-            val newStreak = (anomalyStreaks[streakKey] ?: 0) + 1
-            anomalyStreaks[streakKey] = newStreak
-            newStreak
-        } else {
-            anomalyStreaks.remove(streakKey)
-            0
-        }
-
-        val isConfirmed = cell.isSuspicious && currentStreak >= CONFIRMATION_CYCLES
-
-        return cell.copy(
-            isSuspicious = isConfirmed,
-            suspiciousReason = when {
-                isConfirmed -> cell.suspiciousReason
-                cell.isSuspicious -> "[$currentStreak/$CONFIRMATION_CYCLES ciclos confirmando] ${cell.suspiciousReason}"
-                // v2.1: la celda no llega al umbral de sospecha, pero SÍ falló heurísticas. Antes
-                // esto era `null` y el motivo se perdía para siempre: la fila acababa en el
-                // historial como "85 / OK". Ahora se conserva marcado como sub-umbral. No cambia
-                // nada del comportamiento de alarma (isSuspicious sigue siendo false, no suena
-                // nada, no se muestra como amenaza): solo deja de destruirse la evidencia.
-                cell.suspiciousReason != null -> "$SUBTHRESHOLD_PREFIX ${cell.suspiciousReason}"
-                else -> null
-            }
-        )
-    }
-
     private fun onGpsAvailable() {
         val now = System.currentTimeMillis()
         if (now - lastGpsTriggerTime < 60000L) return
@@ -1198,7 +1224,7 @@ class MiniICService : Service() {
             // la celda REALMENTE activa, no de la anterior — si no, inyectaríamos un GPS fresco en
             // los registros de la antena equivocada (ruido para H11/H13).
             val currentCell = _cellFlow.value.firstOrNull { it.isRegistered } ?: return@launch
-            val cacheKey = "${currentCell.mcc}-${currentCell.mnc}-${currentCell.tac}-${currentCell.cellId}"
+            val cacheKey = currentCell.identityKey
             val cachedStatus = verificationCache[cacheKey]
 
             // Rellenar coordenadas SOLO con un fix casi de tiempo real (<15 s, la cadencia del
@@ -1238,7 +1264,7 @@ class MiniICService : Service() {
             val dbStatus = withContext(Dispatchers.IO) {
                 dbHelper.getKnownStatus(
                     currentCell.mnc, currentCell.tac, currentCell.cellId,
-                    currentCell.mcc, loc.latitude, loc.longitude
+                    currentCell.mcc, loc.latitude, loc.longitude, currentCell.radioTech
                 )
             }
 
@@ -1246,7 +1272,7 @@ class MiniICService : Service() {
                 appendLog("[GPS]", "Celda ya verificada en DB, sin necesidad de API")
                 verificationCache[cacheKey] = VerificationStatus.VERIFIED
                 // Forzar actualización de la UI con el estado recuperado
-                updateFlowWithStatus(currentCell.cellId, VerificationStatus.VERIFIED)
+                updateFlowWithStatus(currentCell, VerificationStatus.VERIFIED)
                 return@launch
             }
 
@@ -1277,20 +1303,27 @@ class MiniICService : Service() {
      * Sin ninguna referencia disponible, se acepta (comportamiento clásico): la barrera 1 sigue
      * activa igualmente.
      */
-    private fun isValidCoordinate(lat: Double, lon: Double): Boolean {
+    private fun isValidCoordinate(lat: Double, lon: Double, cell: CellData? = null): Boolean {
         if (lat == 0.0 && lon == 0.0) return false
         if (lat < -90 || lat > 90) return false
         if (lon < -180 || lon > 180) return false
 
-        // 1. Coordenada centinela: la misma respuesta para varias celdas distintas.
-        try {
-            val sharedBy = dbHelper.countDistinctCellsWithApiCoordinate(lat, lon)
-            if (sharedBy >= API_SENTINEL_MIN_CELLS) {
-                appendLog("[API]", "Coordenada rechazada: ya consta para $sharedBy celdas distintas (valor por defecto de la API, no identifica ninguna antena).")
-                return false
+        // 1. Coordenada centinela: la misma respuesta en áreas de seguimiento sin relación entre
+        //    sí. Se excluye el área de la propia celda: los sectores y bandas de un mismo mástil
+        //    comparten coordenada de forma legítima y contarlos convertía una antena normal en
+        //    sospechosa según se llenaba el historial.
+        if (cell != null) {
+            try {
+                val sharedBy = dbHelper.countDistinctAreasWithApiCoordinate(
+                    lat, lon, cell.mcc, cell.mnc, cell.tac
+                )
+                if (sharedBy >= API_SENTINEL_MIN_AREAS) {
+                    appendLog("[API]", "Coordenada rechazada: ya consta en $sharedBy áreas de seguimiento sin relación entre sí (valor por defecto de la API, no identifica ninguna antena).")
+                    return false
+                }
+            } catch (_: Exception) {
+                // Si la consulta fallara, seguimos con las barreras de distancia.
             }
-        } catch (_: Exception) {
-            // Si la consulta fallara, seguimos con las barreras de distancia.
         }
 
         // 2 y 3. Distancia contra la mejor referencia disponible.
@@ -1321,18 +1354,62 @@ class MiniICService : Service() {
         return true
     }
 
+    /**
+     * Veredicto cuando las dos fuentes no dicen lo mismo.
+     *
+     * Antes cada bloque hacía `finalStatus = s`, de modo que **ganaba la última** en preguntarse.
+     * Con eso, una base que contestaba de verdad "esta celda no está" quedaba borrada por un fallo
+     * de red de la otra, o al revés. El orden de las llamadas no es un argumento.
+     *
+     * Precedencia: una respuesta afirmativa manda sobre todo; una negativa REAL manda sobre una
+     * respuesta descartada, y esta sobre un "no he podido preguntar". El error solo queda cuando es
+     * lo único que hay. Es la única ordenación que no convierte el desconocimiento en afirmación.
+     */
+    private fun mejorRespuesta(actual: VerificationStatus, nueva: VerificationStatus): VerificationStatus {
+        fun peso(s: VerificationStatus) = when (s) {
+            VerificationStatus.VERIFIED -> 4
+            VerificationStatus.NOT_FOUND -> 3
+            VerificationStatus.REJECTED -> 2
+            VerificationStatus.ERROR -> 1
+            VerificationStatus.PENDING -> 0
+        }
+        return if (peso(nueva) > peso(actual)) nueva else actual
+    }
+
+    /**
+     * ¿Se puede preguntar a una API por esta celda?
+     *
+     * Los cuatro identificadores (MCC, MNC, área y Cell ID) tienen que estar presentes y ser
+     * numéricos. Cualquier otra cosa —"N/A", vacío, texto— no es una celda: es una lectura que el
+     * módem no ha podido completar. Preguntar igualmente produce respuestas que parecen datos y no
+     * lo son.
+     */
+    private fun esIdentidadConsultable(cell: CellData): Boolean =
+        listOf(cell.mcc, cell.mnc, cell.tac, cell.cellId).all {
+            it.isNotBlank() && it != "N/A" && it.toLongOrNull() != null
+        }
+
     private fun verifyCell(cell: CellData, neighbors: List<CellData>) {
-        if (cell.cellId == "N/A" || cell.mnc == "N/A" || cell.mcc == "N/A") return
-        
-        val cacheKey = "${cell.mcc}-${cell.mnc}-${cell.tac}-${cell.cellId}"
+        // No se pregunta por una celda cuya identidad no es una identidad.
+        //
+        // El guard anterior miraba CID, MNC y MCC, pero dejaba pasar el área: con el TAC a "N/A" la
+        // consulta salía literalmente como `lac=N/A`. Una API puede contestar a eso con su código
+        // de "cell not found" —porque, en efecto, esa celda no existe— y la app registraba en el
+        // historial forense un NOT_FOUND firme sobre una antena real, por una pregunta que nunca
+        // fue válida. Se exige además que los cuatro sean numéricos: un identificador celular lo
+        // es siempre, y lo que no lo sea viene de una lectura fallida del módem, no de la red.
+        if (!esIdentidadConsultable(cell)) return
+
+        val cacheKey = cell.identityKey
         
         // 1. Mirar caché rápida
         val cached = verificationCache[cacheKey]
-        // VERIFIED y PENDING nunca se reverifican aquí (return inmediato). ERROR y NOT_FOUND
-        // sí tienen camino de reintento, cada uno con su propia ventana temporal (abajo).
+        // VERIFIED y PENDING nunca se reverifican aquí (return inmediato). ERROR, NOT_FOUND y
+        // REJECTED sí tienen camino de reintento, cada uno con su propia ventana temporal (abajo).
         if (cached != null &&
             cached != VerificationStatus.ERROR &&
-            cached != VerificationStatus.NOT_FOUND) return
+            cached != VerificationStatus.NOT_FOUND &&
+            cached != VerificationStatus.REJECTED) return
         // Si la última vez fue ERROR (p. ej. sin red), reintentar solo pasados 60s
         // para no machacar la API en cada ciclo de escaneo (~2s).
         if (cached == VerificationStatus.ERROR) {
@@ -1341,7 +1418,10 @@ class MiniICService : Service() {
         }
         // Si la última vez fue NOT_FOUND, reintentar en vivo solo pasada 1h, por si una torre
         // legítima recién desplegada ya está en WiGLE/OpenCellID y debe pasar a VERIFIED.
-        if (cached == VerificationStatus.NOT_FOUND) {
+        if (cached == VerificationStatus.NOT_FOUND || cached == VerificationStatus.REJECTED) {
+            // Una respuesta descartada se reintenta con la misma ventana que una negativa: lo más
+            // probable es que la siguiente consulta devuelva exactamente lo mismo, y machacar la
+            // API cada 60 s por una respuesta que ya sabemos que no sirve solo gasta cuota.
             val last = lastNotFoundTime[cacheKey] ?: 0L
             if (System.currentTimeMillis() - last < NOT_FOUND_REVERIFY_TTL) return
         }
@@ -1365,12 +1445,13 @@ class MiniICService : Service() {
             val current = verificationCache[cacheKey]
             if (current != null &&
                 current != VerificationStatus.ERROR &&
-                current != VerificationStatus.NOT_FOUND) return
+                current != VerificationStatus.NOT_FOUND &&
+                current != VerificationStatus.REJECTED) return
             if (current == VerificationStatus.ERROR) {
                 val last = lastVerificationErrorTime[cacheKey] ?: 0L
                 if (System.currentTimeMillis() - last < 60000L) return
             }
-            if (current == VerificationStatus.NOT_FOUND) {
+            if (current == VerificationStatus.NOT_FOUND || current == VerificationStatus.REJECTED) {
                 val last = lastNotFoundTime[cacheKey] ?: 0L
                 if (System.currentTimeMillis() - last < NOT_FOUND_REVERIFY_TTL) return
             }
@@ -1380,7 +1461,10 @@ class MiniICService : Service() {
         scope.launch(Dispatchers.IO) {
             // 2. Mirar Base de Datos (fuera del hilo principal)
             val currentLoc = getCurrentLocation()
-            val statusFromDb = dbHelper.getKnownStatus(cell.mnc, cell.tac, cell.cellId, cell.mcc, currentLoc?.latitude, currentLoc?.longitude)
+            val statusFromDb = dbHelper.getKnownStatus(
+                cell.mnc, cell.tac, cell.cellId, cell.mcc,
+                currentLoc?.latitude, currentLoc?.longitude, cell.radioTech
+            )
             
             if (statusFromDb != VerificationStatus.PENDING) {
                 verificationCache[cacheKey] = statusFromDb
@@ -1389,77 +1473,122 @@ class MiniICService : Service() {
                 if (statusFromDb == VerificationStatus.NOT_FOUND) {
                     lastNotFoundTime[cacheKey] = System.currentTimeMillis()
                 }
-                updateFlowWithStatus(cell.cellId, statusFromDb)
+                updateFlowWithStatus(cell, statusFromDb)
                 // Actualizar la fila recién insertada que quedó en PENDING
                 dbHelper.updateVerificationStatus(
                     cell.mnc, cell.tac, cell.cellId,
                     statusFromDb,
-                    mcc = cell.mcc
+                    mcc = cell.mcc,
+                    radio = cell.radioTech
                 )
                 return@launch
             }
 
             // 3. Consultar APIs si es realmente nueva
             var finalStatus = VerificationStatus.PENDING
-            appendLog("[API]", "Nueva antena detectada. Verificando firmas en la nube...")
+            // La identidad exacta que se pregunta, en el terminal: es lo que hace falta para
+            // comprobar a mano en wigle.net u opencellid.org si la antena está o no está, y por
+            // tanto para distinguir un fallo de la app de una laguna de las bases públicas.
+            appendLog("[API]", "Verificando antena MCC ${cell.mcc} · MNC ${cell.mnc} · TAC ${cell.tac} · CID ${cell.cellId}")
 
-            // Intento WiGLE
-            if (wigleApiName.isNotBlank() && wigleApiToken.isNotBlank()) {
-                val (s, data) = WigleClient.tryWigleSync(cell, wigleApiName, wigleApiToken, isProxyEnabled, client)
-                if (s == VerificationStatus.VERIFIED && data != null) {
-                    val lat = data.optDouble("trilat", data.optDouble("lat", Double.NaN))
-                    val lon = data.optDouble("trilong", data.optDouble("lon", Double.NaN))
-                    val hasCoords = !lat.isNaN() && !lon.isNaN()
-                    if (hasCoords && isValidCoordinate(lat, lon)) {
-                        processSuccessfulVerification(lat, lon, cell, cacheKey, neighbors, "WiGLE")
-                        return@launch
-                    } else if (hasCoords) {
-                        // v2.1: la API respondió con una coordenada que NO es creíble (centinela o
-                        // a distancia imposible). Antes esto caía igualmente en la rama "VERIFIED
-                        // sin coordenada" y la celda se llevaba el +15 de verificación por una
-                        // respuesta basura. Una verificación que no se sostiene no es una
-                        // verificación: se trata como no encontrada (se reintentará en 1 h).
-                        appendLog("[API]", "WiGLE: respuesta descartada por coordenada no creíble. La celda NO se da por verificada.")
-                        finalStatus = VerificationStatus.NOT_FOUND
-                    } else {
-                        appendLog("[API]", "WiGLE: respuesta sin coordenadas.")
-                        finalStatus = s
-                    }
-                } else {
-                    finalStatus = s
-                }
-            }
-            
-            // Fallback OpenCellID
-            if (finalStatus != VerificationStatus.VERIFIED && openCellIdKey.isNotBlank() && !openCellIdKey.startsWith("pk.YOUR")) {
-                val (s, data) = OpenCellIdClient.tryOpenCellIdSyncWithData(cell, openCellIdKey, isProxyEnabled, client)
+            // ORDEN: OpenCellID primero, WiGLE después.
+            //
+            // El endpoint de celdas de WiGLE no está abierto a todas las cuentas y su cobertura de
+            // celdas es mucho más floja que la de OpenCellID, así que preguntarle primero gastaba
+            // una petición y una espera en la fuente que menos resuelve. Se pregunta primero a la
+            // que contesta, y WiGLE queda como refuerzo. Si la primera verifica, no hay segunda
+            // llamada: se sale por `return@launch`.
+            if (openCellIdKey.isNotBlank() && !openCellIdKey.startsWith("pk.YOUR")) {
+                val res = OpenCellIdClient.tryOpenCellIdSyncWithData(cell, openCellIdKey, isProxyEnabled, client)
+                val s = res.status
+                val data = res.record
+                // El motivo real llega hasta el terminal: una cuota agotada no puede leerse igual
+                // que una antena desconocida, porque no significa lo mismo ni se registra igual.
+                res.reason?.let { appendLog("[API]", it) }
                 if (s == VerificationStatus.VERIFIED && data != null) {
                     val lat = data.optDouble("lat", Double.NaN)
                     val lon = data.optDouble("lon", Double.NaN)
                     val hasCoords = !lat.isNaN() && !lon.isNaN()
-                    if (hasCoords && isValidCoordinate(lat, lon)) {
+                    if (hasCoords && isValidCoordinate(lat, lon, cell)) {
                         processSuccessfulVerification(lat, lon, cell, cacheKey, neighbors, "OpenCellID")
                         return@launch
                     } else if (hasCoords) {
-                        // Mismo criterio que en WiGLE: coordenada no creíble -> no se verifica.
-                        appendLog("[API]", "OpenCellID: respuesta descartada por coordenada no creíble. La celda NO se da por verificada.")
-                        finalStatus = VerificationStatus.NOT_FOUND
+                        // La API respondió con una coordenada que NO es creíble: centinela, o a una
+                        // distancia imposible. Eso invalida la RESPUESTA, no acusa a la antena — de
+                        // ahí REJECTED y no NOT_FOUND. Decir "no está en las bases" cuando lo que
+                        // pasa es "no me fío de lo que me han contestado" mete una afirmación falsa
+                        // en el historial que luego hay que analizar.
+                        appendLog("[API]", "OpenCellID: respuesta descartada por coordenada no creíble. No se concluye nada sobre la antena.")
+                        finalStatus = mejorRespuesta(finalStatus, VerificationStatus.REJECTED)
                     } else {
-                        appendLog("[API]", "OpenCellID: respuesta sin coordenadas.")
-                        finalStatus = s
+                        appendLog("[API]", "OpenCellID: respuesta sin coordenadas; no se puede comprobar.")
+                        finalStatus = mejorRespuesta(finalStatus, VerificationStatus.REJECTED)
                     }
                 } else {
-                    finalStatus = s
+                    finalStatus = mejorRespuesta(finalStatus, s)
                 }
+            }
+
+            // Refuerzo WiGLE. Se pregunta siempre que OpenCellID no haya resuelto — incluso si
+            // contestó "verificada sin coordenada", porque WiGLE puede traerla.
+            if (wigleApiName.isNotBlank() && wigleApiToken.isNotBlank()) {
+                val res = WigleClient.tryWigleSync(cell, wigleApiName, wigleApiToken, isProxyEnabled, client)
+                val s = res.status
+                val data = res.record
+                res.reason?.let { appendLog("[API]", it) }
+                if (s == VerificationStatus.VERIFIED && data != null) {
+                    val lat = data.optDouble("trilat", data.optDouble("lat", Double.NaN))
+                    val lon = data.optDouble("trilong", data.optDouble("lon", Double.NaN))
+                    val hasCoords = !lat.isNaN() && !lon.isNaN()
+                    if (hasCoords && isValidCoordinate(lat, lon, cell)) {
+                        processSuccessfulVerification(lat, lon, cell, cacheKey, neighbors, "WiGLE")
+                        return@launch
+                    } else if (hasCoords) {
+                        appendLog("[API]", "WiGLE: respuesta descartada por coordenada no creíble. No se concluye nada sobre la antena.")
+                        finalStatus = mejorRespuesta(finalStatus, VerificationStatus.REJECTED)
+                    } else {
+                        appendLog("[API]", "WiGLE: respuesta sin coordenadas; no se puede comprobar.")
+                        finalStatus = mejorRespuesta(finalStatus, VerificationStatus.REJECTED)
+                    }
+                } else {
+                    finalStatus = mejorRespuesta(finalStatus, s)
+                }
+            }
+
+            // Una consulta negativa NO borra una verificación anterior — v2.1.
+            //
+            // WiGLE y OpenCellID no dan de baja antenas: si esta celda estuvo en sus bases, sigue
+            // estándolo. Cuando una reconsulta vuelve vacía lo que ha cambiado casi siempre es la
+            // cuota diaria, el permiso de la cuenta o la cobertura del momento, no la antena. Sin
+            // esta regla, una sola reconsulta desafortunada convertía una celda verificada en
+            // "desconocida" y escribía esa contradicción en el historial
+            // forense junto a las filas que la daban por verificada.
+            //
+            // Lo que sí es una señal —la misma Cell ID reaparecida a cientos de kilómetros— no
+            // pasa por aquí: eso lo detecta la comprobación de distancia de getKnownStatus, que
+            // exige una respuesta AFIRMATIVA con otra coordenada.
+            if (finalStatus != VerificationStatus.VERIFIED &&
+                dbHelper.hasRecentVerifiedRecord(cell.cellId, cell.mnc, cell.tac, cell.mcc, cell.radioTech)) {
+                verificationCache[cacheKey] = VerificationStatus.VERIFIED
+                appendLog("[API]", "Esta antena ya constaba verificada y ahora la consulta no la devuelve. Se mantiene la verificación: las bases públicas no dan de baja antenas, y una consulta vacía o fallida no es una prueba.")
+                dbHelper.updateVerificationStatus(cell.mnc, cell.tac, cell.cellId, VerificationStatus.VERIFIED, mcc = cell.mcc, radio = cell.radioTech)
+                updateFlowWithStatus(cell, VerificationStatus.VERIFIED)
+                return@launch
             }
 
             // Guardar resultado negativo si ninguna lo encontró
             if (finalStatus == VerificationStatus.NOT_FOUND) {
                 verificationCache[cacheKey] = VerificationStatus.NOT_FOUND
                 lastNotFoundTime[cacheKey] = System.currentTimeMillis()
-                dbHelper.updateVerificationStatus(cell.mnc, cell.tac, cell.cellId, VerificationStatus.NOT_FOUND, mcc = cell.mcc)
+                dbHelper.updateVerificationStatus(cell.mnc, cell.tac, cell.cellId, VerificationStatus.NOT_FOUND, mcc = cell.mcc, radio = cell.radioTech)
                 appendLog("[API]", "Antena no identificada en bases públicas. Se reintentará en 1h.")
-                updateFlowWithStatus(cell.cellId, VerificationStatus.NOT_FOUND)
+                updateFlowWithStatus(cell, VerificationStatus.NOT_FOUND)
+                // El camino VERIFIED vuelve a puntuar la celda aquí mismo; este no lo hacía, así
+                // que la pantalla se quedaba con el score anterior (calculado cuando todavía era
+                // PENDING) hasta el siguiente muestreo — hasta 5 minutos enseñando un número que
+                // el motor ya no sostiene. Una lectura nueva reanaliza y cierra el desfase. No
+                // hay recursión: el guard de NOT_FOUND de verifyCell no reintenta hasta 1 h.
+                requestFreshCellInfo()
             } else if (finalStatus == VerificationStatus.ERROR) {
                 // FIX: antes la celda se quedaba atascada en PENDING para siempre tras
                 // un fallo de red, porque el guard de arriba solo reintenta si es ERROR.
@@ -1467,30 +1596,72 @@ class MiniICService : Service() {
                 verificationCache[cacheKey] = VerificationStatus.ERROR
                 lastVerificationErrorTime[cacheKey] = System.currentTimeMillis()
                 appendLog("[API]", "Error de red al verificar. Se reintentará más tarde.")
-                updateFlowWithStatus(cell.cellId, VerificationStatus.ERROR)
+                updateFlowWithStatus(cell, VerificationStatus.ERROR)
+            } else if (finalStatus == VerificationStatus.REJECTED) {
+                // La API contestó, pero su respuesta no supera nuestras comprobaciones: identidad
+                // que no cuadra, coordenada centinela, coordenada imposible, respuesta incompleta.
+                //
+                // Esto NO es una negativa sobre la antena y por eso tiene estado propio. Se guarda
+                // en el historial —interesa saber cuántas respuestas hubo que descartar y de qué
+                // fuente— y se reintenta pasada la misma hora que una negativa, porque lo más
+                // probable es que la siguiente consulta traiga exactamente lo mismo.
+                verificationCache[cacheKey] = VerificationStatus.REJECTED
+                lastNotFoundTime[cacheKey] = System.currentTimeMillis()
+                dbHelper.updateVerificationStatus(cell.mnc, cell.tac, cell.cellId, VerificationStatus.REJECTED, mcc = cell.mcc, radio = cell.radioTech)
+                appendLog("[API]", "Respuesta descartada: no permite afirmar ni desmentir nada sobre esta antena. Se reintentará en 1h.")
+                updateFlowWithStatus(cell, VerificationStatus.REJECTED)
             } else if (finalStatus == VerificationStatus.VERIFIED) {
-                // FIX: la API confirmó la celda pero no se pudo guardar coordenada
-                // (respuesta sin lat/lon, etc.). Antes no había rama VERIFIED aquí y
-                // la celda se quedaba en PENDING. La marcamos VERIFIED igualmente.
+                // La API confirmó la identidad de la celda pero no se pudo guardar coordenada.
+                // Ojo: llegar aquí es raro desde v2.1, porque una respuesta sin coordenada
+                // comprobable se marca REJECTED antes. Se conserva la rama para no dejar nunca la
+                // caché en PENDING, que es el único estado del que no se sale.
                 verificationCache[cacheKey] = VerificationStatus.VERIFIED
-                dbHelper.updateVerificationStatus(cell.mnc, cell.tac, cell.cellId, VerificationStatus.VERIFIED, mcc = cell.mcc)
+                dbHelper.updateVerificationStatus(cell.mnc, cell.tac, cell.cellId, VerificationStatus.VERIFIED, mcc = cell.mcc, radio = cell.radioTech)
                 appendLog("[API]", "Antena verificada (sin coordenada disponible).")
-                updateFlowWithStatus(cell.cellId, VerificationStatus.VERIFIED)
+                updateFlowWithStatus(cell, VerificationStatus.VERIFIED)
+            } else {
+                // Ninguna rama anterior: no debería ocurrir, porque sin credenciales se sale antes
+                // y todo cliente devuelve uno de los cinco estados. Si algún día ocurre, lo que
+                // NO puede pasar es quedarse en PENDING: el guard de arriba nunca reintenta una
+                // celda PENDING, así que se quedaría colgada el resto de la sesión. ERROR la deja
+                // en el camino de reintento a los 60 s.
+                verificationCache[cacheKey] = VerificationStatus.ERROR
+                lastVerificationErrorTime[cacheKey] = System.currentTimeMillis()
+                updateFlowWithStatus(cell, VerificationStatus.ERROR)
             }
         }
     }
 
-    private fun updateFlowWithStatus(cid: String, status: VerificationStatus) {
+    /**
+     * Marca en la pantalla el estado de verificación de **una** celda.
+     *
+     * Recibe la celda entera, no su Cell ID. Comparando solo el CID, otra celda de la lista con el
+     * mismo identificador pero distinto operador, área o tecnología —vecinas incluidas— cambiaba de
+     * color con ella. En una app cuyo trabajo es distinguir antenas, la identidad parcial no vale
+     * en ningún sitio, y menos en el que la persona mira.
+     */
+    private fun updateFlowWithStatus(cell: CellData, status: VerificationStatus) {
+        val clave = cell.identityKey
         scope.launch(Dispatchers.Main) {
-            _cellFlow.value = _cellFlow.value.map { 
-                if (it.cellId == cid) it.copy(verified = status) else it
+            _cellFlow.value = _cellFlow.value.map {
+                if (it.identityKey == clave) it.copy(verified = status) else it
             }
         }
     }
 
     private fun processSuccessfulVerification(lat: Double, lon: Double, cell: CellData, cacheKey: String, neighbors: List<CellData>, source: String) {
         appendLog("[API]", "Validación OK ($source). Firmas geográficas obtenidas.")
+        // La auditoría del terminal se escribe en el handover, cuando la celda todavía está
+        // PENDING. La verificación llega después y cambia la etiqueta de la celda, pero nadie
+        // volvía a escribir una línea: la consola se quedaba diciendo "100% —
+        // entorno SEGURO" mientras el panel de arriba ya mostraba otra cifra. Desde aquí se cierra
+        // el círculo con una línea que dice el resultado real.
         verificationCache[cacheKey] = VerificationStatus.VERIFIED
+        // v2.1 — La distancia a la antena se muestra desde la coordenada cacheada, que se
+        // refresca con el TTL de 60 s. Acabamos de recibirla aquí mismo, así que la ponemos ya:
+        // sin esto, tras verificar una celda nueva habría hasta un minuto de espera para ver la
+        // distancia, justo en el momento en el que la persona está mirando.
+        cachedApiLocation = lat to lon
         dbHelper.updateVerificationStatus(
             cell.mnc,
             cell.tac,
@@ -1498,7 +1669,8 @@ class MiniICService : Service() {
             VerificationStatus.VERIFIED,
             lat,
             lon,
-            cell.mcc)
+            cell.mcc,
+            cell.radioTech)
         
         val loc = getCurrentLocation()
         val history = if (loc != null && cell.cellId != "N/A") {
@@ -1542,6 +1714,9 @@ class MiniICService : Service() {
                 if (it.cellId == cell.cellId) analyzedActive.copy(isRegistered = it.isRegistered) else it 
             }
             
+            // Misma línea de cierre que usa el camino NOT_FOUND: un solo mensaje, una sola voz.
+            logVerificationOutcome(analyzedActive)
+
             if (analyzedActive.isSuspicious && analyzedActive.isRegistered) {
                 toneGenerator?.startTone(ToneGenerator.TONE_CDMA_SOFT_ERROR_LITE, 200)
                 checkAlerts(analyzedActive)
@@ -1597,7 +1772,10 @@ class MiniICService : Service() {
                 arfcn = cell.arfcn,
                 rsrq = cell.rsrq,
                 sinr = cell.sinr,
-                threatProbability = cell.threatProbability
+                anomalyConfidence = cell.anomalyConfidence,
+                timingAdvance = cell.timingAdvance,
+                timingAdvanceUnit = cell.timingAdvanceUnit,
+                radio = cell.radioTech
             )
         }
     }
@@ -1606,6 +1784,10 @@ class MiniICService : Service() {
         val cid = cell.cellId
         val dbm = cell.dbm
         val net = cell.networkType
+
+        // Cierra en el terminal la auditoría de esta misma celda si la verificación ya ha
+        // contestado desde que se escribió. No hace nada si nada ha cambiado.
+        logVerificationOutcome(cell)
 
         if (cid != prevCid) {
             _dbmHistory.value = emptyList()
@@ -1661,7 +1843,10 @@ class MiniICService : Service() {
                     arfcn = cell.arfcn,
                     rsrq = cell.rsrq,
                     sinr = cell.sinr,
-                    threatProbability = cell.threatProbability
+                    anomalyConfidence = cell.anomalyConfidence,
+                timingAdvance = cell.timingAdvance,
+                timingAdvanceUnit = cell.timingAdvanceUnit,
+                radio = cell.radioTech
                 )
             }
             // --------------------------------------------------
@@ -1690,10 +1875,18 @@ class MiniICService : Service() {
                 _rsrqHistory.value = currentRsrq
             }
 
+            // v2.1 — La serie geométrica guarda METROS, no el TA crudo.
+            //
+            // Antes se acumulaba el valor bruto, y un TA de 2 en LTE (156 m), en GSM (1.108 m) y en
+            // NR (desconocido) acababan como tres puntos "2" en la misma curva, dibujados como si
+            // fueran comparables bajo el rótulo "TELEMETRÍA GEOMÉTRICA". No lo son. Ahora solo
+            // entran en la serie las observaciones cuya unidad admite una conversión defendible:
+            // así todos los puntos están en la misma magnitud y la gráfica significa algo.
             val currentTa = cell.timingAdvance
-            if (currentTa != null && currentTa != Int.MAX_VALUE) {
+            val taMeters = currentTa?.let { cell.timingAdvanceUnit.toMeters(it) }
+            if (taMeters != null) {
                 val currentGeo = _geoHistory.value.toMutableList()
-                currentGeo.add(currentTa.toFloat())
+                currentGeo.add(taMeters.toFloat())
                 if (currentGeo.size > 50) currentGeo.removeAt(0)
                 _geoHistory.value = currentGeo
             }
@@ -1732,7 +1925,7 @@ class MiniICService : Service() {
             // (mismo cellId, reseteado en cada handover) para no inundar la BD ciclo a ciclo.
             //
             // Coherencia (confirmed): SOLO se persiste si la alarma viene de la ruta que pasó por
-            // applyTemporalConfidence() (los 3 ciclos). La ruta de re-análisis tras verificación
+            // TemporalConfidence.apply() (los 3 ciclos). La ruta de re-análisis tras verificación
             // API llama a checkAlerts con sospecha CRUDA (1 ciclo): mantiene su tono/aviso, pero
             // NO graba evidencia, para que el historial forense solo contenga alarmas confirmadas.
             if (confirmed && lastAlarmLoggedCellId != cid) {
@@ -1755,7 +1948,10 @@ class MiniICService : Service() {
                         arfcn = cell.arfcn,
                         rsrq = cell.rsrq,
                         sinr = cell.sinr,
-                        threatProbability = cell.threatProbability
+                        anomalyConfidence = cell.anomalyConfidence,
+                timingAdvance = cell.timingAdvance,
+                timingAdvanceUnit = cell.timingAdvanceUnit,
+                radio = cell.radioTech
                     )
                 }
             }
@@ -1790,9 +1986,13 @@ class MiniICService : Service() {
     }
 
     private fun updateNotification(cell: CellData) {
-        val vStatus = when(cell.verified) {
+        val vStatus = when (cell.verified) {
             VerificationStatus.VERIFIED -> "✅ VERIFICADA"
-            VerificationStatus.NOT_FOUND -> "❌ NO REGISTRADA"
+            // El aspa roja sobraba: que una base colaborativa no conozca una antena no es un fallo
+            // de la antena ni un indicio de nada, y desde v2.1 tampoco resta puntos. La
+            // notificación lo dice como lo que es, un dato de contexto.
+            VerificationStatus.NOT_FOUND -> "➖ SIN REGISTRO"
+            VerificationStatus.REJECTED -> "⚠️ RESPUESTA DESCARTADA"
             VerificationStatus.ERROR -> "⚠️ ERROR API"
             VerificationStatus.PENDING -> "⏳ PENDIENTE"
         }
@@ -1862,9 +2062,41 @@ class MiniICService : Service() {
         return "4G LTE"
     }
 
+    /**
+     * Escribe en el terminal el resultado de una celda **después** de que las bases públicas
+     * contesten, y solo si esa celda es la que tiene la auditoría escrita y su estado ha cambiado
+     * desde entonces.
+     *
+     * Existe porque el terminal miente por omisión: la auditoría se genera en el handover, con la
+     * celda todavía PENDING, y ahí puede leerse "100% — entorno SEGURO". La verificación llega
+     * después y cambia la etiqueta de la celda, pero nadie reescribía nada:
+     * quedaban a la vista dos cifras distintas —la del terminal y la de la cabecera— sin ninguna
+     * pista de que una era historia y la otra el presente.
+     */
+    private fun logVerificationOutcome(cell: CellData) {
+        val ck = cell.identityKey
+        if (ck != auditedCellKey || cell.verified == auditedVerified) return
+        auditedVerified = cell.verified
+        val detalle = when (cell.verified) {
+            VerificationStatus.VERIFIED -> "registrada en bases públicas"
+            VerificationStatus.NOT_FOUND ->
+                "sin registro en WiGLE/OpenCellID. No resta puntos: esas bases están incompletas y " +
+                "una antena nueva tarda meses en aparecer, así que su ausencia no dice nada de la antena."
+            VerificationStatus.REJECTED ->
+                "respuesta descartada: no corresponde a esta celda o no es creíble. No dice nada de la antena"
+            VerificationStatus.ERROR -> "las bases públicas no han contestado"
+            VerificationStatus.PENDING -> "pendiente de verificar"
+        }
+        appendLog("[AUDIT]", "Celda ${cell.cellId} — resultado definitivo: ${cell.securityScore}%, $detalle")
+    }
+
     private fun generateAuditLog(cell: CellData) {
         _auditStatus.value = "Auditoría en curso..."
-        appendLog("[AUDIT]", "--- INICIANDO CICLO DE AUDITORÍA (14 REGLAS) ---")
+        // La auditoría lleva la identidad de la celda: cuarenta líneas corridas de varias celdas
+        // sin decir cuál es cuál son un registro forense inservible.
+        auditedCellKey = cell.identityKey
+        auditedVerified = cell.verified
+        appendLog("[AUDIT]", "--- CICLO DE AUDITORÍA (14 REGLAS) · Celda ${cell.cellId} (${cell.mcc}-${cell.mnc}-${cell.tac}) ---")
         val report = cell.heuristicReport
         val results = mapOf(
             "1. Celda Aislada" to report.isolatedCellPassed,
@@ -1895,20 +2127,52 @@ class MiniICService : Service() {
             appendLog("[HEUR]", "$regla: $status")
         }
 
-        appendLog("[AUDIT]", "Resultado Global: ${cell.securityScore}% de seguridad.")
+        // Diagnóstico del Timing Advance. Está aquí porque es la pregunta que no se podía
+        // contestar desde fuera: "¿reporta TA este teléfono?". Ahora se ve en el terminal y se
+        // exporta al CSV, en vez de deducirse de que una heurística no salte nunca.
+        val ta = cell.timingAdvance
+        if (ta == null) {
+            appendLog("[TA]", "El módem no reporta Timing Advance en esta celda (H6 no juzga geometría).")
+        } else if (cell.timingAdvanceUnit == TimingAdvanceUnit.STUB_ZERO) {
+            appendLog("[TA]", "El módem devuelve 0 en todas las celdas (${taSanity.zeroOnlyCellCount} distintas comprobadas): no es una medida, es un campo sin rellenar. No se deduce distancia.")
+        } else if (ta == 0 && cell.timingAdvanceUnit.isUsableForGeometry) {
+            // Un TA de 0 no son "0 metros": es el escalón más bajo del contador, o sea "más cerca
+            // que un paso". Decir "~0 m de la antena" prometía una precisión que el dato no tiene,
+            // y encima es el mismo valor que devuelve un módem que no implementa TA — de ahí el
+            // aviso: si se repite en celdas distintas, no es geometría, es un campo sin rellenar.
+            val paso = cell.timingAdvanceUnit.toMeters(1)
+            appendLog("[TA]", "TA=0 (${cell.timingAdvanceUnit.name}) → a menos de un paso de TA de la antena (< $paso m). No es una medida de 0 m: es el escalón mínimo. Si se repite en varias celdas distintas, el módem no reporta TA.")
+        } else {
+            val metros = cell.timingAdvanceUnit.toMeters(ta)
+            if (metros != null) {
+                appendLog("[TA]", "TA=$ta (${cell.timingAdvanceUnit.name}) → ~${metros} m de la antena.")
+            } else {
+                appendLog("[TA]", "TA=$ta (${cell.timingAdvanceUnit.name}) — sin conversión defendible: se registra pero NO se usa para geometría.")
+            }
+        }
+
+        // El calificativo del resultado depende de si la verificación ya ha contestado. En el
+        // handover casi nunca ha contestado —la consulta acaba de salir—, así que llamar a esto
+        // "Resultado Global" y rematarlo con "validado como SEGURO" era afirmar como definitivo un
+        // número que iba a cambiar en segundos. Es provisional, y ahora lo dice.
+        val pendiente = cell.verified == VerificationStatus.PENDING
+        val titulo = if (pendiente) "Resultado provisional (falta la verificación)" else "Resultado Global"
+        appendLog("[AUDIT]", "$titulo: ${cell.securityScore}% de seguridad.")
         if (cell.isSuspicious) {
             appendLog("[SEC]", "🚨 CRÍTICO: Antena sospechosa detectada: ${cell.suspiciousReason}")
         } else if (cell.suspiciousReason != null) {
             // v2.1: la celda no alcanza el umbral de alarma pero SÍ ha fallado heurísticas.
             // Decir "SEGURO" aquí sería tan deshonesto como lo era guardar la fila como "OK".
             appendLog("[SYS]", "Sin alarma, pero con observaciones: ${cell.suspiciousReason}")
+        } else if (pendiente) {
+            appendLog("[SYS]", "Las 14 reglas pasan. Falta la respuesta de las bases públicas.")
         } else {
             appendLog("[SYS]", "✅ Entorno validado como SEGURO.")
         }
         _auditStatus.value = "Auditoría completada"
     }
 
-    // HONESTIDAD TÉCNICA — detección de cifrado nulo (A5/0) e identificadores (IMSI) NO implementada (pendiente v2.1).
+    // HONESTIDAD TÉCNICA — detección de cifrado nulo (A5/0) e identificadores (IMSI) NO implementada (pendiente de hardware y API).
     //
     // Versiones anteriores tenían aquí dos métodos (onCipheringStatusChanged / onCellularIdentifierDisclosure)
     // con nombres inventados que se asumía que Android invocaría "por reflexión". Eso era un malentendido:
@@ -1920,7 +2184,7 @@ class MiniICService : Service() {
     //   - TelephonyCallback.SecurityAlgorithmsListener        -> onSecurityAlgorithmsChanged(...)
     //   - TelephonyCallback.CellularIdentifierDisclosedListener -> onCellularIdentifierDisclosed(...)
     // sujetas a permisos y a que el modem/HAL del dispositivo reporte esos eventos. Implementarlas bien
-    // requiere prueba en hardware Android 16+ y está planificada para v2.1.
+    // requiere prueba en hardware Android 16+ y queda para una versión futura.
     //
     // Hasta entonces: isHardwareCipheringAvailable permanece en false, ThreatAnalyzer omite ese factor y
     // NO se genera ninguna alarma por cifrado/IMSI (falla de forma segura, sin falsos positivos).
@@ -1943,13 +2207,17 @@ class MiniICService : Service() {
         // Si la referencia persistida es más vieja que esto (p. ej. viaje largo con la app
         // cerrada), se ignora y el próximo fix se trata como bootstrap, evitando falsos rechazos.
         private const val LOCATION_REFERENCE_MAX_AGE = 6L * 60 * 60 * 1000  // 6 h
-        // v2.1 — Una coordenada de API que ya consta para este nº de Cell ID distintas es un
-        // valor por defecto de la API, no la posición de una antena. Umbral bajo a propósito:
-        // dos antenas reales nunca comparten coordenada exacta.
-        private const val API_SENTINEL_MIN_CELLS = 3
+        // v2.1 — Una coordenada de API que ya consta en este número de ÁREAS DE SEGUIMIENTO
+        // distintas (MCC-MNC-TAC), ajenas a la de la celda consultada, es un valor por defecto de
+        // la API y no la posición de una antena. Se cuentan áreas y no celdas porque los sectores
+        // y bandas de un mismo mástil comparten coordenada de forma legítima: contarlos hacía que
+        // una antena normal dejara de verificarse según crecía el historial.
+        private const val API_SENTINEL_MIN_AREAS = 3
         // v2.1 — Cadencia del muestreo periódico de la celda servidora (ver maybeLogPeriodicSample).
         // Más lenta con la pantalla apagada, coherente con el diseño de bajo consumo.
         private const val PERIODIC_LOG_INTERVAL_SCREEN_ON = 5L * 60 * 1000    // 5 min
         private const val PERIODIC_LOG_INTERVAL_SCREEN_OFF = 15L * 60 * 1000  // 15 min
+        // Ciclos consecutivos de sospecha necesarios para confirmar una alarma.
+        private const val CONFIRMATION_CYCLES = 3
     }
 }

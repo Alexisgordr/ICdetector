@@ -172,7 +172,9 @@ fun HistoryPanel(dbHelper: CellDbHelper, onBack: () -> Unit) {
                                         // Fila 2: MNC/TAC y Score
                                         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                                             Text("MNC: ${record.mnc} | TAC: ${record.tac}", color = Color(0xFF888888), fontSize = 11.sp, fontFamily = FontFamily.Monospace)
-                                            val scoreColor = if (record.score >= 90) Color(0xFF4CAF50) else if (record.score >= 70) Color(0xFFFFA000) else Color(0xFFCF6679)
+                                            // Mismo criterio que el monitor: el historial no puede
+                                            // pintar de otro color el mismo score.
+                                            val scoreColor = securityScoreColor(record.score)
                                             Text("🛡️ ${record.score}%", color = scoreColor, fontSize = 12.sp, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Bold)
                                         }
                                         

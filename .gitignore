@@ -28,6 +28,17 @@ Thumbs.db
 *.aar
 *.ap_
 *.dex
+# Salidas de release: son artefactos generados, no fuente. Tenerlos versionados hacía que el
+# árbol declarase dos versiones a la vez (build.gradle.kts decía una y output-metadata.json otra).
+app/release/
+app/debug/
+*.dm
+output-metadata.json
 
 # Benchmarking
 *.hprof
+
+# Historiales de campo para CsvReplayTest. Contienen coordenadas GPS reales (casa, trabajo,
+# rutas): no deben salir nunca de la máquina de quien los generó. El README de esa carpeta
+# explica cómo anonimizar uno si hace falta compartirlo.
+app/src/test/resources/replay/*.csv

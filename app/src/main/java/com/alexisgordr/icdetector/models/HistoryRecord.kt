@@ -32,12 +32,13 @@ data class HistoryRecord(
     val rsrq: Int? = null,
     val sinr: Int? = null,
     /**
-     * Probabilidad bayesiana de amenaza calculada por BayesianScorer en el momento de la
-     * observación (0..95). v2.1: se persiste y se exporta para poder RECALIBRAR los likelihood
-     * ratios con datos reales — antes se calculaba en cada ciclo y se perdía al salir de la UI,
-     * así que no había nada que calibrar (roadmap #7).
+     * Confianza de anomalía calculada por BayesianScorer en el momento de la observación (0..95).
+     *
+     * Se persiste y se exporta para poder RECALIBRAR los likelihood ratios con datos reales —
+     * antes se calculaba en cada ciclo y se perdía al salir de la UI, así que no había nada que
+     * calibrar (roadmap #7). No es una probabilidad medida: ver [CellData.anomalyConfidence].
      */
-    val threatProbability: Float = 0f,
+    val anomalyConfidence: Float = 0f,
     /**
      * Coordenada de la ANTENA según WiGLE/OpenCellID. v2.1: vive en su propia columna y NO
      * se mezcla nunca con [lat]/[lon], que son y solo son la posición GPS del dispositivo en
@@ -45,5 +46,24 @@ data class HistoryRecord(
      * real de las coordenadas imposibles (~1.100 km) que aparecían en el historial.
      */
     val apiLat: Double? = null,
-    val apiLon: Double? = null
+    val apiLon: Double? = null,
+    /**
+     * Timing Advance CRUDO tal y como lo entregó el módem, y la unidad en que lo entregó.
+     *
+     * v2.1: es la señal más cara del motor (H6 penaliza -40) y era la única que NO se exportaba,
+     * así que nadie podía comprobar si su teléfono la reporta siquiera. Ahora se guarda el valor
+     * sin transformar junto con su procedencia: si algún día hay que decidir empíricamente cómo
+     * convertir el TA de NR, la evidencia estará recogida en vez de haber que empezar de cero.
+     */
+    val timingAdvance: Int? = null,
+    val timingAdvanceUnit: TimingAdvanceUnit = TimingAdvanceUnit.UNKNOWN,
+    /**
+     * Tecnología de radio de la observación, tomada de la clase de `CellInfo` — v2.1.
+     *
+     * [netType] NO sirve para esto: viene de `TelephonyDisplayInfo` y describe el icono de la barra
+     * de estado, que en el historial de campo alterna entre "4G" y "5G" para la misma celda. Quien
+     * analice estos datos necesita saber de qué tecnología era cada fila sin tener que fiarse de
+     * una etiqueta de presentación. [RadioTech.UNKNOWN] en las filas anteriores a esta versión.
+     */
+    val radio: RadioTech = RadioTech.UNKNOWN
 )

@@ -77,18 +77,26 @@ class BayesianScorerTest {
         assertTrue(bajo >= 0f)
     }
 
+    /**
+     * v2.1 — El estado de verificación externa NO mueve el posterior.
+     *
+     * Antes VERIFIED valía 0,4 y NOT_FOUND 1,4, y había un test por cada uno exigiendo justo eso.
+     * Las dos cifras eran estimaciones razonadas sobre una base colaborativa de cobertura
+     * irregular: donde el mapeo es pobre, el 1,4 se lo llevan todas las celdas de la zona, y una
+     * razón que se aplica a todas no separa ninguna. Durante la fase de recolección el posterior
+     * tiene que salir solo de las heurísticas, para poder cruzarlo después contra la etiqueta de
+     * verificación y medir si aporta algo. Este test protege esa independencia.
+     */
     @Test
-    fun `verificada en la BD reduce el posterior frente a pendiente`() {
+    fun `el estado de verificacion no altera el posterior durante la fase de medicion`() {
         val pendiente = BayesianScorer.calculate(listOf("powerJump"), "PENDING", false)
-        val verificada = BayesianScorer.calculate(listOf("powerJump"), "VERIFIED", false)
-        assertTrue("VERIFIED (LR 0.4) debe bajar el riesgo", verificada < pendiente)
-    }
-
-    @Test
-    fun `no encontrada en la BD sube ligeramente el posterior`() {
-        val pendiente = BayesianScorer.calculate(listOf("powerJump"), "PENDING", false)
-        val noEncontrada = BayesianScorer.calculate(listOf("powerJump"), "NOT_FOUND", false)
-        assertTrue("NOT_FOUND (LR 1.4) debe subir un poco el riesgo", noEncontrada > pendiente)
+        for (estado in listOf("VERIFIED", "NOT_FOUND", "ERROR")) {
+            val conEstado = BayesianScorer.calculate(listOf("powerJump"), estado, false)
+            assertTrue(
+                "$estado no debe mover el posterior (esperado $pendiente, obtenido $conEstado)",
+                conEstado == pendiente
+            )
+        }
     }
 
     @Test
