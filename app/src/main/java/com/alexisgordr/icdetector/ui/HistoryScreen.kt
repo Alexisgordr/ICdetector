@@ -169,9 +169,15 @@ fun HistoryPanel(dbHelper: CellDbHelper, onBack: () -> Unit) {
                                             Text("${record.dbm} dBm (${record.netType})", color = Color.White, fontSize = 11.sp, fontFamily = FontFamily.Monospace)
                                         }
                                         
-                                        // Fila 2: MNC/TAC y Score
+                                        // Fila 2: identidad de red (MCC/MNC/TAC) y Score
                                         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                                            Text("MNC: ${record.mnc} | TAC: ${record.tac}", color = Color(0xFF888888), fontSize = 11.sp, fontFamily = FontFamily.Monospace)
+                                            Text(
+                                                "MCC/MNC: ${record.mcc}/${record.mnc} | TAC: ${record.tac}",
+                                                color = Color(0xFF888888),
+                                                fontSize = 10.sp,
+                                                fontFamily = FontFamily.Monospace,
+                                                maxLines = 1
+                                            )
                                             // Mismo criterio que el monitor: el historial no puede
                                             // pintar de otro color el mismo score.
                                             val scoreColor = securityScoreColor(record.score)
@@ -424,4 +430,3 @@ fun IntelCell(
             fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Bold)
     }
 }
-

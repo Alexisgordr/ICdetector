@@ -27,6 +27,9 @@ The engine is deliberately tuned to favour fewer false positives over aggressive
 
 ## 🔍 How to Interpret the Data
 
+The live identity panel displays the operator as `MCC / MNC`: MCC identifies the country and MNC
+identifies the mobile network within it. The expanded history shows both values alongside TAC.
+
 ### 1. Verification Status
 
 - ✅ **VERIFIED:** The base station (CellID) is registered in the OpenCellID/WiGLE database and matches the expected network parameters. High confidence.
@@ -100,7 +103,7 @@ If you detect a credible, persistent threat:
 
 3. **Post-Audit:** Export the history to CSV from the History tab.
 
-4. **Reporting:** Use the CSV data to identify patterns — specific times or locations where NOT FOUND or suspicious cells repeatedly appear. The export includes `Timestamp, NetType, CID, MNC, TAC, MCC, DBM, Verified, SecurityScore, FailedHeuristics, Lat, Lon, PCI, ARFCN, RSRQ, SINR, AnomalyConfidence, ApiLat, ApiLon, TA, TAUnit, TAMeters`. Pay special attention to `Lat`, `Lon`, `PCI`, `ARFCN`, `RSRQ` and `SINR` for RF fingerprinting analysis. Note that `Lat`/`Lon` are **your** GPS position when the observation was recorded, while `ApiLat`/`ApiLon` are where WiGLE/OpenCellID claim the antenna is — two different things, kept in separate columns since v2.1. `AnomalyConfidence` is the Bayesian posterior at that moment — a confidence from reasoned likelihood ratios, not a measured probability. `TA` is the raw Timing Advance with the unit it came in (`TAUnit`) and the distance derived from it (`TAMeters`, empty when the unit does not allow a defensible conversion). Rows whose `FailedHeuristics` starts with `[sub-umbral]` are heuristics that failed without reaching the alarm threshold (observations, not alerts). Validate any export with `python3 tools/check_export.py <file.csv>` — and blank `Lat`, `Lon`, `ApiLat` and `ApiLon` before sharing one with anybody. Fields are CSV-escaped (RFC 4180), so the file imports cleanly into spreadsheets and analysis tools.
+4. **Reporting:** Use the CSV data to identify patterns — specific times or locations where NOT FOUND or suspicious cells repeatedly appear. The export includes `Timestamp, NetType, CID, MNC, TAC, MCC, DBM, Verified, SecurityScore, FailedHeuristics, Lat, Lon, PCI, ARFCN, RSRQ, SINR, AnomalyConfidence, ApiLat, ApiLon, TA, TAUnit, TAMeters, Radio`. Pay special attention to `Lat`, `Lon`, `PCI`, `ARFCN`, `RSRQ` and `SINR` for RF fingerprinting analysis. Note that `Lat`/`Lon` are **your** GPS position when the observation was recorded, while `ApiLat`/`ApiLon` are where WiGLE/OpenCellID claim the antenna is — two different things, kept in separate columns since v2.1. `AnomalyConfidence` is the Bayesian posterior at that moment — a confidence from reasoned likelihood ratios, not a measured probability. `TA` is the raw Timing Advance with the unit it came in (`TAUnit`) and the distance derived from it (`TAMeters`, empty when the unit does not allow a defensible conversion). `Radio` is the technology derived from the Android `CellInfo` class, not the status-bar label. Rows whose `FailedHeuristics` starts with `[sub-umbral]` are heuristics that failed without reaching the alarm threshold (observations, not alerts). Validate any export with `python3 tools/check_export.py <file.csv>` — and blank `Lat`, `Lon`, `ApiLat` and `ApiLon` before sharing one with anybody. Fields are CSV-escaped (RFC 4180), so the file imports cleanly into spreadsheets and analysis tools.
 
 ---
 

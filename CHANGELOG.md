@@ -21,6 +21,13 @@
 - Kept external verification neutral to score and anomaly confidence.
 - Expanded regression coverage to 149 declared tests.
 
+### Interface
+
+- The live identity panel now displays `MCC / MNC` together in a compact column, preserving the
+  four-column layout on narrow screens.
+- Expanded history rows display `MCC/MNC` alongside TAC so the operator identity is visible without
+  opening an export.
+
 ### Release metadata
 
 - `versionName`: `2.1`

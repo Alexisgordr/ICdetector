@@ -349,6 +349,9 @@ The app may guide the user toward the relevant settings screen, but the final ex
 
 # Telemetry & Visualization
 
+The live identity row shows `CELL ID`, `TAC/LAC`, the operator as `MCC / MNC`, and `ARFCN` in a
+compact four-column layout. Expanded history rows also retain the visible `MCC/MNC` identity.
+
 ## Forensic Terminal
 
 Structured event-driven logging designed to preserve meaningful security and radio events while minimizing noisy output.
@@ -431,7 +434,7 @@ CSV export is available for:
 - research
 - archival workflows
 
-Columns: `Timestamp, NetType, CID, MNC, TAC, MCC, DBM, Verified, SecurityScore, FailedHeuristics, Lat, Lon, PCI, ARFCN, RSRQ, SINR, AnomalyConfidence, ApiLat, ApiLon, TA, TAUnit, TAMeters`.
+Columns: `Timestamp, NetType, CID, MNC, TAC, MCC, DBM, Verified, SecurityScore, FailedHeuristics, Lat, Lon, PCI, ARFCN, RSRQ, SINR, AnomalyConfidence, ApiLat, ApiLon, TA, TAUnit, TAMeters, Radio`.
 
 Validate any export with `python3 tools/check_export.py <file.csv>` — it checks the invariants the
 design guarantees and prints how mature the history is.

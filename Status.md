@@ -20,6 +20,8 @@ designed to answer, and add the tooling to check that the second one can.
 - API verification callbacks update context only. They cannot emit tones, critical notifications
   or threat state, and they do not advance `TemporalConfidence`; a fresh real radio observation is
   requested and must pass through the normal three-cycle confirmation pipeline.
+- The live identity row and expanded history now show MCC together with MNC (`MCC / MNC`) in a
+  compact single-line layout that preserves the existing four-column monitor panel.
 
 ---
 
@@ -318,6 +320,8 @@ ver — no toca el HAL de telefonía.
 - Los callbacks de verificación API solo actualizan contexto. No pueden emitir tonos,
   notificaciones críticas ni estado de amenaza, y no avanzan `TemporalConfidence`; se solicita
   una lectura real que debe atravesar el flujo normal de confirmación de tres ciclos.
+- La fila de identidad en vivo y el historial expandido muestran MCC junto a MNC (`MCC / MNC`) en
+  una disposición compacta que conserva las cuatro columnas del monitor.
 
 ## Ahora: validar la compilación y comenzar tres meses de recolección
 

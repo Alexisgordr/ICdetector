@@ -383,7 +383,7 @@ fun MainScreenContent(dbHelper: CellDbHelper, service: MiniICService?) {
 
                                 HorizontalDivider(color = Color(0xFF1A1A1A))
 
-                                // Fila 2 — CELL ID, TAC/LAC, MNC y ARFCN
+                                // Fila 2 — CELL ID, TAC/LAC, MCC/MNC y ARFCN
                                 Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
 
                                     // CELL ID
@@ -450,27 +450,29 @@ fun MainScreenContent(dbHelper: CellDbHelper, service: MiniICService?) {
                                             .background(Color(0xFF222222))
                                     )
 
-                                    // MNC
+                                    // MCC / MNC: juntos forman el PLMN del operador.
                                     Column(
                                         modifier = Modifier
-                                            .weight(0.5f)
-                                            .padding(horizontal = 12.dp, vertical = 14.dp)
+                                            .weight(0.75f)
+                                            .padding(horizontal = 8.dp, vertical = 14.dp)
                                     ) {
                                         Text(
-                                            "MNC",
+                                            "MCC / MNC",
                                             color = Color(0xFF555555),
                                             fontFamily = FontFamily.Monospace,
-                                            fontSize = 9.sp,
+                                            fontSize = 8.sp,
                                             fontWeight = FontWeight.Bold,
-                                            letterSpacing = 1.sp
+                                            letterSpacing = 0.5.sp,
+                                            maxLines = 1
                                         )
                                         Spacer(Modifier.height(4.dp))
                                         Text(
-                                            active?.mnc ?: "N/A",
+                                            active?.let { "${it.mcc} / ${it.mnc}" } ?: "N/A / N/A",
                                             color = Color.White,
                                             fontFamily = FontFamily.Monospace,
-                                            fontSize = 13.sp,
-                                            fontWeight = FontWeight.Bold
+                                            fontSize = 12.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            maxLines = 1
                                         )
                                     }
 
