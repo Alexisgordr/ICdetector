@@ -1510,7 +1510,7 @@ class MiniICService : Service() {
                     val lon = data.optDouble("lon", Double.NaN)
                     val hasCoords = !lat.isNaN() && !lon.isNaN()
                     if (hasCoords && isValidCoordinate(lat, lon, cell)) {
-                        processSuccessfulVerification(lat, lon, cell, cacheKey, neighbors, "OpenCellID")
+                        processSuccessfulVerification(lat, lon, cell, cacheKey, "OpenCellID")
                         return@launch
                     } else if (hasCoords) {
                         // La API respondió con una coordenada que NO es creíble: centinela, o a una
@@ -1541,7 +1541,7 @@ class MiniICService : Service() {
                     val lon = data.optDouble("trilong", data.optDouble("lon", Double.NaN))
                     val hasCoords = !lat.isNaN() && !lon.isNaN()
                     if (hasCoords && isValidCoordinate(lat, lon, cell)) {
-                        processSuccessfulVerification(lat, lon, cell, cacheKey, neighbors, "WiGLE")
+                        processSuccessfulVerification(lat, lon, cell, cacheKey, "WiGLE")
                         return@launch
                     } else if (hasCoords) {
                         appendLog("[API]", "WiGLE: respuesta descartada por coordenada no creíble. No se concluye nada sobre la antena.")
@@ -1649,7 +1649,13 @@ class MiniICService : Service() {
         }
     }
 
-    private fun processSuccessfulVerification(lat: Double, lon: Double, cell: CellData, cacheKey: String, neighbors: List<CellData>, source: String) {
+    private fun processSuccessfulVerification(
+        lat: Double,
+        lon: Double,
+        cell: CellData,
+        cacheKey: String,
+        source: String
+    ) {
         appendLog("[API]", "Validación OK ($source). Firmas geográficas obtenidas.")
         // La auditoría del terminal se escribe en el handover, cuando la celda todavía está
         // PENDING. La verificación llega después y cambia la etiqueta de la celda, pero nadie
@@ -1672,55 +1678,20 @@ class MiniICService : Service() {
             cell.mcc,
             cell.radioTech)
         
-        val loc = getCurrentLocation()
-        val history = if (loc != null && cell.cellId != "N/A") {
-            dbHelper.getPreviousCellHistory(cell.cellId, cell.mnc, cell.tac, cell.mcc, loc)
-        } else emptyList()
-        val sigBaseline = if (loc != null && cell.cellId != "N/A") {
-            dbHelper.getCellSignalBaseline(cell.cellId, cell.mnc, cell.tac, cell.mcc, loc)
-        } else null
-        val rfStability = if (cell.cellId != "N/A") {
-            dbHelper.getCellRfStability(cell.cellId, cell.mnc, cell.tac, cell.mcc)
-        } else null
-        val reputation = if (cell.cellId != "N/A") {
-            dbHelper.getCellReputation(cell.cellId, cell.mnc, cell.tac, cell.mcc)
-        } else null
-        val rfFingerprint = if (cell.cellId != "N/A") {
-            dbHelper.getCellRfFingerprint(cell.cellId, cell.mnc, cell.tac, cell.mcc, nearLocation = loc)
-        } else null
-
-        val updatedActive = cell.copy(verified = VerificationStatus.VERIFIED, lat = lat, lon = lon)
-        val analyzedActive = ThreatAnalyzer.analyzeThreats(
-            active = updatedActive,
-            neighbors = neighbors,
-            isHardwareCipheringActive = isHardwareCipheringActive,
-            isHardwareCipheringAvailable = isHardwareCipheringAvailable,
-            cellChangeHistory = cellChangeHistory,
-            currentLocation = loc,
-            preloadedHistory = history,
-            isWifiActive = isWifiConnected(),
-            isNetworkLatencyAnomalous = networkLatencyState.value == "ANOMALA",  // ← NUEVO
-            signalBaseline = sigBaseline,
-            previousBand = prevBand,
-            previousDbm = prevRegisteredDbm,
-            recentRegisteredDbm = recentRegisteredDbmTrend.toList(),
-            rfStability = rfStability,
-            reputation = reputation,
-            rfFingerprint = rfFingerprint
-        )
-        
+        // Una respuesta API cambia contexto, no constituye una nueva observación de radio.
+        // No puede avanzar TemporalConfidence ni alcanzar tonos/alertas por una ruta lateral.
+        // Se solicita una lectura real, que recorrerá el pipeline normal completo.
         scope.launch(Dispatchers.Main) {
-            _cellFlow.value = _cellFlow.value.map { 
-                if (it.cellId == cell.cellId) analyzedActive.copy(isRegistered = it.isRegistered) else it 
+            _cellFlow.value = _cellFlow.value.map { current ->
+                if (current.identityKey == cell.identityKey) {
+                    current.copy(verified = VerificationStatus.VERIFIED)
+                } else {
+                    current
+                }
             }
-            
-            // Misma línea de cierre que usa el camino NOT_FOUND: un solo mensaje, una sola voz.
-            logVerificationOutcome(analyzedActive)
 
-            if (analyzedActive.isSuspicious && analyzedActive.isRegistered) {
-                toneGenerator?.startTone(ToneGenerator.TONE_CDMA_SOFT_ERROR_LITE, 200)
-                checkAlerts(analyzedActive)
-            }
+            logVerificationOutcome(cell.copy(verified = VerificationStatus.VERIFIED))
+            requestFreshCellInfo()
         }
     }
 

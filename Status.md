@@ -17,6 +17,9 @@ designed to answer, and add the tooling to check that the second one can.
   identity and a coordinate that passes validation.
 - GSM/WCDMA mapping, invalid identifiers and CSV replay of the `Radio` column are covered by the
   final code and regression checks.
+- API verification callbacks update context only. They cannot emit tones, critical notifications
+  or threat state, and they do not advance `TemporalConfidence`; a fresh real radio observation is
+  requested and must pass through the normal three-cycle confirmation pipeline.
 
 ---
 
@@ -312,6 +315,9 @@ ver — no toca el HAL de telefonía.
   coincidente y coordenada aceptada.
 - El mapeo GSM/WCDMA, las identidades inválidas y el replay de la columna `Radio` quedan cubiertos
   por el código final y sus comprobaciones de regresión.
+- Los callbacks de verificación API solo actualizan contexto. No pueden emitir tonos,
+  notificaciones críticas ni estado de amenaza, y no avanzan `TemporalConfidence`; se solicita
+  una lectura real que debe atravesar el flujo normal de confirmación de tres ciclos.
 
 ## Ahora: validar la compilación y comenzar tres meses de recolección
 
