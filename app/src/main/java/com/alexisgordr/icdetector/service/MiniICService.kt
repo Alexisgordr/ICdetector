@@ -852,8 +852,14 @@ class MiniICService : Service() {
                         cachedReputation = dbHelper.getCellReputation(
                             activeRaw.cellId, activeRaw.mnc, activeRaw.tac, activeRaw.mcc
                         )
+                        // v2.1: se pasa la ubicación para acotar la huella RF a la zona actual.
+                        // Con el muestreo periódico, el sitio donde más tiempo pasas aporta la
+                        // mayoría de las muestras; sin acotar, la media se desplazaría hacia ese
+                        // sitio y la misma celda vista desde otro punto parecería "incoherente".
+                        // Con ubicación desconocida se mantiene el comportamiento clásico.
                         cachedFingerprint = dbHelper.getCellRfFingerprint(
-                            activeRaw.cellId, activeRaw.mnc, activeRaw.tac, activeRaw.mcc
+                            activeRaw.cellId, activeRaw.mnc, activeRaw.tac, activeRaw.mcc,
+                            nearLocation = currentLocation
                         )
                         cachedRfSignature = rfSig
                         cachedRfStability = st
@@ -1128,18 +1134,24 @@ class MiniICService : Service() {
     private fun idleLatencyState(): String = if (isLatencyProbeActive()) "OK" else "N/A"
 
     private fun applyTemporalConfidence(cell: CellData): CellData {
+        // Clave de racha por IDENTIDAD COMPLETA (roadmap Tier 1 #1). Antes se usaba el cellId
+        // pelado, así que una transición con el MISMO CID bajo distinto MNC/TAC/MCC (frontera,
+        // roaming, red compartida, multi-SIM) podía arrastrar la racha de otra celda. El resto de
+        // consultas ya usaban CID+MNC+TAC+MCC; esto cierra el último sitio que no lo hacía.
+        val streakKey = "${cell.mcc}-${cell.mnc}-${cell.tac}-${cell.cellId}"
+
         // Si cambia la celda activa, resetear todos los streaks
-        if (cell.cellId != lastStreakCellId) {
+        if (streakKey != lastStreakCellId) {
             anomalyStreaks.clear()
-            lastStreakCellId = cell.cellId
+            lastStreakCellId = streakKey
         }
 
         val currentStreak = if (cell.isSuspicious) {
-            val newStreak = (anomalyStreaks[cell.cellId] ?: 0) + 1
-            anomalyStreaks[cell.cellId] = newStreak
+            val newStreak = (anomalyStreaks[streakKey] ?: 0) + 1
+            anomalyStreaks[streakKey] = newStreak
             newStreak
         } else {
-            anomalyStreaks.remove(cell.cellId)
+            anomalyStreaks.remove(streakKey)
             0
         }
 
@@ -1150,6 +1162,12 @@ class MiniICService : Service() {
             suspiciousReason = when {
                 isConfirmed -> cell.suspiciousReason
                 cell.isSuspicious -> "[$currentStreak/$CONFIRMATION_CYCLES ciclos confirmando] ${cell.suspiciousReason}"
+                // v2.1: la celda no llega al umbral de sospecha, pero SÍ falló heurísticas. Antes
+                // esto era `null` y el motivo se perdía para siempre: la fila acababa en el
+                // historial como "85 / OK". Ahora se conserva marcado como sub-umbral. No cambia
+                // nada del comportamiento de alarma (isSuspicious sigue siendo false, no suena
+                // nada, no se muestra como amenaza): solo deja de destruirse la evidencia.
+                cell.suspiciousReason != null -> "$SUBTHRESHOLD_PREFIX ${cell.suspiciousReason}"
                 else -> null
             }
         )
@@ -1238,28 +1256,66 @@ class MiniICService : Service() {
         }
     }
 
+    /**
+     * ¿Es creíble la coordenada que ha devuelto WiGLE/OpenCellID para esta antena?
+     *
+     * v2.1 — reescrita a partir de los datos de campo. La versión anterior hacía un chequeo de
+     * distancia de 50 km, pero SOLO si había un fix GPS vivo; sin fix, aceptaba cualquier cosa.
+     * Y "sin fix" es justo el caso frecuente (la app es GPS-only por diseño y bajo techo no hay
+     * fix), así que una coordenada constante y absurda —la misma, hasta el sexto decimal, para
+     * 46 celdas distintas y a ~1.100 km— entraba sin oposición y marcaba esas celdas como
+     * VERIFIED (+15 de score). Eso no es un problema estético: es una vía de FALSO NEGATIVO,
+     * porque una celda verificada por error queda mucho más difícil de marcar después.
+     *
+     * Ahora hay tres barreras, de más fuerte a más débil:
+     *  1. Centinela: una coordenada que ya consta para varias Cell ID distintas no identifica a
+     *     ninguna antena — es un valor por defecto de la API. Se rechaza. No necesita GPS.
+     *  2. Distancia contra el fix GPS vivo (50 km), como antes.
+     *  3. Si no hay fix vivo, se usa la última posición aceptada (persistida, máx. 6 h) con un
+     *     margen mucho más generoso (500 km) para no rechazar nada legítimo tras un viaje. Un
+     *     salto de 1.100 km sigue cayendo.
+     * Sin ninguna referencia disponible, se acepta (comportamiento clásico): la barrera 1 sigue
+     * activa igualmente.
+     */
     private fun isValidCoordinate(lat: Double, lon: Double): Boolean {
         if (lat == 0.0 && lon == 0.0) return false
         if (lat < -90 || lat > 90) return false
         if (lon < -180 || lon > 180) return false
-        
-        val currentLoc = getCurrentLocation()
-        if (currentLoc == null) {
-            // FIX: sin fix GPS no podemos validar la distancia, pero eso NO significa
-            // que la coordenada de la API sea inválida. Antes se devolvía false y la
-            // celda —aunque la API la verificara— se quedaba atascada en PENDING.
-            // Aceptamos la coordenada (pasa los chequeos básicos); el sanity de
-            // distancia se omite hasta tener un fix GPS fiable.
-            return true
+
+        // 1. Coordenada centinela: la misma respuesta para varias celdas distintas.
+        try {
+            val sharedBy = dbHelper.countDistinctCellsWithApiCoordinate(lat, lon)
+            if (sharedBy >= API_SENTINEL_MIN_CELLS) {
+                appendLog("[API]", "Coordenada rechazada: ya consta para $sharedBy celdas distintas (valor por defecto de la API, no identifica ninguna antena).")
+                return false
+            }
+        } catch (_: Exception) {
+            // Si la consulta fallara, seguimos con las barreras de distancia.
         }
+
+        // 2 y 3. Distancia contra la mejor referencia disponible.
+        val liveLoc = getCurrentLocation()
+        val reference: Location?
+        val maxDistanceMeters: Float
+        if (liveLoc != null) {
+            reference = liveLoc
+            maxDistanceMeters = 50_000f
+        } else {
+            val fallback = lastAcceptedLocation
+            val age = if (fallback != null) System.currentTimeMillis() - fallback.time else Long.MAX_VALUE
+            reference = if (fallback != null && age in 0..LOCATION_REFERENCE_MAX_AGE) fallback else null
+            maxDistanceMeters = 500_000f
+        }
+
+        if (reference == null) return true
 
         val results = FloatArray(1)
         Location.distanceBetween(
-            currentLoc.latitude, currentLoc.longitude,
+            reference.latitude, reference.longitude,
             lat, lon, results
         )
-        if (results[0] > 50000f) {
-            appendLog("[API]", "Coordenadas rechazadas: a ${results[0].toInt()}m de tu posición")
+        if (results[0] > maxDistanceMeters) {
+            appendLog("[API]", "Coordenada rechazada: a ${(results[0] / 1000f).toInt()} km de tu posición de referencia.")
             return false
         }
         return true
@@ -1353,14 +1409,25 @@ class MiniICService : Service() {
                 if (s == VerificationStatus.VERIFIED && data != null) {
                     val lat = data.optDouble("trilat", data.optDouble("lat", Double.NaN))
                     val lon = data.optDouble("trilong", data.optDouble("lon", Double.NaN))
-                    if (!lat.isNaN() && !lon.isNaN() && isValidCoordinate(lat, lon)) {
+                    val hasCoords = !lat.isNaN() && !lon.isNaN()
+                    if (hasCoords && isValidCoordinate(lat, lon)) {
                         processSuccessfulVerification(lat, lon, cell, cacheKey, neighbors, "WiGLE")
                         return@launch
+                    } else if (hasCoords) {
+                        // v2.1: la API respondió con una coordenada que NO es creíble (centinela o
+                        // a distancia imposible). Antes esto caía igualmente en la rama "VERIFIED
+                        // sin coordenada" y la celda se llevaba el +15 de verificación por una
+                        // respuesta basura. Una verificación que no se sostiene no es una
+                        // verificación: se trata como no encontrada (se reintentará en 1 h).
+                        appendLog("[API]", "WiGLE: respuesta descartada por coordenada no creíble. La celda NO se da por verificada.")
+                        finalStatus = VerificationStatus.NOT_FOUND
                     } else {
-                        appendLog("[API]", "WiGLE: coordenadas inválidas descartadas.")
+                        appendLog("[API]", "WiGLE: respuesta sin coordenadas.")
+                        finalStatus = s
                     }
+                } else {
+                    finalStatus = s
                 }
-                finalStatus = s
             }
             
             // Fallback OpenCellID
@@ -1369,14 +1436,21 @@ class MiniICService : Service() {
                 if (s == VerificationStatus.VERIFIED && data != null) {
                     val lat = data.optDouble("lat", Double.NaN)
                     val lon = data.optDouble("lon", Double.NaN)
-                    if (!lat.isNaN() && !lon.isNaN() && isValidCoordinate(lat, lon)) {
+                    val hasCoords = !lat.isNaN() && !lon.isNaN()
+                    if (hasCoords && isValidCoordinate(lat, lon)) {
                         processSuccessfulVerification(lat, lon, cell, cacheKey, neighbors, "OpenCellID")
                         return@launch
+                    } else if (hasCoords) {
+                        // Mismo criterio que en WiGLE: coordenada no creíble -> no se verifica.
+                        appendLog("[API]", "OpenCellID: respuesta descartada por coordenada no creíble. La celda NO se da por verificada.")
+                        finalStatus = VerificationStatus.NOT_FOUND
                     } else {
-                        appendLog("[API]", "OpenCellID: coordenadas inválidas descartadas.")
+                        appendLog("[API]", "OpenCellID: respuesta sin coordenadas.")
+                        finalStatus = s
                     }
+                } else {
+                    finalStatus = s
                 }
-                finalStatus = s
             }
 
             // Guardar resultado negativo si ninguna lo encontró
@@ -1440,7 +1514,7 @@ class MiniICService : Service() {
             dbHelper.getCellReputation(cell.cellId, cell.mnc, cell.tac, cell.mcc)
         } else null
         val rfFingerprint = if (cell.cellId != "N/A") {
-            dbHelper.getCellRfFingerprint(cell.cellId, cell.mnc, cell.tac, cell.mcc)
+            dbHelper.getCellRfFingerprint(cell.cellId, cell.mnc, cell.tac, cell.mcc, nearLocation = loc)
         } else null
 
         val updatedActive = cell.copy(verified = VerificationStatus.VERIFIED, lat = lat, lon = lon)
@@ -1472,6 +1546,59 @@ class MiniICService : Service() {
                 toneGenerator?.startTone(ToneGenerator.TONE_CDMA_SOFT_ERROR_LITE, 200)
                 checkAlerts(analyzedActive)
             }
+        }
+    }
+
+    // v2.1 — Marca del último registro de muestreo periódico (ver maybeLogPeriodicSample).
+    private var lastPeriodicLogTime = 0L
+
+    /**
+     * MUESTREO PERIÓDICO DE LA CELDA SERVIDORA (v2.1).
+     *
+     * Hasta v2.0 el historial solo se escribía en el handover. Consecuencia medida en 59 días de
+     * campo: MEDIANA DE 2 MUESTRAS POR CELDA, el 38 % de las celdas vistas una sola vez, y solo 6
+     * celdas de 173 llegando a las 30 muestras que exige la huella RF — es decir, la huella RF
+     * llevaba dos meses dormida y a ese ritmo lo habría seguido estando en marzo. Estar ocho horas
+     * en casa camping en la misma celda producía CERO muestras.
+     *
+     * Esto registra una observación cada pocos minutos mientras sigues en la misma celda, que es
+     * lo que de verdad alimenta los baselines (H13, huella RSRQ/SINR, reputación). Coste real:
+     *  - Batería: ninguna apreciable. NO despierta el GPS (usa getLastKnownLocation, que es lo que
+     *    ya haya) y NO fuerza lecturas de radio: se limita a persistir el análisis que el bucle
+     *    acaba de hacer de todas formas.
+     *  - Disco: ~150 filas/día, unas 9.000 en los 60 días de retención. Trivial para SQLite.
+     *
+     * La cadencia es más lenta con la pantalla apagada, coherente con el diseño de bajo consumo.
+     */
+    private fun maybeLogPeriodicSample(cell: CellData) {
+        if (cell.cellId == "N/A") return
+        if (cell.dbm == -999 || cell.dbm == Int.MAX_VALUE) return
+
+        val now = System.currentTimeMillis()
+        val interval = if (isScreenOn) PERIODIC_LOG_INTERVAL_SCREEN_ON else PERIODIC_LOG_INTERVAL_SCREEN_OFF
+        if (now - lastPeriodicLogTime < interval) return
+        lastPeriodicLogTime = now
+
+        scope.launch(Dispatchers.IO) {
+            val loc = getCurrentLocation()
+            dbHelper.logConnection(
+                netType = cell.networkType,
+                cid = cell.cellId,
+                mnc = cell.mnc,
+                tac = cell.tac,
+                mcc = cell.mcc,
+                dbm = cell.dbm,
+                verified = cell.verified,
+                score = cell.securityScore,
+                failedHeuristics = cell.suspiciousReason ?: "OK",
+                lat = loc?.latitude,
+                lon = loc?.longitude,
+                pci = cell.pci,
+                arfcn = cell.arfcn,
+                rsrq = cell.rsrq,
+                sinr = cell.sinr,
+                threatProbability = cell.threatProbability
+            )
         }
     }
 
@@ -1533,12 +1660,20 @@ class MiniICService : Service() {
                     pci = cell.pci,
                     arfcn = cell.arfcn,
                     rsrq = cell.rsrq,
-                    sinr = cell.sinr
+                    sinr = cell.sinr,
+                    threatProbability = cell.threatProbability
                 )
             }
             // --------------------------------------------------
 
             prevCid = cid
+            // El registro del handover ya es una muestra: reinicia el reloj del muestreo periódico.
+            lastPeriodicLogTime = System.currentTimeMillis()
+        } else if (confirmed) {
+            // Misma celda que en el ciclo anterior: muestreo periódico (ver más abajo). Solo en la
+            // ruta del bucle principal (confirmed = true), nunca en la de re-análisis tras la API,
+            // para no duplicar filas por el mismo instante.
+            maybeLogPeriodicSample(cell)
         }
 
         if (dbm != -999 && dbm != Int.MAX_VALUE) {
@@ -1619,7 +1754,8 @@ class MiniICService : Service() {
                         pci = cell.pci,
                         arfcn = cell.arfcn,
                         rsrq = cell.rsrq,
-                        sinr = cell.sinr
+                        sinr = cell.sinr,
+                        threatProbability = cell.threatProbability
                     )
                 }
             }
@@ -1760,8 +1896,15 @@ class MiniICService : Service() {
         }
 
         appendLog("[AUDIT]", "Resultado Global: ${cell.securityScore}% de seguridad.")
-        if (cell.isSuspicious) appendLog("[SEC]", "🚨 CRÍTICO: Antena sospechosa detectada: ${cell.suspiciousReason}")
-        else appendLog("[SYS]", "✅ Entorno validado como SEGURO.")
+        if (cell.isSuspicious) {
+            appendLog("[SEC]", "🚨 CRÍTICO: Antena sospechosa detectada: ${cell.suspiciousReason}")
+        } else if (cell.suspiciousReason != null) {
+            // v2.1: la celda no alcanza el umbral de alarma pero SÍ ha fallado heurísticas.
+            // Decir "SEGURO" aquí sería tan deshonesto como lo era guardar la fila como "OK".
+            appendLog("[SYS]", "Sin alarma, pero con observaciones: ${cell.suspiciousReason}")
+        } else {
+            appendLog("[SYS]", "✅ Entorno validado como SEGURO.")
+        }
         _auditStatus.value = "Auditoría completada"
     }
 
@@ -1800,5 +1943,13 @@ class MiniICService : Service() {
         // Si la referencia persistida es más vieja que esto (p. ej. viaje largo con la app
         // cerrada), se ignora y el próximo fix se trata como bootstrap, evitando falsos rechazos.
         private const val LOCATION_REFERENCE_MAX_AGE = 6L * 60 * 60 * 1000  // 6 h
+        // v2.1 — Una coordenada de API que ya consta para este nº de Cell ID distintas es un
+        // valor por defecto de la API, no la posición de una antena. Umbral bajo a propósito:
+        // dos antenas reales nunca comparten coordenada exacta.
+        private const val API_SENTINEL_MIN_CELLS = 3
+        // v2.1 — Cadencia del muestreo periódico de la celda servidora (ver maybeLogPeriodicSample).
+        // Más lenta con la pantalla apagada, coherente con el diseño de bajo consumo.
+        private const val PERIODIC_LOG_INTERVAL_SCREEN_ON = 5L * 60 * 1000    // 5 min
+        private const val PERIODIC_LOG_INTERVAL_SCREEN_OFF = 15L * 60 * 1000  // 15 min
     }
 }

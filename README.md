@@ -1,7 +1,7 @@
 ![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)
 ![Platform](https://img.shields.io/badge/Platform-Android%2010%2B-green.svg)
 ![Root Required](https://img.shields.io/badge/Root-Not%20Required-brightgreen.svg)
-![Status](https://img.shields.io/badge/Status-Stable%20v2.0-success.svg)
+![Status](https://img.shields.io/badge/Status-Stable%20v2.1-success.svg)
 
 <table>
   <tr>
@@ -49,9 +49,13 @@ The application operates from Android userland without requiring root or direct 
 
 # Project Status
 
-ICdetection v2.0 is currently considered stable and feature-complete within the limits of Android userland telemetry.
+> **⚠️ Installing v2.1: uninstall the previous version first.** v2.1 will not install as an in-place update — Android refuses it if the APK is not signed with the same keystore as the copy already on the device, and a clean database is required anyway (records written before v2.1 may hold an antenna coordinate where your GPS position belongs, and the migration deliberately does not try to guess which is which). Export your CSV first if you want to keep the old history. Later versions signed with the same keystore will update in place normally. See `Status.md`.
 
-The project is intentionally entering a data-collection and observation phase. During this period, future work will focus on:
+ICdetection v2.1 is currently considered stable and feature-complete within the limits of Android userland telemetry.
+
+v2.1 is a **data-integrity release**. It adds no new detection claims. It exists because the first two months of field collection surfaced problems that made that very collection unable to answer the questions it was designed to answer: sub-threshold heuristic failures were recorded with their reason erased, API-supplied tower coordinates were overwriting the device's own GPS positions in the history, two heuristics were firing on carrier-aggregation artifacts, and the history was so sparse that the RF fingerprint never woke up. See `CHANGELOG-v2.1.md` for the full evidence and the fixes.
+
+Future work continues to focus on:
 
 - bug fixes
 - field validation
@@ -283,6 +287,8 @@ The heuristic is intentionally conservative: a PCI is only treated as a genuine 
 
 Field testing showed that ARFCN is not reliable enough for this identity-stability decision because carrier aggregation can cause serving-cell ARFCN values to appear inconsistent. Therefore this heuristic deliberately focuses on PCI.
 
+**v2.1 correction.** Longer field data showed that carrier aggregation affects the reported PCI in exactly the same way: when the modem attributes a secondary carrier's ARFCN to the serving cell, it attributes that carrier's PCI too. Across 59 days the correlation was perfect — a given PCI appeared only ever on one ARFCN, with no crossover. The heuristic therefore now compares PCI values **only within the same carrier (ARFCN)**. A clone that reconfigures its PCI does so on its own carrier, so real detection is unaffected; what disappears is a false positive caused by the device's own reporting.
+
 ## RF Quality Fingerprint
 
 Complementing the signal-power baseline, the engine can learn each cell's signal-quality signature using RSRQ and SINR.
@@ -422,6 +428,13 @@ CSV export is available for:
 - reporting
 - research
 - archival workflows
+
+Columns: `Timestamp, NetType, CID, MNC, TAC, MCC, DBM, Verified, SecurityScore, FailedHeuristics, Lat, Lon, PCI, ARFCN, RSRQ, SINR, ThreatProb, ApiLat, ApiLon`.
+
+Two points matter for analysis:
+
+- **`Lat` / `Lon` are the device's own GPS position** at the moment of the observation, and nothing else. The antenna position reported by WiGLE/OpenCellID lives in its own `ApiLat` / `ApiLon` columns. Before v2.1 both were written to the same pair of columns, which silently mixed two different quantities.
+- **`FailedHeuristics` entries prefixed with `[sub-umbral]`** are heuristics that failed without reaching the alarm threshold. They are observations, not alerts, and they are recorded precisely so that false positives can be studied. Before v2.1 they were stored as `OK`.
 
 Exports may contain sensitive location and cellular metadata. Users should treat exported files as private forensic material.
 

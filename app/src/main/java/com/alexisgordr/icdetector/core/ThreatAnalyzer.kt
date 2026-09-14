@@ -370,7 +370,28 @@ object ThreatAnalyzer {
                 val prevStrong = previousDbm != null && previousDbm >= -90
                 // ¿Estaba la señal degradándose progresivamente? -> movimiento físico legítimo.
                 val degrading = isSignalDegrading(recentRegisteredDbm)
-                if (prevStrong && !degrading) {
+
+                // v2.1 — DOS CONDICIONES NUEVAS, a partir de datos de campo.
+                //
+                // En 59 días, 12 de las 34 penalizaciones del historial fueron transiciones de
+                // banda alta a sub-GHz con la celda nueva a -101, -108, -111, incluso -116 dBm.
+                // Eso no es un downgrade forzado: es salir de la cobertura de una microcelda
+                // urbana y caer a la capa sub-GHz, el handover más corriente que existe en LTE.
+                //
+                // El modelo de ataque que esta heurística persigue es otro: un transmisor táctico
+                // CERCANO que te arrastra a una banda de gran alcance. Si te arrastra, es porque
+                // te ofrece una señal buena — no una agonizante. De ahí:
+                //
+                //   newStrong           -> la celda nueva se ve FUERTE en términos absolutos.
+                //   notCoverageFallback -> y no es más débil que la que tenías, que es la firma
+                //                          inequívoca de "he perdido la celda anterior".
+                //
+                // Ambas son condiciones NECESARIAS del ataque, así que no se pierde detección
+                // real; lo que se elimina es el handover rutinario a la capa de cobertura.
+                val newStrong = active.dbm >= -95
+                val notCoverageFallback = previousDbm != null && active.dbm >= previousDbm
+
+                if (prevStrong && newStrong && notCoverageFallback && !degrading) {
                     hBandDowngrade = false
                     val from = BandPlan.approxFreqMhz(previousBand) ?: 0
                     val to = BandPlan.approxFreqMhz(curBand) ?: 0
@@ -394,14 +415,20 @@ object ThreatAnalyzer {
         // entre identidades AHORA, no de un cambio puntual ya asentado.
         rfStability?.let { st ->
             if (st.totalObservations >= 4) {
-                // SOLO PCI. Los datos de campo demuestran que el ARFCN parpadea de forma benigna
-                // por AGREGACIÓN DE PORTADORAS (el móvil atribuye a la celda servidora el ARFCN de
-                // una portadora vecina): se vieron 7 celdas legítimas con el mismo puñado de ARFCN
-                // (1301/2850/3600/6400) mezclados, mientras el PCI permanecía FIJO en cada una. El
-                // PCI es la identidad real de capa física y nunca parpadea en una celda legítima,
-                // así que es la única señal fiable para esta heurística. Un clon con PCI distinto se
-                // detecta igual; uno que copie el PCI exacto cae fuera (limitación asumida a cambio
-                // de eliminar de raíz los falsos positivos por ARFCN).
+                // SOLO PCI, y SOLO DENTRO DE LA MISMA PORTADORA (ARFCN).
+                //
+                // v2.0 ya había descartado el ARFCN como señal de identidad porque parpadea de
+                // forma benigna con AGREGACIÓN DE PORTADORAS: el módem atribuye a la celda
+                // servidora el ARFCN de una portadora secundaria. v2.1 corrige el hueco que
+                // quedaba: el módem hace lo MISMO con el PCI. En 59 días de datos reales, las
+                // celdas con varios PCI mostraban correlación PERFECTA entre PCI y ARFCN (PCI 200
+                // siempre en ARFCN 6400, PCI 473 siempre en 3600, sin un solo cruce). No eran dos
+                // identidades alternándose: era una antena vista por dos portadoras. La regla
+                // global disparaba ahí un -30 que era un falso positivo puro.
+                //
+                // Comparando dentro de cada portadora, ese caso desaparece y la detección real no
+                // se pierde: un clon que reconfigura su PCI lo hace en su propia portadora, así
+                // que sigue apareciendo como dos PCI sólidos en el MISMO ARFCN.
                 val MIN_SHARE = 0.15
                 fun solidSet(values: List<Pair<Int, Int>>): Set<Int> {
                     val total = values.sumOf { it.second }
@@ -409,13 +436,26 @@ object ThreatAnalyzer {
                     return values.filter { it.second >= 2 && it.second.toDouble() / total >= MIN_SHARE }
                         .map { it.first }.toSet()
                 }
-                val solidPci = solidSet(st.distinctPci)
-                val recentPci = st.recentDistinctPci.map { it.first }.toSet()
+
                 // Sospechoso solo si >=2 PCI sólidos siguen activos recientemente (parpadeo real).
-                val pciFlapping = solidPci.intersect(recentPci).size >= 2
+                val pciFlapping = if (st.pciByArfcn.isNotEmpty()) {
+                    st.pciByArfcn.any { (carrier, counts) ->
+                        val solid = solidSet(counts)
+                        if (solid.size < 2) return@any false
+                        val recent = st.recentPciByArfcn[carrier].orEmpty().map { it.first }.toSet()
+                        solid.intersect(recent).size >= 2
+                    }
+                } else {
+                    // Compatibilidad: historial sin desglose por portadora (p. ej. tests o filas
+                    // muy antiguas sin ARFCN). Se mantiene la regla global de v2.0.
+                    val solidPci = solidSet(st.distinctPci)
+                    val recentPci = st.recentDistinctPci.map { it.first }.toSet()
+                    solidPci.intersect(recentPci).size >= 2
+                }
+
                 if (pciFlapping) {
                     hRfStability = false
-                    reasons.add("Identidad RF inestable: misma Cell ID alternando PCI recientemente (posible clon)")
+                    reasons.add("Identidad RF inestable: misma Cell ID alternando PCI en la misma portadora (posible clon)")
                     score -= 30
                 }
             }

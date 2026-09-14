@@ -20,7 +20,7 @@ import java.util.Locale
 class CellDbHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME, null, DATABASE_VERSION) {
     companion object {
         private const val DATABASE_NAME = "icdetector_history.db"
-        private const val DATABASE_VERSION = 8
+        private const val DATABASE_VERSION = 9
         const val TABLE_HISTORY = "history"
         const val COLUMN_ID = "id"
         const val COLUMN_TIMESTAMP = "timestamp"
@@ -39,6 +39,14 @@ class CellDbHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME, 
         const val COLUMN_ARFCN = "arfcn"
         const val COLUMN_RSRQ = "rsrq"
         const val COLUMN_SINR = "sinr"
+        // v2.1 — Probabilidad bayesiana en el momento de la observación (0..95).
+        const val COLUMN_THREAT_PROB = "threat_prob"
+        // v2.1 — Coordenada de la ANTENA devuelta por la API (WiGLE/OpenCellID). Separada de
+        // lat/lon a propósito: lat/lon es SIEMPRE la posición GPS del dispositivo. Antes la
+        // coordenada de la API se escribía encima de lat/lon y contaminaba el historial
+        // geográfico (H11/H13) con posiciones a cientos de km.
+        const val COLUMN_API_LAT = "api_lat"
+        const val COLUMN_API_LON = "api_lon"
     }
 
     override fun onCreate(db: SQLiteDatabase) {
@@ -60,7 +68,10 @@ class CellDbHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME, 
                     "$COLUMN_PCI INTEGER, " +
                     "$COLUMN_ARFCN INTEGER, " +
                     "$COLUMN_RSRQ INTEGER, " +
-                    "$COLUMN_SINR INTEGER)",
+                    "$COLUMN_SINR INTEGER, " +
+                    "$COLUMN_THREAT_PROB REAL DEFAULT 0, " +
+                    "$COLUMN_API_LAT REAL, " +
+                    "$COLUMN_API_LON REAL)",
         )
         createIndexes(db)
     }
@@ -94,6 +105,20 @@ class CellDbHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME, 
             // ejecutan en cada ciclo de análisis. Importante de cara a la fase de recolección,
             // cuando la tabla crecerá a decenas de miles de filas. Imposible que pierdan datos.
             createIndexes(db)
+        }
+        if (oldVersion < 9) {
+            // Migración v2.1, aditiva y NO destructiva: tres columnas nuevas. Las filas
+            // existentes quedan intactas (threat_prob = 0, api_lat/api_lon = NULL). Cada ALTER
+            // en su propio try/catch por si una columna ya existiera en una instalación parcial.
+            //
+            // NOTA sobre el histórico anterior a v2.1: las filas viejas pueden tener en
+            // lat/lon la coordenada de la ANTENA (bug corregido en esta versión) en lugar de la
+            // posición GPS. No se tocan aquí — borrarlas o moverlas automáticamente sería
+            // adivinar. Se recomienda partir de un historial limpio (Ajustes > borrar historial)
+            // para que el baseline geográfico se construya solo con datos correctos.
+            try { db.execSQL("ALTER TABLE $TABLE_HISTORY ADD COLUMN $COLUMN_THREAT_PROB REAL DEFAULT 0") } catch (_: Exception) {}
+            try { db.execSQL("ALTER TABLE $TABLE_HISTORY ADD COLUMN $COLUMN_API_LAT REAL") } catch (_: Exception) {}
+            try { db.execSQL("ALTER TABLE $TABLE_HISTORY ADD COLUMN $COLUMN_API_LON REAL") } catch (_: Exception) {}
         }
     }
 
@@ -134,7 +159,8 @@ class CellDbHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME, 
         pci: Int? = null,
         arfcn: Int? = null,
         rsrq: Int? = null,
-        sinr: Int? = null
+        sinr: Int? = null,
+        threatProbability: Float = 0f
     ): Long {
         val db = this.writableDatabase
         val values = ContentValues().apply {
@@ -155,14 +181,21 @@ class CellDbHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME, 
             if (arfcn != null) put(COLUMN_ARFCN, arfcn)
             if (rsrq != null) put(COLUMN_RSRQ, rsrq)
             if (sinr != null) put(COLUMN_SINR, sinr)
+            put(COLUMN_THREAT_PROB, threatProbability)
+            // api_lat / api_lon NO se escriben aquí: son un dato de verificación, no de la
+            // observación. Los rellena updateVerificationStatus cuando la API responde.
         }
         return db.insert(TABLE_HISTORY, null, values)
     }
 
     fun getKnownStatus(mnc: String, tac: String, cid: String, mcc: String, currentLat: Double? = null, currentLon: Double? = null): VerificationStatus {
         val db = this.readableDatabase
-        // Buscamos cualquier registro previo de esta antena que no sea PENDING o ERROR
-        val query = "SELECT $COLUMN_VERIFIED, $COLUMN_LAT, $COLUMN_LON, $COLUMN_TIMESTAMP FROM $TABLE_HISTORY " +
+        // Buscamos cualquier registro previo de esta antena que no sea PENDING o ERROR.
+        // v2.1: la comprobación de cercanía usa api_lat/api_lon (posición de la ANTENA según la
+        // API), que es lo que esta función siempre quiso comparar. Antes leía lat/lon, donde la
+        // coordenada de la API acababa mezclada con la del GPS: la semántica era ambigua y
+        // dependía de por qué camino se hubiera escrito esa fila.
+        val query = "SELECT $COLUMN_VERIFIED, $COLUMN_API_LAT, $COLUMN_API_LON, $COLUMN_TIMESTAMP FROM $TABLE_HISTORY " +
                     "WHERE $COLUMN_CID=? AND $COLUMN_MNC=? AND $COLUMN_TAC=? AND $COLUMN_MCC=? " +
                     "AND $COLUMN_VERIFIED IN ('VERIFIED', 'NOT_FOUND') " +
                     "ORDER BY CASE WHEN $COLUMN_VERIFIED='VERIFIED' THEN 1 ELSE 2 END ASC, $COLUMN_ID DESC LIMIT 1"
@@ -209,12 +242,24 @@ class CellDbHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME, 
         return status
     }
 
+    /**
+     * Marca como [status] las observaciones aún PENDING de esta celda y, si la API devolvió la
+     * posición de la antena, la guarda en [COLUMN_API_LAT]/[COLUMN_API_LON].
+     *
+     * v2.1 — CAMBIO IMPORTANTE: antes escribía esa coordenada en lat/lon, es decir, ENCIMA de la
+     * posición GPS del dispositivo (o rellenando las filas que se habían guardado sin GPS). Ese
+     * era el origen real de las coordenadas imposibles en el historial: no venían del GPS —
+     * nunca pasaban por isPlausibleFix() — sino de la respuesta de WiGLE/OpenCellID. Y contaminaba
+     * el baseline geográfico de H11/H13, que interpreta lat/lon como "dónde estaba yo".
+     *
+     * Ahora lat/lon es intocable: solo la escribe el GPS. Las dos magnitudes viven separadas.
+     */
     fun updateVerificationStatus(mnc: String, tac: String, cid: String, status: VerificationStatus, lat: Double? = null, lon: Double? = null, mcc: String? = null) {
         val db = this.writableDatabase
         val values = ContentValues().apply {
             put(COLUMN_VERIFIED, status.name)
-            if (lat != null) put(COLUMN_LAT, lat)
-            if (lon != null) put(COLUMN_LON, lon)
+            if (lat != null) put(COLUMN_API_LAT, lat)
+            if (lon != null) put(COLUMN_API_LON, lon)
         }
         val where = if (mcc != null) "$COLUMN_CID=? AND $COLUMN_MNC=? AND $COLUMN_TAC=? AND $COLUMN_MCC=? AND $COLUMN_VERIFIED='PENDING'"
                     else "$COLUMN_CID=? AND $COLUMN_MNC=? AND $COLUMN_TAC=? AND $COLUMN_VERIFIED='PENDING'"
@@ -243,7 +288,15 @@ class CellDbHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME, 
                           else cursor.getInt(cursor.getColumnIndexOrThrow(COLUMN_RSRQ))
                 val sinr = if (cursor.isNull(cursor.getColumnIndexOrThrow(COLUMN_SINR))) null
                           else cursor.getInt(cursor.getColumnIndexOrThrow(COLUMN_SINR))
-                
+                // Columnas v2.1. getColumnIndex (sin OrThrow) para que un export nunca falle si
+                // la migración no se hubiera aplicado por cualquier motivo: -1 -> valor por defecto.
+                val tpIdx = cursor.getColumnIndex(COLUMN_THREAT_PROB)
+                val threatProb = if (tpIdx >= 0 && !cursor.isNull(tpIdx)) cursor.getFloat(tpIdx) else 0f
+                val apiLatIdx = cursor.getColumnIndex(COLUMN_API_LAT)
+                val apiLat = if (apiLatIdx >= 0 && !cursor.isNull(apiLatIdx)) cursor.getDouble(apiLatIdx) else null
+                val apiLonIdx = cursor.getColumnIndex(COLUMN_API_LON)
+                val apiLon = if (apiLonIdx >= 0 && !cursor.isNull(apiLonIdx)) cursor.getDouble(apiLonIdx) else null
+
                 list.add(
                     HistoryRecord(
                         timestamp = cursor.getString(cursor.getColumnIndexOrThrow(COLUMN_TIMESTAMP)),
@@ -265,7 +318,10 @@ class CellDbHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME, 
                         pci = pci,
                         arfcn = arfcn,
                         rsrq = rsrq,
-                        sinr = sinr
+                        sinr = sinr,
+                        threatProbability = threatProb,
+                        apiLat = apiLat,
+                        apiLon = apiLon
                     )
                 )
             } while (cursor.moveToNext())
@@ -344,6 +400,14 @@ class CellDbHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME, 
     /**
      * Obtiene registros previos de una misma Cell ID (excluyendo la ubicación actual)
      * Limitado a los últimos 30 días para evitar datos obsoletos.
+     *
+     * v2.1: el LIMIT de SQL sube de 20 a 300 y el recorte a 20 pasa a hacerse DESPUÉS del filtro
+     * de distancia (>50 m). Motivo: con el muestreo periódico introducido en v2.1 hay muchas más
+     * observaciones desde el MISMO sitio, y todas ellas caen por el filtro de 50 m. Con el LIMIT
+     * antiguo, esas 20 filas recientes del mismo sitio se llevaban todo el cupo y H11 se quedaba
+     * sin registros útiles — es decir, más datos habrían DEGRADADO la heurística. Ahora se leen
+     * hasta 300 filas y se conservan las 20 primeras que de verdad aportan (otro emplazamiento),
+     * que es exactamente lo que H11 espera recibir.
      */
     fun getPreviousCellHistory(
         cellId: String,
@@ -376,14 +440,16 @@ class CellDbHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME, 
               AND $COLUMN_TIMESTAMP < ?
               AND $COLUMN_TIMESTAMP > ?
             ORDER BY $COLUMN_ID DESC
-            LIMIT 20
+            LIMIT 300
         """.trimIndent()
-        
+
+        val maxUsableRecords = 20
         val cursor = db.rawQuery(query, arrayOf(cellId, mnc, tac, mcc, recentThreshold, oldThreshold))
         try {
-        
+
         if (cursor.moveToFirst()) {
             do {
+                if (history.size >= maxUsableRecords) break
                 val lat = cursor.getDouble(cursor.getColumnIndexOrThrow(COLUMN_LAT))
                 val lon = cursor.getDouble(cursor.getColumnIndexOrThrow(COLUMN_LON))
                 
@@ -581,14 +647,22 @@ class CellDbHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME, 
      * no hay muestras suficientes — la firma "duerme" hasta acumular datos, evitando falsos
      * positivos tempranos. Conservadora por diseño (RSRQ/SINR son métricas ruidosas).
      */
-    fun getCellRfFingerprint(cellId: String, mnc: String, tac: String, mcc: String, minSamples: Int = 30): CellRfFingerprint? {
+    fun getCellRfFingerprint(
+        cellId: String,
+        mnc: String,
+        tac: String,
+        mcc: String,
+        minSamples: Int = 30,
+        nearLocation: Location? = null,
+        radiusMeters: Float = 1000f
+    ): CellRfFingerprint? {
         val db = this.readableDatabase
         val ninetyDaysAgo = System.currentTimeMillis() - (90L * 24 * 60 * 60 * 1000)
         val dateFormat = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault())
         val threshold = dateFormat.format(Date(ninetyDaysAgo))
 
         val query = """
-            SELECT $COLUMN_RSRQ, $COLUMN_SINR
+            SELECT $COLUMN_RSRQ, $COLUMN_SINR, $COLUMN_LAT, $COLUMN_LON
             FROM $TABLE_HISTORY
             WHERE $COLUMN_CID = ?
               AND $COLUMN_MNC = ?
@@ -609,7 +683,7 @@ class CellDbHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME, 
                     val rsrq = cursor.getInt(0)
                     val sinr = cursor.getInt(1)
                     // Rangos físicos sensatos (descarta valores basura / no disponibles).
-                    if (rsrq in -30..-1 && sinr in -20..40) {
+                    if (rsrq in -30..-1 && sinr in -20..40 && isSampleInZone(cursor, 2, 3, nearLocation, radiusMeters)) {
                         rsrqs.add(rsrq)
                         sinrs.add(sinr)
                     }
@@ -637,6 +711,65 @@ class CellDbHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME, 
     }
 
     /**
+     * ¿Esta muestra del historial pertenece a la "zona" actual? Se usa para acotar la huella RF
+     * a un mismo emplazamiento (idea opcional del roadmap #5), necesario a partir de v2.1 porque
+     * el muestreo periódico acumula muchísimas muestras del sitio donde más tiempo pasas y, sin
+     * acotar, la media se desplazaría hacia ese sitio y la misma celda vista desde otro punto
+     * podría parecer "incoherente" sin motivo.
+     *
+     * Reglas: sin ubicación de referencia -> se aceptan todas (comportamiento clásico). Una fila
+     * SIN coordenadas se acepta (no se puede afirmar que sea de otra zona; excluirlas dejaría
+     * fuera casi todas las muestras de interior, que son justo las que dan volumen). Una fila CON
+     * coordenadas solo se acepta si está dentro del radio.
+     */
+    private fun isSampleInZone(
+        cursor: Cursor,
+        latIdx: Int,
+        lonIdx: Int,
+        nearLocation: Location?,
+        radiusMeters: Float
+    ): Boolean {
+        if (nearLocation == null) return true
+        if (cursor.isNull(latIdx) || cursor.isNull(lonIdx)) return true
+        val results = FloatArray(1)
+        Location.distanceBetween(
+            nearLocation.latitude, nearLocation.longitude,
+            cursor.getDouble(latIdx), cursor.getDouble(lonIdx), results
+        )
+        return results[0] <= radiusMeters
+    }
+
+    /**
+     * ¿Cuántas Cell ID DISTINTAS tienen ya registrada esta misma coordenada de API?
+     *
+     * v2.1 — detector de coordenadas "centinela". Los datos de campo mostraron una coordenada
+     * devuelta idéntica hasta el sexto decimal para 46 celdas distintas: eso no es la posición de
+     * ninguna antena, es un valor por defecto de la API. Una coordenada legítima pertenece a UNA
+     * antena; si aparece para varias, no verifica nada y no debe aceptarse.
+     *
+     * Tolerancia de ~11 m (0,0001°) para absorber redondeos entre respuestas.
+     */
+    fun countDistinctCellsWithApiCoordinate(lat: Double, lon: Double, toleranceDeg: Double = 0.0001): Int {
+        return try {
+            val db = this.readableDatabase
+            val query = """
+                SELECT COUNT(DISTINCT $COLUMN_CID || '-' || $COLUMN_MNC || '-' || $COLUMN_TAC || '-' || $COLUMN_MCC)
+                FROM $TABLE_HISTORY
+                WHERE $COLUMN_API_LAT IS NOT NULL
+                  AND $COLUMN_API_LON IS NOT NULL
+                  AND ABS($COLUMN_API_LAT - ?) <= ?
+                  AND ABS($COLUMN_API_LON - ?) <= ?
+            """.trimIndent()
+            db.rawQuery(
+                query,
+                arrayOf(lat.toString(), toleranceDeg.toString(), lon.toString(), toleranceDeg.toString())
+            ).use { c -> if (c.moveToFirst()) c.getInt(0) else 0 }
+        } catch (_: Exception) {
+            0
+        }
+    }
+
+    /**
      * H15 (lifecycle): estabilidad de identidad RF de una Cell ID. Cuenta cuántos valores
      * DISTINTOS de PCI y de ARFCN (no nulos) se han observado para esta identidad de celda
      * (CID+MNC+TAC+MCC) en los últimos 30 días, con el nº de apariciones de cada uno y el
@@ -652,6 +785,9 @@ class CellDbHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME, 
         val arfcnCounts = HashMap<Int, Int>()
         val recentPciCounts = HashMap<Int, Int>()
         val recentArfcnCounts = HashMap<Int, Int>()
+        // v2.1: mismo recuento de PCI, pero desglosado por portadora (ARFCN). Ver CellRfStability.
+        val pciByArfcn = HashMap<Int, HashMap<Int, Int>>()
+        val recentPciByArfcn = HashMap<Int, HashMap<Int, Int>>()
         var total = 0
         val db = this.readableDatabase
         val now = System.currentTimeMillis()
@@ -681,20 +817,30 @@ class CellDbHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME, 
                     total++
                     val ts = cursor.getString(tsIdx) ?: ""
                     val isRecent = ts > recentThreshold   // formato "yyyy-MM-dd HH:mm:ss" ordena lexicográficamente
-                    if (!cursor.isNull(pciIdx)) {
-                        val pci = cursor.getInt(pciIdx)
-                        // PCI válido LTE/NR: 0..1007. Ignorar valores fuera de rango (lecturas basura).
-                        if (pci in 0..1007) {
-                            pciCounts[pci] = (pciCounts[pci] ?: 0) + 1
-                            if (isRecent) recentPciCounts[pci] = (recentPciCounts[pci] ?: 0) + 1
+
+                    // PCI válido LTE/NR: 0..1007. Ignorar valores fuera de rango (lecturas basura).
+                    val pci = if (!cursor.isNull(pciIdx)) cursor.getInt(pciIdx).takeIf { it in 0..1007 } else null
+                    val arfcn = if (!cursor.isNull(arfcnIdx)) cursor.getInt(arfcnIdx).takeIf { it > 0 } else null
+
+                    if (pci != null) {
+                        pciCounts[pci] = (pciCounts[pci] ?: 0) + 1
+                        if (isRecent) recentPciCounts[pci] = (recentPciCounts[pci] ?: 0) + 1
+
+                        // Desglose por portadora. Las filas sin ARFCN (histórico anterior a la
+                        // migración v6) se agrupan bajo UNKNOWN_ARFCN, así que siguen contando
+                        // entre ellas y no se mezclan con las que sí tienen portadora conocida.
+                        val carrier = arfcn ?: CellRfStability.UNKNOWN_ARFCN
+                        pciByArfcn.getOrPut(carrier) { HashMap() }
+                            .let { it[pci] = (it[pci] ?: 0) + 1 }
+                        if (isRecent) {
+                            recentPciByArfcn.getOrPut(carrier) { HashMap() }
+                                .let { it[pci] = (it[pci] ?: 0) + 1 }
                         }
                     }
-                    if (!cursor.isNull(arfcnIdx)) {
-                        val arfcn = cursor.getInt(arfcnIdx)
-                        if (arfcn > 0) {
-                            arfcnCounts[arfcn] = (arfcnCounts[arfcn] ?: 0) + 1
-                            if (isRecent) recentArfcnCounts[arfcn] = (recentArfcnCounts[arfcn] ?: 0) + 1
-                        }
+
+                    if (arfcn != null) {
+                        arfcnCounts[arfcn] = (arfcnCounts[arfcn] ?: 0) + 1
+                        if (isRecent) recentArfcnCounts[arfcn] = (recentArfcnCounts[arfcn] ?: 0) + 1
                     }
                 } while (cursor.moveToNext())
             }
@@ -709,7 +855,9 @@ class CellDbHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME, 
             distinctPci = pciCounts.map { it.key to it.value },
             distinctArfcn = arfcnCounts.map { it.key to it.value },
             recentDistinctPci = recentPciCounts.map { it.key to it.value },
-            recentDistinctArfcn = recentArfcnCounts.map { it.key to it.value }
+            recentDistinctArfcn = recentArfcnCounts.map { it.key to it.value },
+            pciByArfcn = pciByArfcn.mapValues { (_, counts) -> counts.map { it.key to it.value } },
+            recentPciByArfcn = recentPciByArfcn.mapValues { (_, counts) -> counts.map { it.key to it.value } }
         )
     }
 }

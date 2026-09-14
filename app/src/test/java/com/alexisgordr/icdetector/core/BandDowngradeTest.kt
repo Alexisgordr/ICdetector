@@ -47,33 +47,88 @@ class BandDowngradeTest {
 
     @Test
     fun `dispara en downgrade forzado de banda alta a baja con senal fuerte`() {
-        // Veníamos de B7 (alta, 2600 MHz) con -70 dBm (fuerte) y nos tiran a B20 (baja).
-        // Señal previa no degradándose (lista vacía => sin evidencia de caída).
+        // Veníamos de B7 (alta, 2600 MHz) con -80 dBm (buena señal) y acabamos en B20 (baja)
+        // a -75 dBm: la celda nueva es FUERTE y no más débil que la anterior, que es la firma
+        // del "tirón" de un transmisor cercano. Señal previa no degradándose (lista vacía).
         val result = analyze(
-            active = lowBandCell(),
+            active = lowBandCell(),      // -75 dBm
             previousBand = 7,
-            previousDbm = -70,
+            previousDbm = -80,
             recentDbm = emptyList()
         )
         assertFalse(
-            "un salto alta->baja con señal previa fuerte debe marcar la heurística como fallida",
+            "un salto alta->baja con señal previa buena y celda nueva fuerte debe marcar la heurística como fallida",
             result.heuristicReport.bandDowngradePassed
         )
     }
 
     @Test
     fun `NO dispara si la senal venia degradandose (excepcion del sotano)`() {
-        // Mismo salto B7 -> B20, pero la señal venía cayendo progresivamente
-        // (entrando a un garaje/sótano): es un movimiento físico legítimo.
+        // Mismo salto B7 -> B20 y mismas condiciones de potencia que el test anterior, pero la
+        // señal venía cayendo progresivamente (entrando a un garaje/sótano): movimiento físico
+        // legítimo. Aísla la excepción de degradación como única diferencia.
         val degrading = listOf(-60, -72, -84, -96)
         val result = analyze(
             active = lowBandCell(),
             previousBand = 7,
-            previousDbm = -70,
+            previousDbm = -80,
             recentDbm = degrading
         )
         assertTrue(
             "con degradación progresiva el salto es legítimo y NO debe penalizarse",
+            result.heuristicReport.bandDowngradePassed
+        )
+    }
+
+    // ---------- v2.1: condiciones nuevas contra el handover rutinario a la capa de cobertura ----
+
+    @Test
+    fun `NO dispara si la celda nueva se ve debil (caida a la capa de cobertura)`() {
+        // Caso REAL del historial de campo: -85 dBm en B7 -> B20 a -108 dBm. Eso no es un
+        // transmisor cercano tirando de ti: es quedarte sin la microcelda y caer a la macro.
+        // Un catcher que te arrastra a banda baja se ve FUERTE, porque está cerca.
+        val weakLowBand = lowBandCell().copy(dbm = -108)
+        val result = analyze(
+            active = weakLowBand,
+            previousBand = 7,
+            previousDbm = -85,
+            recentDbm = emptyList()
+        )
+        assertTrue(
+            "una celda nueva a -108 dBm no puede ser un transmisor táctico cercano",
+            result.heuristicReport.bandDowngradePassed
+        )
+    }
+
+    @Test
+    fun `NO dispara si la celda nueva es mas debil que la anterior aunque sea fuerte`() {
+        // -84 dBm -> -90 dBm: la celda nueva supera el mínimo absoluto (-95) pero es MÁS DÉBIL
+        // que la que teníamos. Perder potencia al cambiar de banda es la firma de perder la
+        // celda anterior, no la de que alguien te capture.
+        val result = analyze(
+            active = lowBandCell().copy(dbm = -90),
+            previousBand = 7,
+            previousDbm = -84,
+            recentDbm = emptyList()
+        )
+        assertTrue(
+            "si la nueva banda baja se ve peor que la anterior, es repliegue a cobertura",
+            result.heuristicReport.bandDowngradePassed
+        )
+    }
+
+    @Test
+    fun `dispara si la celda nueva en banda baja se ve mas fuerte que la anterior`() {
+        // -85 dBm en B3 -> -70 dBm en B20: ganas 15 dB bajando a sub-GHz. Ese "tirón" de
+        // potencia es exactamente el modelo de ataque que la heurística persigue.
+        val result = analyze(
+            active = lowBandCell().copy(dbm = -70),
+            previousBand = 3,
+            previousDbm = -85,
+            recentDbm = emptyList()
+        )
+        assertFalse(
+            "ganar potencia al bajar a sub-GHz sí es el patrón sospechoso",
             result.heuristicReport.bandDowngradePassed
         )
     }

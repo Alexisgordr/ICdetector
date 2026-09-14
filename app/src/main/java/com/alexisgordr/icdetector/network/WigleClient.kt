@@ -41,7 +41,7 @@ object WigleClient {
         val request = Request.Builder()
             .url(url)
             .header("Authorization", credentials)
-            .header("User-Agent", "ICdetection/1.0 (Android)")
+            .header("User-Agent", "ICdetection/2.1 (Android)")
             .header("Accept", "application/json")
             .build()
         

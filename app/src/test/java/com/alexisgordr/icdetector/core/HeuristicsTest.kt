@@ -354,6 +354,76 @@ class HeuristicsTest {
         assertFalse(analyzeRf(rf).rfStabilityPassed)
     }
 
+    // ---------- v2.1: H15 compara PCI DENTRO de la misma portadora (ARFCN) ----------
+
+    @Test fun `H15 NO dispara si cada PCI vive en su propia portadora (caso real 79482913)`() {
+        // Caso real del historial de campo, el ÚNICO que disparaba H15 en 59 días:
+        // PCI 200 visto SIEMPRE en ARFCN 6400 y PCI 473 visto SIEMPRE en ARFCN 3600, sin un solo
+        // cruce. Es agregación de portadoras —una antena vista por dos portadoras—, no un clon.
+        // Con la regla global de v2.0 esto costaba -30 puntos de forma injustificada.
+        val rf = com.alexisgordr.icdetector.models.CellRfStability(
+            totalObservations = 13,
+            distinctPci = listOf(200 to 6, 473 to 7),
+            distinctArfcn = listOf(6400 to 6, 3600 to 7),
+            recentDistinctPci = listOf(200 to 3, 473 to 3),
+            recentDistinctArfcn = listOf(6400 to 3, 3600 to 3),
+            pciByArfcn = mapOf(6400 to listOf(200 to 6), 3600 to listOf(473 to 7)),
+            recentPciByArfcn = mapOf(6400 to listOf(200 to 3), 3600 to listOf(473 to 3))
+        )
+        assertTrue(
+            "dos PCI correlacionados 1:1 con dos ARFCN son agregación de portadoras, no un clon",
+            analyzeRf(rf).rfStabilityPassed
+        )
+    }
+
+    @Test fun `H15 SIGUE disparando si los dos PCI alternan en la MISMA portadora`() {
+        // Mismo reparto global de PCI que el test anterior, pero ambos valores conviven en la
+        // misma portadora: eso ya no se explica por agregación. Es el clon que H15 busca.
+        val rf = com.alexisgordr.icdetector.models.CellRfStability(
+            totalObservations = 13,
+            distinctPci = listOf(200 to 6, 473 to 7),
+            distinctArfcn = listOf(6400 to 13),
+            recentDistinctPci = listOf(200 to 3, 473 to 3),
+            recentDistinctArfcn = listOf(6400 to 6),
+            pciByArfcn = mapOf(6400 to listOf(200 to 6, 473 to 7)),
+            recentPciByArfcn = mapOf(6400 to listOf(200 to 3, 473 to 3))
+        )
+        assertFalse(
+            "dos PCI sólidos y recientes en la misma portadora siguen siendo sospechosos",
+            analyzeRf(rf).rfStabilityPassed
+        )
+    }
+
+    @Test fun `H15 no dispara si el segundo PCI de la portadora no es reciente`() {
+        // Reconfiguración asentada: el PCI viejo solo aparece en registros antiguos.
+        val rf = com.alexisgordr.icdetector.models.CellRfStability(
+            totalObservations = 12,
+            distinctPci = listOf(200 to 5, 473 to 7),
+            distinctArfcn = listOf(6400 to 12),
+            recentDistinctPci = listOf(473 to 4),
+            recentDistinctArfcn = listOf(6400 to 4),
+            pciByArfcn = mapOf(6400 to listOf(200 to 5, 473 to 7)),
+            recentPciByArfcn = mapOf(6400 to listOf(473 to 4))
+        )
+        assertTrue(analyzeRf(rf).rfStabilityPassed)
+    }
+
+    @Test fun `H15 agrupa bajo portadora desconocida las filas antiguas sin ARFCN`() {
+        // Historial anterior a la migración v6 (sin ARFCN): los PCI se comparan entre ellos bajo
+        // UNKNOWN_ARFCN, así que un parpadeo real se sigue detectando.
+        val unknown = com.alexisgordr.icdetector.models.CellRfStability.UNKNOWN_ARFCN
+        val rf = com.alexisgordr.icdetector.models.CellRfStability(
+            totalObservations = 10,
+            distinctPci = listOf(50 to 6, 120 to 4),
+            distinctArfcn = emptyList(),
+            recentDistinctPci = listOf(50 to 3, 120 to 2),
+            recentDistinctArfcn = emptyList(),
+            pciByArfcn = mapOf(unknown to listOf(50 to 6, 120 to 4)),
+            recentPciByArfcn = mapOf(unknown to listOf(50 to 3, 120 to 2))
+        )
+        assertFalse(analyzeRf(rf).rfStabilityPassed)
+    }
+
     @Test fun `H15 no dispara sin datos de estabilidad (null)`() {
         assertTrue(analyzeRf(null).rfStabilityPassed)
     }

@@ -23,6 +23,7 @@ import androidx.compose.ui.unit.sp
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import com.alexisgordr.icdetector.models.HistoryRecord
+import com.alexisgordr.icdetector.models.SUBTHRESHOLD_PREFIX
 import com.alexisgordr.icdetector.storage.CellDbHelper
 import com.alexisgordr.icdetector.utils.ExportUtils
 import kotlinx.coroutines.Dispatchers
@@ -192,10 +193,21 @@ fun HistoryPanel(dbHelper: CellDbHelper, onBack: () -> Unit) {
                                             }
                                         }
                                         
-                                        // Fallos de heurísticas (si los hay)
+                                        // Fallos de heurísticas (si los hay). v2.1: las
+                                        // observaciones sub-umbral (heurísticas que fallaron sin
+                                        // llegar a alarma) se registran desde esta versión y se
+                                        // muestran en gris, claramente separadas de una alarma
+                                        // real en rojo. Antes no se guardaban: la fila decía "OK".
                                         if ((record.failedHeuristics.isNotBlank()) && (record.failedHeuristics != "OK")) {
                                             Spacer(Modifier.height(4.dp))
-                                            Text("⚠️ Fallo: ${record.failedHeuristics}", color = Color(0xFFCF6679), fontSize = 10.sp, fontFamily = FontFamily.Monospace)
+                                            val isSubThreshold = record.failedHeuristics.startsWith(SUBTHRESHOLD_PREFIX)
+                                            Text(
+                                                if (isSubThreshold) "· ${record.failedHeuristics.removePrefix(SUBTHRESHOLD_PREFIX).trim()}"
+                                                else "⚠️ Fallo: ${record.failedHeuristics}",
+                                                color = if (isSubThreshold) Color(0xFF777777) else Color(0xFFCF6679),
+                                                fontSize = 10.sp,
+                                                fontFamily = FontFamily.Monospace
+                                            )
                                         }
                                     }
                                     if (record != records.last()) {
@@ -267,8 +279,15 @@ fun IntelPanel(dbHelper: CellDbHelper) {
     val notFoundCells = groupedItems.count { (_, r) -> r.any { it.verified.name == "NOT_FOUND" } }
     val recordsWithGps = items.count { it.lat != null && it.lon != null }
     val mostSeenCell = groupedItems.maxByOrNull { it.second.size }
+    // "Celdas anómalas" cuenta SOLO alarmas reales. Las observaciones sub-umbral que v2.1 empieza
+    // a registrar son material de análisis, no anomalías: incluirlas aquí inflaría el contador
+    // sin que hubiera pasado nada nuevo en la red.
     val anomalousCells = groupedItems.count { (_, r) ->
-        r.any { it.failedHeuristics.isNotBlank() && it.failedHeuristics != "OK" }
+        r.any {
+            it.failedHeuristics.isNotBlank() &&
+                it.failedHeuristics != "OK" &&
+                !it.failedHeuristics.startsWith(SUBTHRESHOLD_PREFIX)
+        }
     }
     val networkTypes = items.groupBy { it.netType }
         .mapValues { it.value.size }

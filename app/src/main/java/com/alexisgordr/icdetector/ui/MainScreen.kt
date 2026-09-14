@@ -554,6 +554,17 @@ fun SecurityScorePanel(active: CellData, dbmHistory: List<Int>, geoHistory: List
                             fontFamily = FontFamily.Monospace,
                             letterSpacing = 0.5.sp
                         )
+                    } else if (streakText != null && streakText.startsWith(SUBTHRESHOLD_PREFIX)) {
+                        // v2.1: heurísticas fallidas que NO llegan al umbral de alarma. Se muestran
+                        // en gris, como observación, nunca como amenaza: informar sin alarmar.
+                        Spacer(Modifier.height(4.dp))
+                        Text(
+                            streakText.removePrefix(SUBTHRESHOLD_PREFIX).trim(),
+                            color = Color(0xFF777777),
+                            fontSize = 9.sp,
+                            fontFamily = FontFamily.Monospace,
+                            letterSpacing = 0.5.sp
+                        )
                     }
 
                     Spacer(Modifier.height(4.dp))

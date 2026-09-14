@@ -14,7 +14,15 @@ object ExportUtils {
             resolver.openOutputStream(uri).use { outputStream ->
                 if (outputStream != null) {
                     OutputStreamWriter(outputStream, StandardCharsets.UTF_8).use { writer ->
-                        writer.append("Timestamp,NetType,CID,MNC,TAC,MCC,DBM,Verified,SecurityScore,FailedHeuristics,Lat,Lon,PCI,ARFCN,RSRQ,SINR\n")
+                        // v2.1 — tres columnas nuevas al final (se añaden al final a propósito,
+                        // para no romper scripts que leyeran el CSV por posición):
+                        //   ThreatProb     probabilidad bayesiana en el momento de la observación.
+                        //                  Sin ella no había forma de recalibrar los likelihood
+                        //                  ratios con datos de campo (roadmap #7).
+                        //   ApiLat/ApiLon  posición de la ANTENA según WiGLE/OpenCellID. Lat/Lon
+                        //                  son y solo son la posición GPS del dispositivo; antes
+                        //                  ambas magnitudes se mezclaban en las mismas columnas.
+                        writer.append("Timestamp,NetType,CID,MNC,TAC,MCC,DBM,Verified,SecurityScore,FailedHeuristics,Lat,Lon,PCI,ARFCN,RSRQ,SINR,ThreatProb,ApiLat,ApiLon\n")
                         items.forEach { item ->
                             val row = listOf(
                                 item.timestamp,
@@ -32,7 +40,10 @@ object ExportUtils {
                                 item.pci ?: "",
                                 item.arfcn ?: "",
                                 item.rsrq ?: "",
-                                item.sinr ?: ""
+                                item.sinr ?: "",
+                                String.format(java.util.Locale.ROOT, "%.1f", item.threatProbability),
+                                item.apiLat ?: "",
+                                item.apiLon ?: ""
                             ).joinToString(",") { csvEscape(it) }
                             writer.append(row).append("\n")
                         }

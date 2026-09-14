@@ -1,4 +1,4 @@
-# 📖 ICdetection Field Manual (v2.0)
+# 📖 ICdetection Field Manual (v2.1)
 
 This manual provides operational guidelines for using ICdetection. This tool is designed for network auditing and cellular anomaly analysis. Understanding the data is as important as the code itself.
 
@@ -60,9 +60,9 @@ When the status turns **SISTEMA EN COMPROMISO**, check the Suspicious Reason fie
 
 - **"Band Downgrade (H14)":** Detects a sudden, forced shift from a high-frequency capacity band to a low-frequency sub-GHz band. Attackers push devices to lower frequencies to extend coverage and penetration. The check uses real 3GPP band physics (via EARFCN) and distinguishes a forced downgrade from natural signal degradation (e.g. entering a garage), reducing false positives.
 
-- **"RF Identity / PCI (H15)":** A legitimate cell keeps its physical-layer identity (PCI) fixed for life. This flags a single Cell ID seen alternating between distinct PCI values that persist recently — a sign of a clone reusing a legitimate Cell ID with a different radio fingerprint. It can fire while you are stationary (unlike H11, which needs movement). It deliberately uses **PCI only, not ARFCN**, because field testing showed ARFCN fluctuates legitimately due to carrier aggregation.
+- **"RF Identity / PCI (H15)":** A legitimate cell keeps its physical-layer identity (PCI) fixed for life. This flags a single Cell ID seen alternating between distinct PCI values that persist recently — a sign of a clone reusing a legitimate Cell ID with a different radio fingerprint. It can fire while you are stationary (unlike H11, which needs movement). It deliberately uses **PCI only, not ARFCN**, because field testing showed ARFCN fluctuates legitimately due to carrier aggregation. Since v2.1 it also compares PCI values **only within the same carrier**: longer field data showed the modem attributes a secondary carrier's PCI to the serving cell just as it does with the ARFCN, so comparing PCIs across carriers was producing false positives.
 
-- **"Cifrado de enlace (Hardware)":** N/A on standard v2.0 installs unless the operating system exposes a supported ciphering-state signal. ICdetection v2.0 does not claim direct null-cipher or IMSI-disclosure detection on normal no-root Android installs.
+- **"Cifrado de enlace (Hardware)":** N/A on standard v2.1 installs unless the operating system exposes a supported ciphering-state signal. ICdetection v2.1 does not claim direct null-cipher or IMSI-disclosure detection on normal no-root Android installs.
 
 > **Note on the scoring engine:** these heuristics are not simply added up. A Bayesian engine combines them, grouping correlated signals so they cannot double-count and inflate the score, and softening the noisy/environment-sensitive ones on cells with a long, clean local history (cell reputation). The probability is capped at 95% — on Android userland, certainty is never claimed.
 
@@ -84,7 +84,7 @@ If you detect a credible, persistent threat:
 
 - **Use a Proxy:** If you are auditing in an area where you suspect you are being monitored, ensure the Tor (Orbot) proxy is enabled in the settings. This prevents the API (OpenCellID/WiGLE) from correlating your specific public IP with the CellIDs you are auditing.
 
-- **Monitor with Screen Off:** The app continues monitoring with the screen off (polling roughly every 10 seconds). You can keep the phone in your pocket and rely on the Audio Alert System. *Note on GPS in repose: with the screen off and the device stationary, Android Doze restricts the GPS, so fresh coordinates may not be recorded for every observation. This is an OS limitation, not a bug — and it matters little when stationary, since your position has not changed and H15 (PCI) needs no GPS.*
+- **Monitor with Screen Off:** The app continues monitoring with the screen off (polling roughly every 10 seconds). You can keep the phone in your pocket and rely on the Audio Alert System. *Note on GPS in repose: with the screen off and the device stationary, Android Doze restricts the GPS, so fresh coordinates may not be recorded for every observation. This is an OS limitation, not a bug — and it matters little when stationary, since your position has not changed and H15 (PCI) needs no GPS.* Since v2.1 the app also records a periodic sample of the serving cell while you stay camped on it (about every 5 minutes with the screen on, every 15 with it off). This does **not** wake the GPS or force extra radio reads; it simply persists the analysis the service was already performing, and it is what allows the signal baselines and the RSRQ/SINR fingerprint to actually accumulate enough samples to become useful.
 
 - **Learn the tones:** The app uses specific tones for different threat levels. A confirmed threat sounds differently from a high-signal warning. Learn to distinguish them.
 
@@ -100,7 +100,7 @@ If you detect a credible, persistent threat:
 
 3. **Post-Audit:** Export the history to CSV from the History tab.
 
-4. **Reporting:** Use the CSV data to identify patterns — specific times or locations where NOT FOUND or suspicious cells repeatedly appear. The export includes `Timestamp, NetType, CID, MNC, TAC, MCC, DBM, Verified, SecurityScore, FailedHeuristics, Lat, Lon, PCI, ARFCN, RSRQ, SINR`. Pay special attention to `Lat`, `Lon`, `PCI`, `ARFCN`, `RSRQ` and `SINR` for RF fingerprinting analysis. Fields are CSV-escaped (RFC 4180), so the file imports cleanly into spreadsheets and analysis tools.
+4. **Reporting:** Use the CSV data to identify patterns — specific times or locations where NOT FOUND or suspicious cells repeatedly appear. The export includes `Timestamp, NetType, CID, MNC, TAC, MCC, DBM, Verified, SecurityScore, FailedHeuristics, Lat, Lon, PCI, ARFCN, RSRQ, SINR, ThreatProb, ApiLat, ApiLon`. Pay special attention to `Lat`, `Lon`, `PCI`, `ARFCN`, `RSRQ` and `SINR` for RF fingerprinting analysis. Note that `Lat`/`Lon` are **your** GPS position when the observation was recorded, while `ApiLat`/`ApiLon` are where WiGLE/OpenCellID claim the antenna is — two different things, kept in separate columns since v2.1. `ThreatProb` is the Bayesian posterior at that moment, and rows whose `FailedHeuristics` starts with `[sub-umbral]` are heuristics that failed without reaching the alarm threshold (observations, not alerts). Fields are CSV-escaped (RFC 4180), so the file imports cleanly into spreadsheets and analysis tools.
 
 ---
 
@@ -108,7 +108,7 @@ If you detect a credible, persistent threat:
 
 ICdetection operates entirely in Android userland without root access. This means:
 
-- **Direct null-cipher / IMSI-disclosure detection** is not implemented on standard v2.0 installs and requires privileged OS APIs/permissions that normal no-root apps do not receive
+- **Direct null-cipher / IMSI-disclosure detection** is not implemented on standard v2.1 installs and requires privileged OS APIs/permissions that normal no-root apps do not receive
 - **Timing Advance** values may be unavailable on some hardware (returns 0)
 - **Modem-level signaling** (RRC, NAS) is not accessible
 - **GPS in deep repose** (screen off + stationary) is throttled by Android Doze
