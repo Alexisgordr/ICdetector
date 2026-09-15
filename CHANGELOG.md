@@ -4,6 +4,25 @@
 
 ### Verification integrity
 
+- Fixed WiGLE's successful-result parser: cellular identity is returned in `results[].id` as
+  `MCC+MNC_AREA_CELLID`, not as separate `cellid`/`cid` fields. Valid WiGLE matches no longer end
+  up incorrectly as `REJECTED`, while unrelated results remain impossible to verify.
+- Aligned the request with WiGLE's official Android client (`cell_op`, `cell_net`, `cell_id`) and
+  added regression tests for the compound identifier.
+- Made multi-source aggregation conservative: `NOT_FOUND` is shown only when every source queried
+  agrees negatively; an error or rejected reply can no longer be hidden by one empty database.
+- Fixed verification TTL renewal: periodic history samples no longer keep an old `NOT_FOUND` or
+  `VERIFIED` fresh forever. Negative database rows are re-queried after the in-memory one-hour
+  window, and only VERIFIED rows carrying actual API coordinates may be reused for 30 days.
+- Added explicit terminal diagnostics (`OpenCellID → STATUS`, `WiGLE → STATUS`) for every lookup.
+- Removed undocumented camelCase aliases from WiGLE requests; only the official Android client's
+  `cell_op`, `cell_net` and `cell_id` filters are sent.
+- Fixed OpenCellID identity parsing to prefer its canonical `lac` and `cellid` response fields over
+  auxiliary `tac`/`cid` values that may be present as zero. This prevented valid LTE matches from
+  being rejected as area mismatches.
+- Treats OpenCellID `code: 1` accompanied by a temporary-unavailability notice as `ERROR`, following
+  the API documentation, rather than recording it as a missing cell.
+- Redacts the OpenCellID key if an API error echoes it in the response body before terminal logging.
 - Rebuilt WiGLE/OpenCellID handling around `VERIFIED`, `NOT_FOUND`, `REJECTED`, `ERROR` and
   `PENDING`, with full identity and coordinate validation.
 - Added radio-specific identity to requests, caches, UI and database operations.
@@ -19,7 +38,7 @@
 - Unified engine, UI, history and CSV conversion policy.
 - Added `TA`, `TAUnit`, `TAMeters` and `Radio` export and replay support.
 - Kept external verification neutral to score and anomaly confidence.
-- Expanded regression coverage to 149 declared tests.
+- Expanded regression coverage to 154 declared tests.
 
 ### Interface
 

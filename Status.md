@@ -8,6 +8,25 @@ designed to answer, and add the tooling to check that the second one can.
 
 ### Final verification hardening
 
+- **WiGLE response parsing fixed after field evidence.** WiGLE's cell endpoint returns the queried
+  identity in `results[].id` as `MCC+MNC_AREA_CELLID` (for example,
+  `21407_31601_79362070`). The previous defensive parser looked for separate CID fields, so it
+  rejected even a correctly filtered result. v2.1 now validates the complete compound identity
+  before accepting its coordinates; it does not restore the unsafe legacy `results[0]` shortcut.
+- **A partial negative is not presented as a global negative.** If one source says `NOT_FOUND` but
+  the other returns an error or unusable response, the combined result is `REJECTED` (inconclusive).
+  “Not registered in public databases” requires agreement from every source actually queried.
+- **Verification TTLs now measure API evidence, not observation activity.** Periodic samples copy
+  the visible status and previously refreshed its database timestamp indefinitely. A negative is
+  now retained for one hour only by the session cache and is then queried again; a stored VERIFIED
+  is reusable only from a row that contains the API coordinates that created that verification.
+- Every request writes `OpenCellID → STATUS` and `WiGLE → STATUS` to the terminal, making quota,
+  permission, rejection and genuine absence distinguishable during field tests.
+- **OpenCellID canonical fields are now read in the documented order.** Its LTE response can carry
+  the requested area in `lac` while also including an auxiliary `tac: 0`; choosing `tac` first made
+  a valid response look like an identity mismatch. The client now uses `lac`/`cellid` first and
+  only falls back to `tac`/`cid` when the canonical field is absent. A documented `code: 1` carrying
+  a temporary-unavailability notice is classified as `ERROR`, not as a missing cell.
 - Radio technology is part of the in-memory, database and UI identity of a cell.
 - Database updates are scoped by MCC, MNC, area, Cell ID **and radio**, preventing one technology
   from inheriting another technology's result.
@@ -308,6 +327,22 @@ ver — no toca el HAL de telefonía.
 
 ## Endurecimiento final de la verificación
 
+- **Corregida la lectura de respuestas válidas de WiGLE.** La identidad llega en `results[].id`
+  como `MCC+MNC_AREA_CELLID` (por ejemplo, `21407_31601_79362070`), no en campos CID separados.
+  Ahora se interpreta y compara completa antes de aceptar la coordenada; no se recupera el antiguo
+  atajo inseguro que aceptaba `results[0]` sin saber a qué celda correspondía.
+- **Una negativa parcial ya no se presenta como negativa global.** Si una fuente responde
+  `NOT_FOUND` pero la otra da error o una respuesta inutilizable, el resultado combinado será
+  `REJECTED` (inconcluso). “Sin registro en bases públicas” exige que todas coincidan.
+- **Los TTL ya miden evidencia de la API, no actividad de observación.** Las muestras periódicas
+  copiaban el estado y renovaban su fecha indefinidamente. Una negativa queda una hora en la caché
+  de sesión y después se consulta otra vez; VERIFIED solo se reutiliza desde una fila que conserve
+  las coordenadas API que originaron la confirmación.
+- Cada consulta muestra `OpenCellID → ESTADO` y `WiGLE → ESTADO` en el terminal.
+- **OpenCellID ya lee primero sus campos canónicos documentados.** Una respuesta LTE puede traer el
+  área pedida en `lac` y además un `tac: 0` auxiliar; escoger antes ese cero convertía una respuesta
+  válida en identidad incompatible. Ahora se usan primero `lac`/`cellid`, con `tac`/`cid` solo como
+  respaldo. Un `code: 1` con aviso de indisponibilidad temporal se marca `ERROR`, no celda ausente.
 - La tecnología de radio forma parte de la identidad de la celda en memoria, base de datos y UI.
 - Las actualizaciones de la base se limitan por MCC, MNC, área, Cell ID **y radio**, evitando que
   una tecnología herede el resultado de otra.

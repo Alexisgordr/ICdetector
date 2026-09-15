@@ -21,6 +21,7 @@ import androidx.core.app.NotificationCompat
 import androidx.core.content.ContextCompat
 import com.alexisgordr.icdetector.MainActivity
 import com.alexisgordr.icdetector.core.ThreatAnalyzer
+import com.alexisgordr.icdetector.core.VerificationDecision
 import com.alexisgordr.icdetector.models.*
 import com.alexisgordr.icdetector.network.OpenCellIdClient
 import com.alexisgordr.icdetector.network.WigleClient
@@ -1361,20 +1362,11 @@ class MiniICService : Service() {
      * Con eso, una base que contestaba de verdad "esta celda no está" quedaba borrada por un fallo
      * de red de la otra, o al revés. El orden de las llamadas no es un argumento.
      *
-     * Precedencia: una respuesta afirmativa manda sobre todo; una negativa REAL manda sobre una
-     * respuesta descartada, y esta sobre un "no he podido preguntar". El error solo queda cuando es
-     * lo único que hay. Es la única ordenación que no convierte el desconocimiento en afirmación.
+     * VERIFIED manda sobre todo. NOT_FOUND solo queda como conclusión cuando todas las fuentes
+     * consultadas coinciden. Una mezcla de negativa, error o descarte es REJECTED: inconclusa.
      */
-    private fun mejorRespuesta(actual: VerificationStatus, nueva: VerificationStatus): VerificationStatus {
-        fun peso(s: VerificationStatus) = when (s) {
-            VerificationStatus.VERIFIED -> 4
-            VerificationStatus.NOT_FOUND -> 3
-            VerificationStatus.REJECTED -> 2
-            VerificationStatus.ERROR -> 1
-            VerificationStatus.PENDING -> 0
-        }
-        return if (peso(nueva) > peso(actual)) nueva else actual
-    }
+    private fun mejorRespuesta(actual: VerificationStatus, nueva: VerificationStatus): VerificationStatus =
+        VerificationDecision.combine(actual, nueva)
 
     /**
      * ¿Se puede preguntar a una API por esta celda?
@@ -1502,6 +1494,7 @@ class MiniICService : Service() {
                 val res = OpenCellIdClient.tryOpenCellIdSyncWithData(cell, openCellIdKey, isProxyEnabled, client)
                 val s = res.status
                 val data = res.record
+                appendLog("[API]", "OpenCellID → ${s.name}")
                 // El motivo real llega hasta el terminal: una cuota agotada no puede leerse igual
                 // que una antena desconocida, porque no significa lo mismo ni se registra igual.
                 res.reason?.let { appendLog("[API]", it) }
@@ -1535,6 +1528,7 @@ class MiniICService : Service() {
                 val res = WigleClient.tryWigleSync(cell, wigleApiName, wigleApiToken, isProxyEnabled, client)
                 val s = res.status
                 val data = res.record
+                appendLog("[API]", "WiGLE → ${s.name}")
                 res.reason?.let { appendLog("[API]", it) }
                 if (s == VerificationStatus.VERIFIED && data != null) {
                     val lat = data.optDouble("trilat", data.optDouble("lat", Double.NaN))

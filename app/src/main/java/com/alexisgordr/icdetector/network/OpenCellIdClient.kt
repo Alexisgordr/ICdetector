@@ -2,7 +2,6 @@ package com.alexisgordr.icdetector.network
 
 import com.alexisgordr.icdetector.core.VerificationDecision
 import com.alexisgordr.icdetector.models.CellData
-import com.alexisgordr.icdetector.models.RadioTech
 import com.alexisgordr.icdetector.models.VerificationStatus
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -55,7 +54,14 @@ object OpenCellIdClient {
 
                 // Principio de la respuesta cruda, para el terminal. La clave viaja en la URL, que
                 // NO se registra; el cuerpo no la contiene.
-                val crudo = body.take(160).replace(Regex("\\s+"), " ")
+                // El error "API Key not known" puede repetir literalmente la clave enviada.
+                // Nunca dejarla en el terminal ni en un informe compartido.
+                val cuerpoSeguro = if (openCellIdKey.isNotEmpty()) {
+                    body.replace(openCellIdKey, "[REDACTED]")
+                } else body
+                val crudo = cuerpoSeguro
+                    .take(160)
+                    .replace(Regex("\\s+"), " ")
 
                 val hasCoords = json != null && json.has("lat") && json.has("lon")
                 val identityOk = hasCoords && VerificationDecision.identityMatches(
@@ -63,14 +69,16 @@ object OpenCellIdClient {
                         mcc = cell.mcc, mnc = cell.mnc, area = cell.tac,
                         cellId = cell.cellId, radio = cell.radioTech
                     ),
-                    recibida = VerificationDecision.Reported(
+                    recibida = VerificationDecision.reportedFromOpenCellId(
                         mcc = json!!.optTexto("mcc"),
                         mnc = json.optTexto("mnc"),
-                        // En LTE/NR OpenCellID puede devolver el área como `tac`; en GSM/UMTS como
-                        // `lac`. Es el mismo campo con dos nombres según la tecnología.
-                        area = json.optTexto("tac") ?: json.optTexto("lac"),
-                        cellId = json.optTexto("cellid") ?: json.optTexto("cid"),
-                        radio = RadioTech.fromApi(json.optTexto("radio"))
+                        // `lac` es el parámetro canónico también para TAC. `tac`/`cid` pueden
+                        // aparecer como auxiliares a cero y solo son fallback si falta el canónico.
+                        lac = json.optTexto("lac"),
+                        tac = json.optTexto("tac"),
+                        cellId = json.optTexto("cellid"),
+                        cid = json.optTexto("cid"),
+                        radio = json.optTexto("radio")
                     )
                 )
 
@@ -79,6 +87,9 @@ object OpenCellIdClient {
                     hasCoordinates = hasCoords,
                     errorCode = json?.optInt("code", -1) ?: -1,
                     identityOk = identityOk,
+                    mensajeApi = listOfNotNull(
+                        json?.optTexto("error"), json?.optTexto("message"), json?.optTexto("notice")
+                    ).joinToString(" ").takeIf { it.isNotBlank() },
                     crudo = crudo
                 )
 

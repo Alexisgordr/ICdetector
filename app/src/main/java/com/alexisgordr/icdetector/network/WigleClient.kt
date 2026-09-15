@@ -24,9 +24,9 @@ import java.net.Proxy
  * que no tenía nada que ver con la celda preguntada. De ahí salían las coordenadas a cientos de
  * kilómetros, y de ahí venían las verificaciones que resultaron no ser reales.
  *
- * El nombre exacto de esos parámetros no está publicado en ningún sitio verificable y los clientes
- * de terceros discrepan en la forma (`cellOp` frente a `cell_op`). Se envían las dos: un parámetro
- * desconocido no molesta, y acertar importa.
+ * Los nombres usados por el cliente Android oficial de WiGLE son `cell_op`, `cell_net` y
+ * `cell_id`. La respuesta devuelve la identidad empaquetada en `results[].id`, con formato
+ * `MCC+MNC_AREA_CELLID`; ese campo se vuelve a interpretar y se compara antes de verificar.
  *
  * ── LA COMPROBACIÓN QUE FALTABA ──────────────────────────────────────────────────────────────
  * Ninguna respuesta se da por buena sin comprobar **a qué celda corresponde**. Es la defensa que
@@ -55,13 +55,11 @@ object WigleClient {
         // la izquierda que reporta el módem (214 + 01 = "21401", no "2141").
         val operador = "${cell.mcc}${cell.mnc}"
 
+        // Nombres usados por el cliente Android oficial de WiGLE. No se añaden alias camelCase:
+        // una consulta de verificación debe contener únicamente filtros cuyo significado conocemos.
         val url = buildString {
             append("https://api.wigle.net/api/v2/cell/search")
-            append("?cellOp=").append(operador)
-            append("&cellNet=").append(cell.tac)
-            append("&cellID=").append(cell.cellId)
-            // Segunda forma del mismo filtro (ver la nota de arriba).
-            append("&cell_op=").append(operador)
+            append("?cell_op=").append(operador)
             append("&cell_net=").append(cell.tac)
             append("&cell_id=").append(cell.cellId)
             append("&resultsPerPage=5")
@@ -120,12 +118,16 @@ object WigleClient {
     /**
      * Identidad de un registro de WiGLE.
      *
-     * WiGLE no publica un esquema estable para estos campos, así que se acepta cualquiera de los
-     * nombres con los que aparece cada uno. Lo que NO se hace es dar por buena la ausencia de la
-     * Cell ID: sin ella [VerificationDecision.identityMatches] devuelve false, que es lo correcto —
-     * una respuesta de la que no se puede saber de quién habla no verifica nada.
+     * La API celular oficial devuelve `id`, `trilat`, `trilong`, `ssid`, `gentype`, `attributes`
+     * y `channel`. Se conserva compatibilidad defensiva con variantes antiguas, pero nunca se da
+     * por buena la ausencia de una identidad comprobable.
      */
     private fun leerIdentidad(r: JSONObject): VerificationDecision.Reported {
+        VerificationDecision.reportedFromWigleId(
+            id = r.optTexto("id") ?: r.optTexto("netid"),
+            radio = r.optTexto("gentype") ?: r.optTexto("type") ?: r.optTexto("radio")
+        )?.let { return it }
+
         val operador = r.optTexto("operator") ?: r.optTexto("cell_op") ?: r.optTexto("cellOp")
         // WiGLE da el operador como MCC+MNC pegados: los tres primeros dígitos son el MCC.
         val mcc = operador?.takeIf { it.length >= 4 }?.substring(0, 3)
@@ -136,7 +138,7 @@ object WigleClient {
             area = r.optTexto("lac") ?: r.optTexto("tac") ?: r.optTexto("cell_net") ?: r.optTexto("cellNet"),
             cellId = r.optTexto("cellid") ?: r.optTexto("cellId") ?: r.optTexto("cid")
                 ?: r.optTexto("cell_id") ?: r.optTexto("bsid"),
-            radio = RadioTech.fromApi(r.optTexto("type") ?: r.optTexto("radio"))
+            radio = RadioTech.fromApi(r.optTexto("gentype") ?: r.optTexto("type") ?: r.optTexto("radio"))
         )
     }
 }

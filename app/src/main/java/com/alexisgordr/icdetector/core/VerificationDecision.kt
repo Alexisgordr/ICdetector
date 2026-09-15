@@ -57,6 +57,71 @@ object VerificationDecision {
     data class Verdict(val status: VerificationStatus, val reason: String?)
 
     /**
+     * Interpreta el identificador que WiGLE devuelve en `results[].id`.
+     *
+     * Aunque los filtros de búsqueda se llaman `cell_op`, `cell_net` y `cell_id`, la respuesta no
+     * repite esos tres campos: los empaqueta como `MCC+MNC_AREA_CELLID`. Es el mismo formato que
+     * genera la aplicación oficial de WiGLE al registrar una celda. No leer este campo hacía que
+     * una respuesta correcta pareciese no contener Cell ID y terminase en REJECTED.
+     */
+    fun reportedFromWigleId(id: String?, radio: String? = null): Reported? {
+        val partes = id?.trim()?.split('_', limit = 3) ?: return null
+        if (partes.size != 3) return null
+        val operador = partes[0]
+        if (operador.length < 4 || operador.any { !it.isDigit() }) return null
+        if (partes[1].toLongOrNull() == null || partes[2].toLongOrNull() == null) return null
+
+        return Reported(
+            mcc = operador.substring(0, 3),
+            mnc = operador.substring(3),
+            area = partes[1],
+            cellId = partes[2],
+            radio = RadioTech.fromApi(radio)
+        )
+    }
+
+    /**
+     * Construye la identidad con el esquema real de `/cell/get`.
+     *
+     * OpenCellID usa `lac` como identificador de área de la consulta y de la respuesta también
+     * para LTE/NR. El JSON puede incluir además `tac` y `cid` auxiliares con valor 0. Elegir esos
+     * auxiliares antes que `lac`/`cellid` convierte una coincidencia correcta en un falso rechazo.
+     */
+    fun reportedFromOpenCellId(
+        mcc: String?,
+        mnc: String?,
+        lac: String?,
+        tac: String?,
+        cellId: String?,
+        cid: String?,
+        radio: String?
+    ): Reported = Reported(
+        mcc = mcc,
+        mnc = mnc,
+        area = lac ?: tac,
+        cellId = cellId ?: cid,
+        radio = RadioTech.fromApi(radio)
+    )
+
+    /**
+     * Combina las respuestas de varias fuentes en un único estado.
+     *
+     * VERIFIED siempre gana. Dos negativas coincidentes producen NOT_FOUND y dos errores producen
+     * ERROR. Cualquier mezcla entre NOT_FOUND, ERROR y REJECTED es inconclusa y se representa como
+     * REJECTED: una fuente vacía no puede hablar en nombre de otra que no respondió, y tampoco se
+     * debe reintentar cada minuto una consulta parcialmente resuelta hasta agotar la cuota.
+     */
+    fun combine(actual: VerificationStatus, nueva: VerificationStatus): VerificationStatus {
+        if (actual == VerificationStatus.PENDING) return nueva
+        if (nueva == VerificationStatus.PENDING) return actual
+        if (actual == VerificationStatus.VERIFIED || nueva == VerificationStatus.VERIFIED) {
+            return VerificationStatus.VERIFIED
+        }
+        if (actual == nueva) return actual
+        return VerificationStatus.REJECTED
+    }
+
+    /**
      * ¿La respuesta corresponde a la celda que se preguntó?
      *
      * Reglas, y el orden importa:
@@ -108,6 +173,7 @@ object VerificationDecision {
         hasCoordinates: Boolean,
         errorCode: Int,
         identityOk: Boolean,
+        mensajeApi: String? = null,
         crudo: String = ""
     ): Verdict {
         // ── ORDEN DE LAS COMPROBACIONES ──────────────────────────────────────────────────────
@@ -141,8 +207,20 @@ object VerificationDecision {
             return when (errorCode) {
                 // La ÚNICA negativa fiable de OpenCellID. Llega con HTTP 200, de ahí que el código
                 // HTTP por sí solo no valga para decidir nada aquí.
-                OCID_CELL_NOT_FOUND -> Verdict(VerificationStatus.NOT_FOUND,
-                    "OpenCellID: esta celda no está en su base. Respuesta: $crudo")
+                OCID_CELL_NOT_FOUND -> {
+                    // La documentación avisa de que code 1 también puede acompañar un mensaje de
+                    // indisponibilidad temporal. En ese caso no es una negativa sobre la celda.
+                    val texto = mensajeApi.orEmpty().lowercase()
+                    val temporal = listOf("temporar", "unavailable", "maintenance", "try again")
+                        .any { it in texto }
+                    if (temporal) {
+                        Verdict(VerificationStatus.ERROR,
+                            "OpenCellID: servicio temporalmente no disponible. Se reintentará. Respuesta: $crudo")
+                    } else {
+                        Verdict(VerificationStatus.NOT_FOUND,
+                            "OpenCellID: esta celda no está en su base. Respuesta: $crudo")
+                    }
+                }
                 OCID_DAILY_LIMIT -> Verdict(VerificationStatus.ERROR,
                     "OpenCellID: límite diario de consultas agotado. NO significa que la antena no exista; se reintentará. Respuesta: $crudo")
                 OCID_TOO_MANY_REQUESTS -> Verdict(VerificationStatus.ERROR,

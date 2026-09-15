@@ -293,7 +293,11 @@ class CellDbHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME, 
         radio: RadioTech
     ): VerificationStatus {
         val db = this.readableDatabase
-        // Buscamos cualquier registro previo de esta antena que no sea PENDING o ERROR.
+        // Solo se reutiliza una verificación que conserve coordenadas de API. Las observaciones
+        // periódicas copian el estado visual pero no escriben api_lat/api_lon; usar su timestamp
+        // renovaba artificialmente el TTL. NOT_FOUND tampoco se reutiliza desde la DB: no existe
+        // aún una columna con la fecha de la consulta API y una muestra nueva lo haría eterno.
+        // La caché de sesión ya limita sus reintentos a una hora.
         // v2.1: la comprobación de cercanía usa api_lat/api_lon (posición de la ANTENA según la
         // API), que es lo que esta función siempre quiso comparar. Antes leía lat/lon, donde la
         // coordenada de la API acababa mezclada con la del GPS: la semántica era ambigua y
@@ -304,8 +308,9 @@ class CellDbHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME, 
         val query = "SELECT $COLUMN_VERIFIED, $COLUMN_API_LAT, $COLUMN_API_LON, $COLUMN_TIMESTAMP FROM $TABLE_HISTORY " +
                     "WHERE $COLUMN_CID=? AND $COLUMN_MNC=? AND $COLUMN_TAC=? AND $COLUMN_MCC=? " +
                     "AND $COLUMN_RADIO=? " +
-                    "AND $COLUMN_VERIFIED IN ('VERIFIED', 'NOT_FOUND') " +
-                    "ORDER BY CASE WHEN $COLUMN_VERIFIED='VERIFIED' THEN 1 ELSE 2 END ASC, $COLUMN_ID DESC LIMIT 1"
+                    "AND $COLUMN_VERIFIED='VERIFIED' " +
+                    "AND $COLUMN_API_LAT IS NOT NULL AND $COLUMN_API_LON IS NOT NULL " +
+                    "ORDER BY $COLUMN_ID DESC LIMIT 1"
 
         val cursor = db.rawQuery(query, arrayOf(cid, mnc, tac, mcc, radio.name))
         var status = VerificationStatus.PENDING
@@ -343,12 +348,6 @@ class CellDbHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME, 
                     status = if (results[0] < MAX_PLAUSIBLE_ANTENNA_DISTANCE_M) VerificationStatus.VERIFIED
                              else VerificationStatus.PENDING
                 }
-            } else if (savedStatus == VerificationStatus.NOT_FOUND) {
-                // Re-intento: pasada 1 h se vuelve a preguntar, por si una torre legítima recién
-                // desplegada ya ha aparecido en las bases.
-                val edad = edadDeRegistro(savedTimeStr)
-                status = if (edad != null && edad > NOT_FOUND_TTL_MS) VerificationStatus.PENDING
-                         else VerificationStatus.NOT_FOUND
             }
         }
         } finally {
@@ -961,6 +960,7 @@ class CellDbHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME, 
                     "AND $COLUMN_TAC=? AND $COLUMN_MCC=? " +
                     "AND $COLUMN_RADIO=? " +
                     "AND $COLUMN_VERIFIED='VERIFIED' " +
+                    "AND $COLUMN_API_LAT IS NOT NULL AND $COLUMN_API_LON IS NOT NULL " +
                     "ORDER BY $COLUMN_ID DESC LIMIT 1",
                 arrayOf(cid, mnc, tac, mcc, radio.name)
             ).use { c ->

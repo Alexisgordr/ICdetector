@@ -121,6 +121,62 @@ class VerificationDecisionTest {
         )
     }
 
+    @Test
+    fun `la identidad celular oficial de WiGLE se interpreta completa`() {
+        val recibida = VerificationDecision.reportedFromWigleId(
+            "21407_31601_123456", "LTE"
+        )
+        assertEquals(
+            VerificationDecision.Reported("214", "07", "31601", "123456", RadioTech.LTE),
+            recibida
+        )
+        assertTrue(VerificationDecision.identityMatches(esperada, recibida!!))
+    }
+
+    @Test
+    fun `un id WiGLE ajeno o mal formado nunca verifica`() {
+        val ajena = VerificationDecision.reportedFromWigleId("21407_31601_999999", "LTE")
+        assertFalse(VerificationDecision.identityMatches(esperada, ajena!!))
+        assertEquals(null, VerificationDecision.reportedFromWigleId("respuesta-sin-identidad"))
+    }
+
+    @Test
+    fun `OpenCellID usa lac y cellid antes que auxiliares a cero`() {
+        val recibida = VerificationDecision.reportedFromOpenCellId(
+            mcc = "214", mnc = "7", lac = "31601", tac = "0",
+            cellId = "123456", cid = "0", radio = "LTE"
+        )
+        assertTrue(VerificationDecision.identityMatches(esperada, recibida))
+    }
+
+    @Test
+    fun `NOT_FOUND solo representa acuerdo negativo de todas las fuentes`() {
+        assertEquals(
+            VerificationStatus.NOT_FOUND,
+            VerificationDecision.combine(VerificationStatus.NOT_FOUND, VerificationStatus.NOT_FOUND)
+        )
+        assertEquals(
+            VerificationStatus.REJECTED,
+            VerificationDecision.combine(VerificationStatus.NOT_FOUND, VerificationStatus.ERROR)
+        )
+        assertEquals(
+            VerificationStatus.REJECTED,
+            VerificationDecision.combine(VerificationStatus.ERROR, VerificationStatus.NOT_FOUND)
+        )
+        assertEquals(
+            VerificationStatus.ERROR,
+            VerificationDecision.combine(VerificationStatus.ERROR, VerificationStatus.ERROR)
+        )
+        assertEquals(
+            VerificationStatus.REJECTED,
+            VerificationDecision.combine(VerificationStatus.NOT_FOUND, VerificationStatus.REJECTED)
+        )
+        assertEquals(
+            VerificationStatus.VERIFIED,
+            VerificationDecision.combine(VerificationStatus.REJECTED, VerificationStatus.VERIFIED)
+        )
+    }
+
     // ── OpenCellID ───────────────────────────────────────────────────────────────────────────
 
     @Test
@@ -139,6 +195,15 @@ class VerificationDecisionTest {
     fun `opencellid code 1 es la unica negativa`() {
         val v = VerificationDecision.forOpenCellId(200, hasCoordinates = false, errorCode = 1, identityOk = false)
         assertEquals(VerificationStatus.NOT_FOUND, v.status)
+    }
+
+    @Test
+    fun `opencellid code 1 con indisponibilidad temporal es ERROR`() {
+        val v = VerificationDecision.forOpenCellId(
+            200, hasCoordinates = false, errorCode = 1, identityOk = false,
+            mensajeApi = "Endpoint temporarily unavailable"
+        )
+        assertEquals(VerificationStatus.ERROR, v.status)
     }
 
     @Test
