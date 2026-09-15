@@ -1,0 +1,20 @@
+ICdetection es una herramienta abierta y defensiva para auditar el entorno celular desde Android.
+
+La aplicación muestra información proporcionada por las API públicas de telefonía de Android, como la identidad de la celda, MCC, MNC, TAC, PCI, ARFCN, potencia, calidad de señal y Timing Advance cuando el teléfono lo proporciona.
+
+Su motor compara múltiples observaciones y heurísticas conservadoras para identificar comportamientos celulares anómalos. Las alertas requieren confirmación temporal para reducir falsos positivos.
+
+ICdetection no garantiza la detección de IMSI-catchers. Android no permite a las aplicaciones normales inspeccionar completamente el tráfico RRC, NAS ni el interior del módem. Una alerta indica una anomalía que merece revisión, no una prueba definitiva de vigilancia.
+
+La aplicación funciona sin root y almacena el historial localmente en el dispositivo. No contiene publicidad, analítica ni rastreadores.
+
+Las consultas a WiGLE y OpenCellID son opcionales. El usuario debe aportar sus propias credenciales y puede utilizar la aplicación sin estos servicios.
+
+Permisos:
+
+• Ubicación: Android la exige para acceder a determinada información celular y se utiliza en comprobaciones geográficas.
+• Estado del teléfono: necesario para consultar la red y las celdas visibles.
+• Internet: utilizado opcionalmente para WiGLE, OpenCellID y las comprobaciones de red activadas por el usuario.
+• Servicio en primer plano y notificaciones: permiten mantener la monitorización visible y controlable.
+
+La cantidad y calidad de la telemetría dependen del teléfono, el módem, el firmware y la versión de Android.

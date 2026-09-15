@@ -1,0 +1,11 @@
+Version 2.1
+
+• Strict WiGLE and OpenCellID identity verification.
+• Separate VERIFIED, NOT_FOUND, REJECTED and ERROR states.
+• Rate-limited retries for rejected API responses.
+• Temporal confirmation before heuristic alarms.
+• Improved Timing Advance handling and stub-zero detection.
+• Separate device GPS and public tower coordinates.
+• Radio-specific history, caches and statistical baselines.
+• Extended CSV export for the field-data campaign.
+• False-positive and data-integrity corrections.

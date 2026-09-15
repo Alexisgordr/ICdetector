@@ -1,0 +1,11 @@
+Versión 2.1
+
+• Verificación estricta de identidad con WiGLE y OpenCellID.
+• Separación entre VERIFIED, NOT_FOUND, REJECTED y ERROR.
+• Reintentos de respuestas descartadas limitados para proteger la cuota.
+• Confirmación temporal de alarmas.
+• Mejoras en Timing Advance y detección de valores ficticios.
+• Separación entre ubicación GPS y coordenadas públicas de antenas.
+• Historial y cachés separados por tecnología de radio.
+• Exportación CSV ampliada para la campaña de datos.
+• Correcciones de falsos positivos y mejoras de integridad.
