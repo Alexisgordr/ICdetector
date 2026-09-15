@@ -1,5 +1,11 @@
 # Changelog
 
+## 2.1.1
+
+- Eliminado el resolvedor Foojay para permitir compilaciones reproducibles en F-Droid.
+- La aplicación utiliza el JDK 17 proporcionado por el entorno de compilación.
+
+
 ## 2.1
 
 ### Final freeze fixes
