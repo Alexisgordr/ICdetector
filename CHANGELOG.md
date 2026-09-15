@@ -2,8 +2,27 @@
 
 ## 2.1
 
+### Final freeze fixes
+
+- Increased the `REJECTED` retry window from 15 minutes to one hour to protect API quota when one
+  source repeatedly returns an unusable response.
+- Raw ping-pong detections now leave an informational terminal trace without tone; only a
+  three-cycle confirmed threat can produce the alarm.
+- Removed the immediate raw ping-pong tone. Ping-pong can now contribute to an alert only after
+  the normal three consecutive observations required by `TemporalConfidence`.
+- Extended complete cell identity (`MCC + MNC + area + CID + radio`) to API-coordinate lookup,
+  history, signal baseline, reputation, RF fingerprint, RF stability and both service caches.
+- Added the non-destructive database migration 11→12 and a radio-aware identity index.
+- History cards and Intel statistics now group by complete identity instead of CID alone; LTE and
+  NR records sharing a numeric CID are no longer merged.
+
 ### Verification integrity
 
+- Split retry timing by meaning: `REJECTED` and a genuine `NOT_FOUND` are retried after one hour.
+  Separate timestamp maps prevent either state from renewing
+  or blocking the other's retry.
+- Field check with `alexis3.csv`: 33/71 observations were VERIFIED (14 distinct verified cells with
+  API coordinates), confirming that strict identity verification and API/GPS distance are working.
 - Fixed WiGLE's successful-result parser: cellular identity is returned in `results[].id` as
   `MCC+MNC_AREA_CELLID`, not as separate `cellid`/`cid` fields. Valid WiGLE matches no longer end
   up incorrectly as `REJECTED`, while unrelated results remain impossible to verify.
@@ -25,7 +44,8 @@
 - Redacts the OpenCellID key if an API error echoes it in the response body before terminal logging.
 - Rebuilt WiGLE/OpenCellID handling around `VERIFIED`, `NOT_FOUND`, `REJECTED`, `ERROR` and
   `PENDING`, with full identity and coordinate validation.
-- Added radio-specific identity to requests, caches, UI and database operations.
+- Added radio-specific identity to requests, caches, UI and all identity-based database reads and
+  writes.
 - Prevented HTTP/API errors and legacy rows without radio from becoming current verification.
 - Added verification TTL and separated public-database coordinates from device GPS coordinates.
 - Prevented API callbacks from bypassing the three real-observation cycles required by
@@ -38,7 +58,7 @@
 - Unified engine, UI, history and CSV conversion policy.
 - Added `TA`, `TAUnit`, `TAMeters` and `Radio` export and replay support.
 - Kept external verification neutral to score and anomaly confidence.
-- Expanded regression coverage to 154 declared tests.
+- Expanded regression coverage to 155 declared tests.
 
 ### Interface
 
@@ -51,4 +71,4 @@
 
 - `versionName`: `2.1`
 - `versionCode`: `3`
-- Database schema: `11`
+- Database schema: `12`

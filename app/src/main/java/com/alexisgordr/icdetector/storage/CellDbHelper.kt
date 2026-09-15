@@ -22,7 +22,7 @@ import java.util.Locale
 class CellDbHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME, null, DATABASE_VERSION) {
     companion object {
         private const val DATABASE_NAME = "icdetector_history.db"
-        private const val DATABASE_VERSION = 11
+        private const val DATABASE_VERSION = 12
         const val TABLE_HISTORY = "history"
         const val COLUMN_ID = "id"
         const val COLUMN_TIMESTAMP = "timestamp"
@@ -185,6 +185,11 @@ class CellDbHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME, 
             // válido, sencillamente no sabe de qué tecnología era cada observación.
             try { db.execSQL("ALTER TABLE $TABLE_HISTORY ADD COLUMN $COLUMN_RADIO TEXT") } catch (_: Exception) {}
         }
+        if (oldVersion < 12) {
+            // La identidad histórica completa incluye la tecnología. El índice anterior se
+            // conserva para compatibilidad, y este evita mezclar o ralentizar LTE/NR/UMTS/GSM.
+            createRadioIdentityIndex(db)
+        }
     }
 
     /**
@@ -204,8 +209,18 @@ class CellDbHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME, 
                     "($COLUMN_CID, $COLUMN_MNC, $COLUMN_TAC, $COLUMN_MCC)"
             )
         } catch (_: Exception) {}
+        createRadioIdentityIndex(db)
         try {
             db.execSQL("CREATE INDEX IF NOT EXISTS idx_timestamp ON $TABLE_HISTORY ($COLUMN_TIMESTAMP)")
+        } catch (_: Exception) {}
+    }
+
+    private fun createRadioIdentityIndex(db: SQLiteDatabase) {
+        try {
+            db.execSQL(
+                "CREATE INDEX IF NOT EXISTS idx_cell_identity_radio ON $TABLE_HISTORY " +
+                    "($COLUMN_CID, $COLUMN_MNC, $COLUMN_TAC, $COLUMN_MCC, $COLUMN_RADIO)"
+            )
         } catch (_: Exception) {}
     }
 
@@ -502,6 +517,7 @@ class CellDbHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME, 
 
     fun updateNullCoordinates(
         cellId: String, mnc: String, tac: String, mcc: String,
+        radio: RadioTech,
         lat: Double, lon: Double
     ): Int {
         val db = this.writableDatabase
@@ -528,9 +544,10 @@ class CellDbHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME, 
                 TABLE_HISTORY,
                 values,
                 "$COLUMN_ID = (SELECT MAX($COLUMN_ID) FROM $TABLE_HISTORY " +
-                    "WHERE $COLUMN_CID = ? AND $COLUMN_MNC = ? AND $COLUMN_TAC = ? AND $COLUMN_MCC = ?) " +
+                    "WHERE $COLUMN_CID = ? AND $COLUMN_MNC = ? AND $COLUMN_TAC = ? AND $COLUMN_MCC = ? " +
+                    "AND $COLUMN_RADIO = ?) " +
                     "AND $COLUMN_LAT IS NULL AND $COLUMN_LON IS NULL",
-                arrayOf(cellId, mnc, tac, mcc)
+                arrayOf(cellId, mnc, tac, mcc, radio.name)
             )
         } catch (_: Exception) {
             0
@@ -554,6 +571,7 @@ class CellDbHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME, 
         mnc: String,
         tac: String,
         mcc: String,
+        radio: RadioTech,
         excludeCurrentLocation: Location
     ): List<HistoryRecord> {
         val history = mutableListOf<HistoryRecord>()
@@ -577,6 +595,7 @@ class CellDbHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME, 
               AND $COLUMN_LAT IS NOT NULL 
               AND $COLUMN_LON IS NOT NULL
               AND $COLUMN_MCC = ?
+              AND $COLUMN_RADIO = ?
               AND $COLUMN_TIMESTAMP < ?
               AND $COLUMN_TIMESTAMP > ?
             ORDER BY $COLUMN_ID DESC
@@ -584,7 +603,7 @@ class CellDbHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME, 
         """.trimIndent()
 
         val maxUsableRecords = 20
-        val cursor = db.rawQuery(query, arrayOf(cellId, mnc, tac, mcc, recentThreshold, oldThreshold))
+        val cursor = db.rawQuery(query, arrayOf(cellId, mnc, tac, mcc, radio.name, recentThreshold, oldThreshold))
         try {
 
         if (cursor.moveToFirst()) {
@@ -649,6 +668,7 @@ class CellDbHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME, 
         mnc: String,
         tac: String,
         mcc: String,
+        radio: RadioTech,
         nearLocation: Location,
         radiusMeters: Float = 500f,
         minSamples: Int = 5
@@ -667,12 +687,13 @@ class CellDbHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME, 
               AND $COLUMN_LAT IS NOT NULL
               AND $COLUMN_LON IS NOT NULL
               AND $COLUMN_MCC = ?
+              AND $COLUMN_RADIO = ?
               AND $COLUMN_TIMESTAMP > ?
             ORDER BY $COLUMN_ID DESC
             LIMIT 200
         """.trimIndent()
 
-        val cursor = db.rawQuery(query, arrayOf(cellId, mnc, tac, mcc, oldThreshold))
+        val cursor = db.rawQuery(query, arrayOf(cellId, mnc, tac, mcc, radio.name, oldThreshold))
         val samples = mutableListOf<Int>()
         try {
         if (cursor.moveToFirst()) {
@@ -727,7 +748,7 @@ class CellDbHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME, 
      * heurísticas débiles sobre celdas probadas (ver CellReputation). Devuelve trustScore = -1
      * (desconocida) si no hay historial suficiente para juzgar — en ese caso no se amortigua nada.
      */
-    fun getCellReputation(cellId: String, mnc: String, tac: String, mcc: String): CellReputation {
+    fun getCellReputation(cellId: String, mnc: String, tac: String, mcc: String, radio: RadioTech): CellReputation {
         val db = this.readableDatabase
         val ninetyDaysAgo = System.currentTimeMillis() - (90L * 24 * 60 * 60 * 1000)
         val dateFormat = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault())
@@ -740,6 +761,7 @@ class CellDbHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME, 
               AND $COLUMN_MNC = ?
               AND $COLUMN_TAC = ?
               AND $COLUMN_MCC = ?
+              AND $COLUMN_RADIO = ?
               AND $COLUMN_TIMESTAMP > ?
             ORDER BY $COLUMN_ID DESC
             LIMIT 500
@@ -748,7 +770,7 @@ class CellDbHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME, 
         var total = 0
         var clean = 0
         val days = HashSet<String>()
-        db.rawQuery(query, arrayOf(cellId, mnc, tac, mcc, threshold)).use { cursor ->
+        db.rawQuery(query, arrayOf(cellId, mnc, tac, mcc, radio.name, threshold)).use { cursor ->
             if (cursor.moveToFirst()) {
                 do {
                     val score = cursor.getInt(0)
@@ -792,6 +814,7 @@ class CellDbHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME, 
         mnc: String,
         tac: String,
         mcc: String,
+        radio: RadioTech,
         minSamples: Int = 30,
         nearLocation: Location? = null,
         radiusMeters: Float = 1000f
@@ -808,6 +831,7 @@ class CellDbHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME, 
               AND $COLUMN_MNC = ?
               AND $COLUMN_TAC = ?
               AND $COLUMN_MCC = ?
+              AND $COLUMN_RADIO = ?
               AND $COLUMN_RSRQ IS NOT NULL
               AND $COLUMN_SINR IS NOT NULL
               AND $COLUMN_TIMESTAMP > ?
@@ -817,7 +841,7 @@ class CellDbHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME, 
 
         val rsrqs = mutableListOf<Int>()
         val sinrs = mutableListOf<Int>()
-        db.rawQuery(query, arrayOf(cellId, mnc, tac, mcc, threshold)).use { cursor ->
+        db.rawQuery(query, arrayOf(cellId, mnc, tac, mcc, radio.name, threshold)).use { cursor ->
             if (cursor.moveToFirst()) {
                 do {
                     val rsrq = cursor.getInt(0)
@@ -985,18 +1009,19 @@ class CellDbHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME, 
      *
      * Devuelve null si esa celda nunca se verificó con coordenada.
      */
-    fun getCellApiLocation(cellId: String, mnc: String, tac: String, mcc: String): Pair<Double, Double>? {
+    fun getCellApiLocation(cellId: String, mnc: String, tac: String, mcc: String, radio: RadioTech): Pair<Double, Double>? {
         return try {
             val db = this.readableDatabase
             val query = """
                 SELECT $COLUMN_API_LAT, $COLUMN_API_LON
                 FROM $TABLE_HISTORY
                 WHERE $COLUMN_CID = ? AND $COLUMN_MNC = ? AND $COLUMN_TAC = ? AND $COLUMN_MCC = ?
+                  AND $COLUMN_RADIO = ?
                   AND $COLUMN_API_LAT IS NOT NULL AND $COLUMN_API_LON IS NOT NULL
                 ORDER BY $COLUMN_ID DESC
                 LIMIT 1
             """.trimIndent()
-            db.rawQuery(query, arrayOf(cellId, mnc, tac, mcc)).use { c ->
+            db.rawQuery(query, arrayOf(cellId, mnc, tac, mcc, radio.name)).use { c ->
                 if (c.moveToFirst()) c.getDouble(0) to c.getDouble(1) else null
             }
         } catch (_: Exception) {
@@ -1015,7 +1040,7 @@ class CellDbHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME, 
      * interesa all el historial de la celda (incluidas reapariciones recientes y en el sitio
      * actual). Solo lectura; no toca esquema ni escritura.
      */
-    fun getCellRfStability(cellId: String, mnc: String, tac: String, mcc: String): CellRfStability {
+    fun getCellRfStability(cellId: String, mnc: String, tac: String, mcc: String, radio: RadioTech): CellRfStability {
         val pciCounts = HashMap<Int, Int>()
         val arfcnCounts = HashMap<Int, Int>()
         val recentPciCounts = HashMap<Int, Int>()
@@ -1039,10 +1064,11 @@ class CellDbHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME, 
               AND $COLUMN_MNC = ?
               AND $COLUMN_TAC = ?
               AND $COLUMN_MCC = ?
+              AND $COLUMN_RADIO = ?
               AND $COLUMN_TIMESTAMP > ?
         """.trimIndent()
 
-        val cursor = db.rawQuery(query, arrayOf(cellId, mnc, tac, mcc, oldThreshold))
+        val cursor = db.rawQuery(query, arrayOf(cellId, mnc, tac, mcc, radio.name, oldThreshold))
         try {
             if (cursor.moveToFirst()) {
                 val pciIdx = cursor.getColumnIndexOrThrow(COLUMN_PCI)

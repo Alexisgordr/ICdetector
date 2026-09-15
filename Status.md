@@ -8,6 +8,26 @@ designed to answer, and add the tooling to check that the second one can.
 
 ### Final verification hardening
 
+- **Campaign baseline starts clean on 2026-09-15 (frozen build).** Historical rows whose radio is
+  `NULL`/`UNKNOWN` remain visible and exportable, but deliberately do not feed radio-specific
+  baseline, reputation, fingerprint or RF-stability calculations. They are not lost; they are
+  excluded because assigning one ambiguous row simultaneously to LTE, NR, GSM and UMTS would
+  contaminate the new series. The first sample written by the frozen build is the effective start
+  of the three-month baseline.
+- **Quota-safe inconclusive retry.** `REJECTED` is retried after one hour, not every 15 minutes.
+- **Ping-pong remains observable without creating a raw alarm.** A one-cycle detection writes an
+  informational terminal line with no tone; only the confirmed alarm pipeline may sound.
+- **Freeze audit closed three final consistency gaps.** A raw ping-pong observation cannot sound
+  before `TemporalConfidence` confirms three cycles; every historical/cache lookup now includes
+  radio; and history cards/statistics group by complete identity rather than CID alone.
+- Database schema 12 adds a non-destructive radio-aware identity index. Existing rows are retained.
+
+- **Discarded replies are not abandoned.** `REJECTED` and `NOT_FOUND` use independent one-hour
+  retry timers. A retry occurs when the same cell is still serving or is
+  observed again after the window. Restarting the service also clears the in-memory wait.
+- **Latest field evidence is positive.** `alexis3.csv` contains 71 observations: 33 VERIFIED, 34
+  REJECTED, 3 NOT_FOUND and 1 ERROR. Fourteen distinct cells have a verified API coordinate, so
+  genuine verification and the API-coordinate-to-GPS distance path are both operating.
 - **WiGLE response parsing fixed after field evidence.** WiGLE's cell endpoint returns the queried
   identity in `results[].id` as `MCC+MNC_AREA_CELLID` (for example,
   `21407_31601_79362070`). The previous defensive parser looked for separate CID fields, so it
@@ -27,7 +47,8 @@ designed to answer, and add the tooling to check that the second one can.
   a valid response look like an identity mismatch. The client now uses `lac`/`cellid` first and
   only falls back to `tac`/`cid` when the canonical field is absent. A documented `code: 1` carrying
   a temporary-unavailability notice is classified as `ERROR`, not as a missing cell.
-- Radio technology is part of the in-memory, database and UI identity of a cell.
+- Radio technology is part of the in-memory, every identity-based database lookup/cache, and UI
+  identity of a cell.
 - Database updates are scoped by MCC, MNC, area, Cell ID **and radio**, preventing one technology
   from inheriting another technology's result.
 - Legacy rows without a recorded radio remain available as historical evidence but are not reused
@@ -327,6 +348,13 @@ ver — no toca el HAL de telefonía.
 
 ## Endurecimiento final de la verificación
 
+- **Las respuestas descartadas no se abandonan.** `REJECTED` y `NOT_FOUND` tienen temporizadores
+  independientes de una hora. Se reintenta cuando la misma celda continúa activa o
+  vuelve a aparecer después de esa ventana. Reiniciar el servicio también elimina la espera en
+  memoria.
+- **La última evidencia de campo es positiva.** `alexis3.csv` contiene 71 observaciones: 33
+  VERIFIED, 34 REJECTED, 3 NOT_FOUND y 1 ERROR. Catorce celdas distintas conservan coordenadas API
+  verificadas, confirmando que funcionan tanto la verificación real como la distancia API/GPS.
 - **Corregida la lectura de respuestas válidas de WiGLE.** La identidad llega en `results[].id`
   como `MCC+MNC_AREA_CELLID` (por ejemplo, `21407_31601_79362070`), no en campos CID separados.
   Ahora se interpreta y compara completa antes de aceptar la coordenada; no se recupera el antiguo

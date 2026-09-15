@@ -24,6 +24,7 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import com.alexisgordr.icdetector.models.HistoryRecord
 import com.alexisgordr.icdetector.models.SUBTHRESHOLD_PREFIX
+import com.alexisgordr.icdetector.models.identityKey
 import com.alexisgordr.icdetector.storage.CellDbHelper
 import com.alexisgordr.icdetector.utils.ExportUtils
 import kotlinx.coroutines.Dispatchers
@@ -72,15 +73,16 @@ fun HistoryPanel(dbHelper: CellDbHelper, onBack: () -> Unit) {
 
     val groupedItems = remember(items) {
         val groups = mutableMapOf<String, MutableList<HistoryRecord>>()
-        val orderedCids = mutableListOf<String>()
+        val orderedIdentities = mutableListOf<String>()
         items.forEach { record ->
-            if (!groups.containsKey(record.cid)) {
-                orderedCids.add(record.cid)
-                groups[record.cid] = mutableListOf()
+            val identity = record.identityKey
+            if (!groups.containsKey(identity)) {
+                orderedIdentities.add(identity)
+                groups[identity] = mutableListOf()
             }
-            groups[record.cid]!!.add(record)
+            groups[identity]!!.add(record)
         }
-        orderedCids.map { cid -> cid to groups[cid]!! }
+        orderedIdentities.map { identity -> identity to groups[identity]!! }
     }
 
     var expandedCids by remember { mutableStateOf(setOf<String>()) }
@@ -125,8 +127,8 @@ fun HistoryPanel(dbHelper: CellDbHelper, onBack: () -> Unit) {
                 }
             }
             LazyColumn(modifier = Modifier.fillMaxWidth().weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                items(groupedItems, key = { it.first }) { (cid, records) ->
-                    val isExpanded = expandedCids.contains(cid)
+                items(groupedItems, key = { it.first }) { (identity, records) ->
+                    val isExpanded = expandedCids.contains(identity)
                     val first = records.first()
                     
                     Card(
@@ -134,7 +136,7 @@ fun HistoryPanel(dbHelper: CellDbHelper, onBack: () -> Unit) {
                         colors = CardDefaults.cardColors(containerColor = Color(0xFF111111)),
                         shape = RoundedCornerShape(4.dp),
                         onClick = {
-                            expandedCids = if (isExpanded) expandedCids - cid else expandedCids + cid
+                            expandedCids = if (isExpanded) expandedCids - identity else expandedCids + identity
                         }
                     ) {
                         Column(modifier = Modifier.padding(12.dp)) {
@@ -144,7 +146,7 @@ fun HistoryPanel(dbHelper: CellDbHelper, onBack: () -> Unit) {
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
                                 Column {
-                                    Text("CELL ID: $cid", color = Color.White, fontSize = 13.sp, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Bold)
+                                    Text("CELL ID: ${first.cid} · ${first.radio.name}", color = Color.White, fontSize = 13.sp, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Bold)
                                     Text("CONEXIONES: ${records.size}", color = Color(0xFF888888), fontSize = 10.sp, fontFamily = FontFamily.Monospace)
                                 }
                                 Row(verticalAlignment = Alignment.CenterVertically) {
@@ -267,15 +269,16 @@ fun IntelPanel(dbHelper: CellDbHelper) {
 
     val groupedItems = remember(items) {
         val groups = mutableMapOf<String, MutableList<HistoryRecord>>()
-        val orderedCids = mutableListOf<String>()
+        val orderedIdentities = mutableListOf<String>()
         items.forEach { record ->
-            if (!groups.containsKey(record.cid)) {
-                orderedCids.add(record.cid)
-                groups[record.cid] = mutableListOf()
+            val identity = record.identityKey
+            if (!groups.containsKey(identity)) {
+                orderedIdentities.add(identity)
+                groups[identity] = mutableListOf()
             }
-            groups[record.cid]!!.add(record)
+            groups[identity]!!.add(record)
         }
-        orderedCids.map { cid -> cid to groups[cid]!! }
+        orderedIdentities.map { identity -> identity to groups[identity]!! }
     }
 
     // Calcular estadísticas

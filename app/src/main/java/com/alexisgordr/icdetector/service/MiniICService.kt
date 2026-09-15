@@ -175,6 +175,12 @@ class MiniICService : Service() {
     private val lastNotFoundTime = ConcurrentHashMap<String, Long>()
     // TTL de reverificación de NOT_FOUND: 1h. En caliente, sin reiniciar la app.
     private val NOT_FOUND_REVERIFY_TTL = 60L * 60L * 1000L
+    // REJECTED no es una negativa: es una consulta inconclusa. Se le da otra oportunidad antes,
+    // pero no cada ciclo de radio, para no consumir la cuota de ambas APIs en pocos minutos.
+    private val lastRejectedTime = ConcurrentHashMap<String, Long>()
+    // Durante la campaña, una respuesta inconclusa no debe consumir cuota cada 15 minutos.
+    // Una hora mantiene el reintento sin convertir un fallo persistente de una fuente en bucle.
+    private val REJECTED_REVERIFY_TTL = 60L * 60L * 1000L
 
     var alarmThreshold = -50f
     var isStrongSignalAlarmEnabled = true
@@ -353,6 +359,8 @@ class MiniICService : Service() {
         // NOT_FOUND de más de 1h (el TTL): se retira la marca para acotar el mapa; al volver a
         // observar la celda, el guard la reverificará (last ausente = fuera de ventana).
         lastNotFoundTime.entries.removeIf { now - it.value > NOT_FOUND_REVERIFY_TTL }
+        // Las respuestas inconclusas tienen su propia ventana, más corta que una negativa real.
+        lastRejectedTime.entries.removeIf { now - it.value > REJECTED_REVERIFY_TTL }
         // Cap de seguridad: si se excede, se descarta el exceso (las celdas afectadas
         // simplemente vuelven a aprender baseline / re-verificarse; sin impacto de correctitud).
         // Estas son ConcurrentHashMap (sin orden de inserción), así que la purga por .take() es
@@ -576,6 +584,7 @@ class MiniICService : Service() {
             scope.launch(Dispatchers.IO) {
                 val updated = dbHelper.updateNullCoordinates(
                     cell.cellId, cell.mnc, cell.tac, cell.mcc,
+                    cell.radioTech,
                     location.latitude, location.longitude
                 )
                 appendLog("[GPS]",
@@ -886,19 +895,21 @@ class MiniICService : Service() {
                 // estando parado. Caché propia por firma de celda (sin depender del movimiento).
                 var rfStability: CellRfStability? = null
                 if (activeRaw != null && activeRaw.cellId != "N/A") {
-                    val rfSig = "${activeRaw.cellId}|${activeRaw.mnc}|${activeRaw.tac}|${activeRaw.mcc}"
+                    // La radio forma parte de la identidad: un CID numéricamente igual en LTE y
+                    // NR no puede compartir coordenada, reputación, fingerprint ni estabilidad.
+                    val rfSig = activeRaw.identityKey
                     val nowRf = System.currentTimeMillis()
                     rfStability = if (rfSig == cachedRfSignature && (nowRf - cachedRfTimestamp) < CELL_CACHE_TTL) {
                         cachedRfStability
                     } else {
                         val st = dbHelper.getCellRfStability(
-                            activeRaw.cellId, activeRaw.mnc, activeRaw.tac, activeRaw.mcc
+                            activeRaw.cellId, activeRaw.mnc, activeRaw.tac, activeRaw.mcc, activeRaw.radioTech
                         )
                         // Reputación: misma identidad de celda -> se recalcula con la misma caché.
                         // Solo lectura del historial (columna 'score'); amortigua ruido débil en
                         // celdas probadas (ver CellReputation). No toca esquema.
                         cachedReputation = dbHelper.getCellReputation(
-                            activeRaw.cellId, activeRaw.mnc, activeRaw.tac, activeRaw.mcc
+                            activeRaw.cellId, activeRaw.mnc, activeRaw.tac, activeRaw.mcc, activeRaw.radioTech
                         )
                         // v2.1: se pasa la ubicación para acotar la huella RF a la zona actual.
                         // Con el muestreo periódico, el sitio donde más tiempo pasas aporta la
@@ -907,6 +918,7 @@ class MiniICService : Service() {
                         // Con ubicación desconocida se mantiene el comportamiento clásico.
                         cachedFingerprint = dbHelper.getCellRfFingerprint(
                             activeRaw.cellId, activeRaw.mnc, activeRaw.tac, activeRaw.mcc,
+                            radio = activeRaw.radioTech,
                             nearLocation = currentLocation
                         )
                         // v2.1 — Posición de la antena según las bases públicas, para poder
@@ -914,7 +926,7 @@ class MiniICService : Service() {
                         // la verificación). Misma caché por identidad de celda: una consulta más
                         // cada 60 s como mucho.
                         cachedApiLocation = dbHelper.getCellApiLocation(
-                            activeRaw.cellId, activeRaw.mnc, activeRaw.tac, activeRaw.mcc
+                            activeRaw.cellId, activeRaw.mnc, activeRaw.tac, activeRaw.mcc, activeRaw.radioTech
                         )
                         cachedRfSignature = rfSig
                         cachedRfStability = st
@@ -926,7 +938,7 @@ class MiniICService : Service() {
                 val rfFingerprint: CellRfFingerprint? = cachedFingerprint
 
                 if (canQuery) {
-                    val signature = "${activeRaw.cellId}|${activeRaw.mnc}|${activeRaw.tac}|${activeRaw.mcc}"
+                    val signature = activeRaw.identityKey
                     val now = System.currentTimeMillis()
                     // ¿Cuánto te has movido desde el último prefetch? (afecta al baseline, que
                     // filtra muestras por cercanía). Si te mueves mucho, hay que reconsultar.
@@ -949,10 +961,12 @@ class MiniICService : Service() {
                         signalBaseline = cachedBaseline
                     } else {
                         preloadedHistory = dbHelper.getPreviousCellHistory(
-                            activeRaw.cellId, activeRaw.mnc, activeRaw.tac, activeRaw.mcc, currentLocation
+                            activeRaw.cellId, activeRaw.mnc, activeRaw.tac, activeRaw.mcc,
+                            activeRaw.radioTech, currentLocation
                         )
                         signalBaseline = dbHelper.getCellSignalBaseline(
-                            activeRaw.cellId, activeRaw.mnc, activeRaw.tac, activeRaw.mcc, currentLocation
+                            activeRaw.cellId, activeRaw.mnc, activeRaw.tac, activeRaw.mcc,
+                            activeRaw.radioTech, currentLocation
                         )
                         cachedCellSignature = signature
                         cachedLocationLat = currentLocation.latitude
@@ -1242,6 +1256,7 @@ class MiniICService : Service() {
                         currentCell.mnc,
                         currentCell.tac,
                         currentCell.mcc,
+                        currentCell.radioTech,
                         loc.latitude,
                         loc.longitude
                     )
@@ -1410,12 +1425,13 @@ class MiniICService : Service() {
         }
         // Si la última vez fue NOT_FOUND, reintentar en vivo solo pasada 1h, por si una torre
         // legítima recién desplegada ya está en WiGLE/OpenCellID y debe pasar a VERIFIED.
-        if (cached == VerificationStatus.NOT_FOUND || cached == VerificationStatus.REJECTED) {
-            // Una respuesta descartada se reintenta con la misma ventana que una negativa: lo más
-            // probable es que la siguiente consulta devuelva exactamente lo mismo, y machacar la
-            // API cada 60 s por una respuesta que ya sabemos que no sirve solo gasta cuota.
+        if (cached == VerificationStatus.NOT_FOUND) {
             val last = lastNotFoundTime[cacheKey] ?: 0L
             if (System.currentTimeMillis() - last < NOT_FOUND_REVERIFY_TTL) return
+        }
+        if (cached == VerificationStatus.REJECTED) {
+            val last = lastRejectedTime[cacheKey] ?: 0L
+            if (System.currentTimeMillis() - last < REJECTED_REVERIFY_TTL) return
         }
 
         // Verificar credenciales
@@ -1443,9 +1459,13 @@ class MiniICService : Service() {
                 val last = lastVerificationErrorTime[cacheKey] ?: 0L
                 if (System.currentTimeMillis() - last < 60000L) return
             }
-            if (current == VerificationStatus.NOT_FOUND || current == VerificationStatus.REJECTED) {
+            if (current == VerificationStatus.NOT_FOUND) {
                 val last = lastNotFoundTime[cacheKey] ?: 0L
                 if (System.currentTimeMillis() - last < NOT_FOUND_REVERIFY_TTL) return
+            }
+            if (current == VerificationStatus.REJECTED) {
+                val last = lastRejectedTime[cacheKey] ?: 0L
+                if (System.currentTimeMillis() - last < REJECTED_REVERIFY_TTL) return
             }
             verificationCache[cacheKey] = VerificationStatus.PENDING
         }
@@ -1600,9 +1620,9 @@ class MiniICService : Service() {
                 // fuente— y se reintenta pasada la misma hora que una negativa, porque lo más
                 // probable es que la siguiente consulta traiga exactamente lo mismo.
                 verificationCache[cacheKey] = VerificationStatus.REJECTED
-                lastNotFoundTime[cacheKey] = System.currentTimeMillis()
+                lastRejectedTime[cacheKey] = System.currentTimeMillis()
                 dbHelper.updateVerificationStatus(cell.mnc, cell.tac, cell.cellId, VerificationStatus.REJECTED, mcc = cell.mcc, radio = cell.radioTech)
-                appendLog("[API]", "Respuesta descartada: no permite afirmar ni desmentir nada sobre esta antena. Se reintentará en 1h.")
+                appendLog("[API]", "Respuesta descartada: no permite afirmar ni desmentir nada sobre esta antena. Se reintentará en 1 h si la celda sigue activa o reaparece.")
                 updateFlowWithStatus(cell, VerificationStatus.REJECTED)
             } else if (finalStatus == VerificationStatus.VERIFIED) {
                 // La API confirmó la identidad de la celda pero no se pudo guardar coordenada.
@@ -1780,10 +1800,14 @@ class MiniICService : Service() {
             cellChangeHistory.add(Pair(cid, currentTime))
             cellChangeHistory.removeAll { currentTime - it.second > 10000L }
 
+            // El informe de heurísticas es la observación cruda del ciclo. No debe producir un
+            // tono aquí: TemporalConfidence necesita tres ciclos antes de convertirla en alarma.
+            // Si el ping-pong contribuye a una amenaza confirmada, lo registra la rama general
+            // cell.isSuspicious de abajo, junto al resto de las heurísticas confirmadas.
             if (!cell.heuristicReport.pingPongPassed) {
-                toneGenerator?.startTone(ToneGenerator.TONE_CDMA_PIP, 300)
-                appendLog("[SEC]", "🚨 ¡ALERTA! Efecto Ping-Pong detectado en parado.")
-                Log.e("MiniIC", "ANOMALÍA: Efecto Ping-Pong detectado en parado.")
+                // Evidencia para la campaña, sin alerta: el informe sigue siendo crudo y todavía
+                // no ha superado los tres ciclos de TemporalConfidence.
+                appendLog("[RADIO]", "Ping-Pong observado (sin confirmar; sin tono).")
             } else if (cellChangeHistory.size >= 3) {
                 val speedKmh = (getCurrentLocation()?.speed ?: 0f) * 3.6f
                 appendLog("[RADIO]", "Ping-Pong detectado a ${String.format(Locale.getDefault(), "%.1f", speedKmh)} km/h. Ignorando alerta.")
@@ -1881,6 +1905,9 @@ class MiniICService : Service() {
             toneGenerator?.startTone(ToneGenerator.TONE_CDMA_SOFT_ERROR_LITE, 200)
             Log.e("MiniIC", "THREAT DETECTED: ${cell.suspiciousReason}")
             requestHighAccuracyFix()
+            if (!cell.heuristicReport.pingPongPassed) {
+                appendLog("[SEC]", "🚨 Efecto Ping-Pong confirmado por TemporalConfidence.")
+            }
 
             // Fix #1: persistir la evidencia de la alarma en el historial. El registro normal
             // (más arriba) solo ocurre al CAMBIAR de celda, pero una amenaza se confirma en la
@@ -1890,9 +1917,8 @@ class MiniICService : Service() {
             // (mismo cellId, reseteado en cada handover) para no inundar la BD ciclo a ciclo.
             //
             // Coherencia (confirmed): SOLO se persiste si la alarma viene de la ruta que pasó por
-            // TemporalConfidence.apply() (los 3 ciclos). La ruta de re-análisis tras verificación
-            // API llama a checkAlerts con sospecha CRUDA (1 ciclo): mantiene su tono/aviso, pero
-            // NO graba evidencia, para que el historial forense solo contenga alarmas confirmadas.
+            // TemporalConfidence.apply() (los 3 ciclos). Las respuestas API solo actualizan
+            // contexto y nunca llaman directamente a esta ruta con una sospecha cruda.
             if (confirmed && lastAlarmLoggedCellId != cid) {
                 lastAlarmLoggedCellId = cid
                 scope.launch(Dispatchers.IO) {

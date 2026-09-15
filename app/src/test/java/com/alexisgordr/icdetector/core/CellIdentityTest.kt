@@ -1,6 +1,7 @@
 package com.alexisgordr.icdetector.core
 
 import com.alexisgordr.icdetector.models.CellData
+import com.alexisgordr.icdetector.models.HistoryRecord
 import com.alexisgordr.icdetector.models.RadioTech
 import com.alexisgordr.icdetector.models.identityKey
 import com.alexisgordr.icdetector.models.isSameCell
@@ -37,5 +38,15 @@ class CellIdentityTest {
         val second = cell(RadioTech.GSM)
 
         assertTrue(first.isSameCell(second))
+    }
+
+    @Test
+    fun `historial separa un mismo cid por tecnologia`() {
+        fun row(radio: RadioTech) = HistoryRecord(
+            timestamp = "2026-09-15 12:00:00", netType = "test", cid = "123456",
+            mnc = "07", tac = "31601", mcc = "214", dbm = -85, radio = radio
+        )
+
+        assertNotEquals(row(RadioTech.LTE).identityKey, row(RadioTech.NR).identityKey)
     }
 }

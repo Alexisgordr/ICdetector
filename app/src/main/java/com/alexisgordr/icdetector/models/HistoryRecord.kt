@@ -67,3 +67,7 @@ data class HistoryRecord(
      */
     val radio: RadioTech = RadioTech.UNKNOWN
 )
+
+/** Misma identidad completa que [CellData.identityKey], aplicada a una fila histórica. */
+val HistoryRecord.identityKey: String
+    get() = "$mcc-$mnc-$tac-$cid-${radio.name}"
