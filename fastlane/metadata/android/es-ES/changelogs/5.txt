@@ -1,0 +1,2 @@
+Activada la optimización de las compilaciones mediante R8.
+Mejorada la compatibilidad del empaquetado con las compilaciones reproducibles de F-Droid.
