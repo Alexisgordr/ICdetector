@@ -1,0 +1,9 @@
+Novedades de 2.1.3:
+
+* Estados PASSED, FAILED y N/A en tiempo real para las 15 heurísticas.
+* Cobertura de evaluación: reglas evaluadas, fallos y datos no disponibles.
+* La correlación entre latencia y RF aparece ahora en la auditoría.
+* La falta de datos en bases externas se muestra por separado y no implica una amenaza.
+* El porcentaje se presenta ahora como índice heurístico.
+* Mejorado el historial en pantallas estrechas.
+* Añadidas pruebas para los cambios dinámicos de estado.

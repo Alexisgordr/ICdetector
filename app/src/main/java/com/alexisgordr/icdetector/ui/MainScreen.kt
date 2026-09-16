@@ -240,7 +240,7 @@ fun MainScreenContent(dbHelper: CellDbHelper, service: MiniICService?) {
                     val (statusText, statusColor) = when {
                         active == null -> "BUSCANDO SEÑAL..." to Color(0xFF888888)
                         active.isSuspicious -> "SISTEMA EN COMPROMISO" to Color(0xFFCF6679)
-                        active.securityScore >= SCORE_SAFE -> "ENTORNO SEGURO — ${active.securityScore}%" to securityScoreColor(active.securityScore)
+                        active.securityScore >= SCORE_SAFE -> "SIN ANOMALÍAS DETECTADAS" to securityScoreColor(active.securityScore)
                         active.securityScore >= SCORE_WATCH -> "OBSERVANDO — ${active.securityScore}%" to securityScoreColor(active.securityScore)
                         else -> "ANOMALÍA SIN CONFIRMAR — ${active.securityScore}%" to securityScoreColor(active.securityScore)
                     }
@@ -618,6 +618,21 @@ fun SecurityScorePanel(active: CellData, dbmHistory: List<Int>, geoHistory: List
 
                     Spacer(Modifier.height(4.dp))
                     Text("${active.securityScore}%", color = scoreColor, fontFamily = FontFamily.Monospace, fontSize = 28.sp, fontWeight = FontWeight.ExtraBold)
+                    Text(
+                        "ÍNDICE HEURÍSTICO · SOLO DATOS EVALUADOS",
+                        color = Color(0xFF777777),
+                        fontFamily = FontFamily.Monospace,
+                        fontSize = 8.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Text(
+                        "${active.heuristicReport.evaluatedCount}/${active.heuristicReport.totalCount} evaluadas · " +
+                            "${active.heuristicReport.failedCount} fallos · " +
+                            "${active.heuristicReport.totalCount - active.heuristicReport.evaluatedCount} sin datos",
+                        color = Color(0xFF666666),
+                        fontFamily = FontFamily.Monospace,
+                        fontSize = 9.sp
+                    )
 
                     // Probabilidad Bayesiana de amenaza
                     val threatColor = when {
@@ -652,34 +667,26 @@ fun SecurityScorePanel(active: CellData, dbmHistory: List<Int>, geoHistory: List
                         "GEO" -> GeoGraph(active, geoHistory)
                         "HEUR" -> {
                             Text("AUDITORÍA DE PARÁMETROS", color = Color(0xFF555555), fontFamily = FontFamily.Monospace, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                            Text(
+                                "${active.heuristicReport.evaluatedCount}/${active.heuristicReport.totalCount} EVALUADAS · ${active.heuristicReport.failedCount} FALLOS",
+                                color = Color(0xFF777777), fontFamily = FontFamily.Monospace, fontSize = 9.sp
+                            )
                             Spacer(Modifier.height(8.dp))
-                            HeuristicItem("1. Análisis de Celda Aislada", active.heuristicReport.isolatedCellPassed)
-                            HeuristicItem("2. Estabilidad de Potencia (Anti-Gap)", active.heuristicReport.powerJumpPassed)
-                            HeuristicItem("3. Consistencia de MCC", active.heuristicReport.mccConsistencyPassed)
-                            HeuristicItem("4. Límite de Redes MNC", active.heuristicReport.mncCountPassed)
-                            HeuristicItem("5. Validación Regional TAC", active.heuristicReport.tacDeviationPassed)
-                            HeuristicItem("6. Coherencia Geométrica (TA)", active.heuristicReport.taDistancePassed)
-                            HeuristicItem("7. Espectro de Vecinos (Anti-Ghost)", active.heuristicReport.ghostNeighborsPassed)
-                            HeuristicItem("8. Sanidad de Frecuencia (ARFCN)", active.heuristicReport.arfcnSanityPassed)
-
-                            if (active.heuristicReport.hardwareCipheringAvailable) {
-                                HeuristicItem("9. Cifrado de Enlace (Hardware)", active.heuristicReport.hardwareCipheringPassed)
-                            } else {
-                                Row(
-                                    modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    Text("⚠", color = Color(0xFFFFA000), fontSize = 10.sp, fontFamily = FontFamily.Monospace)
-                                    Spacer(modifier = Modifier.width(6.dp))
-                                    Text("9. Cifrado de Enlace (Hardware) — N/A", color = Color(0xFFFFA000), fontSize = 10.sp, fontFamily = FontFamily.Monospace)
-                                }
-                            }
-
-                            HeuristicItem("10. Estabilidad de Conexión (Anti Ping-Pong)", active.heuristicReport.pingPongPassed)
-                            HeuristicItem("11. Consistencia Geográfica (Cell ID móvil)", active.heuristicReport.mobileCellIdPassed)
-                            HeuristicItem("12. Potencia vs Histórico (Baseline + huella RSRQ/SINR)", active.heuristicReport.signalBaselinePassed)
-                            HeuristicItem("13. Downgrade de Banda (Intra-LTE)", active.heuristicReport.bandDowngradePassed)
-                            HeuristicItem("14. Estabilidad de Identidad RF (PCI)", active.heuristicReport.rfStabilityPassed)
+                            HeuristicItem("1. Análisis de Celda Aislada", active.heuristicReport.isolatedCell)
+                            HeuristicItem("2. Estabilidad de Potencia (Anti-Gap)", active.heuristicReport.powerJump)
+                            HeuristicItem("3. Consistencia de MCC", active.heuristicReport.mccConsistency)
+                            HeuristicItem("4. Límite de Redes MNC", active.heuristicReport.mncCount)
+                            HeuristicItem("5. Validación Regional TAC", active.heuristicReport.tacDeviation)
+                            HeuristicItem("6. Coherencia Geométrica (TA)", active.heuristicReport.taDistance)
+                            HeuristicItem("7. Espectro de Vecinos (Anti-Ghost)", active.heuristicReport.ghostNeighbors)
+                            HeuristicItem("8. Sanidad de Frecuencia (ARFCN)", active.heuristicReport.arfcnSanity)
+                            HeuristicItem("9. Cifrado de Enlace (Hardware)", active.heuristicReport.hardwareCiphering)
+                            HeuristicItem("10. Estabilidad de Conexión (Anti Ping-Pong)", active.heuristicReport.pingPong)
+                            HeuristicItem("11. Consistencia Geográfica (Cell ID móvil)", active.heuristicReport.mobileCellId)
+                            HeuristicItem("12. Correlación Latencia + RF", active.heuristicReport.latencyCorrelation)
+                            HeuristicItem("13. Potencia vs Histórico (Baseline + huella RSRQ/SINR)", active.heuristicReport.signalBaseline)
+                            HeuristicItem("14. Downgrade de Banda (Intra-LTE)", active.heuristicReport.bandDowngrade)
+                            HeuristicItem("15. Estabilidad de Identidad RF (PCI)", active.heuristicReport.rfStability)
                         }
                     }
                 }

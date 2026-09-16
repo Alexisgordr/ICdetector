@@ -16,6 +16,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.alexisgordr.icdetector.models.VerificationStatus
+import com.alexisgordr.icdetector.models.HeuristicStatus
 
 @Composable
 fun DataBox(modifier: Modifier, label: String, value: String, highlight: Boolean = false) {
@@ -87,23 +88,25 @@ fun SignalBarSegmented(label: String, dbm: Int, isMain: Boolean, isSuspicious: B
 }
 
 @Composable
-fun HeuristicItem(label: String, passed: Boolean) {
+fun HeuristicItem(label: String, status: HeuristicStatus) {
     Row(
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Text(label, color = Color(0xFFCCCCCC), fontSize = 11.sp, fontFamily = FontFamily.Monospace)
-        if (passed) {
-            Icon(Icons.Default.CheckCircle, contentDescription = "Pass", tint = Color(0xFF4CAF50), modifier = Modifier.size(14.dp))
-        } else {
-            Icon(Icons.Default.Cancel, contentDescription = "Fail", tint = Color(0xFFCF6679), modifier = Modifier.size(14.dp))
+        Text(label, modifier = Modifier.weight(1f), color = Color(0xFFCCCCCC), fontSize = 11.sp, fontFamily = FontFamily.Monospace)
+        Spacer(Modifier.width(8.dp))
+        val (text, color) = when (status) {
+            HeuristicStatus.PASSED -> "PASSED" to Color(0xFF4CAF50)
+            HeuristicStatus.FAILED -> "FAILED" to Color(0xFFCF6679)
+            HeuristicStatus.NOT_EVALUATED -> "N/A" to Color(0xFFFFA000)
         }
+        Text(text, color = color, fontSize = 10.sp, fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace)
     }
 }
 
 @Composable
-fun VerificationBadge(status: VerificationStatus) {
+fun VerificationBadge(status: VerificationStatus, compact: Boolean = false) {
     val (text, color) = when (status) {
         VerificationStatus.VERIFIED -> "REGISTRADA" to Color(0xFF4CAF50)
         // "NO ENCONTRADA" en rojo era otra herencia de cuando no estar en una base pública se
@@ -123,10 +126,14 @@ fun VerificationBadge(status: VerificationStatus) {
         Text(
             text = text,
             color = color,
-            fontSize = 10.sp,
+            fontSize = if (compact) 8.sp else 10.sp,
             fontFamily = FontFamily.Monospace,
             fontWeight = FontWeight.Bold,
-            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+            maxLines = 1,
+            modifier = Modifier.padding(
+                horizontal = if (compact) 4.dp else 6.dp,
+                vertical = 2.dp
+            )
         )
     }
 }

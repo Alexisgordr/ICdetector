@@ -18,6 +18,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -145,17 +146,33 @@ fun HistoryPanel(dbHelper: CellDbHelper, onBack: () -> Unit) {
                                 horizontalArrangement = Arrangement.SpaceBetween,
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
-                                Column {
-                                    Text("CELL ID: ${first.cid} · ${first.radio.name}", color = Color.White, fontSize = 13.sp, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Bold)
+                                Column(
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .padding(end = 6.dp)
+                                ) {
+                                    Text(
+                                        "CELL ID: ${first.cid} · ${first.radio.name}",
+                                        color = Color.White,
+                                        fontSize = 11.sp,
+                                        fontFamily = FontFamily.Monospace,
+                                        fontWeight = FontWeight.Bold,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis
+                                    )
                                     Text("CONEXIONES: ${records.size}", color = Color(0xFF888888), fontSize = 10.sp, fontFamily = FontFamily.Monospace)
                                 }
-                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                    VerificationBadge(first.verified)
-                                    Spacer(Modifier.width(8.dp))
+                                Row(
+                                    modifier = Modifier.wrapContentWidth(),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    VerificationBadge(first.verified, compact = true)
+                                    Spacer(Modifier.width(4.dp))
                                     Icon(
                                         imageVector = if (isExpanded) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
                                         contentDescription = null,
-                                        tint = Color(0xFF666666)
+                                        tint = Color(0xFF666666),
+                                        modifier = Modifier.size(20.dp)
                                     )
                                 }
                             }
