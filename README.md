@@ -4,6 +4,7 @@
 ![Status](https://img.shields.io/badge/Status-Stable%20v2.1-success.svg)
 
 <table>
+  
   <tr>
     <td width="60%" valign="top">
       <h3>Forensic Cellular Monitoring Interface</h3>
@@ -18,7 +19,7 @@
       </ul>
     </td>
     <td width="40%" align="center">
-      <img src="https://github.com/user-attachments/assets/81bf1ed6-94c4-462e-8d13-828f7754f532"
+      <img src="https://github.com/user-attachments/assets/8b200d5e-1eba-403d-88a4-e7702ed5d6ef"
            alt="ICdetection Screenshot"
            width="260" />
     </td>
