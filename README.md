@@ -19,7 +19,7 @@
       </ul>
     </td>
     <td width="40%" align="center">
-      <img src="https://github.com/user-attachments/assets/8b200d5e-1eba-403d-88a4-e7702ed5d6ef"
+      <img src="https://github.com/user-attachments/assets/05ad0ec4-d09b-4bb8-83c1-a4dbe9a7b44b"
            alt="ICdetection Screenshot"
            width="260" />
     </td>
