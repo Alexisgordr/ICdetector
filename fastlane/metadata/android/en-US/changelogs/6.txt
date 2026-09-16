@@ -1,0 +1,9 @@
+What's new in 2.1.3:
+
+* Live PASSED, FAILED and N/A states for all 15 heuristics.
+* Added evaluation coverage: evaluated rules, failures and unavailable data.
+* Latency + RF correlation is now visible in the audit panel.
+* Missing external database data is reported separately and does not imply a threat.
+* The percentage is now presented as a heuristic index.
+* Improved history layout on narrow screens.
+* Added tests for dynamic heuristic state transitions.

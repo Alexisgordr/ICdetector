@@ -3,6 +3,7 @@ package com.alexisgordr.icdetector.core
 import android.location.Location
 import com.alexisgordr.icdetector.models.CellData
 import com.alexisgordr.icdetector.models.HeuristicReport
+import com.alexisgordr.icdetector.models.HeuristicStatus
 import com.alexisgordr.icdetector.models.HistoryRecord
 import com.alexisgordr.icdetector.models.SignalBaseline
 import com.alexisgordr.icdetector.models.CellRfStability
@@ -126,6 +127,7 @@ object ThreatAnalyzer {
         preloadedHistory: List<HistoryRecord> = emptyList(),
         isWifiActive: Boolean = false,
         isNetworkLatencyAnomalous: Boolean = false,
+        isNetworkLatencyAvailable: Boolean = true,
         signalBaseline: SignalBaseline? = null,
         previousBand: Int? = null,
         previousDbm: Int? = null,
@@ -150,6 +152,23 @@ object ThreatAnalyzer {
         var hSignalBaseline = true
         var hBandDowngrade = true
         var hRfStability = true
+        var hLatencyCorrelation = true
+
+        var eIsolated = !isWifiActive
+        var ePowerJump = false
+        var eMcc = false
+        var eMncCount = false
+        var eTac = false
+        var eTa = false
+        var eGhost = false
+        var eArfcn = false
+        val eCiphering = isHardwareCipheringAvailable
+        val ePingPong = true
+        var eMobileCellId = false
+        var eLatencyCorrelation = false
+        var eSignalBaseline = false
+        var eBandDowngrade = false
+        var eRfStability = false
 
         // 1. Neighbor analysis
         if (!isWifiActive && neighbors.isEmpty() && active.dbm >= -80) {
@@ -160,6 +179,7 @@ object ThreatAnalyzer {
 
         // 2. Signal Gap analysis
         val nextStrongest = neighbors.maxOfOrNull { it.dbm }
+        ePowerJump = !isWifiActive && nextStrongest != null
         if (!isWifiActive && nextStrongest != null && active.dbm >= -75 && (active.dbm - nextStrongest > 35)) {
             hPowerJump = false
             reasons.add("Salto potencia (>35dB)")
@@ -167,6 +187,7 @@ object ThreatAnalyzer {
         }
 
         // 3. MNC/MCC Inconsistency
+        eMcc = active.mcc != "N/A" && neighbors.any { it.mcc != "N/A" }
         val differentMcc = neighbors.filter { it.mcc != "N/A" && active.mcc != "N/A" && it.mcc != active.mcc }
         if (differentMcc.isNotEmpty()) {
             hMcc = false
@@ -177,6 +198,7 @@ object ThreatAnalyzer {
         // 4. Multiple MNCs in area
         val uniqueMncs = (neighbors.asSequence().map { it.mnc } + active.mnc)
             .filter { it != "N/A" }.distinct().toList()
+        eMncCount = active.mnc != "N/A" && neighbors.any { it.mnc != "N/A" }
         // Umbral >4 (antes >3): es habitual ver 3-4 MNC de forma legítima
         // (MVNOs, estaciones de tren, roaming, zonas fronterizas). Subir el umbral
         // reduce falsos positivos sin necesidad de tocar la LR (que sigue baja a propósito).
@@ -189,6 +211,7 @@ object ThreatAnalyzer {
         // 5. TAC Deviation Audit
         if (neighbors.isNotEmpty() && active.tac != "N/A") {
             val neighborTacs = neighbors.map { it.tac }.filter { it != "N/A" }
+            eTac = neighborTacs.isNotEmpty()
             if (neighborTacs.isNotEmpty() && !neighborTacs.contains(active.tac)) {
                 hTac = false
                 reasons.add("Desviación TAC")
@@ -214,6 +237,7 @@ object ThreatAnalyzer {
         // conversión y H6 NO JUZGA. Abstenerse es correcto: una geometría inventada aquí es peor
         // que no tener geometría.
         val taMeters = active.timingAdvance?.let { active.timingAdvanceUnit.toMeters(it) }
+        eTa = taMeters != null
         if (taMeters != null) {
             if (active.lat != null && active.lon != null && currentLocation != null) {
                 if (taMeters > 0) {
@@ -258,6 +282,7 @@ object ThreatAnalyzer {
         // 7. Ghost Cells Check
         // Umbral subido a -65dBm y vecinas a -110dBm para reducir
         // falsos positivos en zonas rurales con macroceldas
+        eGhost = !isWifiActive && neighbors.isNotEmpty()
         if (!isWifiActive && active.dbm >= -65 && neighbors.isNotEmpty()
             && neighbors.all { it.dbm <= -110 }) {
             hGhost = false
@@ -270,12 +295,14 @@ object ThreatAnalyzer {
         // 70645 es válido para Band 252/255 (CBRS)
         active.arfcn?.let { arfcn ->
             if (active.networkType.contains("5G")) {
+                eArfcn = true
                 if (arfcn > 3279165 || arfcn == 0) {
                     hArfcn = false
                     reasons.add("Frecuencia (ARFCN) 5G sospechosa")
                     score -= 15
                 }
             } else if (active.networkType.contains("4G") || active.networkType.contains("LTE")) {
+                eArfcn = true
                 if (arfcn > 262143) {  // EARFCN 0 es válido (Banda 1, 2110 MHz); el "no disponible" llega como > 262143
                     hArfcn = false
                     reasons.add("Frecuencia (EARFCN) 4G sospechosa")
@@ -302,6 +329,8 @@ object ThreatAnalyzer {
         }
 
         // 11. Consistencia Geográfica y RF (PCI/ARFCN)
+        eMobileCellId = currentLocation != null && active.cellId != "N/A" &&
+            preloadedHistory.any { it.lat != null && it.lon != null }
         val (hMobileOk, hMobilePenalty, hMobileReason) = analyzeMobileCellId(
             active, currentLocation, preloadedHistory, neighbors
         )
@@ -312,10 +341,13 @@ object ThreatAnalyzer {
         }
 
         // 12. RF Quality + Latency Cross-Layer Correlation (Experimental)
+        eLatencyCorrelation = !isWifiActive && isNetworkLatencyAvailable &&
+            (active.rsrq != null || active.sinr != null)
         if (!isWifiActive && isNetworkLatencyAnomalous && active.dbm >= -70) {
             val rsrqAnomalous = active.rsrq != null && active.rsrq <= -15
             val sinrAnomalous = active.sinr != null && active.sinr <= 0
             if (rsrqAnomalous || sinrAnomalous) {
+                hLatencyCorrelation = false
                 reasons.add("RF anómalo + latencia: posible MITM (Experimental)")
                 score -= 20
             }
@@ -328,6 +360,8 @@ object ThreatAnalyzer {
         // (mismo sitio) y al historial del usuario, no a parámetros de red falseables.
         // Solo la dirección "más fuerte de lo normal" es sospechosa; más débil puede ser
         // simple obstrucción o distancia. Requiere historial (si no, no juzga nada).
+        eSignalBaseline = !isWifiActive && (signalBaseline != null ||
+            (rfFingerprint != null && active.rsrq != null && active.sinr != null))
         signalBaseline?.let { base ->
             // Acotamos el stddev a un mínimo para no disparar con historiales muy planos,
             // y exigimos una desviación grande Y estadísticamente significativa.
@@ -391,6 +425,7 @@ object ThreatAnalyzer {
         run {
             val isLte = active.networkType.contains("4G") || active.networkType.contains("LTE")
             val curBand = active.band ?: active.arfcn?.let { BandPlan.earfcnToBandLte(it) }
+            eBandDowngrade = isLte && curBand != null && previousBand != null && previousDbm != null
             if (isLte && curBand != null && previousBand != null
                 && BandPlan.isHighBand(previousBand) && BandPlan.isLowBand(curBand)) {
                 // ¿Veníamos con buena señal en la banda alta? (downgrade injustificado)
@@ -442,6 +477,7 @@ object ThreatAnalyzer {
         // entre identidades AHORA, no de un cambio puntual ya asentado.
         rfStability?.let { st ->
             if (st.totalObservations >= 4) {
+                eRfStability = true
                 // SOLO PCI, y SOLO DENTRO DE LA MISMA PORTADORA (ARFCN).
                 //
                 // v2.0 ya había descartado el ARFCN como señal de identidad porque parpadea de
@@ -550,22 +586,28 @@ object ThreatAnalyzer {
         val finalScore = score.coerceIn(0, 100)
         val isSuspicious = finalScore < 70
 
+        fun status(evaluated: Boolean, passed: Boolean): HeuristicStatus = when {
+            !evaluated -> HeuristicStatus.NOT_EVALUATED
+            passed -> HeuristicStatus.PASSED
+            else -> HeuristicStatus.FAILED
+        }
+
         val report = HeuristicReport(
-            isolatedCellPassed = hIsolated,
-            powerJumpPassed = hPowerJump,
-            mccConsistencyPassed = hMcc,
-            mncCountPassed = hMncCount,
-            tacDeviationPassed = hTac,
-            taDistancePassed = hTa,
-            ghostNeighborsPassed = hGhost,
-            arfcnSanityPassed = hArfcn,
-            hardwareCipheringPassed = isHardwareCipheringActive,
-            hardwareCipheringAvailable = isHardwareCipheringAvailable,
-            pingPongPassed = hPingPong,
-            mobileCellIdPassed = hMobileCellId,
-            signalBaselinePassed = hSignalBaseline,
-            bandDowngradePassed = hBandDowngrade,
-            rfStabilityPassed = hRfStability
+            isolatedCell = status(eIsolated, hIsolated),
+            powerJump = status(ePowerJump, hPowerJump),
+            mccConsistency = status(eMcc, hMcc),
+            mncCount = status(eMncCount, hMncCount),
+            tacDeviation = status(eTac, hTac),
+            taDistance = status(eTa, hTa),
+            ghostNeighbors = status(eGhost, hGhost),
+            arfcnSanity = status(eArfcn, hArfcn),
+            hardwareCiphering = status(eCiphering, isHardwareCipheringActive),
+            pingPong = status(ePingPong, hPingPong),
+            mobileCellId = status(eMobileCellId, hMobileCellId),
+            latencyCorrelation = status(eLatencyCorrelation, hLatencyCorrelation),
+            signalBaseline = status(eSignalBaseline, hSignalBaseline),
+            bandDowngrade = status(eBandDowngrade, hBandDowngrade),
+            rfStability = status(eRfStability, hRfStability)
         )
 
         return active.copy(

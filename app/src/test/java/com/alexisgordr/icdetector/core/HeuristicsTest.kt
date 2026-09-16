@@ -1,6 +1,7 @@
 package com.alexisgordr.icdetector.core
 
 import com.alexisgordr.icdetector.models.CellData
+import com.alexisgordr.icdetector.models.HeuristicStatus
 import com.alexisgordr.icdetector.models.VerificationStatus
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -73,7 +74,8 @@ class HeuristicsTest {
         isHardwareCipheringAvailable: Boolean = false,
         cellChangeHistory: List<Pair<String, Long>> = emptyList(),
         isWifiActive: Boolean = false,
-        isNetworkLatencyAnomalous: Boolean = false
+        isNetworkLatencyAnomalous: Boolean = false,
+        isNetworkLatencyAvailable: Boolean = true
     ) = ThreatAnalyzer.analyzeThreats(
         active = active,
         neighbors = neighbors,
@@ -82,8 +84,47 @@ class HeuristicsTest {
         cellChangeHistory = cellChangeHistory,
         currentLocation = null,
         isWifiActive = isWifiActive,
-        isNetworkLatencyAnomalous = isNetworkLatencyAnomalous
+        isNetworkLatencyAnomalous = isNetworkLatencyAnomalous,
+        isNetworkLatencyAvailable = isNetworkLatencyAvailable
     ).heuristicReport
+
+    @Test fun `el estado se recalcula de failed a passed en la siguiente lectura`() {
+        val failed = analyze(active(dbm = -70), neighbors = emptyList())
+        val passedFiveSecondsLater = analyze(active(dbm = -70), neighbors = listOf(neighbor(-85)))
+
+        assertEquals(HeuristicStatus.FAILED, failed.isolatedCell)
+        assertEquals(HeuristicStatus.PASSED, passedFiveSecondsLater.isolatedCell)
+    }
+
+    @Test fun `una regla sin datos figura como no evaluada y no como passed`() {
+        val report = analyze(active(), neighbors = emptyList())
+
+        assertEquals(HeuristicStatus.NOT_EVALUATED, report.powerJump)
+        assertEquals(HeuristicStatus.NOT_EVALUATED, report.taDistance)
+        assertEquals(HeuristicStatus.NOT_EVALUATED, report.hardwareCiphering)
+    }
+
+    @Test fun `latencia cambia entre no evaluada failed y passed`() {
+        val noData = analyze(
+            active(dbm = -65, rsrq = -18),
+            isNetworkLatencyAnomalous = false,
+            isNetworkLatencyAvailable = false
+        )
+        val failed = analyze(
+            active(dbm = -65, rsrq = -18),
+            isNetworkLatencyAnomalous = true,
+            isNetworkLatencyAvailable = true
+        )
+        val passed = analyze(
+            active(dbm = -65, rsrq = -18),
+            isNetworkLatencyAnomalous = false,
+            isNetworkLatencyAvailable = true
+        )
+
+        assertEquals(HeuristicStatus.NOT_EVALUATED, noData.latencyCorrelation)
+        assertEquals(HeuristicStatus.FAILED, failed.latencyCorrelation)
+        assertEquals(HeuristicStatus.PASSED, passed.latencyCorrelation)
+    }
 
     // ---------- H1: Celda aislada ----------
     @Test fun `H1 dispara sin vecinas y senal fuerte`() {
