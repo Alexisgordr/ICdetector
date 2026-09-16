@@ -1,8 +1,8 @@
 # ICdetection Status
 
-## v2.1 — final release candidate. Second field-collection phase starts after build validation.
+## v2.1.1 — final release candidate. Second field-collection phase starts after build validation.
 
-v2.1 is a **data-integrity release**. It adds no new heuristics and makes no new detection claims.
+v2.1.1 is a **data-integrity release**. It adds no new heuristics and makes no new detection claims.
 What it does is fix the reasons the *first* collection phase could not answer the questions it was
 designed to answer, and add the tooling to check that the second one can.
 
@@ -67,10 +67,10 @@ designed to answer, and add the tooling to check that the second one can.
 
 ## ⚠️ Before installing: uninstall the previous version
 
-**Uninstall ICdetection, then install v2.1 as a fresh install.** Two independent reasons, and both
+**Uninstall ICdetection, then install v2.1.1 as a fresh install.** Two independent reasons, and both
 point the same way:
 
-1. **Signature.** If the v2.1 APK is not signed with the same keystore as the copy already on the
+1. **Signature.** If the v2.1.1 APK is not signed with the same keystore as the copy already on the
    device, Android refuses the update (`INSTALL_FAILED_UPDATE_INCOMPATIBLE`).
 2. **A clean history, which you want anyway.** Rows written before v2.1 may hold an antenna
    coordinate from the verification APIs in the `lat`/`lon` fields, where your own GPS position
