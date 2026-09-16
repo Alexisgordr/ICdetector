@@ -49,7 +49,7 @@ The application operates from Android userland without requiring root or direct 
 
 # Project Status
 
-> **⚠️ Installing v2.1.1: uninstall the previous version first.** v2.1 will not install as an in-place update — Android refuses it if the APK is not signed with the same keystore as the copy already on the device, and a clean database is required anyway (records written before v2.1 may hold an antenna coordinate where your GPS position belongs, and the migration deliberately does not try to guess which is which). Export your CSV first if you want to keep the old history. Later versions signed with the same keystore will update in place normally. See `Status.md`.
+> **⚠️ Installing v2.1.1: uninstall the previous version first.** v2.1.1 will not install as an in-place update — Android refuses it if the APK is not signed with the same keystore as the copy already on the device, and a clean database is required anyway (records written before v2.1.1 may hold an antenna coordinate where your GPS position belongs, and the migration deliberately does not try to guess which is which). Export your CSV first if you want to keep the old history. Later versions signed with the same keystore will update in place normally. See `Status.md`.
 
 ICdetection v2.1.1 is currently considered stable and feature-complete within the limits of Android userland telemetry.
 
