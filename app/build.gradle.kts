@@ -23,14 +23,22 @@ plugins {
 
 android {
     namespace = "com.alexisgordr.icdetector"
+
+    dependenciesInfo {
+        includeInApk = false
+        includeInBundle = false
+    }
+
     compileSdk = 37
 
     defaultConfig {
         applicationId = "com.alexisgordr.icdetector"
         minSdk = 29
         targetSdk = 37
-        versionCode = 4
-        versionName = "2.1.1"
+
+        versionCode = 5
+        versionName = "2.1.2"
+
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables {
@@ -40,9 +48,16 @@ android {
 
     buildTypes {
         release {
-            isMinifyEnabled = false
+            isMinifyEnabled = true
+            isShrinkResources = true
+
+            proguardFiles(
+                getDefaultProguardFile("proguard-android-optimize.txt"),
+                "proguard-rules.pro"
+            )
         }
     }
+
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17

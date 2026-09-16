@@ -1,0 +1,2 @@
+Enabled release build optimization with R8.
+Improved APK packaging and F-Droid reproducible build compatibility.
