@@ -1,4 +1,4 @@
-# ICdetection Field Manual — v2.2.1
+# ICdetection Field Manual —
 
 ICdetection is an open-source Android application for passive cellular-network auditing and anomaly analysis. It observes information exposed by Android, compares each observation with the device's local history and, when configured, cross-checks cells against external tower databases.
 
