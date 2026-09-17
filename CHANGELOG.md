@@ -1,52 +1,136 @@
 # Changelog
 
-## 2.1.3
+## 2.3.0
 
-### Live heuristic transparency
+### H16 — cellular transition coherence
 
-- Replaced ambiguous Boolean heuristic results with explicit `PASSED`, `FAILED`, and `N/A`
-  states.
-- Added per-rule eligibility tracking. A rule is now shown as `N/A` when Android or the current
-  context does not provide the inputs required to evaluate it, rather than being presented as a
-  successful check.
-- Recomputes the visible state on every analysis cycle. A rule can move dynamically between
-  `N/A`, `PASSED`, and `FAILED` as neighbor cells, location, Timing Advance, latency, historical
-  baselines, or other telemetry becomes available.
-- Added the previously implicit latency/RF correlation check to the live audit, bringing the
-  visible audit to 15 rules.
-- Distinguished unavailable latency telemetry from a valid, non-anomalous latency result.
+- Added a conservative mobility heuristic that audits real serving-cell handovers against device
+  displacement, GPS accuracy, previously visible neighbours, locally learned cell zones, and
+  previously trusted transitions.
+- H16 does not impose a universal maximum distance between towers. It abstains when the GPS is
+  inaccurate, the interval is stale, or either geographic baseline is immature.
+- A transition fails only when the phone barely moved while two mature local coverage zones are
+  remote and non-overlapping, the destination was not a visible neighbour, and the route was not
+  previously learned.
+- Added a dedicated **Mobility sanity · H16** card with live `COHERENT`, `INCOHERENT`, or `N/A`
+  state and a human-readable explanation.
+- Handover results remain visible for 20 seconds so the existing three-cycle temporal confirmation
+  can evaluate them; they do not become permanent failures.
+- Added a persistent transition baseline (database schema 15). Only coherent transitions backed by
+  mature local baselines can teach a trusted route, preventing an unevaluable or suspicious event
+  from legitimising itself.
+- H16 carries a deliberately low 15-point penalty and a conservative expert-estimated likelihood
+  ratio of 1.8. It is grouped with the existing mobility family to prevent double-counting H11,
+  Timing Advance, ping-pong, and RF-identity evidence.
+- Added unit coverage for impossible jumps, immature history, inaccurate GPS, visible neighbours,
+  previously learned routes, and overlapping legitimate coverage zones.
 
-### Honest result reporting
+### Local handover topology explorer
 
-- Added evaluated, failed, and unavailable rule counts to the security panel and forensic
-  terminal.
-- Relabeled the percentage as a heuristic index based on observable inputs, avoiding the
-  impression that unavailable rules were successfully validated.
-- Replaced categorical "safe environment" wording with the narrower and technically defensible
-  "no anomalies detected" / "no anomalies in the rules that could be evaluated" result.
-- Preserved external OpenCellID/WiGLE verification as contextual evidence rather than allowing
-  database coverage or missing coordinates to become a detector verdict.
+- Added a read-only **TOPOLOGY** view alongside antennas, incidents, and forensic cases.
+- Shows unique observed cells, directional routes, total handovers, and routes backed by trusted
+  H16 observations.
+- Each route exposes its complete origin/destination identity, observation count, trusted count,
+  last result, trust ratio, and most recent observation time.
+- Added `ALL`, `LEARNED`, and `REVIEW` filters. The explorer never changes the score or teaches the
+  baseline; it is an analyst view over evidence already collected by H16.
+- Added privacy-gated topology ZIP export with `cells.csv`, `transitions.csv`, directed GraphML,
+  machine-readable metadata, and SHA-256 checksums.
 
-### Interface and tests
+### Release metadata
 
-- Improved the history-card layout on narrow displays with compact verification badges,
-  constrained identity text, and consistent spacing around the expand control.
-- Added regression coverage for `FAILED -> PASSED` transitions, unavailable inputs, and the
-  three-state latency/RF rule.
-- Updated release metadata to `versionName 2.1.3` and `versionCode 6`.
+- Updated release metadata to `versionName 2.3.0` and `versionCode 9`.
 
-### Scope
+## 2.2.1
 
-- No new detection claims were introduced. This release improves diagnostic transparency,
-  presentation, and the interpretation of incomplete Android telemetry while retaining the
-  frozen v2.1.2 detection baseline.
+### WiGLE quota handling
 
-## 2.1.2
+- Added structured detection of WiGLE rate limiting for both HTTP `429` responses and API bodies
+  reporting `too many queries`, `rate limit`, or `quota` exhaustion.
+- Added a global WiGLE cooldown instead of retrying the same exhausted account separately for each
+  observed cell.
+- Persisted the cooldown across service restarts so restarting ICdetection cannot immediately resume
+  requests against an exhausted daily allowance.
+- WiGLE now respects a numeric `Retry-After` response when supplied; otherwise the application uses
+  a conservative 24-hour fallback with a one-hour minimum.
+- OpenCellID and all local heuristic analysis remain active while WiGLE is paused.
+- Added terminal context explaining that WiGLE is paused and reporting the approximate time
+  remaining, without treating an unavailable database as evidence against the observed cell.
+- Added regression tests for HTTP `429`, WiGLE's real `too many queries today` response, and normal
+  non-quota service failures.
 
-- Enabled R8 code shrinking and resource shrinking for release builds.
-- Added release ProGuard configuration and disabled dependency metadata embedded by the Android
-  Gradle Plugin to support F-Droid reproducible-build comparison.
-- Updated release metadata to `versionName 2.1.2` and `versionCode 5`.
+### Forensic recorder correctness
+
+- Replaced wall-clock arithmetic in the forensic pre-event buffer with Android's monotonic elapsed
+  time. Manual clock changes or NTP adjustments can no longer empty or freeze the retention window.
+- Replaced the nullable `peekFirst()` access with a safe lookup, removing the Kotlin release-build
+  warning without changing the 60-second / 180-sample capture policy.
+
+### Release metadata
+
+- Updated release metadata to `versionName 2.2.1` and `versionCode 8`.
+- Detection weights, heuristic rules, alarm thresholds, database schema, and forensic export format
+  are unchanged from v2.2.0.
+
+## 2.2.0
+
+### Incident black box and temporal transparency
+
+- Added a persistent incident black box that opens as soon as an anomaly reaches temporal phase
+  `1/3`, rather than waiting for a confirmed `3/3` alert.
+- Added explicit incident states: `OBSERVING`, `CONFIRMED`, `RECOVERED`, and `INTERRUPTED`.
+- Added visible and persistent `1/3`, `2/3`, and `3/3` temporal phases so users can distinguish an
+  initial observation from a sustained, confirmed event.
+- Incident records preserve the highest phase reached, threat score, anomaly confidence, reason,
+  and the heuristic snapshot associated with the event.
+- Added separate **ANTENNAS** and **INCIDENTES** views to keep infrastructure history distinct from
+  security-event history.
+
+### Explainable diagnostics and baseline maturity
+
+- Added structured per-rule diagnostics with contextual explanations for `PASS`, `FAIL`, and
+  `N/A` results.
+- `N/A` now indicates that a rule could not be evaluated with the telemetry or context currently
+  available; it is not treated as a pass or a failure.
+- Added maturity indicators for the RSRP power baseline, RSRQ/SINR fingerprint, PCI identity
+  history, and local cell reputation.
+- Live diagnostic states update as new modem, location, latency, and historical data becomes
+  available.
+- Detection weights, penalties, confirmation thresholds, and the existing threat engine remain
+  unchanged in this release.
+
+### Forensic case capture
+
+- Added an automatic forensic case recorder that starts at temporal phase `1/3`.
+- Added a bounded in-memory pre-event buffer covering up to 60 seconds and 180 samples.
+- A case preserves the complete `1/3 -> 2/3 -> 3/3` episode and continues for 60 seconds after
+  recovery. A recurrence during that post-event window remains part of the same case.
+- Added a 30-minute safety limit for an individual capture.
+- Captures serving and neighboring cells, radio identity and quality, Timing Advance when exposed,
+  device GPS and accuracy, latency state, verification state, temporal phase, score, confidence,
+  heuristic diagnostics, device capabilities, and relevant terminal context.
+- Added forensic case states: `CAPTURING`, `POST_CAPTURE`, `READY`, and `INTERRUPTED`.
+- Open captures are marked `INTERRUPTED` after an unexpected service or process restart instead of
+  being silently presented as complete.
+
+### Portable forensic export
+
+- Added case export as a ZIP archive containing:
+  `case.json`, `timeline.csv`, `cells.csv`, `heuristics.csv`, `capabilities.json`, `terminal.log`,
+  and `SHA256SUMS.txt`.
+- `SHA256SUMS.txt` allows later modification of exported files to be detected. It is an integrity
+  aid, not a cryptographic signature or a legal chain-of-custody guarantee.
+- Exports deliberately exclude API credentials, IMSI, IMEI, and the phone number.
+- Added an explicit privacy warning because forensic exports can contain exact device coordinates
+  and sensitive cellular metadata.
+
+### Storage, compatibility, and validation
+
+- Database schema advanced from 12 to 14 with non-destructive migrations for incident and forensic
+  case storage.
+- The existing 60-day retention policy also applies to forensic cases and their samples.
+- Added regression coverage for diagnostic state/maturity behavior and forensic capture policy.
+- Release metadata updated to `versionName 2.2.0` and `versionCode 7`.
 
 ## 2.1.1
 

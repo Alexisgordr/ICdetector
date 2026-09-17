@@ -674,6 +674,8 @@ fun SecurityScorePanel(active: CellData, dbmHistory: List<Int>, geoHistory: List
                                 color = Color(0xFF777777), fontFamily = FontFamily.Monospace, fontSize = 9.sp
                             )
                             Spacer(Modifier.height(8.dp))
+                            TransitionCoherenceCard(active.transitionCoherence)
+                            Spacer(Modifier.height(8.dp))
                             active.heuristicDiagnostics.forEach { HeuristicDiagnosticItem(it) }
                             if (active.heuristicDiagnostics.isEmpty()) {
                                 Text("Preparando diagnóstico del primer ciclo…", color = Color(0xFF777777), fontSize = 9.sp)

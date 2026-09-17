@@ -1,6 +1,8 @@
 package com.alexisgordr.icdetector.ui
 
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -29,8 +31,11 @@ import com.alexisgordr.icdetector.models.IncidentState
 import com.alexisgordr.icdetector.models.ForensicCase
 import com.alexisgordr.icdetector.models.ForensicCaseState
 import com.alexisgordr.icdetector.forensics.ForensicExporter
+import com.alexisgordr.icdetector.forensics.TopologyExporter
 import com.alexisgordr.icdetector.models.SUBTHRESHOLD_PREFIX
 import com.alexisgordr.icdetector.models.identityKey
+import com.alexisgordr.icdetector.models.CellTransitionSummary
+import com.alexisgordr.icdetector.models.HeuristicStatus
 import com.alexisgordr.icdetector.storage.CellDbHelper
 import com.alexisgordr.icdetector.utils.ExportUtils
 import kotlinx.coroutines.Dispatchers
@@ -44,7 +49,9 @@ fun HistoryPanel(dbHelper: CellDbHelper, onBack: () -> Unit) {
     var incidents by remember { mutableStateOf<List<IncidentRecord>>(emptyList()) }
     var showIncidents by remember { mutableStateOf(false) }
     var showForensics by remember { mutableStateOf(false) }
+    var showTopology by remember { mutableStateOf(false) }
     var forensicCases by remember { mutableStateOf<List<ForensicCase>>(emptyList()) }
+    var transitions by remember { mutableStateOf<List<CellTransitionSummary>>(emptyList()) }
     val showDeleteConfirm = remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
 
@@ -53,6 +60,7 @@ fun HistoryPanel(dbHelper: CellDbHelper, onBack: () -> Unit) {
             items = dbHelper.getRecords()
             incidents = dbHelper.getIncidents()
             forensicCases = dbHelper.getForensicCases()
+            transitions = dbHelper.getCellTransitions()
         }
     }
 
@@ -61,6 +69,10 @@ fun HistoryPanel(dbHelper: CellDbHelper, onBack: () -> Unit) {
             forensicCases = withContext(Dispatchers.IO) { dbHelper.getForensicCases() }
             delay(2_000L)
         }
+    }
+
+    LaunchedEffect(showTopology) {
+        if (showTopology) transitions = withContext(Dispatchers.IO) { dbHelper.getCellTransitions() }
     }
 
     if (showDeleteConfirm.value) {
@@ -118,15 +130,20 @@ fun HistoryPanel(dbHelper: CellDbHelper, onBack: () -> Unit) {
             }
             Text(when {
                 showForensics -> "LABORATORIO FORENSE"
+                showTopology -> "TOPOLOGÍA DE HANDOVERS"
                 showIncidents -> "CAJA NEGRA DE INCIDENTES"
                 else -> "HISTORIAL DE ANTENAS"
             }, color = Color(0xFF666666), fontFamily = FontFamily.Monospace, fontSize = 12.sp)
         }
 
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            FilterChip(selected = !showIncidents && !showForensics, onClick = { showIncidents = false; showForensics = false }, label = { Text("ANTENAS") })
-            FilterChip(selected = showIncidents, onClick = { showIncidents = true; showForensics = false }, label = { Text("INCIDENTES") })
-            FilterChip(selected = showForensics, onClick = { showForensics = true; showIncidents = false }, label = { Text("FORENSE") })
+        Row(
+            Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            FilterChip(selected = !showIncidents && !showForensics && !showTopology, onClick = { showIncidents = false; showForensics = false; showTopology = false }, label = { Text("ANTENAS") })
+            FilterChip(selected = showIncidents, onClick = { showIncidents = true; showForensics = false; showTopology = false }, label = { Text("INCIDENTES") })
+            FilterChip(selected = showForensics, onClick = { showForensics = true; showIncidents = false; showTopology = false }, label = { Text("FORENSE") })
+            FilterChip(selected = showTopology, onClick = { showTopology = true; showIncidents = false; showForensics = false }, label = { Text("TOPOLOGÍA") })
         }
 
         if (showForensics) {
@@ -135,6 +152,10 @@ fun HistoryPanel(dbHelper: CellDbHelper, onBack: () -> Unit) {
         }
         if (showIncidents) {
             IncidentList(incidents = incidents, modifier = Modifier.fillMaxWidth().weight(1f))
+            return@Column
+        }
+        if (showTopology) {
+            TopologyPanel(transitions, Modifier.fillMaxWidth().weight(1f))
             return@Column
         }
 
@@ -301,6 +322,179 @@ fun HistoryPanel(dbHelper: CellDbHelper, onBack: () -> Unit) {
             AuthorSignature()
         }
     }
+}
+
+@Composable
+private fun TopologyPanel(
+    transitions: List<CellTransitionSummary>,
+    modifier: Modifier = Modifier
+) {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    var confirmExport by remember { mutableStateOf(false) }
+    var exportMessage by remember { mutableStateOf<String?>(null) }
+    val exportLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.CreateDocument("application/zip")
+    ) { uri ->
+        if (uri != null) scope.launch {
+            exportMessage = "Exportando topología…"
+            val result = withContext(Dispatchers.IO) {
+                runCatching { TopologyExporter.export(context, transitions, uri) }
+            }
+            exportMessage = if (result.isSuccess) "Topología exportada correctamente" else
+                "Error: ${result.exceptionOrNull()?.message}"
+        }
+    }
+    if (confirmExport) AlertDialog(
+        onDismissRequest = { confirmExport = false },
+        title = { Text("Exportar topología") },
+        text = {
+            Text(
+                "El paquete contiene identidades celulares y rutas de handover que pueden " +
+                    "revelar patrones habituales de movimiento. No incluye IMSI, IMEI, teléfono " +
+                    "ni credenciales. Revísalo antes de compartirlo."
+            )
+        },
+        confirmButton = { TextButton(onClick = {
+            confirmExport = false
+            exportLauncher.launch("ICD-topology-${System.currentTimeMillis()}.zip")
+        }) { Text("EXPORTAR") } },
+        dismissButton = { TextButton(onClick = { confirmExport = false }) { Text("CANCELAR") } }
+    )
+    var filter by remember { mutableStateOf("ALL") }
+    val visible = remember(transitions, filter) {
+        when (filter) {
+            "TRUSTED" -> transitions.filter { it.trustedObservations > 0 }
+            "REVIEW" -> transitions.filter { it.lastStatus != HeuristicStatus.PASSED }
+            else -> transitions
+        }.sortedWith(compareByDescending<CellTransitionSummary> { it.observations }.thenByDescending { it.lastSeenMs })
+    }
+    val uniqueCells = remember(transitions) {
+        transitions.flatMap { listOf(it.fromIdentity, it.toIdentity) }.toSet().size
+    }
+    val totalHandovers = transitions.sumOf { it.observations }
+    val trustedRoutes = transitions.count { it.trustedObservations > 0 }
+
+    Column(modifier) {
+        Text(
+            "MAPA LÓGICO LOCAL · NO MODIFICA EL SCORE",
+            color = Color(0xFF777777), fontFamily = FontFamily.Monospace, fontSize = 9.sp
+        )
+        Spacer(Modifier.height(8.dp))
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            TopologyMetric("CELDAS", uniqueCells.toString(), Modifier.weight(1f))
+            TopologyMetric("RUTAS", transitions.size.toString(), Modifier.weight(1f))
+            TopologyMetric("HANDOVERS", totalHandovers.toString(), Modifier.weight(1f))
+            TopologyMetric("FIABLES", trustedRoutes.toString(), Modifier.weight(1f))
+        }
+        Spacer(Modifier.height(8.dp))
+        Row(
+            Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+            horizontalArrangement = Arrangement.spacedBy(6.dp)
+        ) {
+            FilterChip(filter == "ALL", { filter = "ALL" }, label = { Text("TODAS") })
+            FilterChip(filter == "TRUSTED", { filter = "TRUSTED" }, label = { Text("APRENDIDAS") })
+            FilterChip(filter == "REVIEW", { filter = "REVIEW" }, label = { Text("REVISAR") })
+        }
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+            TextButton(
+                onClick = { confirmExport = true },
+                enabled = transitions.isNotEmpty(),
+                colors = ButtonDefaults.textButtonColors(contentColor = Color(0xFF4CAF50))
+            ) {
+                Icon(Icons.Default.Share, contentDescription = null, modifier = Modifier.size(14.dp))
+                Spacer(Modifier.width(4.dp))
+                Text("EXPORTAR TOPOLOGÍA", fontFamily = FontFamily.Monospace, fontSize = 9.sp)
+            }
+        }
+        exportMessage?.let {
+            Text(it, color = Color(0xFF80CBC4), fontFamily = FontFamily.Monospace, fontSize = 8.sp)
+        }
+        Spacer(Modifier.height(6.dp))
+
+        if (transitions.isEmpty()) {
+            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                Text(
+                    "SIN RUTAS TODAVÍA\nLa topología aparecerá tras los primeros handovers",
+                    color = Color(0xFF555555), fontFamily = FontFamily.Monospace,
+                    fontSize = 11.sp, lineHeight = 16.sp
+                )
+            }
+        } else if (visible.isEmpty()) {
+            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                Text("SIN RUTAS PARA ESTE FILTRO", color = Color(0xFF555555), fontFamily = FontFamily.Monospace, fontSize = 11.sp)
+            }
+        } else {
+            LazyColumn(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                items(visible, key = { "${it.fromIdentity}>${it.toIdentity}" }) { route ->
+                    TopologyRouteCard(route)
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun TopologyMetric(label: String, value: String, modifier: Modifier = Modifier) {
+    Surface(modifier, color = Color(0xFF111111), shape = RoundedCornerShape(3.dp)) {
+        Column(Modifier.padding(horizontal = 6.dp, vertical = 8.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+            Text(value, color = Color.White, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Bold, fontSize = 14.sp)
+            Text(label, color = Color(0xFF666666), fontFamily = FontFamily.Monospace, fontSize = 7.sp, maxLines = 1)
+        }
+    }
+}
+
+@Composable
+private fun TopologyRouteCard(route: CellTransitionSummary) {
+    val (statusText, statusColor) = when (route.lastStatus) {
+        HeuristicStatus.PASSED -> "COHERENTE" to Color(0xFF4CAF50)
+        HeuristicStatus.FAILED -> "REVISAR" to Color(0xFFCF6679)
+        HeuristicStatus.NOT_EVALUATED -> "APRENDIENDO" to Color(0xFFFFA000)
+    }
+    val lastSeen = remember(route.lastSeenMs) {
+        java.text.SimpleDateFormat("yyyy-MM-dd HH:mm", java.util.Locale.getDefault())
+            .format(java.util.Date(route.lastSeenMs))
+    }
+    Card(
+        colors = CardDefaults.cardColors(containerColor = Color(0xFF111111)),
+        border = BorderStroke(1.dp, statusColor.copy(alpha = 0.45f)),
+        shape = RoundedCornerShape(4.dp)
+    ) {
+        Column(Modifier.fillMaxWidth().padding(11.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                Text("RUTA DE HANDOVER", color = Color(0xFF777777), fontFamily = FontFamily.Monospace, fontSize = 8.sp)
+                Text(statusText, color = statusColor, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Bold, fontSize = 9.sp)
+            }
+            Text(
+                "${topologyIdentityLabel(route.fromIdentity)}  →  ${topologyIdentityLabel(route.toIdentity)}",
+                color = Color.White, fontFamily = FontFamily.Monospace,
+                fontWeight = FontWeight.Bold, fontSize = 10.sp,
+                maxLines = 2, overflow = TextOverflow.Ellipsis
+            )
+            LinearProgressIndicator(
+                progress = { route.trustRatio.coerceIn(0f, 1f) },
+                modifier = Modifier.fillMaxWidth().height(3.dp),
+                color = Color(0xFF4CAF50),
+                trackColor = Color(0xFF252525)
+            )
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                Text(
+                    "${route.observations} observaciones · ${route.trustedObservations} fiables",
+                    color = Color(0xFF999999), fontFamily = FontFamily.Monospace, fontSize = 8.sp
+                )
+                Text(lastSeen, color = Color(0xFF666666), fontFamily = FontFamily.Monospace, fontSize = 8.sp)
+            }
+        }
+    }
+}
+
+/** Convierte MCC-MNC-TAC-CID-RADIO a una etiqueta compacta sin perder la identidad completa. */
+private fun topologyIdentityLabel(identity: String): String {
+    val parts = identity.split('-')
+    if (parts.size < 5) return identity
+    val radio = parts.last()
+    val cid = parts.subList(3, parts.lastIndex).joinToString("-")
+    return "CID $cid · $radio · ${parts[0]}/${parts[1]} · TAC ${parts[2]}"
 }
 
 @Composable

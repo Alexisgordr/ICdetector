@@ -25,6 +25,7 @@ import com.alexisgordr.icdetector.core.VerificationDecision
 import com.alexisgordr.icdetector.models.*
 import com.alexisgordr.icdetector.network.OpenCellIdClient
 import com.alexisgordr.icdetector.network.WigleClient
+import com.alexisgordr.icdetector.network.VerificationFailure
 import com.alexisgordr.icdetector.storage.CellDbHelper
 import com.alexisgordr.icdetector.telephony.CellParser
 import com.alexisgordr.icdetector.forensics.ForensicRecorder
@@ -170,6 +171,11 @@ class MiniICService : Service() {
     private val verificationCache = ConcurrentHashMap<String, VerificationStatus>()
     // Marca temporal del último ERROR por celda, para permitir reintentos sin saturar la API
     private val lastVerificationErrorTime = ConcurrentHashMap<String, Long>()
+    // El límite de WiGLE es global para la cuenta, no para una celda. Persistirlo impide que un
+    // reinicio del servicio vuelva a consumir peticiones cuando WiGLE ya ha dicho que la cuota
+    // diaria está agotada.
+    private var wigleRateLimitedUntil = 0L
+    private var hasLoggedWigleCooldown = false
     // Marca temporal del último NOT_FOUND por celda. A diferencia de ERROR (fallo de red
     // transitorio, reintento a 60s), NOT_FOUND es una respuesta afirmativa de la API ("no está
     // en la base"). Reintentamos en vivo cada 1h por si una torre legítima recién desplegada se
@@ -220,6 +226,19 @@ class MiniICService : Service() {
     private var connectionRetryCount = 0
     private val cellChangeHistory = CopyOnWriteArrayList<Pair<String, Long>>()
 
+    private data class ServingSnapshot(
+        val cell: CellData,
+        val location: Location?,
+        val elapsedRealtimeMs: Long,
+        val neighborIdentities: Set<String>
+    )
+    private val transitionLock = Any()
+    private var lastServingSnapshot: ServingSnapshot? = null
+    private var activeTransitionResult = TransitionCoherenceResult()
+    private var activeTransitionIdentity: String? = null
+    private var activeTransitionExpiresAt = 0L
+    private val TRANSITION_RESULT_TTL_MS = 20_000L
+
     inner class LocalBinder : Binder() {
         fun getService(): MiniICService = this@MiniICService
     }
@@ -255,6 +274,11 @@ class MiniICService : Service() {
         openCellIdKey = prefs.getString("opencellid_key", "") ?: ""
         wigleApiName = prefs.getString("wigle_api_name", "") ?: ""
         wigleApiToken = prefs.getString("wigle_api_token", "") ?: ""
+        wigleRateLimitedUntil = prefs.getLong(KEY_WIGLE_RATE_LIMITED_UNTIL, 0L)
+        if (wigleRateLimitedUntil <= System.currentTimeMillis()) {
+            wigleRateLimitedUntil = 0L
+            prefs.edit().remove(KEY_WIGLE_RATE_LIMITED_UNTIL).apply()
+        }
         isProxyEnabled = prefs.getBoolean("proxy_enabled", false)
         isLatencyDetectionEnabled = prefs.getBoolean("latency_detection_enabled", false)
         loadPersistedLastAcceptedLocation()  // referencia de plausibilidad superviviente a reinicios
@@ -891,6 +915,13 @@ class MiniICService : Service() {
             scope.launch(Dispatchers.IO) {
                 val currentLocation = getCurrentLocation()
 
+                // H16 se prepara antes de analizar la celda: aquí todavía conservamos la última
+                // servidora. El resultado se retiene 20 s para que los tres ciclos temporales
+                // puedan observar el mismo handover, sin convertirlo en un fallo permanente.
+                val transitionCoherence = if (activeRaw != null && activeRaw.cellId != "N/A") {
+                    evaluateServingTransition(activeRaw, currentLocation, neighbors)
+                } else TransitionCoherenceResult()
+
                 val canQuery = activeRaw != null && activeRaw.cellId != "N/A" && currentLocation != null
 
                 val preloadedHistory: List<HistoryRecord>
@@ -1034,7 +1065,8 @@ class MiniICService : Service() {
                             recentRegisteredDbm = recentRegisteredDbmTrend.toList(),
                             rfStability = rfStability,
                             reputation = reputation,
-                            rfFingerprint = rfFingerprint
+                            rfFingerprint = rfFingerprint,
+                            transitionCoherence = transitionCoherence
                         ).copy(distanceToTowerMeters = towerDistance)
                     } else {
                         // Las vecinas no se evalúan como amenaza; se mantienen como contexto.
@@ -1067,7 +1099,8 @@ class MiniICService : Service() {
                             signalBaseline = signalBaseline,
                             rfFingerprint = rfFingerprint,
                             rfStability = rfStability,
-                            reputation = reputation
+                            reputation = reputation,
+                            transitionCoherence = transitionCoherence
                         )
                         val confirmedActive = temporalActive.copy(
                             heuristicDiagnostics = com.alexisgordr.icdetector.core.DiagnosticEngine.explain(
@@ -1137,6 +1170,74 @@ class MiniICService : Service() {
         } catch (e: Exception) {
             e.printStackTrace()
         }
+    }
+
+    private fun evaluateServingTransition(
+        active: CellData,
+        currentLocation: Location?,
+        neighbors: List<CellData>
+    ): TransitionCoherenceResult {
+        val now = SystemClock.elapsedRealtime()
+        val current = ServingSnapshot(
+            cell = active,
+            location = currentLocation?.let { Location(it) },
+            elapsedRealtimeMs = now,
+            neighborIdentities = neighbors.map { it.identityKey }.toSet()
+        )
+
+        val prior = synchronized(transitionLock) {
+            val previous = lastServingSnapshot
+            lastServingSnapshot = current
+            if (previous == null) return TransitionCoherenceResult()
+            if (previous.cell.identityKey == active.identityKey) {
+                return if (activeTransitionIdentity == active.identityKey && now <= activeTransitionExpiresAt) {
+                    activeTransitionResult
+                } else TransitionCoherenceResult(
+                    explanation = "N/A: esperando el siguiente handover para comprobar la movilidad."
+                )
+            }
+            // Evita que un resultado de la celda anterior sobreviva durante el cálculo del nuevo.
+            activeTransitionIdentity = null
+            activeTransitionResult = TransitionCoherenceResult()
+            previous
+        }
+
+        val elapsedSeconds = ((now - prior.elapsedRealtimeMs) / 1_000L).coerceAtLeast(0L)
+        val previousLocation = prior.location
+        val moved = if (previousLocation != null && currentLocation != null) {
+            previousLocation.distanceTo(currentLocation).toDouble()
+        } else null
+        val result = com.alexisgordr.icdetector.core.TransitionCoherence.evaluate(
+            com.alexisgordr.icdetector.core.TransitionCoherence.Input(
+                fromIdentity = prior.cell.identityKey,
+                toIdentity = active.identityKey,
+                elapsedSeconds = elapsedSeconds,
+                deviceDistanceMeters = moved,
+                previousAccuracyMeters = previousLocation?.accuracy,
+                currentAccuracyMeters = currentLocation?.accuracy,
+                fromSamples = dbHelper.getCellLocationSamples(prior.cell),
+                toSamples = dbHelper.getCellLocationSamples(active),
+                priorTrustedTransitions = dbHelper.getTrustedTransitionCount(
+                    prior.cell.identityKey, active.identityKey
+                ),
+                destinationWasNeighbor = active.identityKey in prior.neighborIdentities
+            )
+        )
+        dbHelper.recordCellTransition(result)
+        synchronized(transitionLock) {
+            activeTransitionIdentity = active.identityKey
+            activeTransitionResult = result
+            activeTransitionExpiresAt = now + TRANSITION_RESULT_TTL_MS
+        }
+        appendLog(
+            "[H16]",
+            when (result.status) {
+                HeuristicStatus.PASSED -> "Transición coherente: ${result.explanation}"
+                HeuristicStatus.FAILED -> "Transición incoherente: ${result.explanation}"
+                HeuristicStatus.NOT_EVALUATED -> result.explanation
+            }
+        )
+        return result
     }
 
     // Fix #2: último fix GPS aceptado como bueno, para validar plausibilidad del siguiente.
@@ -1597,14 +1698,44 @@ class MiniICService : Service() {
                 }
             }
 
-            // Refuerzo WiGLE. Se pregunta siempre que OpenCellID no haya resuelto — incluso si
-            // contestó "verificada sin coordenada", porque WiGLE puede traerla.
-            if (wigleApiName.isNotBlank() && wigleApiToken.isNotBlank()) {
+            // Refuerzo WiGLE. Se pregunta cuando OpenCellID no ha resuelto, salvo que WiGLE haya
+            // comunicado que la cuota de TODA la cuenta está agotada. Ese bloqueo es global y
+            // persistente: reintentar por celda cada 60 s no puede recuperar cuota y solo genera
+            // tráfico inútil.
+            val wigleConfigured = wigleApiName.isNotBlank() && wigleApiToken.isNotBlank()
+            val now = System.currentTimeMillis()
+            val wigleCoolingDown = now < wigleRateLimitedUntil
+            if (wigleConfigured && wigleCoolingDown) {
+                finalStatus = mejorRespuesta(finalStatus, VerificationStatus.ERROR)
+                if (!hasLoggedWigleCooldown) {
+                    val minutes = ((wigleRateLimitedUntil - now + 59_999L) / 60_000L).coerceAtLeast(1L)
+                    appendLog("[API]", "WiGLE: cuota diaria agotada; consultas pausadas (${minutes} min restantes). OpenCellID y el análisis local siguen activos.")
+                    hasLoggedWigleCooldown = true
+                }
+            } else if (wigleConfigured) {
                 val res = WigleClient.tryWigleSync(cell, wigleApiName, wigleApiToken, isProxyEnabled, client)
                 val s = res.status
                 val data = res.record
                 appendLog("[API]", "WiGLE → ${s.name}")
                 res.reason?.let { appendLog("[API]", it) }
+
+                if (res.failure == VerificationFailure.RATE_LIMITED) {
+                    val cooldown = (res.retryAfterMillis ?: WIGLE_RATE_LIMIT_FALLBACK_MS)
+                        .coerceAtLeast(WIGLE_RATE_LIMIT_MINIMUM_MS)
+                    wigleRateLimitedUntil = System.currentTimeMillis() + cooldown
+                    getSharedPreferences("miniic_prefs", MODE_PRIVATE).edit()
+                        .putLong(KEY_WIGLE_RATE_LIMITED_UNTIL, wigleRateLimitedUntil)
+                        .apply()
+                    hasLoggedWigleCooldown = true
+                    appendLog("[API]", "WiGLE: cuota diaria agotada. No se volverá a consultar durante 24 h (o el plazo indicado por el servidor). OpenCellID y el análisis local siguen activos.")
+                } else if (wigleRateLimitedUntil != 0L) {
+                    // La pausa ya venció y WiGLE volvió a contestar: eliminamos el estado antiguo.
+                    wigleRateLimitedUntil = 0L
+                    hasLoggedWigleCooldown = false
+                    getSharedPreferences("miniic_prefs", MODE_PRIVATE).edit()
+                        .remove(KEY_WIGLE_RATE_LIMITED_UNTIL)
+                        .apply()
+                }
                 if (s == VerificationStatus.VERIFIED && data != null) {
                     val lat = data.optDouble("trilat", data.optDouble("lat", Double.NaN))
                     val lon = data.optDouble("trilong", data.optDouble("lon", Double.NaN))
@@ -2259,6 +2390,10 @@ class MiniICService : Service() {
         // Persistencia de la referencia de plausibilidad GPS entre reinicios (cierra el hueco
         // de arranque de isPlausibleFix, donde el primer fix se aceptaba sin comparar).
         private const val KEY_LAST_LOC = "last_accepted_loc"
+        private const val KEY_WIGLE_RATE_LIMITED_UNTIL = "wigle_rate_limited_until"
+        private const val WIGLE_RATE_LIMIT_FALLBACK_MS = 24L * 60L * 60L * 1000L
+        // Evita que un Retry-After anormalmente corto reactive un bucle de cuota por celda.
+        private const val WIGLE_RATE_LIMIT_MINIMUM_MS = 60L * 60L * 1000L
         // Si la referencia persistida es más vieja que esto (p. ej. viaje largo con la app
         // cerrada), se ignora y el próximo fix se trata como bootstrap, evitando falsos rechazos.
         private const val LOCATION_REFERENCE_MAX_AGE = 6L * 60 * 60 * 1000  // 6 h

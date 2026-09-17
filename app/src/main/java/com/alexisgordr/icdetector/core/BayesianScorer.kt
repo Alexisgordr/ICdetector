@@ -54,6 +54,7 @@ object BayesianScorer {
         "h11"         to 6.0f,  // Compromiso móvil vs fijo
         "taDistance"  to 7.0f,  // Físicamente irrefutable con TA real
         "rfStability" to 6.0f,  // Misma Cell ID con PCI/ARFCN mutados — clon reconfigurándose
+        "transitionCoherence" to 1.8f, // H16 nace conservadora; necesita calibración de campo
 
         // Independientes
         // Expert-derived LR estimate — not directly reported by source paper
@@ -97,7 +98,7 @@ object BayesianScorer {
     // rfStability (PCI/ARFCN mutados de una misma Cell ID) se agrupa aquí porque comparte
     // con h11 el mismo fenómeno de identidad RF inconsistente; juntas no deben inflar el
     // posterior, así que solo cuenta la LR más alta del grupo.
-    private val MOBILITY_GROUP = listOf("pingPong", "h11", "taDistance", "rfStability")
+    private val MOBILITY_GROUP = listOf("pingPong", "h11", "taDistance", "rfStability", "transitionCoherence")
 
     // mncCount y tacDev — correlación débil entre sí
     // pueden aparecer juntos en estaciones mal configuradas

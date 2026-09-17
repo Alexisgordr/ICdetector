@@ -1,0 +1,1 @@
+Añadida H16, coherencia de transición celular, y un explorador de topología de solo lectura para celdas y rutas de handover. H16 contrasta movimiento, GPS, vecinas, zonas aprendidas y rutas fiables; se abstiene sin evidencia suficiente y no puede activar una alerta por sí sola.
