@@ -1,0 +1,7 @@
+Gran actualización forense:
+- Caja negra persistente de incidentes desde la fase 1/3.
+- Fases temporales visibles 1/3, 2/3 y 3/3.
+- Explicaciones para heurísticas no evaluadas.
+- Indicadores de madurez de baselines.
+- Captura forense automática antes, durante y después de un incidente.
+- Exportación ZIP con cronología, celdas, heurísticas, capacidades, logs y hashes SHA-256.

@@ -27,6 +27,7 @@ import com.alexisgordr.icdetector.network.OpenCellIdClient
 import com.alexisgordr.icdetector.network.WigleClient
 import com.alexisgordr.icdetector.storage.CellDbHelper
 import com.alexisgordr.icdetector.telephony.CellParser
+import com.alexisgordr.icdetector.forensics.ForensicRecorder
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -79,6 +80,7 @@ class MiniICService : Service() {
 
     private lateinit var telephonyManager: TelephonyManager
     private lateinit var dbHelper: CellDbHelper
+    private lateinit var forensicRecorder: ForensicRecorder
     private lateinit var locationManager: LocationManager
     private var toneGenerator: ToneGenerator? = null
     private var telephonyCallback: TelephonyCallback? = null
@@ -111,6 +113,7 @@ class MiniICService : Service() {
     // v2.1: la confirmación temporal vive en core/TemporalConfidence para poder testearla de
     // extremo a extremo (ver ScenarioTest). El servicio solo la usa.
     private val temporalConfidence = com.alexisgordr.icdetector.core.TemporalConfidence(CONFIRMATION_CYCLES)
+    private var lastIncidentIdentity: String? = null
     // v2.1 — ¿el TA de este módem es una medida o un campo sin rellenar? Ver TimingAdvanceSanity.
     private val taSanity = com.alexisgordr.icdetector.core.TimingAdvanceSanity()
     private var hasLoggedMissingCredentials = false
@@ -231,6 +234,7 @@ class MiniICService : Service() {
         isServiceRunning = true
         telephonyManager = getSystemService(TELEPHONY_SERVICE) as TelephonyManager
         dbHelper = CellDbHelper(this)
+        forensicRecorder = ForensicRecorder(dbHelper)
         locationManager = getSystemService(LOCATION_SERVICE) as LocationManager
 
         // Poda de histórico antiguo al arrancar (en segundo plano, no bloquea onCreate).
@@ -238,6 +242,10 @@ class MiniICService : Service() {
         // encima de la ventana de 30 días que usan las consultas, así que no afecta detección.
         scope.launch(Dispatchers.IO) {
             try {
+                // Si el proceso anterior terminó durante un episodio, no puede quedar marcado
+                // eternamente como "en curso". Se conserva y se cierra como interrumpido.
+                dbHelper.closeOpenIncidents(activeIdentity = null, interrupted = true)
+                dbHelper.interruptOpenForensicCases()
                 val deleted = dbHelper.pruneOldRecords(60)
                 if (deleted > 0) appendLog("[SYS]", "Poda de histórico: $deleted registros antiguos eliminados.")
             } catch (_: Exception) {}
@@ -1047,7 +1055,53 @@ class MiniICService : Service() {
                         val knownStatus = verificationCache[cacheKey] ?: VerificationStatus.PENDING
 
                         // Aplicar confirmación temporal antes de alertas
-                        val confirmedActive = temporalConfidence.apply(active)
+                        val temporalActive = temporalConfidence.apply(active)
+                        val diagnosticInputs = com.alexisgordr.icdetector.core.DiagnosticEngine.Inputs(
+                            neighborCount = neighbors.size,
+                            wifiActive = isWifiConnected(),
+                            locationAvailable = currentLocation != null,
+                            historyWithLocation = preloadedHistory.count { it.lat != null && it.lon != null },
+                            latencyAvailable = networkLatencyState.value != "N/A",
+                            cipheringAvailable = isHardwareCipheringAvailable,
+                            previousBandAvailable = prevBand != null && prevRegisteredDbm != null,
+                            signalBaseline = signalBaseline,
+                            rfFingerprint = rfFingerprint,
+                            rfStability = rfStability,
+                            reputation = reputation
+                        )
+                        val confirmedActive = temporalActive.copy(
+                            heuristicDiagnostics = com.alexisgordr.icdetector.core.DiagnosticEngine.explain(
+                                temporalActive, diagnosticInputs
+                            ),
+                            baselineMaturity = com.alexisgordr.icdetector.core.DiagnosticEngine.maturity(diagnosticInputs)
+                        )
+
+                        // Caja negra: se actualiza fuera del hilo de UI. Registra desde 1/3 y
+                        // cierra el episodio al recuperarse o al cambiar de identidad.
+                        val previousIncidentIdentity = lastIncidentIdentity
+                        lastIncidentIdentity = if (confirmedActive.temporalProgress.active) cacheKey else null
+                        scope.launch(Dispatchers.IO) {
+                            if (previousIncidentIdentity != null && previousIncidentIdentity != cacheKey) {
+                                dbHelper.closeOpenIncidents(previousIncidentIdentity, interrupted = true)
+                            }
+                            if (confirmedActive.temporalProgress.active) {
+                                dbHelper.recordIncidentPhase(confirmedActive)
+                            } else {
+                                dbHelper.closeOpenIncidents(cacheKey, interrupted = false)
+                            }
+                        }
+
+                        // Captura forense pasiva. Recibe una copia del ciclo ya resuelto, jamás
+                        // devuelve datos al detector y por tanto no puede alterar su veredicto.
+                        scope.launch(Dispatchers.IO) {
+                            forensicRecorder.observe(
+                                active = confirmedActive.copy(verified = knownStatus),
+                                neighbors = neighbors,
+                                location = currentLocation,
+                                latencyState = networkLatencyState.value,
+                                logs = liveLogs.value
+                            )
+                        }
 
                         // 2. Lanzar alertas y registro con el estado actual
                         checkAlerts(confirmedActive.copy(verified = knownStatus), confirmed = true)

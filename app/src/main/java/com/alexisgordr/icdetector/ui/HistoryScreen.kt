@@ -24,6 +24,11 @@ import androidx.compose.ui.unit.sp
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import com.alexisgordr.icdetector.models.HistoryRecord
+import com.alexisgordr.icdetector.models.IncidentRecord
+import com.alexisgordr.icdetector.models.IncidentState
+import com.alexisgordr.icdetector.models.ForensicCase
+import com.alexisgordr.icdetector.models.ForensicCaseState
+import com.alexisgordr.icdetector.forensics.ForensicExporter
 import com.alexisgordr.icdetector.models.SUBTHRESHOLD_PREFIX
 import com.alexisgordr.icdetector.models.identityKey
 import com.alexisgordr.icdetector.storage.CellDbHelper
@@ -31,16 +36,30 @@ import com.alexisgordr.icdetector.utils.ExportUtils
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.delay
 
 @Composable
 fun HistoryPanel(dbHelper: CellDbHelper, onBack: () -> Unit) {
     var items by remember { mutableStateOf<List<HistoryRecord>>(emptyList()) }
+    var incidents by remember { mutableStateOf<List<IncidentRecord>>(emptyList()) }
+    var showIncidents by remember { mutableStateOf(false) }
+    var showForensics by remember { mutableStateOf(false) }
+    var forensicCases by remember { mutableStateOf<List<ForensicCase>>(emptyList()) }
     val showDeleteConfirm = remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
 
     LaunchedEffect(Unit) {
         withContext(Dispatchers.IO) {
             items = dbHelper.getRecords()
+            incidents = dbHelper.getIncidents()
+            forensicCases = dbHelper.getForensicCases()
+        }
+    }
+
+    LaunchedEffect(showForensics) {
+        while (showForensics) {
+            forensicCases = withContext(Dispatchers.IO) { dbHelper.getForensicCases() }
+            delay(2_000L)
         }
     }
 
@@ -97,7 +116,26 @@ fun HistoryPanel(dbHelper: CellDbHelper, onBack: () -> Unit) {
             IconButton(onClick = onBack) {
                 Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back", tint = Color.White)
             }
-            Text("HISTORIAL DE ANTENAS", color = Color(0xFF666666), fontFamily = FontFamily.Monospace, fontSize = 12.sp)
+            Text(when {
+                showForensics -> "LABORATORIO FORENSE"
+                showIncidents -> "CAJA NEGRA DE INCIDENTES"
+                else -> "HISTORIAL DE ANTENAS"
+            }, color = Color(0xFF666666), fontFamily = FontFamily.Monospace, fontSize = 12.sp)
+        }
+
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            FilterChip(selected = !showIncidents && !showForensics, onClick = { showIncidents = false; showForensics = false }, label = { Text("ANTENAS") })
+            FilterChip(selected = showIncidents, onClick = { showIncidents = true; showForensics = false }, label = { Text("INCIDENTES") })
+            FilterChip(selected = showForensics, onClick = { showForensics = true; showIncidents = false }, label = { Text("FORENSE") })
+        }
+
+        if (showForensics) {
+            ForensicCaseList(dbHelper, forensicCases, Modifier.fillMaxWidth().weight(1f))
+            return@Column
+        }
+        if (showIncidents) {
+            IncidentList(incidents = incidents, modifier = Modifier.fillMaxWidth().weight(1f))
+            return@Column
         }
 
         if (items.isEmpty()) {
@@ -261,6 +299,115 @@ fun HistoryPanel(dbHelper: CellDbHelper, onBack: () -> Unit) {
             }
 
             AuthorSignature()
+        }
+    }
+}
+
+@Composable
+private fun ForensicCaseList(dbHelper: CellDbHelper, cases: List<ForensicCase>, modifier: Modifier = Modifier) {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    var selectedForExport by remember { mutableStateOf<ForensicCase?>(null) }
+    var confirmExport by remember { mutableStateOf(false) }
+    var exportMessage by remember { mutableStateOf<String?>(null) }
+    val launcher = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/zip")) { uri ->
+        val selected = selectedForExport
+        if (uri != null && selected != null) scope.launch {
+            exportMessage = "Exportando ${selected.caseCode}…"
+            val result = withContext(Dispatchers.IO) { runCatching { ForensicExporter.export(context, dbHelper, selected, uri) } }
+            exportMessage = if (result.isSuccess) "Caso exportado correctamente" else "Error: ${result.exceptionOrNull()?.message}"
+        }
+    }
+    if (confirmExport) AlertDialog(
+        onDismissRequest = { confirmExport = false },
+        title = { Text("Exportar caso forense") },
+        text = { Text("El paquete puede contener ubicación GPS precisa, datos de radio, modelo del dispositivo y registros técnicos. Revísalo antes de compartirlo; nunca contiene claves de API, IMSI ni IMEI.") },
+        confirmButton = { TextButton(onClick = {
+            confirmExport = false
+            selectedForExport?.let { launcher.launch("${it.caseCode}.zip") }
+        }) { Text("EXPORTAR") } },
+        dismissButton = { TextButton(onClick = { confirmExport = false }) { Text("CANCELAR") } }
+    )
+    Column(modifier) {
+        Text(
+            "Ventana automática: 60 s antes · episodio completo · 60 s después",
+            color = Color(0xFF777777), fontFamily = FontFamily.Monospace, fontSize = 9.sp,
+            modifier = Modifier.padding(bottom = 8.dp)
+        )
+        exportMessage?.let { Text(it, color = Color(0xFF80CBC4), fontFamily = FontFamily.Monospace, fontSize = 9.sp) }
+        if (cases.isEmpty()) {
+            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                Text("SIN CASOS FORENSES\nLa captura comienza automáticamente en 1/3", color = Color(0xFF555555), fontFamily = FontFamily.Monospace, fontSize = 11.sp)
+            }
+        } else LazyColumn(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            items(cases, key = { it.id }) { fc ->
+                val color = when (fc.state) {
+                    ForensicCaseState.CAPTURING -> Color(0xFFCF6679)
+                    ForensicCaseState.POST_CAPTURE -> Color(0xFFFFA000)
+                    ForensicCaseState.READY -> Color(0xFF4CAF50)
+                    ForensicCaseState.INTERRUPTED -> Color(0xFF888888)
+                }
+                Card(colors = CardDefaults.cardColors(containerColor = Color(0xFF111111)), border = BorderStroke(1.dp, color.copy(alpha=.55f))) {
+                    Column(Modifier.fillMaxWidth().padding(12.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) {
+                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                            Text(fc.caseCode, color = Color.White, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Bold, fontSize = 11.sp)
+                            Text(fc.state.name, color = color, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Bold, fontSize = 9.sp)
+                        }
+                        Text("Fase máxima ${fc.highestPhase}/3 · ${fc.sampleCount} muestras", color = Color(0xFFAAAAAA), fontFamily = FontFamily.Monospace, fontSize = 9.sp)
+                        Text("${fc.createdAt} → ${fc.closedAt ?: "EN CURSO"}", color = Color(0xFF777777), fontFamily = FontFamily.Monospace, fontSize = 9.sp)
+                        if (fc.state == ForensicCaseState.READY || fc.state == ForensicCaseState.INTERRUPTED) {
+                            OutlinedButton(onClick = {
+                                selectedForExport = fc
+                                confirmExport = true
+                            }, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(4.dp)) {
+                                Icon(Icons.Default.Share, null, Modifier.size(14.dp)); Spacer(Modifier.width(6.dp))
+                                Text("EXPORTAR CASO FORENSE", fontFamily = FontFamily.Monospace, fontSize = 9.sp)
+                            }
+                        } else Text("CAPTURA AUTOMÁTICA EN CURSO", color = color, fontFamily = FontFamily.Monospace, fontSize = 9.sp)
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun IncidentList(incidents: List<IncidentRecord>, modifier: Modifier = Modifier) {
+    if (incidents.isEmpty()) {
+        Box(modifier = modifier, contentAlignment = Alignment.Center) {
+            Text("SIN INCIDENTES REGISTRADOS", color = Color(0xFF555555), fontFamily = FontFamily.Monospace, fontSize = 11.sp)
+        }
+        return
+    }
+    LazyColumn(modifier = modifier, verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        items(incidents, key = { it.id }) { incident ->
+            var expanded by remember(incident.id) { mutableStateOf(false) }
+            val stateColor = when (incident.state) {
+                IncidentState.CONFIRMED -> Color(0xFFCF6679)
+                IncidentState.OBSERVING -> Color(0xFFFFA000)
+                IncidentState.RECOVERED -> Color(0xFF4CAF50)
+                IncidentState.INTERRUPTED -> Color(0xFF888888)
+            }
+            Card(
+                onClick = { expanded = !expanded },
+                colors = CardDefaults.cardColors(containerColor = Color(0xFF111111)),
+                border = BorderStroke(1.dp, stateColor.copy(alpha = 0.55f)),
+                shape = RoundedCornerShape(4.dp)
+            ) {
+                Column(Modifier.fillMaxWidth().padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                        Text("CID ${incident.cid} · ${incident.radio.name}", color = Color.White, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Bold, fontSize = 11.sp)
+                        Text("${incident.highestPhase}/${incident.requiredPhases} ${incident.state.name}", color = stateColor, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Bold, fontSize = 10.sp)
+                    }
+                    Text("${incident.startedAt} → ${incident.endedAt ?: "EN CURSO"}", color = Color(0xFF777777), fontFamily = FontFamily.Monospace, fontSize = 9.sp)
+                    Text("Score ${incident.score}% · confianza ${String.format(java.util.Locale.ROOT, "%.1f", incident.anomalyConfidence)}%", color = Color(0xFFAAAAAA), fontFamily = FontFamily.Monospace, fontSize = 9.sp)
+                    if (expanded) {
+                        HorizontalDivider(color = Color(0xFF222222))
+                        Text(incident.reason, color = Color(0xFFCCCCCC), fontFamily = FontFamily.Monospace, fontSize = 9.sp)
+                        Text(incident.heuristicSnapshot, color = Color(0xFF777777), fontFamily = FontFamily.Monospace, fontSize = 8.sp)
+                    }
+                }
+            }
         }
     }
 }

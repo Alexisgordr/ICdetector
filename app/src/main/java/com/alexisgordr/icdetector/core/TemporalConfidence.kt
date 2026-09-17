@@ -62,6 +62,10 @@ class TemporalConfidence(private val confirmationCycles: Int = 3) {
 
         return cell.copy(
             isSuspicious = isConfirmed,
+            temporalProgress = com.alexisgordr.icdetector.models.TemporalProgress(
+                phase = currentStreak.coerceAtMost(confirmationCycles),
+                required = confirmationCycles
+            ),
             suspiciousReason = when {
                 isConfirmed -> cell.suspiciousReason
                 cell.isSuspicious -> "[$currentStreak/$confirmationCycles ciclos confirmando] ${cell.suspiciousReason}"
