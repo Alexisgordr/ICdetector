@@ -305,7 +305,7 @@ class CellDbHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME, 
                     "UPDATE $TABLE_CELL_TRANSITIONS SET observations=observations+1, " +
                         "trusted_observations=trusted_observations+? " +
                         "WHERE from_identity=? AND to_identity=?",
-                    arrayOf(trustedIncrement, from, to)
+                    arrayOf<Any>(trustedIncrement, from, to)
                 )
             } else {
                 db.insertOrThrow(TABLE_CELL_TRANSITIONS, null, ContentValues().apply {
