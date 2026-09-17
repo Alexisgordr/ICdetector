@@ -1,16 +1,30 @@
 # ICdetection Status
 
-## v2.2.0 — incident traceability and bounded forensic capture
+## v2.2.1 — quota-safe external verification maintenance release
 
 **Release:** stable  
-**Version code:** 7  
+**Version code:** 8
 **Database schema:** 14  
 **Detection baseline:** unchanged
 
-v2.2.0 is a major observability and evidence-handling update. It does not add a new heuristic,
-retune the threat score, lower the three-cycle confirmation threshold, or claim that Android
-userland can prove the presence of an IMSI catcher. It makes the existing analysis easier to
-inspect, preserve, and export.
+v2.2.1 is a focused maintenance release built on the incident and forensic capabilities introduced
+in v2.2.0. It does not add a heuristic, retune the threat score, lower the three-cycle confirmation
+threshold, change the database schema, or make a new detection claim.
+
+### v2.2.1 maintenance changes
+
+- WiGLE rate limiting is identified explicitly from HTTP `429` and quota-related API messages.
+- A WiGLE quota failure now activates one global cooldown instead of one retry loop per cell.
+- The cooldown survives service restarts and defaults to 24 hours when WiGLE provides no usable
+  `Retry-After` value.
+- OpenCellID and all local heuristic analysis continue normally while WiGLE is paused.
+- The terminal explains the cooldown and approximate remaining time; a rate-limited source remains
+  unavailable context and does not become evidence against a cell.
+- The forensic prebuffer now uses monotonic elapsed time rather than wall-clock subtraction, so an
+  NTP or manual clock adjustment cannot disturb its retention window.
+- Safe access to the prebuffer head removes the nullable Kotlin release-build warning.
+- Regression tests cover HTTP `429`, the observed `too many queries today` response, and ordinary
+  non-quota service failures.
 
 ### Current capability status
 
@@ -21,7 +35,8 @@ inspect, preserve, and export.
 | Incident black box | Active | Opens at `1/3`; records the highest phase, score, confidence, reason, and diagnostic snapshot. |
 | Rule diagnostics | Active | Rules report `PASS`, `FAIL`, or explained `N/A` according to available context. |
 | Baseline maturity | Active | Shows readiness of power, quality-fingerprint, PCI-identity, and reputation histories. |
-| Forensic prebuffer | Active | Holds up to 60 seconds / 180 recent samples in memory. |
+| Forensic prebuffer | Active | Holds up to 60 seconds / 180 recent samples using monotonic timing. |
+| WiGLE quota control | Active | Pauses WiGLE globally and persistently after rate limiting; OpenCellID and local analysis continue. |
 | Post-recovery capture | Active | Continues for 60 seconds; recurrence stays in the same case. |
 | Forensic ZIP export | Active | Produces seven documented files plus SHA-256 integrity hashes. |
 | Root/baseband visibility | Unavailable | Android userland still cannot expose all ciphering and baseband state on every device. |

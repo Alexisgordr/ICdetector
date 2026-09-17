@@ -1,5 +1,36 @@
 # Changelog
 
+## 2.2.1
+
+### WiGLE quota handling
+
+- Added structured detection of WiGLE rate limiting for both HTTP `429` responses and API bodies
+  reporting `too many queries`, `rate limit`, or `quota` exhaustion.
+- Added a global WiGLE cooldown instead of retrying the same exhausted account separately for each
+  observed cell.
+- Persisted the cooldown across service restarts so restarting ICdetection cannot immediately resume
+  requests against an exhausted daily allowance.
+- WiGLE now respects a numeric `Retry-After` response when supplied; otherwise the application uses
+  a conservative 24-hour fallback with a one-hour minimum.
+- OpenCellID and all local heuristic analysis remain active while WiGLE is paused.
+- Added terminal context explaining that WiGLE is paused and reporting the approximate time
+  remaining, without treating an unavailable database as evidence against the observed cell.
+- Added regression tests for HTTP `429`, WiGLE's real `too many queries today` response, and normal
+  non-quota service failures.
+
+### Forensic recorder correctness
+
+- Replaced wall-clock arithmetic in the forensic pre-event buffer with Android's monotonic elapsed
+  time. Manual clock changes or NTP adjustments can no longer empty or freeze the retention window.
+- Replaced the nullable `peekFirst()` access with a safe lookup, removing the Kotlin release-build
+  warning without changing the 60-second / 180-sample capture policy.
+
+### Release metadata
+
+- Updated release metadata to `versionName 2.2.1` and `versionCode 8`.
+- Detection weights, heuristic rules, alarm thresholds, database schema, and forensic export format
+  are unchanged from v2.2.0.
+
 ## 2.2.0
 
 ### Incident black box and temporal transparency

@@ -1,7 +1,7 @@
 ![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)
 ![Platform](https://img.shields.io/badge/Platform-Android%2010%2B-green.svg)
 ![Root Required](https://img.shields.io/badge/Root-Not%20Required-brightgreen.svg)
-![Status](https://img.shields.io/badge/Status-Stable%20v2.2.0-success.svg)
+![Status](https://img.shields.io/badge/Status-Stable%20v2.2.1-success.svg)
 [![Featured in Awesome Telco](https://img.shields.io/badge/Featured%20in-Awesome%20Telco-6f42c1.svg)](https://github.com/ravens/awesome-telco#imsi-catcher-detection)
 
 
@@ -54,13 +54,15 @@ The application operates from Android userland without requiring root or direct 
 
 > **⚠️ Upgrading from a version older than v2.1.1:** uninstall the previous version first. Android refuses an in-place update when the APK is not signed with the same keystore, and a clean database is required because records written before v2.1.1 may hold an antenna coordinate where the device GPS position belongs. Export your CSV first if you want to keep the old history. v2.1.2 and later releases signed with the same keystore update in place normally. See `Status.md`.
 
-ICdetection v2.2.0 is the current stable release. It adds persistent incident tracking, visible temporal confirmation phases, explainable capability diagnostics, baseline-maturity indicators, and a bounded forensic case recorder with portable ZIP export.
+ICdetection v2.2.1 is the current stable release. It retains the incident tracking, visible temporal confirmation phases, explainable capability diagnostics, baseline-maturity indicators, and bounded forensic case recorder introduced in v2.2.0, while correcting WiGLE quota handling and forensic prebuffer timing.
 
-> **What v2.2.0 means:** an observation at `1/3` can now leave an incident record and start a forensic capture, while only a sustained event reaching `3/3` is presented as confirmed. This improves traceability without weakening the conservative confirmation model.
+> **What v2.2.1 changes:** when WiGLE reports that its daily allowance is exhausted, ICdetection pauses WiGLE globally and persistently instead of retrying once per cell. OpenCellID and all local analysis remain active. The forensic prebuffer now uses monotonic time, so a system-clock adjustment cannot disturb its 60-second window.
+
+> **What the v2.2 series means:** an observation at `1/3` can leave an incident record and start a forensic capture, while only a sustained event reaching `3/3` is presented as confirmed. This improves traceability without weakening the conservative confirmation model.
 
 v2.1.1 was the project's **data-integrity release**. It added no new heuristics and no new detection claims. It exists because the first two months of field collection surfaced problems that made that very collection unable to answer the questions it was designed to answer: sub-threshold heuristic failures were recorded with their reason erased, API-supplied tower coordinates were overwriting the device's own GPS positions in the history, two heuristics were firing on carrier-aggregation artifacts, and the history was so sparse that the RF fingerprint never woke up. `Status.md` and `v2.1Roadmap.md` carry the full evidence and the fixes.
 
-**The detection baseline remains frozen in v2.2.0.** This release improves observation, explanation, persistence, and export; it does not change heuristic weights, penalties, temporal thresholds, or make new detection claims. The project still needs field data to establish which heuristics carry useful signal, the real false-positive rate, and whether the Bayesian likelihood ratios hold up against reality.
+**The detection baseline remains frozen in v2.2.1.** This maintenance release does not change heuristic weights, penalties, temporal thresholds, or make new detection claims. The project still needs field data to establish which heuristics carry useful signal, the real false-positive rate, and whether the Bayesian likelihood ratios hold up against reality.
 
 Future work continues to focus on:
 
@@ -463,6 +465,11 @@ A "not found" result does **not** imply malicious infrastructure.
 
 External requests are only made when the user configures and enables infrastructure verification APIs.
 
+WiGLE applies account-specific query limits. When WiGLE reports that its allowance is exhausted,
+v2.2.1 pauses WiGLE requests globally and persists that cooldown across service restarts. The app
+continues using OpenCellID and its local heuristic engine during the pause. A rate-limited external
+source is treated as unavailable context, not as evidence that a cell is suspicious or absent.
+
 ---
 
 # Privacy & Networking
@@ -640,7 +647,7 @@ Derivative works must remain open-source under GPL-compatible licensing.
 
 Thank you to everyone who has followed the project through its many iterations.
 
-ICdetection v2.2.0 is considered stable within the boundaries of what Android userland allows without root or direct baseband access.
+ICdetection v2.2.1 is considered stable within the boundaries of what Android userland allows without root or direct baseband access.
 
 Future updates will focus on bug fixes, field validation, false-positive analysis, and minor improvements discovered through real-world usage.
 
