@@ -1,128 +1,395 @@
-# 📖 ICdetection Field Manual (v2.1)
+# ICdetection Field Manual — v2.2.0
 
-This manual provides operational guidelines for using ICdetection. This tool is designed for network auditing and cellular anomaly analysis. Understanding the data is as important as the code itself.
+ICdetection is an open-source Android application for passive cellular-network auditing and anomaly analysis. It observes information exposed by Android, compares each observation with the device's local history and, when configured, cross-checks cells against external tower databases.
 
----
+This manual explains how to operate the application, interpret its results, investigate incidents, and export a forensic case.
 
-## 🛡️ Operational Philosophy
-
-ICdetection is a passive, local-first auditing tool. It does not perform active attacks. It listens to the radio broadcast signals of your environment and cross-references them with global databases.
-
-Most alerts are false positives caused by legitimate network conditions. This manual is intended for situations where alerts are **persistent, confirmed across multiple cycles, and geographically consistent**.
-
-ICdetection does not aim for instant verdicts. Its strength is **historical intelligence**: it learns your normal RF environment over time and flags what deviates from it. The longer you use it in your regular areas, the more accurate it becomes. It is a complement to prevention (end-to-end encryption, encryption-required settings), not a replacement for it.
+> **Important:** ICdetection is an anomaly detector, not a device that can prove the presence of an IMSI catcher. A warning means that the observations deserve examination. It does not identify an attacker or establish intent by itself.
 
 ---
 
-## ⚠️ Important: False Positives
+## 1. What ICdetection does
 
-Cellular networks are complex. Terrain, building materials, and carrier maintenance can trigger alerts.
+ICdetection works passively and locally. It does not transmit radio commands, attack cellular networks, or require root access.
 
-- **If you see a warning:** Do not panic. Observe the signal stability.
-- **If you see persistent alerts:** Take note of the time, location, and the Suspicious Reason provided by the app.
+While monitoring, it can:
 
-The engine is deliberately tuned to favour fewer false positives over aggressive alerting. Several layers (percentiles, cell reputation, multi-cycle confirmation) exist specifically to keep it quiet unless something is genuinely off.
+- Observe the serving cell and cellular information exposed by Android.
+- Record MCC, MNC, Cell ID, TAC, PCI, channel, RSRP, RSRQ, SINR, radio technology, and Timing Advance when available.
+- Evaluate multiple anomaly heuristics during every analysis cycle.
+- Learn historical behaviour for repeatedly observed cells.
+- Cross-reference cells with OpenCellID and WiGLE when configured.
+- Require suspicious behaviour to persist through three analysis phases.
+- Explain which checks passed, failed, or could not run.
+- Preserve incidents separately from routine antenna history.
+- Capture and export a forensic package around qualifying incidents.
 
----
-
-## 🔍 How to Interpret the Data
-
-The live identity panel displays the operator as `MCC / MNC`: MCC identifies the country and MNC
-identifies the mobile network within it. The expanded history shows both values alongside TAC.
-
-### 1. Verification Status
-
-- ✅ **VERIFIED:** The base station (CellID) is registered in the OpenCellID/WiGLE database and matches the expected network parameters. High confidence.
-- ⏳ **PENDING:** The app is querying the databases or waiting for a GPS fix to validate coordinates. This resolves automatically.
-- ❌ **NOT FOUND:** The tower is not in the database. This is common in very remote areas or brand-new 5G installations. Exercise caution but do not assume malicious intent.
-- ⚠️ **ERROR API:** Connection issue. Check your API tokens and Proxy settings in the menu.
+Available observations vary by phone, modem, Android version, operator, radio conditions, and power-saving restrictions.
 
 ---
 
-### 2. Threat Confirmation — Temporal Confidence Decay
+## 2. Initial setup
 
-Alerts require **3 consecutive analysis cycles** before triggering a confirmed threat. You may see `[1/3 cycles confirming]` or `[2/3 cycles confirming]` in the terminal — this means the app is building confidence before alarming.
+### Permissions
 
-Transient anomalies that resolve within one cycle are logged but **do not trigger alerts**. This significantly reduces false positive fatigue in dynamic RF environments.
+Grant the permissions requested by the app. Location permission is important because Android protects cellular identifiers as location-sensitive data. GPS also enables geographic consistency checks and comparisons with tower-database coordinates.
 
----
+If a permission is unavailable, ICdetection should continue with the remaining information, but affected rules may report `N/A`.
 
-### 3. Threat Analysis — The Red Flags
+### Background monitoring
 
-When the status turns **SISTEMA EN COMPROMISO**, check the Suspicious Reason field. The strongest, hardest-to-fool heuristics are the ones anchored to physics and your own history (H11, H13, H14, H15):
+For longer sessions:
 
-- **"Celda aislada (sin vecinos)":** A tower broadcasting strongly while showing no coherent neighbors is a known red flag in amateur rogue BTS scenarios, but it is not proof by itself. Rural coverage, indoor deployments and unusual radio conditions can also produce this pattern.
+1. Allow ICdetection to operate in the background.
+2. Exclude it from aggressive manufacturer battery optimisation if necessary.
+3. Confirm that its persistent monitoring notification remains visible.
 
-- **"Salto de potencia anómalo (>35dB)":** An attacker might be boosting power to force your phone to latch onto their signal over legitimate ones.
+Android Doze may reduce fresh GPS fixes when the screen is off and the device is stationary. This is an operating-system restriction, not necessarily an app failure.
 
-- **"TA vs Distancia GPS":** If the tower claims to be 5km away but the Timing Advance (TA) indicates it is 50 meters away, this is likely a spoofed tower. *Note: TA telemetry is highly device-dependent. If your modem reports a constant 0 the app marks it `STUB_ZERO` and this check simply does not run — abstaining is correct, an invented distance would be worse.*
+### External verification
 
-- **"Consistencia Geográfica (H11)":** The same Cell ID has been detected from physically inconsistent locations over time. This is one of the strongest contextual indicators in the engine because it relies on physics and local GPS history rather than public tower databases. It can be consistent with a mobile rogue base station cloning a legitimate tower, but it still requires careful interpretation.
+OpenCellID and WiGLE are optional. Configure valid credentials in Settings to enable external cross-referencing. Without them, local and historical analysis still works, while database-dependent rules may report `N/A`, `PENDING`, `NOT FOUND`, or an API error.
 
-- **"Potencia vs Histórico (Baseline + huella RSRQ/SINR) (H13)":** The app learns each cell's typical signal level (RSRP) at a given location from your own history, and flags readings that are anomalously **strong** versus that baseline — a transmitter impersonating a normally-weaker cell will appear far closer than its history allows. With enough samples, an anomaly must also exceed the cell's own **99th percentile**, making the check robust against occasional legitimate spikes. It additionally learns each cell's **RSRQ/SINR signature** and flags a signal quality incoherent with that fingerprint. Fully offline; needs a warm-up period and stays silent until it has data.
+A missing public-database record does not make a cell malicious. Public datasets can be incomplete or outdated.
 
-- **"Band Downgrade (H14)":** Detects a sudden, forced shift from a high-frequency capacity band to a low-frequency sub-GHz band. Attackers push devices to lower frequencies to extend coverage and penetration. The check uses real 3GPP band physics (via EARFCN) and distinguishes a forced downgrade from natural signal degradation (e.g. entering a garage), reducing false positives.
+### Proxy
 
-- **"RF Identity / PCI (H15)":** A legitimate cell keeps its physical-layer identity (PCI) fixed for life. This flags a single Cell ID seen alternating between distinct PCI values that persist recently — a sign of a clone reusing a legitimate Cell ID with a different radio fingerprint. It can fire while you are stationary (unlike H11, which needs movement). It deliberately uses **PCI only, not ARFCN**, because field testing showed ARFCN fluctuates legitimately due to carrier aggregation. Since v2.1 it also compares PCI values **only within the same carrier**: longer field data showed the modem attributes a secondary carrier's PCI to the serving cell just as it does with the ARFCN, so comparing PCIs across carriers was producing false positives.
-
-- **"Cifrado de enlace (Hardware)":** N/A on standard v2.1 installs unless the operating system exposes a supported ciphering-state signal. ICdetection v2.1 does not claim direct null-cipher or IMSI-disclosure detection on normal no-root Android installs.
-
-> **Note on the scoring engine:** these heuristics are not simply added up. A Bayesian engine combines them, grouping correlated signals so they cannot double-count and inflate the score, and softening the noisy/environment-sensitive ones on cells with a long, clean local history (cell reputation). The probability is capped at 95% — on Android userland, certainty is never claimed.
+If required by your threat model, configure the supported proxy and a compatible service such as Orbot. Verify that API requests still succeed after enabling it.
 
 ---
 
-## 🏃 Emergency Countermeasures
+## 3. Monitoring behaviour
 
-If you detect a credible, persistent threat:
+Start the monitoring service from the main screen. While active, the app repeatedly reads the data Android exposes and reevaluates the current cellular environment.
 
-1. **Immediate Fallback — Airplane Mode:** Manually toggle Airplane Mode from the system status bar. This is the most reliable countermeasure. *Note: the app can only toggle Airplane Mode automatically if it has been granted the privileged `WRITE_SECURE_SETTINGS` permission via ADB (`adb shell pm grant com.alexisgordr.icdetector android.permission.WRITE_SECURE_SETTINGS`). On a normal install this permission is **not** granted, so the automatic fallback will not fire and you should toggle Airplane Mode yourself.*
+Displayed states are dynamic. A rule may move from `N/A` to `PASS` after GPS, neighbour-cell data, latency, or an API result becomes available. It can later change to `FAIL` if a new measurement becomes inconsistent.
 
-2. **Physical Displacement:** Move away from the detected signal source. Depending on equipment power level, moving 200-500 meters may disconnect your device from the rogue base station. Professional-grade IMSI-catchers can cover up to 2km — Airplane Mode is more reliable than distance alone.
-
-3. **Data Persistence:** If the app generates a Security Alert, wait for the app to log it to the SQLite database. Later, go to the History tab and use the **Export CSV** function to save the forensic evidence.
+If the service stops or the device restarts while an incident or forensic capture is open, the record is closed as `INTERRUPTED`. The app must not describe an unobserved period as continuous monitoring.
 
 ---
 
-## ⚙️ Best Practices for Auditing (OPSEC)
+## 4. Reading cellular data
 
-- **Use a Proxy:** If you are auditing in an area where you suspect you are being monitored, ensure the Tor (Orbot) proxy is enabled in the settings. This prevents the API (OpenCellID/WiGLE) from correlating your specific public IP with the CellIDs you are auditing.
+| Field | Meaning |
+| --- | --- |
+| MCC | Mobile Country Code. |
+| MNC | Mobile Network Code. |
+| Cell ID / CID | Identifier reported for the observed cell. |
+| TAC | Tracking Area Code. |
+| PCI | Physical Cell Identity at the radio layer. |
+| ARFCN / EARFCN / NR-ARFCN | Radio channel number, depending on technology. |
+| Radio | Technology derived from Android's cellular-information type. |
+| RSRP | Reference-signal received power. |
+| RSRQ | Reference-signal received quality. |
+| SINR | Signal-to-interference-plus-noise ratio, when available. |
+| TA | Timing Advance, when the modem provides a usable value. |
 
-- **Monitor with Screen Off:** The app continues monitoring with the screen off (polling roughly every 10 seconds). You can keep the phone in your pocket and rely on the Audio Alert System. *Note on GPS in repose: with the screen off and the device stationary, Android Doze restricts the GPS, so fresh coordinates may not be recorded for every observation. This is an OS limitation, not a bug — and it matters little when stationary, since your position has not changed and H15 (PCI) needs no GPS.* Since v2.1 the app also records a periodic sample of the serving cell while you stay camped on it (about every 5 minutes with the screen on, every 15 with it off). This does **not** wake the GPS or force extra radio reads; it simply persists the analysis the service was already performing, and it is what allows the signal baselines and the RSRQ/SINR fingerprint to actually accumulate enough samples to become useful.
+Blank or unavailable data is preferable to an invented measurement.
 
-- **Learn the tones:** The app uses specific tones for different threat levels. A confirmed threat sounds differently from a high-signal warning. Learn to distinguish them.
+### Verification states
 
-- **Let the history learn your environment:** H11, H13, the cell reputation and the RSRQ/SINR fingerprint all become more accurate over time as they build local history. The more you use the app in your regular areas, the more precisely it detects anomalies — and the quieter it stays on cells it has learned to trust. Expect a warm-up period of days before the historical heuristics are fully effective; the RF fingerprint in particular stays dormant until weeks of data accumulate, by design.
+- **VERIFIED:** A configured external source returned a compatible record. This adds context but is not absolute proof of legitimacy.
+- **PENDING:** Verification has not finished or is waiting for required data.
+- **NOT FOUND:** No matching public record was returned. This is common for new, indoor, rural, or incompletely mapped cells.
+- **ERROR / API ERROR:** Credentials, connectivity, proxy configuration, or the external service prevented verification.
 
----
+### Threat score
 
-## 📋 Forensic Workflow
-
-1. **Preparation:** Open the app and (optionally) configure valid API tokens for WiGLE and OpenCellID in Settings. The app works offline without them; the tokens only enable external tower cross-referencing.
-
-2. **During Audit:** Keep the app running in the background. The GPS indicator shows whether location data is being recorded.
-
-3. **Post-Audit:** Export the history to CSV from the History tab.
-
-4. **Reporting:** Use the CSV data to identify patterns — specific times or locations where NOT FOUND or suspicious cells repeatedly appear. The export includes `Timestamp, NetType, CID, MNC, TAC, MCC, DBM, Verified, SecurityScore, FailedHeuristics, Lat, Lon, PCI, ARFCN, RSRQ, SINR, AnomalyConfidence, ApiLat, ApiLon, TA, TAUnit, TAMeters, Radio`. Pay special attention to `Lat`, `Lon`, `PCI`, `ARFCN`, `RSRQ` and `SINR` for RF fingerprinting analysis. Note that `Lat`/`Lon` are **your** GPS position when the observation was recorded, while `ApiLat`/`ApiLon` are where WiGLE/OpenCellID claim the antenna is — two different things, kept in separate columns since v2.1. `AnomalyConfidence` is the Bayesian posterior at that moment — a confidence from reasoned likelihood ratios, not a measured probability. `TA` is the raw Timing Advance with the unit it came in (`TAUnit`) and the distance derived from it (`TAMeters`, empty when the unit does not allow a defensible conversion). `Radio` is the technology derived from the Android `CellInfo` class, not the status-bar label. Rows whose `FailedHeuristics` starts with `[sub-umbral]` are heuristics that failed without reaching the alarm threshold (observations, not alerts). Validate any export with `python3 tools/check_export.py <file.csv>` — and blank `Lat`, `Lon`, `ApiLat` and `ApiLon` before sharing one with anybody. Fields are CSV-escaped (RFC 4180), so the file imports cleanly into spreadsheets and analysis tools.
-
----
-
-## 🔬 Technical Limitations
-
-ICdetection operates entirely in Android userland without root access. This means:
-
-- **Direct null-cipher / IMSI-disclosure detection** is not implemented on standard v2.1 installs and requires privileged OS APIs/permissions that normal no-root apps do not receive
-- **Timing Advance** is unavailable on a lot of hardware. Many modems do not implement it and return a constant 0 instead of declaring it unavailable; the app detects that (three distinct cells all reporting 0) and marks the unit `STUB_ZERO`, deriving no geometry from it. There is no way around this without root — `getTimingAdvance()` is the only public API there is. When TA is unusable, the GEOM panel still shows a distance to the antenna taken from the public databases, clearly labelled as such
-- **Modem-level signaling** (RRC, NAS) is not accessible
-- **GPS in deep repose** (screen off + stationary) is throttled by Android Doze
-- **Legal interception** at the carrier level cannot be detected — it occurs inside the operator's infrastructure, not at the radio layer
-
-ICdetection is most useful against amateur rogue base stations, poorly configured setups, some semi-professional scenarios, and abnormal network behaviour visible through Android APIs. It is **not** able to reliably detect a well-configured professional IMSI-catcher in real time — that requires baseband/modem access this tool does not have. These are fundamental Android limitations, not application bugs.
+The score is a decision aid, not a measured probability that an IMSI catcher exists. The engine combines available evidence, limits double-counting between related signals, and considers historical cell reputation. Missing evidence should remain unavailable instead of becoming automatically suspicious.
 
 ---
 
-*Final Note: This tool is for educational and defensive purposes. Always respect local laws regarding radio frequency monitoring.*
+## 5. Heuristic diagnostics
 
-**Stay vigilant. Stay encrypted.**
+Version 2.2.0 exposes the state and explanation of each evaluated rule:
 
-*Developed by Alexis Gómez Rodríguez*
+- **PASS:** The rule ran with sufficient data and did not detect its suspicious condition.
+- **FAIL:** The rule ran and detected its suspicious condition. One failed rule does not automatically confirm a threat.
+- **N/A:** The rule could not make a defensible decision with the available data.
+
+Common reasons for `N/A` include:
+
+- The modem does not expose the required measurement.
+- GPS is unavailable or inaccurate.
+- External tower coordinates are unavailable.
+- The historical baseline is not mature.
+- Too few observations exist for comparison.
+- A network request is pending or failed.
+- Android does not expose the required privileged ciphering information.
+
+`N/A` is an honest abstention, not automatically a defect. Read the diagnostic explanation to learn which prerequisite is missing.
+
+---
+
+## 6. Baseline maturity
+
+Historical rules need repeated observations before they become reliable. The maturity indicators show whether enough local history exists for those checks.
+
+A new installation will naturally contain immature baselines and several `N/A` results. To improve them:
+
+- Run the app regularly in familiar areas.
+- Let it observe legitimate cells under different normal conditions.
+- Avoid deleting the database without a reason.
+- Allow days or weeks for history-dependent fingerprints to mature.
+
+Mature baselines improve context but do not guarantee correct attribution. Operators can legitimately reconfigure their networks.
+
+---
+
+## 7. Temporal phases: `1/3`, `2/3`, and `3/3`
+
+ICdetection does not confirm a threat from one suspicious cycle:
+
+1. **`1/3` — observation begins:** The cycle is suspicious. An incident opens and forensic capture starts, including the pre-event buffer.
+2. **`2/3` — suspicion persists:** A second consecutive cycle remains suspicious, but confirmation is not complete.
+3. **`3/3` — confirmed incident:** Suspicious behaviour persisted for the required confirmation window. The app records confirmation and may issue the configured alert.
+
+If the condition returns to normal before `3/3`, it remains an incident observation but is not presented as a confirmed threat. This distinction reduces alarms caused by transient radio behaviour.
+
+### Incident states
+
+- **OBSERVING:** Suspicion started but has not reached confirmation.
+- **CONFIRMED:** The episode reached `3/3`.
+- **RECOVERED:** Conditions returned to normal and the episode closed normally.
+- **INTERRUPTED:** Monitoring stopped before a reliable closure was observed.
+
+Even a brief `1/3` episode can remain in incident history for later examination.
+
+---
+
+## 8. Main heuristic families
+
+No individual rule proves the presence of a rogue base station.
+
+### Cell isolation and neighbours
+
+A strong serving cell without coherent neighbours can be suspicious, but rural coverage, indoor deployments, modem limitations, and temporary network conditions may look similar.
+
+### Sudden signal changes
+
+An unusually large power increase can indicate a transmitter much closer or stronger than expected. Movement, handovers, line-of-sight changes, and indoor propagation can also cause abrupt shifts.
+
+### Timing Advance and geometry
+
+When Timing Advance has a known unit, the app can compare its implied range with geographic context. Many modems omit TA or repeatedly return zero as a stub. Unusable zero values must not be interpreted as a real distance of zero metres.
+
+### Geographic consistency
+
+Historical GPS observations can reveal a Cell ID appearing in physically inconsistent locations. Bad GPS fixes, operator reuse, database errors, or parsing limitations must also be considered.
+
+### Historical RF baseline
+
+The app learns normal signal strength and, when available, RSRQ/SINR characteristics for cells repeatedly observed by this device. Once sufficiently mature, the baseline can detect an unusually strong or inconsistent observation.
+
+### Band downgrade
+
+The engine examines suspicious transitions from higher-frequency capacity bands to lower-frequency bands while considering radio conditions. Legitimate coverage optimisation, congestion, indoor movement, and operator policy can produce similar transitions.
+
+### RF identity / PCI
+
+A Cell ID associated with inconsistent physical-layer identities can deserve attention. The app limits comparisons to reduce known carrier-aggregation false positives, but operator reconfiguration and modem reporting remain possible explanations.
+
+### Ciphering visibility
+
+Normal no-root Android apps generally cannot directly inspect modem ciphering state. This rule is therefore normally `N/A` unless the operating system exposes a supported signal. ICdetection does not claim direct null-cipher or IMSI-disclosure detection when the data is unavailable.
+
+### Regional, latency, and external correlation
+
+These checks depend on inputs such as reliable location, tower-database results, network reachability, and sufficient samples. They may legitimately remain `N/A`; their explanation should identify the missing prerequisite.
+
+---
+
+## 9. History and retention
+
+The app separates three types of information:
+
+- **Antenna history:** Long-term observations used to understand cells and build historical baselines.
+- **Incident history:** Security-relevant episodes and their progression.
+- **Forensic cases:** Detailed evidence captured around qualifying incidents.
+
+Routine history may be pruned according to the configured retention policy to prevent unlimited database growth. Export important information before clearing application data or uninstalling the app.
+
+---
+
+## 10. Forensic capture
+
+When an episode reaches `1/3`, ICdetection opens a forensic case. It preserves context rather than only the final alert.
+
+A case can contain:
+
+- Up to approximately 60 seconds before the first suspicious cycle.
+- The progression through `1/3`, `2/3`, and `3/3`, when reached.
+- Approximately 60 seconds after recovery.
+- Serving and observed neighbour cells.
+- Available RSRP, RSRQ, SINR, PCI, channel, TAC, TA, and radio technology.
+- Device position and GPS accuracy when available.
+- External-verification state and latency context.
+- Threat score, temporal phase, and rule diagnostics for each cycle.
+- Device capabilities and unavailable-data explanations.
+- Relevant terminal output.
+- App version, Android version, and device model.
+
+Capture duration is bounded so an unresolved case cannot grow indefinitely.
+
+### Forensic states
+
+- **CAPTURING:** The suspicious episode is still being recorded.
+- **POST_CAPTURE:** The condition recovered and the post-event window is being collected.
+- **READY:** Capture completed normally and can be exported.
+- **INTERRUPTED:** Monitoring ended before normal completion; partial evidence is retained.
+
+Do not describe an interrupted package as a complete continuous recording.
+
+---
+
+## 11. Exporting a forensic case
+
+Select a completed case and use **EXPORT FORENSIC CASE**. The ZIP can contain:
+
+```text
+ICD-YYYY-MM-DD-NNNN.zip
+├── case.json
+├── timeline.csv
+├── cells.csv
+├── heuristics.csv
+├── capabilities.json
+├── terminal.log
+└── SHA256SUMS.txt
+```
+
+| File | Purpose |
+| --- | --- |
+| `case.json` | Case metadata, state, timing, summary, and device/app context. |
+| `timeline.csv` | Chronological measurements and analysis state. |
+| `cells.csv` | Serving and neighbour-cell observations. |
+| `heuristics.csv` | Rule state and explanation by cycle. |
+| `capabilities.json` | Data the device could and could not provide. |
+| `terminal.log` | Relevant diagnostic log entries. |
+| `SHA256SUMS.txt` | SHA-256 digests for detecting later file modification. |
+
+To verify an extracted package on Linux or WSL:
+
+```bash
+sha256sum -c SHA256SUMS.txt
+```
+
+Every listed file should report `OK`. Verify a copy and preserve the original ZIP unchanged.
+
+The checksum proves only that the checked files match their recorded digests. It does not establish who collected them, independently prove the collection time, create a legal chain of custody, or prove that an IMSI catcher existed.
+
+---
+
+## 12. Exporting antenna history
+
+Use **EXPORT CSV** for long-term observations rather than one incident:
+
+- `Lat` and `Lon` are the phone's position at collection time.
+- `ApiLat` and `ApiLon` are coordinates returned by an external database.
+- `TA` is the raw Timing Advance.
+- `TAUnit` explains how TA was interpreted.
+- `TAMeters` should be empty when conversion is not defensible.
+- `Radio` comes from Android cellular information, not only the status-bar label.
+- `AnomalyConfidence` is analytical output, not an independently measured probability.
+- Sub-threshold failures are observations, not confirmed alerts.
+
+Validate a CSV from the project directory with:
+
+```bash
+python3 tools/check_export.py path/to/export.csv
+```
+
+Exports can contain precise locations, network identifiers, device information, and security observations. Redact sensitive information before sharing publicly.
+
+---
+
+## 13. Responding to a credible alert
+
+If an event persists to `3/3` and remains concerning after reviewing its explanations:
+
+1. **Do not panic.** It is still an anomaly classification, not attribution.
+2. **Preserve context.** Do not clear history, storage, or the forensic case.
+3. **Use Airplane Mode** if immediate disconnection is appropriate. Manual activation is the most dependable option for a normal installation.
+4. **Move to another safe location** if useful, then observe whether the anomaly follows the phone or remains localised.
+5. **Export the forensic case** after it becomes `READY`; retain an `INTERRUPTED` case as partial evidence if monitoring stopped.
+6. **Preserve the original ZIP** and record the circumstances and actions taken.
+7. **Seek corroboration** from another device, an operator, another data source, or qualified radio/network analysis.
+
+Automatic Airplane Mode requires privileged `WRITE_SECURE_SETTINGS` access granted through ADB. Normal installations do not possess this permission.
+
+---
+
+## 14. Privacy and evidence handling
+
+ICdetection data may reveal device locations, travel patterns, observed networks, device characteristics, and security events.
+
+Recommended handling:
+
+- Preserve original exports and analyse copies.
+- Record the SHA-256 digest of the original ZIP.
+- Do not edit files inside the original package.
+- Use encrypted storage for sensitive cases.
+- Redact GPS coordinates and credentials before public sharing.
+- Never publish API tokens, signing keys, or private keystores.
+
+Formal evidential use normally requires documented acquisition, preservation of originals, an auditable chain of custody, trustworthy time evidence, corroboration, and expert interpretation. Obtain appropriate legal and technical advice. The forensic export assists investigation but does not automatically satisfy legal requirements.
+
+---
+
+## 15. Technical limitations
+
+Because ICdetection runs in Android user space without root:
+
+- It cannot access raw baseband, RRC, or NAS signalling.
+- It normally cannot inspect active cellular ciphering.
+- It cannot reliably observe IMSI disclosure through privileged modem data.
+- Timing Advance is unavailable, ambiguous, or stubbed on many phones.
+- Neighbour-cell reporting differs by device and operator.
+- GPS can be inaccurate, unavailable indoors, or throttled in the background.
+- Public tower databases can be incomplete, delayed, or wrong.
+- Carrier aggregation and modem behaviour can make identities appear unstable.
+- Operator-side lawful interception is not visible from these observations.
+- A sophisticated IMSI catcher may expose no anomaly available through public Android APIs.
+
+ICdetection is a transparent multi-signal anomaly auditor. It provides leads, historical context, and structured evidence about behaviour visible to Android; it cannot guarantee detection.
+
+---
+
+## 16. Troubleshooting
+
+### Most rules show `N/A`
+
+Check permissions, GPS, API configuration, connectivity, and the capability explanations. Allow time for baselines to mature. Some measurements may remain unavailable permanently on a particular modem.
+
+### A rule alternates between `N/A` and `PASS`
+
+Its required input is intermittent. Review its explanation and check GPS, neighbour reporting, latency, or API availability. This behaviour alone is not a threat.
+
+### A cell is `NOT FOUND`
+
+Public databases do not contain every cell. Check whether independent heuristics fail, whether the condition persists, and whether local historical behaviour remains consistent.
+
+### No forensic case appears
+
+A case starts at the first suspicious temporal phase. Confirm that monitoring is running and inspect incident history. Normal observations do not create cases.
+
+### A case is `INTERRUPTED`
+
+The service stopped or restarted before capture completed. The app retains the partial case honestly; it must not be relabelled as recovered.
+
+### Checksum verification fails
+
+A file changed after export or extraction was corrupted. Preserve the original ZIP, extract a fresh copy, and verify again.
+
+---
+
+## 17. Responsible use
+
+Use ICdetection only for lawful, defensive, educational, and research purposes. Respect local laws, privacy, operator terms, and restrictions concerning network monitoring.
+
+When reporting bugs, provide enough technical detail to reproduce the issue, but remove personal locations, credentials, tokens, and unrelated third-party information.
+
+---
+
+**Stay observant. Verify context. Preserve evidence carefully.**
+
+*Developed by Alexis Gómez Rodríguez.*
