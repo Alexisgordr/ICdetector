@@ -18,7 +18,8 @@ object DiagnosticEngine {
         val signalBaseline: SignalBaseline?,
         val rfFingerprint: CellRfFingerprint?,
         val rfStability: CellRfStability?,
-        val reputation: CellReputation?
+        val reputation: CellReputation?,
+        val transitionCoherence: TransitionCoherenceResult = TransitionCoherenceResult()
     )
 
     fun maturity(i: Inputs) = BaselineMaturity(
@@ -74,7 +75,9 @@ object DiagnosticEngine {
             HeuristicDiagnostic(14, "Downgrade de banda", r.bandDowngrade,
                 explanation(r.bandDowngrade, if (!i.previousBandAvailable) "N/A: falta una banda LTE anterior válida para comparar." else "N/A: la tecnología o banda actual no permite la comparación.")),
             HeuristicDiagnostic(15, "Estabilidad de identidad RF", r.rfStability,
-                explanation(r.rfStability, "N/A: historial RF insuficiente (${i.rfStability?.totalObservations ?: 0}/4 observaciones)."))
+                explanation(r.rfStability, "N/A: historial RF insuficiente (${i.rfStability?.totalObservations ?: 0}/4 observaciones).")),
+            HeuristicDiagnostic(16, "Coherencia de transición celular", r.transitionCoherence,
+                i.transitionCoherence.explanation)
         )
     }
 }

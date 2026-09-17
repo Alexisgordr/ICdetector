@@ -1,0 +1,1 @@
+Added H16 cellular-transition coherence and a read-only topology explorer for cells and directional handover routes. H16 checks movement, GPS quality, visible neighbours, locally learned zones, and trusted routes; it abstains without sufficient evidence and cannot trigger an alert by itself.

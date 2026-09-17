@@ -1,7 +1,7 @@
 ![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)
 ![Platform](https://img.shields.io/badge/Platform-Android%2010%2B-green.svg)
 ![Root Required](https://img.shields.io/badge/Root-Not%20Required-brightgreen.svg)
-![Status](https://img.shields.io/badge/Status-Stable%20v2.2.1-success.svg)
+![Status](https://img.shields.io/badge/Status-Stable%20v2.3.0-success.svg)
 [![Featured in Awesome Telco](https://img.shields.io/badge/Featured%20in-Awesome%20Telco-6f42c1.svg)](https://github.com/ravens/awesome-telco#imsi-catcher-detection)
 
 
@@ -54,15 +54,27 @@ The application operates from Android userland without requiring root or direct 
 
 > **⚠️ Upgrading from a version older than v2.1.1:** uninstall the previous version first. Android refuses an in-place update when the APK is not signed with the same keystore, and a clean database is required because records written before v2.1.1 may hold an antenna coordinate where the device GPS position belongs. Export your CSV first if you want to keep the old history. v2.1.2 and later releases signed with the same keystore update in place normally. See `Status.md`.
 
-ICdetection v2.2.1 is the current stable release. It retains the incident tracking, visible temporal confirmation phases, explainable capability diagnostics, baseline-maturity indicators, and bounded forensic case recorder introduced in v2.2.0, while correcting WiGLE quota handling and forensic prebuffer timing.
+ICdetection v2.3.0 is the current stable release. It adds H16, a conservative cellular-transition
+coherence check, while retaining incident tracking, visible temporal phases, explainable diagnostics,
+baseline-maturity indicators, quota-safe external verification, and bounded forensic capture.
 
-> **What v2.2.1 changes:** when WiGLE reports that its daily allowance is exhausted, ICdetection pauses WiGLE globally and persistently instead of retrying once per cell. OpenCellID and all local analysis remain active. The forensic prebuffer now uses monotonic time, so a system-clock adjustment cannot disturb its 60-second window.
+> **What v2.3.0 changes:** H16 compares a real handover with device movement, GPS quality, visible
+> neighbours, locally learned coverage zones, and trusted previous transitions. It has no fixed
+> “maximum tower distance” and returns `N/A` whenever the available evidence is not defensible.
+
+> **Topology explorer:** the history area now includes a local, read-only view of cells and
+> directional handover routes. Analysts can inspect route frequency, trusted observations, last
+> state, and recency without changing the detector or its learned baseline. A privacy-gated ZIP
+> export provides CSV, directed GraphML, metadata, and SHA-256 checksums for external analysis.
 
 > **What the v2.2 series means:** an observation at `1/3` can leave an incident record and start a forensic capture, while only a sustained event reaching `3/3` is presented as confirmed. This improves traceability without weakening the conservative confirmation model.
 
 v2.1.1 was the project's **data-integrity release**. It added no new heuristics and no new detection claims. It exists because the first two months of field collection surfaced problems that made that very collection unable to answer the questions it was designed to answer: sub-threshold heuristic failures were recorded with their reason erased, API-supplied tower coordinates were overwriting the device's own GPS positions in the history, two heuristics were firing on carrier-aggregation artifacts, and the history was so sparse that the RF fingerprint never woke up. `Status.md` and `v2.1Roadmap.md` carry the full evidence and the fixes.
 
-**The detection baseline remains frozen in v2.2.1.** This maintenance release does not change heuristic weights, penalties, temporal thresholds, or make new detection claims. The project still needs field data to establish which heuristics carry useful signal, the real false-positive rate, and whether the Bayesian likelihood ratios hold up against reality.
+**H16 begins as a conservative field-validation rule.** Its low weight cannot trigger an alert by
+itself, related mobility evidence is not double-counted, and its local transition baseline learns
+only from coherent events with mature geographic history. Field data is still required to validate
+its false-positive rate and the expert-estimated Bayesian likelihood ratios.
 
 Future work continues to focus on:
 
@@ -551,7 +563,7 @@ Two points matter for analysis:
 
 - **`Lat` / `Lon` are the device's own GPS position** at the moment of the observation, and nothing else. The antenna position reported by WiGLE/OpenCellID lives in its own `ApiLat` / `ApiLon` columns. Before v2.1 both were written to the same pair of columns, which silently mixed two different quantities.
 - **`FailedHeuristics` entries prefixed with `[sub-umbral]`** are heuristics that failed without reaching the alarm threshold. They are observations, not alerts, and they are recorded precisely so that false positives can be studied. Before v2.1 they were stored as `OK`.
-- **`Verified` is a label, not a verdict, and it has five values.** `VERIFIED` (a public database returned *this* cell — identity checked field by field — with a credible coordinate), `NOT_FOUND` (an explicit, reliable negative: OpenCellID's documented "cell not found", or WiGLE answering successfully with zero results), `REJECTED` (a reply arrived but did not survive the checks — wrong identity, sentinel or impossible coordinate, incomplete body), `ERROR` (no interpretable reply: quota, rejected key, timeout, 404) and `PENDING`. Since v2.1 **none of them changes `SecurityScore`**: the score comes only from the 14 heuristics, so that the label and the detector stay independent and can be cross-tabulated at the end of the collection phase. A `VERIFIED` older than 30 days is re-checked; the historical rows are kept either way.
+- **`Verified` is a label, not a verdict, and it has five values.** `VERIFIED` (a public database returned *this* cell — identity checked field by field — with a credible coordinate), `NOT_FOUND` (an explicit, reliable negative: OpenCellID's documented "cell not found", or WiGLE answering successfully with zero results), `REJECTED` (a reply arrived but did not survive the checks — wrong identity, sentinel or impossible coordinate, incomplete body), `ERROR` (no interpretable reply: quota, rejected key, timeout, 404) and `PENDING`. Since v2.1 **none of them changes `SecurityScore`**: the score comes only from the local heuristic engine, so that the label and the detector stay independent and can be cross-tabulated at the end of the collection phase. A `VERIFIED` older than 30 days is re-checked; the historical rows are kept either way.
 
 Exports may contain sensitive location and cellular metadata. Users should treat exported files as private forensic material.
 

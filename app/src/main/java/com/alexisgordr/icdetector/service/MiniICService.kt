@@ -226,6 +226,19 @@ class MiniICService : Service() {
     private var connectionRetryCount = 0
     private val cellChangeHistory = CopyOnWriteArrayList<Pair<String, Long>>()
 
+    private data class ServingSnapshot(
+        val cell: CellData,
+        val location: Location?,
+        val elapsedRealtimeMs: Long,
+        val neighborIdentities: Set<String>
+    )
+    private val transitionLock = Any()
+    private var lastServingSnapshot: ServingSnapshot? = null
+    private var activeTransitionResult = TransitionCoherenceResult()
+    private var activeTransitionIdentity: String? = null
+    private var activeTransitionExpiresAt = 0L
+    private val TRANSITION_RESULT_TTL_MS = 20_000L
+
     inner class LocalBinder : Binder() {
         fun getService(): MiniICService = this@MiniICService
     }
@@ -902,6 +915,13 @@ class MiniICService : Service() {
             scope.launch(Dispatchers.IO) {
                 val currentLocation = getCurrentLocation()
 
+                // H16 se prepara antes de analizar la celda: aquí todavía conservamos la última
+                // servidora. El resultado se retiene 20 s para que los tres ciclos temporales
+                // puedan observar el mismo handover, sin convertirlo en un fallo permanente.
+                val transitionCoherence = if (activeRaw != null && activeRaw.cellId != "N/A") {
+                    evaluateServingTransition(activeRaw, currentLocation, neighbors)
+                } else TransitionCoherenceResult()
+
                 val canQuery = activeRaw != null && activeRaw.cellId != "N/A" && currentLocation != null
 
                 val preloadedHistory: List<HistoryRecord>
@@ -1045,7 +1065,8 @@ class MiniICService : Service() {
                             recentRegisteredDbm = recentRegisteredDbmTrend.toList(),
                             rfStability = rfStability,
                             reputation = reputation,
-                            rfFingerprint = rfFingerprint
+                            rfFingerprint = rfFingerprint,
+                            transitionCoherence = transitionCoherence
                         ).copy(distanceToTowerMeters = towerDistance)
                     } else {
                         // Las vecinas no se evalúan como amenaza; se mantienen como contexto.
@@ -1078,7 +1099,8 @@ class MiniICService : Service() {
                             signalBaseline = signalBaseline,
                             rfFingerprint = rfFingerprint,
                             rfStability = rfStability,
-                            reputation = reputation
+                            reputation = reputation,
+                            transitionCoherence = transitionCoherence
                         )
                         val confirmedActive = temporalActive.copy(
                             heuristicDiagnostics = com.alexisgordr.icdetector.core.DiagnosticEngine.explain(
@@ -1148,6 +1170,74 @@ class MiniICService : Service() {
         } catch (e: Exception) {
             e.printStackTrace()
         }
+    }
+
+    private fun evaluateServingTransition(
+        active: CellData,
+        currentLocation: Location?,
+        neighbors: List<CellData>
+    ): TransitionCoherenceResult {
+        val now = SystemClock.elapsedRealtime()
+        val current = ServingSnapshot(
+            cell = active,
+            location = currentLocation?.let { Location(it) },
+            elapsedRealtimeMs = now,
+            neighborIdentities = neighbors.map { it.identityKey }.toSet()
+        )
+
+        val prior = synchronized(transitionLock) {
+            val previous = lastServingSnapshot
+            lastServingSnapshot = current
+            if (previous == null) return TransitionCoherenceResult()
+            if (previous.cell.identityKey == active.identityKey) {
+                return if (activeTransitionIdentity == active.identityKey && now <= activeTransitionExpiresAt) {
+                    activeTransitionResult
+                } else TransitionCoherenceResult(
+                    explanation = "N/A: esperando el siguiente handover para comprobar la movilidad."
+                )
+            }
+            // Evita que un resultado de la celda anterior sobreviva durante el cálculo del nuevo.
+            activeTransitionIdentity = null
+            activeTransitionResult = TransitionCoherenceResult()
+            previous
+        }
+
+        val elapsedSeconds = ((now - prior.elapsedRealtimeMs) / 1_000L).coerceAtLeast(0L)
+        val previousLocation = prior.location
+        val moved = if (previousLocation != null && currentLocation != null) {
+            previousLocation.distanceTo(currentLocation).toDouble()
+        } else null
+        val result = com.alexisgordr.icdetector.core.TransitionCoherence.evaluate(
+            com.alexisgordr.icdetector.core.TransitionCoherence.Input(
+                fromIdentity = prior.cell.identityKey,
+                toIdentity = active.identityKey,
+                elapsedSeconds = elapsedSeconds,
+                deviceDistanceMeters = moved,
+                previousAccuracyMeters = previousLocation?.accuracy,
+                currentAccuracyMeters = currentLocation?.accuracy,
+                fromSamples = dbHelper.getCellLocationSamples(prior.cell),
+                toSamples = dbHelper.getCellLocationSamples(active),
+                priorTrustedTransitions = dbHelper.getTrustedTransitionCount(
+                    prior.cell.identityKey, active.identityKey
+                ),
+                destinationWasNeighbor = active.identityKey in prior.neighborIdentities
+            )
+        )
+        dbHelper.recordCellTransition(result)
+        synchronized(transitionLock) {
+            activeTransitionIdentity = active.identityKey
+            activeTransitionResult = result
+            activeTransitionExpiresAt = now + TRANSITION_RESULT_TTL_MS
+        }
+        appendLog(
+            "[H16]",
+            when (result.status) {
+                HeuristicStatus.PASSED -> "Transición coherente: ${result.explanation}"
+                HeuristicStatus.FAILED -> "Transición incoherente: ${result.explanation}"
+                HeuristicStatus.NOT_EVALUATED -> result.explanation
+            }
+        )
+        return result
     }
 
     // Fix #2: último fix GPS aceptado como bueno, para validar plausibilidad del siguiente.

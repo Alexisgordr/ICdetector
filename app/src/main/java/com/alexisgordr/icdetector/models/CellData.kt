@@ -62,7 +62,9 @@ data class CellData(
     /** Diagnóstico del ciclo actual, incluida la causa concreta de cada N/A. */
     val heuristicDiagnostics: List<HeuristicDiagnostic> = emptyList(),
     /** Cantidad de evidencia histórica disponible para las reglas que aprenden localmente. */
-    val baselineMaturity: BaselineMaturity = BaselineMaturity()
+    val baselineMaturity: BaselineMaturity = BaselineMaturity(),
+    /** Resultado detallado del último handover; alimenta H16 y su tarjeta visible. */
+    val transitionCoherence: TransitionCoherenceResult = TransitionCoherenceResult()
 )
 
 /**

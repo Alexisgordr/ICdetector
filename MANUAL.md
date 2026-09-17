@@ -101,7 +101,7 @@ The score is a decision aid, not a measured probability that an IMSI catcher exi
 
 ## 5. Heuristic diagnostics
 
-Version 2.2.0 exposes the state and explanation of each evaluated rule:
+Version 2.3.0 exposes the state and explanation of each evaluated rule:
 
 - **PASS:** The rule ran with sufficient data and did not detect its suspicious condition.
 - **FAIL:** The rule ran and detected its suspicious condition. One failed rule does not automatically confirm a threat.
@@ -118,6 +118,38 @@ Common reasons for `N/A` include:
 - Android does not expose the required privileged ciphering information.
 
 `N/A` is an honest abstention, not automatically a defect. Read the diagnostic explanation to learn which prerequisite is missing.
+
+### H16: mobility sanity
+
+The **CORDURA DE MOVILIDAD · H16** card audits a real serving-cell transition. It combines the
+distance actually travelled by the phone, GPS accuracy, cells visible as neighbours immediately
+before the handover, the locally learned observation zones of both cells, and trusted previous
+transitions.
+
+- `COHERENT` means that the available movement evidence explains the handover.
+- `INCOHERENT` means that mature local evidence describes a physically implausible jump. H16 has
+  low weight and does not confirm an IMSI catcher on its own.
+- `N/A` usually means no handover occurred yet, GPS was insufficient, or either local zone is still
+  learning.
+
+There is deliberately no universal one-kilometre rule. Legitimate rural macrocells, urban small
+cells, terrain, load balancing, and operator policy make fixed tower-spacing thresholds unreliable.
+
+### Topology explorer
+
+Open **History → TOPOLOGY** to inspect the directional handover graph learned locally by the
+device. The summary reports unique cells, routes, total handovers, and routes with trusted H16
+observations. Each route preserves its full origin and destination identities, observation count,
+trusted count, last H16 state, trust ratio, and most recent timestamp.
+
+The filters separate all routes, learned routes, and routes that deserve review. This screen is
+strictly read-only: opening it, filtering it, or inspecting a route cannot change `SecurityScore`,
+H16, or the transition baseline.
+
+Use **EXPORT TOPOLOGY** to create a ZIP containing `cells.csv`, `transitions.csv`,
+`topology.graphml`, `metadata.json`, and `SHA256SUMS.txt`. GraphML can be opened by tools such as
+Gephi or Cytoscape. The export contains no API credentials, IMSI, IMEI, or telephone number, but
+cell identities and routes can reveal habitual movement patterns; review it before sharing.
 
 ---
 

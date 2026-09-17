@@ -18,6 +18,7 @@ import androidx.compose.ui.unit.sp
 import com.alexisgordr.icdetector.models.VerificationStatus
 import com.alexisgordr.icdetector.models.HeuristicStatus
 import com.alexisgordr.icdetector.models.HeuristicDiagnostic
+import com.alexisgordr.icdetector.models.TransitionCoherenceResult
 
 @Composable
 fun DataBox(modifier: Modifier, label: String, value: String, highlight: Boolean = false) {
@@ -118,6 +119,34 @@ fun HeuristicDiagnosticItem(item: HeuristicDiagnostic) {
                 fontFamily = FontFamily.Monospace,
                 modifier = Modifier.padding(start = 12.dp, top = 1.dp)
             )
+        }
+    }
+}
+
+@Composable
+fun TransitionCoherenceCard(result: TransitionCoherenceResult) {
+    val (label, color) = when (result.status) {
+        HeuristicStatus.PASSED -> "COHERENTE" to Color(0xFF4CAF50)
+        HeuristicStatus.FAILED -> "INCOHERENTE" to Color(0xFFCF6679)
+        HeuristicStatus.NOT_EVALUATED -> "N/A" to Color(0xFFFFA000)
+    }
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        color = color.copy(alpha = 0.07f),
+        border = BorderStroke(1.dp, color.copy(alpha = 0.55f)),
+        shape = RoundedCornerShape(3.dp)
+    ) {
+        Column(Modifier.padding(10.dp)) {
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                Text(
+                    "CORDURA DE MOVILIDAD · H16",
+                    color = Color(0xFFCCCCCC), fontSize = 10.sp,
+                    fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Bold
+                )
+                Text(label, color = color, fontSize = 10.sp, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Bold)
+            }
+            Spacer(Modifier.height(5.dp))
+            Text(result.explanation, color = Color(0xFF888888), fontSize = 8.sp, fontFamily = FontFamily.Monospace)
         }
     }
 }

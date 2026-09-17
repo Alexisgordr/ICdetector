@@ -1,5 +1,46 @@
 # Changelog
 
+## 2.3.0
+
+### H16 — cellular transition coherence
+
+- Added a conservative mobility heuristic that audits real serving-cell handovers against device
+  displacement, GPS accuracy, previously visible neighbours, locally learned cell zones, and
+  previously trusted transitions.
+- H16 does not impose a universal maximum distance between towers. It abstains when the GPS is
+  inaccurate, the interval is stale, or either geographic baseline is immature.
+- A transition fails only when the phone barely moved while two mature local coverage zones are
+  remote and non-overlapping, the destination was not a visible neighbour, and the route was not
+  previously learned.
+- Added a dedicated **Mobility sanity · H16** card with live `COHERENT`, `INCOHERENT`, or `N/A`
+  state and a human-readable explanation.
+- Handover results remain visible for 20 seconds so the existing three-cycle temporal confirmation
+  can evaluate them; they do not become permanent failures.
+- Added a persistent transition baseline (database schema 15). Only coherent transitions backed by
+  mature local baselines can teach a trusted route, preventing an unevaluable or suspicious event
+  from legitimising itself.
+- H16 carries a deliberately low 15-point penalty and a conservative expert-estimated likelihood
+  ratio of 1.8. It is grouped with the existing mobility family to prevent double-counting H11,
+  Timing Advance, ping-pong, and RF-identity evidence.
+- Added unit coverage for impossible jumps, immature history, inaccurate GPS, visible neighbours,
+  previously learned routes, and overlapping legitimate coverage zones.
+
+### Local handover topology explorer
+
+- Added a read-only **TOPOLOGY** view alongside antennas, incidents, and forensic cases.
+- Shows unique observed cells, directional routes, total handovers, and routes backed by trusted
+  H16 observations.
+- Each route exposes its complete origin/destination identity, observation count, trusted count,
+  last result, trust ratio, and most recent observation time.
+- Added `ALL`, `LEARNED`, and `REVIEW` filters. The explorer never changes the score or teaches the
+  baseline; it is an analyst view over evidence already collected by H16.
+- Added privacy-gated topology ZIP export with `cells.csv`, `transitions.csv`, directed GraphML,
+  machine-readable metadata, and SHA-256 checksums.
+
+### Release metadata
+
+- Updated release metadata to `versionName 2.3.0` and `versionCode 9`.
+
 ## 2.2.1
 
 ### WiGLE quota handling

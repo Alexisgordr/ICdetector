@@ -21,6 +21,10 @@ import com.alexisgordr.icdetector.models.ForensicCase
 import com.alexisgordr.icdetector.models.ForensicCaseState
 import com.alexisgordr.icdetector.models.ForensicSample
 import com.alexisgordr.icdetector.models.identityKey
+import com.alexisgordr.icdetector.models.CellLocationSample
+import com.alexisgordr.icdetector.models.TransitionCoherenceResult
+import com.alexisgordr.icdetector.models.HeuristicStatus
+import com.alexisgordr.icdetector.models.CellTransitionSummary
 import kotlin.math.sqrt
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -29,7 +33,7 @@ import java.util.Locale
 class CellDbHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME, null, DATABASE_VERSION) {
     companion object {
         private const val DATABASE_NAME = "icdetector_history.db"
-        private const val DATABASE_VERSION = 14
+        private const val DATABASE_VERSION = 15
         const val TABLE_HISTORY = "history"
         const val COLUMN_ID = "id"
         const val COLUMN_TIMESTAMP = "timestamp"
@@ -74,6 +78,7 @@ class CellDbHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME, 
         const val TABLE_INCIDENTS = "incidents"
         const val TABLE_FORENSIC_CASES = "forensic_cases"
         const val TABLE_FORENSIC_SAMPLES = "forensic_samples"
+        const val TABLE_CELL_TRANSITIONS = "cell_transitions"
 
         /**
          * Cuánto vale una verificación antes de volver a preguntar — v2.1.
@@ -137,6 +142,7 @@ class CellDbHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME, 
         createIndexes(db)
         createIncidentTable(db)
         createForensicTables(db)
+        createTransitionTable(db)
     }
 
     override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {
@@ -204,6 +210,114 @@ class CellDbHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME, 
         }
         if (oldVersion < 13) createIncidentTable(db)
         if (oldVersion < 14) createForensicTables(db)
+        if (oldVersion < 15) createTransitionTable(db)
+    }
+
+    private fun createTransitionTable(db: SQLiteDatabase) {
+        db.execSQL(
+            "CREATE TABLE IF NOT EXISTS $TABLE_CELL_TRANSITIONS (" +
+                "from_identity TEXT NOT NULL, to_identity TEXT NOT NULL, " +
+                "observations INTEGER NOT NULL DEFAULT 0, trusted_observations INTEGER NOT NULL DEFAULT 0, " +
+                "last_status TEXT NOT NULL, last_seen_ms INTEGER NOT NULL, " +
+                "PRIMARY KEY(from_identity, to_identity))"
+        )
+        db.execSQL(
+            "CREATE INDEX IF NOT EXISTS idx_cell_transitions_seen ON " +
+                "$TABLE_CELL_TRANSITIONS(last_seen_ms)"
+        )
+    }
+
+    /** Últimas posiciones GPS válidas donde este dispositivo observó la identidad indicada. */
+    fun getCellLocationSamples(cell: CellData, limit: Int = 40): List<CellLocationSample> {
+        if (cell.cellId == "N/A" || cell.radioTech == RadioTech.UNKNOWN) return emptyList()
+        val cutoff = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault()).format(
+            Date(System.currentTimeMillis() - 30L * 24 * 60 * 60 * 1000)
+        )
+        val out = mutableListOf<CellLocationSample>()
+        readableDatabase.rawQuery(
+            "SELECT $COLUMN_LAT,$COLUMN_LON FROM $TABLE_HISTORY " +
+                "WHERE $COLUMN_CID=? AND $COLUMN_MNC=? AND $COLUMN_TAC=? AND $COLUMN_MCC=? " +
+                "AND $COLUMN_RADIO=? AND $COLUMN_LAT IS NOT NULL AND $COLUMN_LON IS NOT NULL " +
+                "AND $COLUMN_TIMESTAMP>=? ORDER BY $COLUMN_ID DESC LIMIT ?",
+            arrayOf(cell.cellId, cell.mnc, cell.tac, cell.mcc, cell.radioTech.name, cutoff, limit.toString())
+        ).use { cursor ->
+            while (cursor.moveToNext()) {
+                val lat = cursor.getDouble(0)
+                val lon = cursor.getDouble(1)
+                if (lat in -90.0..90.0 && lon in -180.0..180.0 && !(lat == 0.0 && lon == 0.0)) {
+                    out += CellLocationSample(lat, lon)
+                }
+            }
+        }
+        return out
+    }
+
+    fun getTrustedTransitionCount(fromIdentity: String, toIdentity: String): Int =
+        readableDatabase.rawQuery(
+            "SELECT trusted_observations FROM $TABLE_CELL_TRANSITIONS " +
+                "WHERE from_identity=? AND to_identity=?",
+            arrayOf(fromIdentity, toIdentity)
+        ).use { cursor -> if (cursor.moveToFirst()) cursor.getInt(0) else 0 }
+
+    /** Vista agregada para el explorador técnico; no modifica el baseline ni la detección. */
+    fun getCellTransitions(limit: Int = 250): List<CellTransitionSummary> {
+        val out = mutableListOf<CellTransitionSummary>()
+        readableDatabase.rawQuery(
+            "SELECT from_identity,to_identity,observations,trusted_observations,last_status,last_seen_ms " +
+                "FROM $TABLE_CELL_TRANSITIONS ORDER BY last_seen_ms DESC LIMIT ?",
+            arrayOf(limit.coerceIn(1, 1_000).toString())
+        ).use { cursor ->
+            while (cursor.moveToNext()) {
+                out += CellTransitionSummary(
+                    fromIdentity = cursor.getString(0),
+                    toIdentity = cursor.getString(1),
+                    observations = cursor.getInt(2),
+                    trustedObservations = cursor.getInt(3),
+                    lastStatus = runCatching { HeuristicStatus.valueOf(cursor.getString(4)) }
+                        .getOrDefault(HeuristicStatus.NOT_EVALUATED),
+                    lastSeenMs = cursor.getLong(5)
+                )
+            }
+        }
+        return out
+    }
+
+    /** PASSED incrementa el baseline fiable; FAILED/N/A solo quedan auditados como observación. */
+    fun recordCellTransition(result: TransitionCoherenceResult) {
+        val from = result.fromIdentity ?: return
+        val to = result.toIdentity ?: return
+        val trustedIncrement = if (result.status == HeuristicStatus.PASSED && result.eligibleForLearning) 1 else 0
+        val db = writableDatabase
+        db.beginTransaction()
+        try {
+            val changed = db.update(
+                TABLE_CELL_TRANSITIONS,
+                ContentValues().apply {
+                    // Los contadores se actualizan abajo mediante SQL para que el incremento sea
+                    // atómico. Aquí solo se refrescan los metadatos del último handover.
+                    put("last_status", result.status.name)
+                    put("last_seen_ms", System.currentTimeMillis())
+                },
+                "from_identity=? AND to_identity=?", arrayOf(from, to)
+            )
+            if (changed > 0) {
+                db.execSQL(
+                    "UPDATE $TABLE_CELL_TRANSITIONS SET observations=observations+1, " +
+                        "trusted_observations=trusted_observations+? " +
+                        "WHERE from_identity=? AND to_identity=?",
+                    arrayOf<Any>(trustedIncrement, from, to)
+                )
+            } else {
+                db.insertOrThrow(TABLE_CELL_TRANSITIONS, null, ContentValues().apply {
+                    put("from_identity", from); put("to_identity", to)
+                    put("observations", 1); put("trusted_observations", trustedIncrement)
+                    put("last_status", result.status.name); put("last_seen_ms", System.currentTimeMillis())
+                })
+            }
+            db.setTransactionSuccessful()
+        } finally {
+            db.endTransaction()
+        }
     }
 
     private fun createForensicTables(db: SQLiteDatabase) {
@@ -704,6 +818,7 @@ class CellDbHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME, 
         db.execSQL("DELETE FROM $TABLE_INCIDENTS")
         db.execSQL("DELETE FROM $TABLE_FORENSIC_SAMPLES")
         db.execSQL("DELETE FROM $TABLE_FORENSIC_CASES")
+        db.execSQL("DELETE FROM $TABLE_CELL_TRANSITIONS")
     }
 
     /**
@@ -726,6 +841,7 @@ class CellDbHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME, 
             }
             oldCases.forEach { id -> db.delete(TABLE_FORENSIC_SAMPLES, "case_id=?", arrayOf(id.toString())) }
             db.delete(TABLE_FORENSIC_CASES, "updated_at < ?", arrayOf(threshold))
+            db.delete(TABLE_CELL_TRANSITIONS, "last_seen_ms < ?", arrayOf(cutoff.toString()))
             historyDeleted
         } catch (_: Exception) {
             0

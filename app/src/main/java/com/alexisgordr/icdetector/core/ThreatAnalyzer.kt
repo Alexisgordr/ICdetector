@@ -4,6 +4,7 @@ import android.location.Location
 import com.alexisgordr.icdetector.models.CellData
 import com.alexisgordr.icdetector.models.HeuristicReport
 import com.alexisgordr.icdetector.models.HeuristicStatus
+import com.alexisgordr.icdetector.models.TransitionCoherenceResult
 import com.alexisgordr.icdetector.models.HistoryRecord
 import com.alexisgordr.icdetector.models.SignalBaseline
 import com.alexisgordr.icdetector.models.CellRfStability
@@ -134,7 +135,8 @@ object ThreatAnalyzer {
         recentRegisteredDbm: List<Int> = emptyList(),
         rfStability: CellRfStability? = null,
         reputation: CellReputation? = null,
-        rfFingerprint: CellRfFingerprint? = null
+        rfFingerprint: CellRfFingerprint? = null,
+        transitionCoherence: TransitionCoherenceResult = TransitionCoherenceResult()
     ): CellData {
         val reasons = mutableListOf<String>()
         var score = 100
@@ -153,6 +155,7 @@ object ThreatAnalyzer {
         var hBandDowngrade = true
         var hRfStability = true
         var hLatencyCorrelation = true
+        var hTransitionCoherence = true
 
         var eIsolated = !isWifiActive
         var ePowerJump = false
@@ -169,6 +172,7 @@ object ThreatAnalyzer {
         var eSignalBaseline = false
         var eBandDowngrade = false
         var eRfStability = false
+        val eTransitionCoherence = transitionCoherence.status != HeuristicStatus.NOT_EVALUATED
 
         // 1. Neighbor analysis
         if (!isWifiActive && neighbors.isEmpty() && active.dbm >= -80) {
@@ -524,6 +528,15 @@ object ThreatAnalyzer {
             }
         }
 
+        // 16. Coherencia de transición celular. La geometría y la madurez se calculan fuera del
+        // motor para mantener este analizador determinista. Peso bajo: nunca acusa por sí sola;
+        // solo refuerza otras señales si un handover contradice GPS, vecinas e historial local.
+        if (transitionCoherence.status == HeuristicStatus.FAILED) {
+            hTransitionCoherence = false
+            reasons.add("Transición celular incoherente")
+            score -= 15
+        }
+
         // Probabilidad Bayesiana de amenaza
         val failedList = buildList {
             if (!hIsolated) add("isolated")
@@ -540,6 +553,7 @@ object ThreatAnalyzer {
             if (!hSignalBaseline) add("signalBaseline")
             if (!hBandDowngrade) add("bandDowngrade")
             if (!hRfStability) add("rfStability")
+            if (!hTransitionCoherence) add("transitionCoherence")
         }
 
         // El estado de verificación se le sigue pasando al bayesiano, pero sus razones de
@@ -571,7 +585,7 @@ object ThreatAnalyzer {
         // queremos AVERIGUAR si el estado de verificación aporta señal. Eso no se puede medir si ya
         // está metido dentro de la puntuación que sirve de referencia — se estaría contrastando el
         // dato consigo mismo. Queda como etiqueta independiente (columna `Verified` del CSV) junto
-        // a un score que sale solo de las 14 heurísticas. Al final de los tres meses se podrá
+        // a un score que sale solo de las heurísticas locales. Al final de los tres meses se podrá
         // cruzar una cosa con la otra y contestar la pregunta con datos.
         //
         // La ortogonalidad es completa: ninguna heurística lee `active.verified`. La última que lo
@@ -607,7 +621,8 @@ object ThreatAnalyzer {
             latencyCorrelation = status(eLatencyCorrelation, hLatencyCorrelation),
             signalBaseline = status(eSignalBaseline, hSignalBaseline),
             bandDowngrade = status(eBandDowngrade, hBandDowngrade),
-            rfStability = status(eRfStability, hRfStability)
+            rfStability = status(eRfStability, hRfStability),
+            transitionCoherence = status(eTransitionCoherence, hTransitionCoherence)
         )
 
         return active.copy(
@@ -615,7 +630,8 @@ object ThreatAnalyzer {
             suspiciousReason = if (reasons.isNotEmpty()) reasons.joinToString(" | ") else null,
             heuristicReport = report,
             securityScore = finalScore,
-            anomalyConfidence = anomalyConfidence
+            anomalyConfidence = anomalyConfidence,
+            transitionCoherence = transitionCoherence
         )
     }
 }

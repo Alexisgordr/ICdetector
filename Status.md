@@ -1,17 +1,31 @@
 # ICdetection Status
 
-## v2.2.1 — quota-safe external verification maintenance release
+## v2.3.0 — mobility-transition coherence release
 
-**Release:** stable  
-**Version code:** 8
-**Database schema:** 14  
-**Detection baseline:** unchanged
+**Release:** stable
+**Version code:** 9
+**Database schema:** 15
+**Detection baseline:** H16 added conservatively
 
-v2.2.1 is a focused maintenance release built on the incident and forensic capabilities introduced
-in v2.2.0. It does not add a heuristic, retune the threat score, lower the three-cycle confirmation
-threshold, change the database schema, or make a new detection claim.
+v2.3.0 adds H16, a local-first check for physically incoherent serving-cell transitions. It does
+not use a fixed tower-spacing rule: it compares the handover with actual device motion, GPS
+quality, previous neighbours, locally learned cell zones, and trusted transition history.
 
-### v2.2.1 maintenance changes
+### v2.3.0 detection changes
+
+- H16 reports `COHERENT`, `INCOHERENT`, or an explained `N/A` in a dedicated mobility-sanity card.
+- Poor GPS, stale observations, and immature baselines cause abstention rather than suspicion.
+- A fail requires a short, near-stationary handover between mature, remote, non-overlapping local
+  zones when the destination was not a neighbour and the route was not previously trusted.
+- The low `-15` weight cannot trigger the `<70` alert threshold alone.
+- H16 shares the Bayesian mobility group with H11, Timing Advance, ping-pong, and RF stability, so
+  correlated evidence is not multiplied.
+- Schema 15 persists transition counts. Only coherent transitions with mature geographic evidence
+  increase the trusted count; failed and unavailable events cannot teach themselves as normal.
+- The result remains active for 20 seconds, allowing the existing `1/3 → 3/3` confirmation system
+  to observe it without leaving a permanent state on the cell.
+
+### Retained v2.2.1 maintenance behavior
 
 - WiGLE rate limiting is identified explicitly from HTTP `429` and quota-related API messages.
 - A WiGLE quota failure now activates one global cooldown instead of one retry loop per cell.
@@ -34,6 +48,8 @@ threshold, change the database schema, or make a new detection claim.
 | Temporal phases | Active | `1/3`, `2/3`, and `3/3` are visible and persisted with incident context. |
 | Incident black box | Active | Opens at `1/3`; records the highest phase, score, confidence, reason, and diagnostic snapshot. |
 | Rule diagnostics | Active | Rules report `PASS`, `FAIL`, or explained `N/A` according to available context. |
+| Handover topology | Active | Read-only route explorer exposes cells, direction, frequency, trusted observations, last state, and recency. |
+| Topology export | Active | ZIP includes cell/transition CSV, directed GraphML, metadata, and SHA-256 checksums after a privacy warning. |
 | Baseline maturity | Active | Shows readiness of power, quality-fingerprint, PCI-identity, and reputation histories. |
 | Forensic prebuffer | Active | Holds up to 60 seconds / 180 recent samples using monotonic timing. |
 | WiGLE quota control | Active | Pauses WiGLE globally and persistently after rate limiting; OpenCellID and local analysis continue. |
@@ -244,7 +260,7 @@ exactly why the verification no longer affects the score at all (see below).
   outweighs both: this collection phase exists to find out **whether** the verification status
   carries signal, and that cannot be measured while it is baked into the score used as the
   reference. It stays as an independent label in the `Verified` column, next to a score that comes
-  only from the 14 heuristics. `check_export.py` now prints both halves of that comparison.
+  only from the local heuristic engine. `check_export.py` now prints both halves of that comparison.
 - **"Not in the database" and "I could not ask" are no longer the same answer.** There is a fifth
   state, `REJECTED`, for a reply that arrives but does not survive our checks: an identity that does
   not match, a sentinel coordinate, an impossible distance, an incomplete body. `NOT_FOUND` is now
@@ -404,7 +420,7 @@ mismo la verificación ya no toca la puntuación (más abajo).
   metodológica, que pesa más que las dos: esta fase existe para averiguar **si** el estado de
   verificación aporta señal, y eso no se puede medir mientras está metido dentro de la puntuación
   que sirve de referencia. Queda como etiqueta independiente en la columna `Verified`, junto a un
-  score que sale solo de las 14 heurísticas. `check_export.py` imprime ya las dos mitades de esa
+  score que sale solo del motor heurístico local. `check_export.py` imprime ya las dos mitades de esa
   comparación.
 - **"No está en la base" y "no he podido preguntar" dejan de ser la misma respuesta.** Hay un quinto
   estado, `REJECTED`, para la respuesta que llega pero no supera nuestras comprobaciones: identidad

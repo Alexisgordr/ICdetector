@@ -31,7 +31,8 @@ data class HeuristicReport(
     val latencyCorrelation: HeuristicStatus = HeuristicStatus.NOT_EVALUATED,
     val signalBaseline: HeuristicStatus = HeuristicStatus.NOT_EVALUATED,
     val bandDowngrade: HeuristicStatus = HeuristicStatus.NOT_EVALUATED,
-    val rfStability: HeuristicStatus = HeuristicStatus.NOT_EVALUATED
+    val rfStability: HeuristicStatus = HeuristicStatus.NOT_EVALUATED,
+    val transitionCoherence: HeuristicStatus = HeuristicStatus.NOT_EVALUATED
 ) {
     // Compatibilidad: una regla que se abstiene no debe activar una alarma.
     val isolatedCellPassed get() = isolatedCell.passed
@@ -50,6 +51,7 @@ data class HeuristicReport(
     val signalBaselinePassed get() = signalBaseline.passed
     val bandDowngradePassed get() = bandDowngrade.passed
     val rfStabilityPassed get() = rfStability.passed
+    val transitionCoherencePassed get() = transitionCoherence.passed
 
     val evaluatedCount: Int
         get() = statuses.count { it != HeuristicStatus.NOT_EVALUATED }
@@ -65,13 +67,15 @@ data class HeuristicReport(
         "H4" to mncCount, "H5" to tacDeviation, "H6" to taDistance,
         "H7" to ghostNeighbors, "H8" to arfcnSanity, "H9" to hardwareCiphering,
         "H10" to pingPong, "H11" to mobileCellId, "H12" to latencyCorrelation,
-        "H13" to signalBaseline, "H14" to bandDowngrade, "H15" to rfStability
+        "H13" to signalBaseline, "H14" to bandDowngrade, "H15" to rfStability,
+        "H16" to transitionCoherence
     ).joinToString(";") { (id, status) -> "$id=${status.name}" }
 
     private val statuses: List<HeuristicStatus>
         get() = listOf(
             isolatedCell, powerJump, mccConsistency, mncCount, tacDeviation,
             taDistance, ghostNeighbors, arfcnSanity, hardwareCiphering, pingPong,
-            mobileCellId, latencyCorrelation, signalBaseline, bandDowngrade, rfStability
+            mobileCellId, latencyCorrelation, signalBaseline, bandDowngrade, rfStability,
+            transitionCoherence
         )
 }
