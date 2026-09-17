@@ -99,7 +99,7 @@ designed to answer, and add the tooling to check that the second one can.
 
 ### Final verification hardening
 
-- **Campaign baseline starts clean on 2026-09-15 (frozen build v2.1). The campaign continues on v2.2.0 from 2026-09-17: the   engine, weights and CSV format are identical, so the series is continuous.
+- Campaign baseline starts clean on 2026-09-15 (frozen build v2.1). The campaign continues on v2.2.0 from 2026-09-17: the     engine, weights and CSV format are identical, so the series is continuous.
 - **Quota-safe inconclusive retry.** `REJECTED` is retried after one hour, not every 15 minutes.
 - **Ping-pong remains observable without creating a raw alarm.** A one-cycle detection writes an
   informational terminal line with no tone; only the confirmed alarm pipeline may sound.
