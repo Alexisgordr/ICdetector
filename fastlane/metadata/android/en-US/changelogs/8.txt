@@ -1,0 +1,1 @@
+Fixed WiGLE quota handling. When the daily query allowance is exhausted, ICdetection now pauses WiGLE requests globally and persistently instead of retrying every minute for each cell. OpenCellID and local heuristic analysis remain fully active during the cooldown.

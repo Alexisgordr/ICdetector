@@ -34,6 +34,13 @@ import java.net.Proxy
  */
 object WigleClient {
 
+    /** Clasificación pura para poder probar la cuota sin realizar peticiones reales. */
+    internal fun isRateLimited(httpCode: Int, message: String?): Boolean =
+        httpCode == 429 ||
+            message?.contains("too many queries", ignoreCase = true) == true ||
+            message?.contains("rate limit", ignoreCase = true) == true ||
+            message?.contains("quota", ignoreCase = true) == true
+
     fun tryWigleSync(
         cell: CellData,
         wigleApiName: String,
@@ -77,6 +84,17 @@ object WigleClient {
                 val body = response.body.string()
                 val json = runCatching { JSONObject(body) }.getOrNull()
                 val crudo = body.take(160).replace(Regex("\\s+"), " ")
+                val mensajeApi = json?.optTexto("message")
+                val rateLimited = isRateLimited(response.code, mensajeApi)
+
+                // WiGLE suele contestar 429 sin Retry-After, pero si lo proporciona respetamos
+                // el número de segundos. La pausa de seguridad cuando falta se decide en el
+                // servicio, que además la persiste entre reinicios.
+                val retryAfterMillis = response.header("Retry-After")
+                    ?.trim()
+                    ?.toLongOrNull()
+                    ?.takeIf { it > 0L }
+                    ?.let { seconds -> seconds.coerceAtMost(Long.MAX_VALUE / 1000L) * 1000L }
 
                 val results = json?.optJSONArray("results")
                 val esperada = VerificationDecision.Identity(
@@ -95,7 +113,7 @@ object WigleClient {
                     success = json?.optBoolean("success", false) ?: false,
                     resultCount = results?.length() ?: 0,
                     identityOk = coincidente != null,
-                    mensajeApi = json?.optTexto("message"),
+                    mensajeApi = mensajeApi,
                     crudo = crudo
                 )
 
@@ -103,7 +121,9 @@ object WigleClient {
                     status = veredicto.status,
                     source = VerificationSource.WIGLE,
                     record = if (veredicto.status == VerificationStatus.VERIFIED) coincidente else null,
-                    reason = veredicto.reason
+                    reason = veredicto.reason,
+                    failure = if (rateLimited) VerificationFailure.RATE_LIMITED else VerificationFailure.NONE,
+                    retryAfterMillis = retryAfterMillis
                 )
             }
         } catch (_: Exception) {

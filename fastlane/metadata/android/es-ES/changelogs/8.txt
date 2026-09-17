@@ -1,0 +1,1 @@
+Corregida la gestión de la cuota de WiGLE. Cuando se agota el límite diario, ICdetection pausa las consultas a WiGLE de forma global y persistente en lugar de reintentarlas cada minuto para cada celda. OpenCellID y el análisis heurístico local siguen completamente activos durante la pausa.
