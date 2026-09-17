@@ -25,6 +25,7 @@ import com.alexisgordr.icdetector.core.VerificationDecision
 import com.alexisgordr.icdetector.models.*
 import com.alexisgordr.icdetector.network.OpenCellIdClient
 import com.alexisgordr.icdetector.network.WigleClient
+import com.alexisgordr.icdetector.network.VerificationFailure
 import com.alexisgordr.icdetector.storage.CellDbHelper
 import com.alexisgordr.icdetector.telephony.CellParser
 import com.alexisgordr.icdetector.forensics.ForensicRecorder
@@ -170,6 +171,11 @@ class MiniICService : Service() {
     private val verificationCache = ConcurrentHashMap<String, VerificationStatus>()
     // Marca temporal del último ERROR por celda, para permitir reintentos sin saturar la API
     private val lastVerificationErrorTime = ConcurrentHashMap<String, Long>()
+    // El límite de WiGLE es global para la cuenta, no para una celda. Persistirlo impide que un
+    // reinicio del servicio vuelva a consumir peticiones cuando WiGLE ya ha dicho que la cuota
+    // diaria está agotada.
+    private var wigleRateLimitedUntil = 0L
+    private var hasLoggedWigleCooldown = false
     // Marca temporal del último NOT_FOUND por celda. A diferencia de ERROR (fallo de red
     // transitorio, reintento a 60s), NOT_FOUND es una respuesta afirmativa de la API ("no está
     // en la base"). Reintentamos en vivo cada 1h por si una torre legítima recién desplegada se
@@ -255,6 +261,11 @@ class MiniICService : Service() {
         openCellIdKey = prefs.getString("opencellid_key", "") ?: ""
         wigleApiName = prefs.getString("wigle_api_name", "") ?: ""
         wigleApiToken = prefs.getString("wigle_api_token", "") ?: ""
+        wigleRateLimitedUntil = prefs.getLong(KEY_WIGLE_RATE_LIMITED_UNTIL, 0L)
+        if (wigleRateLimitedUntil <= System.currentTimeMillis()) {
+            wigleRateLimitedUntil = 0L
+            prefs.edit().remove(KEY_WIGLE_RATE_LIMITED_UNTIL).apply()
+        }
         isProxyEnabled = prefs.getBoolean("proxy_enabled", false)
         isLatencyDetectionEnabled = prefs.getBoolean("latency_detection_enabled", false)
         loadPersistedLastAcceptedLocation()  // referencia de plausibilidad superviviente a reinicios
@@ -1597,14 +1608,44 @@ class MiniICService : Service() {
                 }
             }
 
-            // Refuerzo WiGLE. Se pregunta siempre que OpenCellID no haya resuelto — incluso si
-            // contestó "verificada sin coordenada", porque WiGLE puede traerla.
-            if (wigleApiName.isNotBlank() && wigleApiToken.isNotBlank()) {
+            // Refuerzo WiGLE. Se pregunta cuando OpenCellID no ha resuelto, salvo que WiGLE haya
+            // comunicado que la cuota de TODA la cuenta está agotada. Ese bloqueo es global y
+            // persistente: reintentar por celda cada 60 s no puede recuperar cuota y solo genera
+            // tráfico inútil.
+            val wigleConfigured = wigleApiName.isNotBlank() && wigleApiToken.isNotBlank()
+            val now = System.currentTimeMillis()
+            val wigleCoolingDown = now < wigleRateLimitedUntil
+            if (wigleConfigured && wigleCoolingDown) {
+                finalStatus = mejorRespuesta(finalStatus, VerificationStatus.ERROR)
+                if (!hasLoggedWigleCooldown) {
+                    val minutes = ((wigleRateLimitedUntil - now + 59_999L) / 60_000L).coerceAtLeast(1L)
+                    appendLog("[API]", "WiGLE: cuota diaria agotada; consultas pausadas (${minutes} min restantes). OpenCellID y el análisis local siguen activos.")
+                    hasLoggedWigleCooldown = true
+                }
+            } else if (wigleConfigured) {
                 val res = WigleClient.tryWigleSync(cell, wigleApiName, wigleApiToken, isProxyEnabled, client)
                 val s = res.status
                 val data = res.record
                 appendLog("[API]", "WiGLE → ${s.name}")
                 res.reason?.let { appendLog("[API]", it) }
+
+                if (res.failure == VerificationFailure.RATE_LIMITED) {
+                    val cooldown = (res.retryAfterMillis ?: WIGLE_RATE_LIMIT_FALLBACK_MS)
+                        .coerceAtLeast(WIGLE_RATE_LIMIT_MINIMUM_MS)
+                    wigleRateLimitedUntil = System.currentTimeMillis() + cooldown
+                    getSharedPreferences("miniic_prefs", MODE_PRIVATE).edit()
+                        .putLong(KEY_WIGLE_RATE_LIMITED_UNTIL, wigleRateLimitedUntil)
+                        .apply()
+                    hasLoggedWigleCooldown = true
+                    appendLog("[API]", "WiGLE: cuota diaria agotada. No se volverá a consultar durante 24 h (o el plazo indicado por el servidor). OpenCellID y el análisis local siguen activos.")
+                } else if (wigleRateLimitedUntil != 0L) {
+                    // La pausa ya venció y WiGLE volvió a contestar: eliminamos el estado antiguo.
+                    wigleRateLimitedUntil = 0L
+                    hasLoggedWigleCooldown = false
+                    getSharedPreferences("miniic_prefs", MODE_PRIVATE).edit()
+                        .remove(KEY_WIGLE_RATE_LIMITED_UNTIL)
+                        .apply()
+                }
                 if (s == VerificationStatus.VERIFIED && data != null) {
                     val lat = data.optDouble("trilat", data.optDouble("lat", Double.NaN))
                     val lon = data.optDouble("trilong", data.optDouble("lon", Double.NaN))
@@ -2259,6 +2300,10 @@ class MiniICService : Service() {
         // Persistencia de la referencia de plausibilidad GPS entre reinicios (cierra el hueco
         // de arranque de isPlausibleFix, donde el primer fix se aceptaba sin comparar).
         private const val KEY_LAST_LOC = "last_accepted_loc"
+        private const val KEY_WIGLE_RATE_LIMITED_UNTIL = "wigle_rate_limited_until"
+        private const val WIGLE_RATE_LIMIT_FALLBACK_MS = 24L * 60L * 60L * 1000L
+        // Evita que un Retry-After anormalmente corto reactive un bucle de cuota por celda.
+        private const val WIGLE_RATE_LIMIT_MINIMUM_MS = 60L * 60L * 1000L
         // Si la referencia persistida es más vieja que esto (p. ej. viaje largo con la app
         // cerrada), se ignora y el próximo fix se trata como bootstrap, evitando falsos rechazos.
         private const val LOCATION_REFERENCE_MAX_AGE = 6L * 60 * 60 * 1000  // 6 h

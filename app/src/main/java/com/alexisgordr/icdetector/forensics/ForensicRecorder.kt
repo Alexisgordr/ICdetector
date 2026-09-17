@@ -47,7 +47,12 @@ class ForensicRecorder(private val db: CellDbHelper) {
         val payload = payload(active, neighbors, location, latencyState, logs)
         val sample = Buffered(wall, elapsed, event, payload)
         buffer.addLast(sample)
-        while (buffer.size > MAX_BUFFER_SAMPLES || (buffer.isNotEmpty() && wall - buffer.peekFirst().wall > PRE_WINDOW_MS)) {
+        // elapsedRealtime es monotónico: un ajuste manual/NTP de la hora no vacía ni congela el
+        // prebuffer. El acceso seguro elimina además el aviso nullable de peekFirst() en Kotlin.
+        while (
+            buffer.size > MAX_BUFFER_SAMPLES ||
+            (buffer.peekFirst()?.let { elapsed - it.elapsed > PRE_WINDOW_MS } == true)
+        ) {
             buffer.removeFirst()
         }
 

@@ -6,6 +6,9 @@ import org.json.JSONObject
 /** De dónde vino una respuesta de verificación. */
 enum class VerificationSource { OPENCELLID, WIGLE }
 
+/** Motivo técnico que puede requerir una política de reintento específica. */
+enum class VerificationFailure { NONE, RATE_LIMITED }
+
 /**
  * Resultado de consultar a una base pública.
  *
@@ -21,6 +24,8 @@ enum class VerificationSource { OPENCELLID, WIGLE }
  * @property source qué base contestó.
  * @property record respuesta cruda cuando hay verificación, para sacar la coordenada.
  * @property reason motivo en texto llano para el terminal, cuando no hay verificación.
+ * @property failure fallo estructurado que el servicio debe gestionar sin analizar [reason].
+ * @property retryAfterMillis pausa solicitada por la fuente, si la respuesta la proporciona.
  * @property queriedAt cuándo se preguntó. Lo necesita el TTL de las verificaciones.
  */
 data class VerificationOutcome(
@@ -28,5 +33,7 @@ data class VerificationOutcome(
     val source: VerificationSource,
     val record: JSONObject? = null,
     val reason: String? = null,
+    val failure: VerificationFailure = VerificationFailure.NONE,
+    val retryAfterMillis: Long? = null,
     val queriedAt: Long = System.currentTimeMillis()
 )
