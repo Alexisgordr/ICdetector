@@ -2,6 +2,8 @@
 ![Platform](https://img.shields.io/badge/Platform-Android%2010%2B-green.svg)
 ![Root Required](https://img.shields.io/badge/Root-Not%20Required-brightgreen.svg)
 ![Status](https://img.shields.io/badge/Status-Stable%20v2.2.0-success.svg)
+[![awesome-telco](https://awesome.re/badge.svg)](https://github.com/ravens/awesome-telco)
+
 
 <table>
   
