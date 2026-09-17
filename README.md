@@ -72,8 +72,23 @@ No new detection claims should be assumed until they are validated against real-
 
 ---
 
+# Community Recognition
+
+[![Featured in awesome-telco](https://img.shields.io/badge/Featured%20in-awesome--telco-4c8bf5.svg)](https://github.com/ravens/awesome-telco)
+
+ICdetection is listed in [**awesome-telco**](https://github.com/ravens/awesome-telco), a curated
+community collection of telecommunications software, research resources, protocols, datasets, and
+security tooling. Its inclusion helps researchers and telecommunications practitioners discover the
+project alongside other open-source tools in the field.
+
+Inclusion in a community-maintained list is recognition and visibility, not an independent security
+audit, certification, or endorsement of ICdetection's detection results.
+
+---
+
 ## Table of Contents
 
+- [Community Recognition](#community-recognition)
 - [Development Disclosure](#development-disclosure)
 - [Project Philosophy](#project-philosophy)
 - [Technical Limitations](#technical-limitations)
