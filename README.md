@@ -1,7 +1,8 @@
 ![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)
 ![Platform](https://img.shields.io/badge/Platform-Android%2010%2B-green.svg)
 ![Root Required](https://img.shields.io/badge/Root-Not%20Required-brightgreen.svg)
-![Status](https://img.shields.io/badge/Status-Stable%20v2.1.2-success.svg)
+![Status](https://img.shields.io/badge/Status-Stable%20v2.1.3-success.svg)
+[![Featured in Awesome Telco](https://img.shields.io/badge/Featured%20in-Awesome%20Telco-6f42c1.svg)](https://github.com/ravens/awesome-telco#imsi-catcher-detection)
 
 <table>
   
@@ -52,13 +53,15 @@ The application operates from Android userland without requiring root or direct 
 
 > **⚠️ Upgrading from a version older than v2.1.1:** uninstall the previous version first. Android refuses an in-place update when the APK is not signed with the same keystore, and a clean database is required because records written before v2.1.1 may hold an antenna coordinate where the device GPS position belongs. Export your CSV first if you want to keep the old history. v2.1.2 and later releases signed with the same keystore update in place normally. See `Status.md`.
 
-ICdetection v2.1.2 is the current stable release and is considered feature-complete within the limits of Android userland telemetry.
+ICdetection v2.1.3 is the current stable release and is considered feature-complete within the limits of Android userland telemetry.
 
-> **🚧 v2.1.3 is coming soon.** The next release is being prepared with multiple interface refinements, clearer live heuristic-status reporting, more transparent handling of unavailable telemetry, and other usability improvements. The current stable release remains v2.1.2 until testing is complete.
+**v2.1.3 is a transparency and usability release.** It does not introduce new detection claims. Instead, it makes the live audit accurately distinguish between a rule that passed, a rule that failed, and a rule that could not be evaluated with the telemetry currently available. All 15 analysis rules now expose a dynamic `PASSED`, `FAILED`, or `N/A` state and are recalculated on every analysis cycle, so their state can change as fresh radio, location, latency, or historical context becomes available.
+
+The release also reports how many rules were actually evaluated, failed, or lacked sufficient data; replaces categorical "safe" wording with the narrower "no anomalies detected" conclusion; and improves the history-card layout on narrow screens.
 
 v2.1.1 was the project's **data-integrity release**. It added no new heuristics and no new detection claims. It exists because the first two months of field collection surfaced problems that made that very collection unable to answer the questions it was designed to answer: sub-threshold heuristic failures were recorded with their reason erased, API-supplied tower coordinates were overwriting the device's own GPS positions in the history, two heuristics were firing on carrier-aggregation artifacts, and the history was so sparse that the RF fingerprint never woke up. `Status.md` and `v2.1Roadmap.md` carry the full evidence and the fixes.
 
-**The v2.1.2 detection baseline remains frozen for the field-collection phase.** The upcoming v2.1.3 work focuses on presentation, diagnostic transparency, and targeted usability corrections rather than new detection claims. What the project needs next is data: which heuristics carry signal, what the real false-positive rate looks like over months, and whether the Bayesian likelihood ratios hold up against reality. None of that can be answered by reading code.
+**The v2.1.2 detection baseline remains frozen for the field-collection phase.** v2.1.3 improves presentation, diagnostic transparency, and targeted usability without claiming additional detection capability. What the project needs next is data: which heuristics carry signal, what the real false-positive rate looks like over months, and whether the Bayesian likelihood ratios hold up against reality. None of that can be answered by reading code.
 
 Future work continues to focus on:
 
@@ -355,6 +358,16 @@ The app may guide the user toward the relevant settings screen, but the final ex
 The live identity row shows `CELL ID`, `TAC/LAC`, the operator as `MCC / MNC`, and `ARFCN` in a
 compact four-column layout. Expanded history rows also retain the visible `MCC/MNC` identity.
 
+## Live Heuristic Audit
+
+The `HEUR` view exposes the current state of all 15 analysis rules:
+
+- **`PASSED`** — the required inputs were available and no anomaly was detected.
+- **`FAILED`** — the rule was evaluated and its anomaly condition was met.
+- **`N/A`** — the rule could not be evaluated because a required signal, permission, historical baseline, location fix, neighbor set, latency sample, or hardware capability was unavailable.
+
+These are live states rather than permanent labels. They are recalculated during each analysis cycle and may legitimately move between `N/A`, `PASSED`, and `FAILED` as the observable cellular context changes. The interface and forensic terminal also show the evaluated, failed, and unavailable counts so a high score cannot be mistaken for complete coverage when Android did not expose enough evidence.
+
 ## Forensic Terminal
 
 Structured event-driven logging designed to preserve meaningful security and radio events while minimizing noisy output.
@@ -446,7 +459,7 @@ Two points matter for analysis:
 
 - **`Lat` / `Lon` are the device's own GPS position** at the moment of the observation, and nothing else. The antenna position reported by WiGLE/OpenCellID lives in its own `ApiLat` / `ApiLon` columns. Before v2.1 both were written to the same pair of columns, which silently mixed two different quantities.
 - **`FailedHeuristics` entries prefixed with `[sub-umbral]`** are heuristics that failed without reaching the alarm threshold. They are observations, not alerts, and they are recorded precisely so that false positives can be studied. Before v2.1 they were stored as `OK`.
-- **`Verified` is a label, not a verdict, and it has five values.** `VERIFIED` (a public database returned *this* cell — identity checked field by field — with a credible coordinate), `NOT_FOUND` (an explicit, reliable negative: OpenCellID's documented "cell not found", or WiGLE answering successfully with zero results), `REJECTED` (a reply arrived but did not survive the checks — wrong identity, sentinel or impossible coordinate, incomplete body), `ERROR` (no interpretable reply: quota, rejected key, timeout, 404) and `PENDING`. Since v2.1 **none of them changes `SecurityScore`**: the score comes only from the 14 heuristics, so that the label and the detector stay independent and can be cross-tabulated at the end of the collection phase. A `VERIFIED` older than 30 days is re-checked; the historical rows are kept either way.
+- **`Verified` is a label, not a verdict, and it has five values.** `VERIFIED` (a public database returned *this* cell — identity checked field by field — with a credible coordinate), `NOT_FOUND` (an explicit, reliable negative: OpenCellID's documented "cell not found", or WiGLE answering successfully with zero results), `REJECTED` (a reply arrived but did not survive the checks — wrong identity, sentinel or impossible coordinate, incomplete body), `ERROR` (no interpretable reply: quota, rejected key, timeout, 404) and `PENDING`. Since v2.1 **none of them changes `SecurityScore`**: the score comes only from the 15 local analysis rules, so that the label and the detector stay independent and can be cross-tabulated at the end of the collection phase. A `VERIFIED` older than 30 days is re-checked; the historical rows are kept either way.
 
 Exports may contain sensitive location and cellular metadata. Users should treat exported files as private forensic material.
 
@@ -543,6 +556,8 @@ Derivative works must remain open-source under GPL-compatible licensing.
 Thank you to everyone who has followed the project through its many iterations.
 
 ICdetection is now considered stable and feature-complete within the boundaries of what Android userland allows without root or direct baseband access.
+
+ICdetection is listed in [Awesome Telco](https://github.com/ravens/awesome-telco#imsi-catcher-detection), under its IMSI Catcher Detection resources. Inclusion is appreciated as community visibility; it should not be interpreted as a security certification or independent validation of detection accuracy.
 
 Future updates will focus on bug fixes, field validation, false-positive analysis, and minor improvements discovered through real-world usage.
 

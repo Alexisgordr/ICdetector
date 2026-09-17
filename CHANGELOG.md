@@ -1,5 +1,53 @@
 # Changelog
 
+## 2.1.3
+
+### Live heuristic transparency
+
+- Replaced ambiguous Boolean heuristic results with explicit `PASSED`, `FAILED`, and `N/A`
+  states.
+- Added per-rule eligibility tracking. A rule is now shown as `N/A` when Android or the current
+  context does not provide the inputs required to evaluate it, rather than being presented as a
+  successful check.
+- Recomputes the visible state on every analysis cycle. A rule can move dynamically between
+  `N/A`, `PASSED`, and `FAILED` as neighbor cells, location, Timing Advance, latency, historical
+  baselines, or other telemetry becomes available.
+- Added the previously implicit latency/RF correlation check to the live audit, bringing the
+  visible audit to 15 rules.
+- Distinguished unavailable latency telemetry from a valid, non-anomalous latency result.
+
+### Honest result reporting
+
+- Added evaluated, failed, and unavailable rule counts to the security panel and forensic
+  terminal.
+- Relabeled the percentage as a heuristic index based on observable inputs, avoiding the
+  impression that unavailable rules were successfully validated.
+- Replaced categorical "safe environment" wording with the narrower and technically defensible
+  "no anomalies detected" / "no anomalies in the rules that could be evaluated" result.
+- Preserved external OpenCellID/WiGLE verification as contextual evidence rather than allowing
+  database coverage or missing coordinates to become a detector verdict.
+
+### Interface and tests
+
+- Improved the history-card layout on narrow displays with compact verification badges,
+  constrained identity text, and consistent spacing around the expand control.
+- Added regression coverage for `FAILED -> PASSED` transitions, unavailable inputs, and the
+  three-state latency/RF rule.
+- Updated release metadata to `versionName 2.1.3` and `versionCode 6`.
+
+### Scope
+
+- No new detection claims were introduced. This release improves diagnostic transparency,
+  presentation, and the interpretation of incomplete Android telemetry while retaining the
+  frozen v2.1.2 detection baseline.
+
+## 2.1.2
+
+- Enabled R8 code shrinking and resource shrinking for release builds.
+- Added release ProGuard configuration and disabled dependency metadata embedded by the Android
+  Gradle Plugin to support F-Droid reproducible-build comparison.
+- Updated release metadata to `versionName 2.1.2` and `versionCode 5`.
+
 ## 2.1.1
 
 - Eliminado el resolvedor Foojay para permitir compilaciones reproducibles en F-Droid.
