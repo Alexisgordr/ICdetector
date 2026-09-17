@@ -60,6 +60,14 @@ data class HeuristicReport(
     val totalCount: Int
         get() = statuses.size
 
+    fun snapshot(): String = listOf(
+        "H1" to isolatedCell, "H2" to powerJump, "H3" to mccConsistency,
+        "H4" to mncCount, "H5" to tacDeviation, "H6" to taDistance,
+        "H7" to ghostNeighbors, "H8" to arfcnSanity, "H9" to hardwareCiphering,
+        "H10" to pingPong, "H11" to mobileCellId, "H12" to latencyCorrelation,
+        "H13" to signalBaseline, "H14" to bandDowngrade, "H15" to rfStability
+    ).joinToString(";") { (id, status) -> "$id=${status.name}" }
+
     private val statuses: List<HeuristicStatus>
         get() = listOf(
             isolatedCell, powerJump, mccConsistency, mncCount, tacDeviation,

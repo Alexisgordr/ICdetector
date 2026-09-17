@@ -592,15 +592,17 @@ fun SecurityScorePanel(active: CellData, dbmHistory: List<Int>, geoHistory: List
                         Text(auditStatus, color = Color(0xFF00FF00), fontFamily = FontFamily.Monospace, fontSize = 11.sp)
                     }
 
-                    // Mostrar ciclos de confirmación si está acumulando
+                    // Fase estructurada: ya no depende de analizar un texto de presentación.
                     val streakText = active.suspiciousReason
-                    if (streakText != null && streakText.contains("ciclos confirmando")) {
+                    if (active.temporalProgress.active) {
                         Spacer(Modifier.height(4.dp))
                         Text(
-                            streakText.substringBefore("]") + "]",
-                            color = Color(0xFFFFA000),
-                            fontSize = 9.sp,
+                            "CONFIRMACIÓN TEMPORAL ${active.temporalProgress.label}" +
+                                if (active.temporalProgress.confirmed) " · CONFIRMADA" else " · OBSERVANDO",
+                            color = if (active.temporalProgress.confirmed) Color(0xFFCF6679) else Color(0xFFFFA000),
+                            fontSize = 10.sp,
                             fontFamily = FontFamily.Monospace,
+                            fontWeight = FontWeight.Bold,
                             letterSpacing = 0.5.sp
                         )
                     } else if (streakText != null && streakText.startsWith(SUBTHRESHOLD_PREFIX)) {
@@ -672,21 +674,17 @@ fun SecurityScorePanel(active: CellData, dbmHistory: List<Int>, geoHistory: List
                                 color = Color(0xFF777777), fontFamily = FontFamily.Monospace, fontSize = 9.sp
                             )
                             Spacer(Modifier.height(8.dp))
-                            HeuristicItem("1. Análisis de Celda Aislada", active.heuristicReport.isolatedCell)
-                            HeuristicItem("2. Estabilidad de Potencia (Anti-Gap)", active.heuristicReport.powerJump)
-                            HeuristicItem("3. Consistencia de MCC", active.heuristicReport.mccConsistency)
-                            HeuristicItem("4. Límite de Redes MNC", active.heuristicReport.mncCount)
-                            HeuristicItem("5. Validación Regional TAC", active.heuristicReport.tacDeviation)
-                            HeuristicItem("6. Coherencia Geométrica (TA)", active.heuristicReport.taDistance)
-                            HeuristicItem("7. Espectro de Vecinos (Anti-Ghost)", active.heuristicReport.ghostNeighbors)
-                            HeuristicItem("8. Sanidad de Frecuencia (ARFCN)", active.heuristicReport.arfcnSanity)
-                            HeuristicItem("9. Cifrado de Enlace (Hardware)", active.heuristicReport.hardwareCiphering)
-                            HeuristicItem("10. Estabilidad de Conexión (Anti Ping-Pong)", active.heuristicReport.pingPong)
-                            HeuristicItem("11. Consistencia Geográfica (Cell ID móvil)", active.heuristicReport.mobileCellId)
-                            HeuristicItem("12. Correlación Latencia + RF", active.heuristicReport.latencyCorrelation)
-                            HeuristicItem("13. Potencia vs Histórico (Baseline + huella RSRQ/SINR)", active.heuristicReport.signalBaseline)
-                            HeuristicItem("14. Downgrade de Banda (Intra-LTE)", active.heuristicReport.bandDowngrade)
-                            HeuristicItem("15. Estabilidad de Identidad RF (PCI)", active.heuristicReport.rfStability)
+                            active.heuristicDiagnostics.forEach { HeuristicDiagnosticItem(it) }
+                            if (active.heuristicDiagnostics.isEmpty()) {
+                                Text("Preparando diagnóstico del primer ciclo…", color = Color(0xFF777777), fontSize = 9.sp)
+                            }
+                            Spacer(Modifier.height(12.dp))
+                            Text("MADUREZ DE BASELINES", color = Color(0xFF555555), fontFamily = FontFamily.Monospace, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                            val maturity = active.baselineMaturity
+                            BaselineMaturityRow("Potencia RSRP", maturity.signalSamples, maturity.signalLevel)
+                            BaselineMaturityRow("Huella RSRQ/SINR", maturity.fingerprintSamples, maturity.fingerprintLevel)
+                            BaselineMaturityRow("Identidad PCI", maturity.rfIdentitySamples, maturity.rfIdentityLevel)
+                            BaselineMaturityRow("Reputación local", maturity.reputationSamples, maturity.reputationLevel)
                         }
                     }
                 }
@@ -786,5 +784,19 @@ fun SecurityScorePanel(active: CellData, dbmHistory: List<Int>, geoHistory: List
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun BaselineMaturityRow(label: String, samples: Int, level: BaselineLevel) {
+    val color = when (level) {
+        BaselineLevel.EMPTY -> Color(0xFF666666)
+        BaselineLevel.LEARNING -> Color(0xFFFFA000)
+        BaselineLevel.USABLE -> Color(0xFF80CBC4)
+        BaselineLevel.MATURE -> Color(0xFF4CAF50)
+    }
+    Row(Modifier.fillMaxWidth().padding(vertical = 2.dp), horizontalArrangement = Arrangement.SpaceBetween) {
+        Text(label, color = Color(0xFFAAAAAA), fontFamily = FontFamily.Monospace, fontSize = 9.sp)
+        Text("${level.name} · $samples muestras", color = color, fontFamily = FontFamily.Monospace, fontSize = 9.sp)
     }
 }

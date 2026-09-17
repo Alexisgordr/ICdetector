@@ -17,6 +17,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.alexisgordr.icdetector.models.VerificationStatus
 import com.alexisgordr.icdetector.models.HeuristicStatus
+import com.alexisgordr.icdetector.models.HeuristicDiagnostic
 
 @Composable
 fun DataBox(modifier: Modifier, label: String, value: String, highlight: Boolean = false) {
@@ -102,6 +103,22 @@ fun HeuristicItem(label: String, status: HeuristicStatus) {
             HeuristicStatus.NOT_EVALUATED -> "N/A" to Color(0xFFFFA000)
         }
         Text(text, color = color, fontSize = 10.sp, fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace)
+    }
+}
+
+@Composable
+fun HeuristicDiagnosticItem(item: HeuristicDiagnostic) {
+    Column(modifier = Modifier.fillMaxWidth().padding(vertical = 3.dp)) {
+        HeuristicItem("${item.id}. ${item.name}", item.status)
+        if (item.status == HeuristicStatus.NOT_EVALUATED) {
+            Text(
+                item.explanation,
+                color = Color(0xFF777777),
+                fontSize = 8.sp,
+                fontFamily = FontFamily.Monospace,
+                modifier = Modifier.padding(start = 12.dp, top = 1.dp)
+            )
+        }
     }
 }
 

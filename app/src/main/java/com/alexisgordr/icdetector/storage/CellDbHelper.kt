@@ -14,6 +14,13 @@ import com.alexisgordr.icdetector.models.CellRfFingerprint
 import com.alexisgordr.icdetector.models.RadioTech
 import com.alexisgordr.icdetector.models.TimingAdvanceUnit
 import com.alexisgordr.icdetector.models.VerificationStatus
+import com.alexisgordr.icdetector.models.CellData
+import com.alexisgordr.icdetector.models.IncidentRecord
+import com.alexisgordr.icdetector.models.IncidentState
+import com.alexisgordr.icdetector.models.ForensicCase
+import com.alexisgordr.icdetector.models.ForensicCaseState
+import com.alexisgordr.icdetector.models.ForensicSample
+import com.alexisgordr.icdetector.models.identityKey
 import kotlin.math.sqrt
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -22,7 +29,7 @@ import java.util.Locale
 class CellDbHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME, null, DATABASE_VERSION) {
     companion object {
         private const val DATABASE_NAME = "icdetector_history.db"
-        private const val DATABASE_VERSION = 12
+        private const val DATABASE_VERSION = 14
         const val TABLE_HISTORY = "history"
         const val COLUMN_ID = "id"
         const val COLUMN_TIMESTAMP = "timestamp"
@@ -64,6 +71,9 @@ class CellDbHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME, 
         // de estado y en el historial de campo hay 54 celdas que alternan entre "4G" y "5G" sin
         // cambiar de identidad. Para analizar los datos hace falta el dato firme, no la etiqueta.
         const val COLUMN_RADIO = "radio"
+        const val TABLE_INCIDENTS = "incidents"
+        const val TABLE_FORENSIC_CASES = "forensic_cases"
+        const val TABLE_FORENSIC_SAMPLES = "forensic_samples"
 
         /**
          * Cuánto vale una verificación antes de volver a preguntar — v2.1.
@@ -125,6 +135,8 @@ class CellDbHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME, 
                     "$COLUMN_RADIO TEXT)",
         )
         createIndexes(db)
+        createIncidentTable(db)
+        createForensicTables(db)
     }
 
     override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {
@@ -190,6 +202,201 @@ class CellDbHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME, 
             // conserva para compatibilidad, y este evita mezclar o ralentizar LTE/NR/UMTS/GSM.
             createRadioIdentityIndex(db)
         }
+        if (oldVersion < 13) createIncidentTable(db)
+        if (oldVersion < 14) createForensicTables(db)
+    }
+
+    private fun createForensicTables(db: SQLiteDatabase) {
+        db.execSQL(
+            "CREATE TABLE IF NOT EXISTS $TABLE_FORENSIC_CASES (" +
+                "id INTEGER PRIMARY KEY AUTOINCREMENT, case_code TEXT NOT NULL, " +
+                "created_at TEXT NOT NULL, updated_at TEXT NOT NULL, closed_at TEXT, " +
+                "state TEXT NOT NULL, cell_identity TEXT NOT NULL, highest_phase INTEGER NOT NULL, " +
+                "confirmed INTEGER NOT NULL DEFAULT 0)"
+        )
+        db.execSQL(
+            "CREATE TABLE IF NOT EXISTS $TABLE_FORENSIC_SAMPLES (" +
+                "id INTEGER PRIMARY KEY AUTOINCREMENT, case_id INTEGER NOT NULL, " +
+                "wall_time_ms INTEGER NOT NULL, elapsed_time_ms INTEGER NOT NULL, event TEXT NOT NULL, " +
+                "payload_json TEXT NOT NULL, FOREIGN KEY(case_id) REFERENCES $TABLE_FORENSIC_CASES(id) ON DELETE CASCADE)"
+        )
+        db.execSQL("CREATE INDEX IF NOT EXISTS idx_forensic_samples_case ON $TABLE_FORENSIC_SAMPLES (case_id, id)")
+    }
+
+    fun createForensicCase(cell: CellData): Long {
+        val db = writableDatabase
+        val now = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault()).format(Date())
+        val provisional = ContentValues().apply {
+            put("case_code", "PENDING")
+            put("created_at", now); put("updated_at", now)
+            put("state", ForensicCaseState.CAPTURING.name); put("cell_identity", cell.identityKey)
+            put("highest_phase", cell.temporalProgress.phase); put("confirmed", 0)
+        }
+        val id = db.insertOrThrow(TABLE_FORENSIC_CASES, null, provisional)
+        val date = SimpleDateFormat("yyyy-MM-dd", Locale.ROOT).format(Date())
+        db.update(TABLE_FORENSIC_CASES, ContentValues().apply {
+            put("case_code", "ICD-$date-${id.toString().padStart(4, '0')}")
+        }, "id=?", arrayOf(id.toString()))
+        return id
+    }
+
+    fun insertForensicSample(caseId: Long, wall: Long, elapsed: Long, event: String, json: String) {
+        writableDatabase.insert(TABLE_FORENSIC_SAMPLES, null, ContentValues().apply {
+            put("case_id", caseId); put("wall_time_ms", wall); put("elapsed_time_ms", elapsed)
+            put("event", event); put("payload_json", json)
+        })
+    }
+
+    fun updateForensicCaseProgress(caseId: Long, cell: CellData) {
+        val now = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault()).format(Date())
+        writableDatabase.execSQL(
+            "UPDATE $TABLE_FORENSIC_CASES SET updated_at=?, highest_phase=MAX(highest_phase, ?), " +
+                "confirmed=MAX(confirmed, ?) WHERE id=?",
+            arrayOf(now, cell.temporalProgress.phase, if (cell.temporalProgress.confirmed) 1 else 0, caseId)
+        )
+    }
+
+    fun setForensicCaseState(caseId: Long, state: ForensicCaseState) {
+        writableDatabase.update(TABLE_FORENSIC_CASES, ContentValues().apply { put("state", state.name) }, "id=?", arrayOf(caseId.toString()))
+    }
+
+    fun finishForensicCase(caseId: Long, state: ForensicCaseState) {
+        val now = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault()).format(Date())
+        writableDatabase.update(TABLE_FORENSIC_CASES, ContentValues().apply {
+            put("state", state.name); put("updated_at", now); put("closed_at", now)
+        }, "id=?", arrayOf(caseId.toString()))
+    }
+
+    fun interruptOpenForensicCases() {
+        val now = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault()).format(Date())
+        writableDatabase.update(TABLE_FORENSIC_CASES, ContentValues().apply {
+            put("state", ForensicCaseState.INTERRUPTED.name); put("updated_at", now); put("closed_at", now)
+        }, "state IN (?,?)", arrayOf(ForensicCaseState.CAPTURING.name, ForensicCaseState.POST_CAPTURE.name))
+    }
+
+    fun getForensicCases(): List<ForensicCase> {
+        val out = mutableListOf<ForensicCase>()
+        readableDatabase.rawQuery(
+            "SELECT c.*, (SELECT COUNT(*) FROM $TABLE_FORENSIC_SAMPLES s WHERE s.case_id=c.id) sample_count " +
+                "FROM $TABLE_FORENSIC_CASES c ORDER BY c.id DESC", null
+        ).use { c -> while (c.moveToNext()) {
+            fun s(n: String) = c.getString(c.getColumnIndexOrThrow(n))
+            val closed = c.getColumnIndexOrThrow("closed_at")
+            out += ForensicCase(
+                c.getLong(c.getColumnIndexOrThrow("id")), s("case_code"), s("created_at"), s("updated_at"),
+                if (c.isNull(closed)) null else c.getString(closed),
+                runCatching { ForensicCaseState.valueOf(s("state")) }.getOrDefault(ForensicCaseState.INTERRUPTED),
+                s("cell_identity"), c.getInt(c.getColumnIndexOrThrow("highest_phase")),
+                c.getInt(c.getColumnIndexOrThrow("confirmed")) != 0,
+                c.getInt(c.getColumnIndexOrThrow("sample_count"))
+            )
+        } }
+        return out
+    }
+
+    fun getForensicSamples(caseId: Long): List<ForensicSample> {
+        val out = mutableListOf<ForensicSample>()
+        readableDatabase.rawQuery("SELECT * FROM $TABLE_FORENSIC_SAMPLES WHERE case_id=? ORDER BY id", arrayOf(caseId.toString())).use { c ->
+            while (c.moveToNext()) out += ForensicSample(
+                c.getLong(c.getColumnIndexOrThrow("id")), caseId,
+                c.getLong(c.getColumnIndexOrThrow("wall_time_ms")), c.getLong(c.getColumnIndexOrThrow("elapsed_time_ms")),
+                c.getString(c.getColumnIndexOrThrow("event")), c.getString(c.getColumnIndexOrThrow("payload_json"))
+            )
+        }
+        return out
+    }
+
+    private fun createIncidentTable(db: SQLiteDatabase) {
+        db.execSQL(
+            "CREATE TABLE IF NOT EXISTS $TABLE_INCIDENTS (" +
+                "id INTEGER PRIMARY KEY AUTOINCREMENT, started_at TEXT NOT NULL, " +
+                "updated_at TEXT NOT NULL, ended_at TEXT, identity TEXT NOT NULL, " +
+                "cid TEXT NOT NULL, radio TEXT NOT NULL, state TEXT NOT NULL, " +
+                "highest_phase INTEGER NOT NULL, required_phases INTEGER NOT NULL, " +
+                "score INTEGER NOT NULL, anomaly_confidence REAL NOT NULL, " +
+                "reason TEXT NOT NULL, heuristic_snapshot TEXT NOT NULL)"
+        )
+        db.execSQL("CREATE INDEX IF NOT EXISTS idx_incident_identity_state ON $TABLE_INCIDENTS (identity, state)")
+        db.execSQL("CREATE INDEX IF NOT EXISTS idx_incident_updated ON $TABLE_INCIDENTS (updated_at)")
+    }
+
+    /**
+     * Abre o actualiza la caja negra del episodio actual. Una fase 1/3 ya se conserva; 3/3 cambia
+     * el estado a CONFIRMED. No crea registros para observaciones sub-umbral.
+     */
+    fun recordIncidentPhase(cell: CellData) {
+        val progress = cell.temporalProgress
+        if (!progress.active) return
+        val db = writableDatabase
+        val now = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault()).format(Date())
+        val openId = findOpenIncidentId(db, cell.identityKey)
+        val state = if (progress.confirmed) IncidentState.CONFIRMED else IncidentState.OBSERVING
+        val values = ContentValues().apply {
+            put("updated_at", now)
+            put("state", state.name)
+            put("highest_phase", progress.phase)
+            put("required_phases", progress.required)
+            put("score", cell.securityScore)
+            put("anomaly_confidence", cell.anomalyConfidence)
+            put("reason", cell.suspiciousReason.orEmpty())
+            put("heuristic_snapshot", cell.heuristicReport.snapshot())
+        }
+        if (openId == null) {
+            values.put("started_at", now)
+            values.put("identity", cell.identityKey)
+            values.put("cid", cell.cellId)
+            values.put("radio", cell.radioTech.name)
+            db.insert(TABLE_INCIDENTS, null, values)
+        } else {
+            db.update(TABLE_INCIDENTS, values, "id=?", arrayOf(openId.toString()))
+        }
+    }
+
+    /** Cierra episodios que dejaron de observarse o fueron interrumpidos por un handover. */
+    fun closeOpenIncidents(activeIdentity: String?, interrupted: Boolean = false) {
+        val db = writableDatabase
+        val now = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault()).format(Date())
+        val values = ContentValues().apply {
+            put("updated_at", now)
+            put("ended_at", now)
+            put("state", if (interrupted) IncidentState.INTERRUPTED.name else IncidentState.RECOVERED.name)
+        }
+        val openStates = "state IN ('${IncidentState.OBSERVING.name}','${IncidentState.CONFIRMED.name}')"
+        if (activeIdentity == null) {
+            db.update(TABLE_INCIDENTS, values, openStates, null)
+        } else {
+            db.update(TABLE_INCIDENTS, values, "$openStates AND identity=?", arrayOf(activeIdentity))
+        }
+    }
+
+    private fun findOpenIncidentId(db: SQLiteDatabase, identity: String): Long? {
+        db.rawQuery(
+            "SELECT id FROM $TABLE_INCIDENTS WHERE identity=? AND state IN (?,?) ORDER BY id DESC LIMIT 1",
+            arrayOf(identity, IncidentState.OBSERVING.name, IncidentState.CONFIRMED.name)
+        ).use { cursor -> return if (cursor.moveToFirst()) cursor.getLong(0) else null }
+    }
+
+    fun getIncidents(): List<IncidentRecord> {
+        val result = mutableListOf<IncidentRecord>()
+        readableDatabase.rawQuery("SELECT * FROM $TABLE_INCIDENTS ORDER BY id DESC", null).use { c ->
+            while (c.moveToNext()) {
+                fun s(name: String) = c.getString(c.getColumnIndexOrThrow(name))
+                result += IncidentRecord(
+                    id = c.getLong(c.getColumnIndexOrThrow("id")),
+                    startedAt = s("started_at"), updatedAt = s("updated_at"),
+                    endedAt = c.getColumnIndexOrThrow("ended_at").let { if (c.isNull(it)) null else c.getString(it) },
+                    identity = s("identity"), cid = s("cid"),
+                    radio = runCatching { RadioTech.valueOf(s("radio")) }.getOrDefault(RadioTech.UNKNOWN),
+                    state = runCatching { IncidentState.valueOf(s("state")) }.getOrDefault(IncidentState.INTERRUPTED),
+                    highestPhase = c.getInt(c.getColumnIndexOrThrow("highest_phase")),
+                    requiredPhases = c.getInt(c.getColumnIndexOrThrow("required_phases")),
+                    score = c.getInt(c.getColumnIndexOrThrow("score")),
+                    anomalyConfidence = c.getFloat(c.getColumnIndexOrThrow("anomaly_confidence")),
+                    reason = s("reason"), heuristicSnapshot = s("heuristic_snapshot")
+                )
+            }
+        }
+        return result
     }
 
     /**
@@ -494,6 +701,9 @@ class CellDbHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME, 
     fun clear() {
         val db = this.writableDatabase
         db.execSQL("DELETE FROM $TABLE_HISTORY")
+        db.execSQL("DELETE FROM $TABLE_INCIDENTS")
+        db.execSQL("DELETE FROM $TABLE_FORENSIC_SAMPLES")
+        db.execSQL("DELETE FROM $TABLE_FORENSIC_CASES")
     }
 
     /**
@@ -509,7 +719,14 @@ class CellDbHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME, 
             val sdf = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault())
             val threshold = sdf.format(Date(cutoff))
             val db = this.writableDatabase
-            db.delete(TABLE_HISTORY, "$COLUMN_TIMESTAMP < ?", arrayOf(threshold))
+            val historyDeleted = db.delete(TABLE_HISTORY, "$COLUMN_TIMESTAMP < ?", arrayOf(threshold))
+            db.delete(TABLE_INCIDENTS, "updated_at < ?", arrayOf(threshold))
+            val oldCases = db.rawQuery("SELECT id FROM $TABLE_FORENSIC_CASES WHERE updated_at < ?", arrayOf(threshold)).use { c ->
+                buildList { while (c.moveToNext()) add(c.getLong(0)) }
+            }
+            oldCases.forEach { id -> db.delete(TABLE_FORENSIC_SAMPLES, "case_id=?", arrayOf(id.toString())) }
+            db.delete(TABLE_FORENSIC_CASES, "updated_at < ?", arrayOf(threshold))
+            historyDeleted
         } catch (_: Exception) {
             0
         }

@@ -56,7 +56,13 @@ data class CellData(
      * módem no reporta TA, que es el caso en buena parte de los teléfonos; no sirve para acusar a
      * nadie. Mezclarla con la geometría del TA sería juntar dos precisiones incomparables.
      */
-    val distanceToTowerMeters: Int? = null
+    val distanceToTowerMeters: Int? = null,
+    /** Estado visible y persistible del filtro temporal; no modifica el resultado heurístico. */
+    val temporalProgress: TemporalProgress = TemporalProgress(),
+    /** Diagnóstico del ciclo actual, incluida la causa concreta de cada N/A. */
+    val heuristicDiagnostics: List<HeuristicDiagnostic> = emptyList(),
+    /** Cantidad de evidencia histórica disponible para las reglas que aprenden localmente. */
+    val baselineMaturity: BaselineMaturity = BaselineMaturity()
 )
 
 /**
