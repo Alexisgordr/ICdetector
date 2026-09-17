@@ -1,52 +1,64 @@
 # Changelog
 
-## 2.1.3
+## 2.2.0
 
-### Live heuristic transparency
+### Incident black box and temporal transparency
 
-- Replaced ambiguous Boolean heuristic results with explicit `PASSED`, `FAILED`, and `N/A`
-  states.
-- Added per-rule eligibility tracking. A rule is now shown as `N/A` when Android or the current
-  context does not provide the inputs required to evaluate it, rather than being presented as a
-  successful check.
-- Recomputes the visible state on every analysis cycle. A rule can move dynamically between
-  `N/A`, `PASSED`, and `FAILED` as neighbor cells, location, Timing Advance, latency, historical
-  baselines, or other telemetry becomes available.
-- Added the previously implicit latency/RF correlation check to the live audit, bringing the
-  visible audit to 15 rules.
-- Distinguished unavailable latency telemetry from a valid, non-anomalous latency result.
+- Added a persistent incident black box that opens as soon as an anomaly reaches temporal phase
+  `1/3`, rather than waiting for a confirmed `3/3` alert.
+- Added explicit incident states: `OBSERVING`, `CONFIRMED`, `RECOVERED`, and `INTERRUPTED`.
+- Added visible and persistent `1/3`, `2/3`, and `3/3` temporal phases so users can distinguish an
+  initial observation from a sustained, confirmed event.
+- Incident records preserve the highest phase reached, threat score, anomaly confidence, reason,
+  and the heuristic snapshot associated with the event.
+- Added separate **ANTENNAS** and **INCIDENTES** views to keep infrastructure history distinct from
+  security-event history.
 
-### Honest result reporting
+### Explainable diagnostics and baseline maturity
 
-- Added evaluated, failed, and unavailable rule counts to the security panel and forensic
-  terminal.
-- Relabeled the percentage as a heuristic index based on observable inputs, avoiding the
-  impression that unavailable rules were successfully validated.
-- Replaced categorical "safe environment" wording with the narrower and technically defensible
-  "no anomalies detected" / "no anomalies in the rules that could be evaluated" result.
-- Preserved external OpenCellID/WiGLE verification as contextual evidence rather than allowing
-  database coverage or missing coordinates to become a detector verdict.
+- Added structured per-rule diagnostics with contextual explanations for `PASS`, `FAIL`, and
+  `N/A` results.
+- `N/A` now indicates that a rule could not be evaluated with the telemetry or context currently
+  available; it is not treated as a pass or a failure.
+- Added maturity indicators for the RSRP power baseline, RSRQ/SINR fingerprint, PCI identity
+  history, and local cell reputation.
+- Live diagnostic states update as new modem, location, latency, and historical data becomes
+  available.
+- Detection weights, penalties, confirmation thresholds, and the existing threat engine remain
+  unchanged in this release.
 
-### Interface and tests
+### Forensic case capture
 
-- Improved the history-card layout on narrow displays with compact verification badges,
-  constrained identity text, and consistent spacing around the expand control.
-- Added regression coverage for `FAILED -> PASSED` transitions, unavailable inputs, and the
-  three-state latency/RF rule.
-- Updated release metadata to `versionName 2.1.3` and `versionCode 6`.
+- Added an automatic forensic case recorder that starts at temporal phase `1/3`.
+- Added a bounded in-memory pre-event buffer covering up to 60 seconds and 180 samples.
+- A case preserves the complete `1/3 -> 2/3 -> 3/3` episode and continues for 60 seconds after
+  recovery. A recurrence during that post-event window remains part of the same case.
+- Added a 30-minute safety limit for an individual capture.
+- Captures serving and neighboring cells, radio identity and quality, Timing Advance when exposed,
+  device GPS and accuracy, latency state, verification state, temporal phase, score, confidence,
+  heuristic diagnostics, device capabilities, and relevant terminal context.
+- Added forensic case states: `CAPTURING`, `POST_CAPTURE`, `READY`, and `INTERRUPTED`.
+- Open captures are marked `INTERRUPTED` after an unexpected service or process restart instead of
+  being silently presented as complete.
 
-### Scope
+### Portable forensic export
 
-- No new detection claims were introduced. This release improves diagnostic transparency,
-  presentation, and the interpretation of incomplete Android telemetry while retaining the
-  frozen v2.1.2 detection baseline.
+- Added case export as a ZIP archive containing:
+  `case.json`, `timeline.csv`, `cells.csv`, `heuristics.csv`, `capabilities.json`, `terminal.log`,
+  and `SHA256SUMS.txt`.
+- `SHA256SUMS.txt` allows later modification of exported files to be detected. It is an integrity
+  aid, not a cryptographic signature or a legal chain-of-custody guarantee.
+- Exports deliberately exclude API credentials, IMSI, IMEI, and the phone number.
+- Added an explicit privacy warning because forensic exports can contain exact device coordinates
+  and sensitive cellular metadata.
 
-## 2.1.2
+### Storage, compatibility, and validation
 
-- Enabled R8 code shrinking and resource shrinking for release builds.
-- Added release ProGuard configuration and disabled dependency metadata embedded by the Android
-  Gradle Plugin to support F-Droid reproducible-build comparison.
-- Updated release metadata to `versionName 2.1.2` and `versionCode 5`.
+- Database schema advanced from 12 to 14 with non-destructive migrations for incident and forensic
+  case storage.
+- The existing 60-day retention policy also applies to forensic cases and their samples.
+- Added regression coverage for diagnostic state/maturity behavior and forensic capture policy.
+- Release metadata updated to `versionName 2.2.0` and `versionCode 7`.
 
 ## 2.1.1
 

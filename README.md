@@ -1,8 +1,7 @@
 ![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)
 ![Platform](https://img.shields.io/badge/Platform-Android%2010%2B-green.svg)
 ![Root Required](https://img.shields.io/badge/Root-Not%20Required-brightgreen.svg)
-![Status](https://img.shields.io/badge/Status-Stable%20v2.1.3-success.svg)
-[![Featured in Awesome Telco](https://img.shields.io/badge/Featured%20in-Awesome%20Telco-6f42c1.svg)](https://github.com/ravens/awesome-telco#imsi-catcher-detection)
+![Status](https://img.shields.io/badge/Status-Stable%20v2.2.0-success.svg)
 
 <table>
   
@@ -53,15 +52,13 @@ The application operates from Android userland without requiring root or direct 
 
 > **⚠️ Upgrading from a version older than v2.1.1:** uninstall the previous version first. Android refuses an in-place update when the APK is not signed with the same keystore, and a clean database is required because records written before v2.1.1 may hold an antenna coordinate where the device GPS position belongs. Export your CSV first if you want to keep the old history. v2.1.2 and later releases signed with the same keystore update in place normally. See `Status.md`.
 
-ICdetection v2.1.3 is the current stable release and is considered feature-complete within the limits of Android userland telemetry.
+ICdetection v2.2.0 is the current stable release. It adds persistent incident tracking, visible temporal confirmation phases, explainable capability diagnostics, baseline-maturity indicators, and a bounded forensic case recorder with portable ZIP export.
 
-**v2.1.3 is a transparency and usability release.** It does not introduce new detection claims. Instead, it makes the live audit accurately distinguish between a rule that passed, a rule that failed, and a rule that could not be evaluated with the telemetry currently available. All 15 analysis rules now expose a dynamic `PASSED`, `FAILED`, or `N/A` state and are recalculated on every analysis cycle, so their state can change as fresh radio, location, latency, or historical context becomes available.
-
-The release also reports how many rules were actually evaluated, failed, or lacked sufficient data; replaces categorical "safe" wording with the narrower "no anomalies detected" conclusion; and improves the history-card layout on narrow screens.
+> **What v2.2.0 means:** an observation at `1/3` can now leave an incident record and start a forensic capture, while only a sustained event reaching `3/3` is presented as confirmed. This improves traceability without weakening the conservative confirmation model.
 
 v2.1.1 was the project's **data-integrity release**. It added no new heuristics and no new detection claims. It exists because the first two months of field collection surfaced problems that made that very collection unable to answer the questions it was designed to answer: sub-threshold heuristic failures were recorded with their reason erased, API-supplied tower coordinates were overwriting the device's own GPS positions in the history, two heuristics were firing on carrier-aggregation artifacts, and the history was so sparse that the RF fingerprint never woke up. `Status.md` and `v2.1Roadmap.md` carry the full evidence and the fixes.
 
-**The v2.1.2 detection baseline remains frozen for the field-collection phase.** v2.1.3 improves presentation, diagnostic transparency, and targeted usability without claiming additional detection capability. What the project needs next is data: which heuristics carry signal, what the real false-positive rate looks like over months, and whether the Bayesian likelihood ratios hold up against reality. None of that can be answered by reading code.
+**The detection baseline remains frozen in v2.2.0.** This release improves observation, explanation, persistence, and export; it does not change heuristic weights, penalties, temporal thresholds, or make new detection claims. The project still needs field data to establish which heuristics carry useful signal, the real false-positive rate, and whether the Bayesian likelihood ratios hold up against reality.
 
 Future work continues to focus on:
 
@@ -84,11 +81,14 @@ No new detection claims should be assumed until they are validated against real-
 - [Detection Engine](#detection-engine)
 - [Statistical and Historical Hardening](#statistical-and-historical-hardening)
 - [Temporal Confidence](#temporal-confidence)
+- [Incident Black Box](#incident-black-box)
+- [Capability Diagnostics & Baseline Maturity](#capability-diagnostics--baseline-maturity)
 - [Battery Optimization](#battery-optimization)
 - [Telemetry & Visualization](#telemetry--visualization)
 - [Infrastructure Verification](#infrastructure-verification)
 - [Privacy & Networking](#privacy--networking)
 - [Forensic Logging](#forensic-logging)
+- [Forensic Case Export](#forensic-case-export)
 - [False Positives](#false-positives)
 - [Security & Threat Model](#security--threat-model)
 - [Related Research & Inspiration](#related-research--inspiration)
@@ -337,6 +337,52 @@ Anomalies must persist across multiple analysis cycles before triggering a confi
 
 Transient heuristic failures are logged but do not immediately raise confirmed alarms. This reduces false-positive fatigue in dynamic RF environments and makes the app more useful during daily use.
 
+v2.2.0 exposes the full temporal progression:
+
+- `1/3` — initial observation; an incident record and forensic capture may begin.
+- `2/3` — the condition persists, but it is not yet a confirmed threat.
+- `3/3` — the configured temporal confirmation requirement has been reached.
+
+The phase can move as fresh radio observations arrive. A rule may also move between `N/A`, `PASS`,
+and `FAIL` when the modem or Android begins or stops exposing the data needed to evaluate it.
+
+---
+
+# Incident Black Box
+
+The incident black box preserves the lifecycle of a suspicious episode independently from the
+ordinary antenna history. It records the first observation at `1/3`, the highest temporal phase
+reached, score, anomaly confidence, reason, and a snapshot of the heuristic diagnostics.
+
+Incident states are:
+
+- `OBSERVING` — the condition has started but is not confirmed.
+- `CONFIRMED` — the event reached `3/3`.
+- `RECOVERED` — subsequent observations returned to normal.
+- `INTERRUPTED` — the application or monitoring service stopped before the lifecycle completed.
+
+This history improves later review, but it does not turn a heuristic alert into definitive proof
+of a rogue base station or surveillance activity.
+
+---
+
+# Capability Diagnostics & Baseline Maturity
+
+The live diagnostics view reports whether each rule passed, failed, or could not be evaluated.
+An `N/A` result is accompanied by a contextual explanation, such as unavailable modem telemetry,
+missing location, insufficient latency context, or an immature historical baseline.
+
+The application also reports the maturity of the historical data used by:
+
+- the RSRP power baseline
+- the RSRQ/SINR quality fingerprint
+- PCI identity stability
+- local cell reputation
+
+These indicators make it possible to distinguish an inactive-looking rule from one that is waiting
+for enough trustworthy data. They are diagnostic information and do not independently increase the
+threat score.
+
 ---
 
 # Battery Optimization
@@ -357,16 +403,6 @@ The app may guide the user toward the relevant settings screen, but the final ex
 
 The live identity row shows `CELL ID`, `TAC/LAC`, the operator as `MCC / MNC`, and `ARFCN` in a
 compact four-column layout. Expanded history rows also retain the visible `MCC/MNC` identity.
-
-## Live Heuristic Audit
-
-The `HEUR` view exposes the current state of all 15 analysis rules:
-
-- **`PASSED`** — the required inputs were available and no anomaly was detected.
-- **`FAILED`** — the rule was evaluated and its anomaly condition was met.
-- **`N/A`** — the rule could not be evaluated because a required signal, permission, historical baseline, location fix, neighbor set, latency sample, or hardware capability was unavailable.
-
-These are live states rather than permanent labels. They are recalculated during each analysis cycle and may legitimately move between `N/A`, `PASSED`, and `FAILED` as the observable cellular context changes. The interface and forensic terminal also show the evaluated, failed, and unavailable counts so a high score cannot be mistaken for complete coverage when Android did not expose enough evidence.
 
 ## Forensic Terminal
 
@@ -440,6 +476,38 @@ ICdetection supports optional SOCKS5 proxy routing for infrastructure-verificati
 
 Telemetry and forensic events are stored locally on-device in SQLite.
 
+v2.2.0 adds bounded forensic cases. A case begins automatically when an observation reaches phase
+`1/3`, includes up to 60 seconds of pre-event context, follows the complete episode, and remains
+open for 60 seconds after recovery. A recurrence during that window continues the same case. An
+individual capture is limited to 30 minutes.
+
+The recorder can preserve serving and neighboring cell observations, radio identity and quality,
+Timing Advance when available, GPS position and accuracy, latency and verification state, temporal
+phase, score, confidence, heuristic explanations, device capabilities, and relevant terminal logs.
+It deliberately excludes API credentials, IMSI, IMEI, and the phone number.
+
+Cases move through `CAPTURING`, `POST_CAPTURE`, `READY`, and `INTERRUPTED` states. The forensic view
+refreshes while monitoring so the current case state remains visible.
+
+## Forensic Case Export
+
+A ready case can be exported as a ZIP archive containing:
+
+```text
+ICD-YYYY-MM-DD-NNNN.zip
+├── case.json
+├── timeline.csv
+├── cells.csv
+├── heuristics.csv
+├── capabilities.json
+├── terminal.log
+└── SHA256SUMS.txt
+```
+
+`SHA256SUMS.txt` can reveal whether an exported member was modified later. It is not a digital
+signature and does not, by itself, establish legal chain of custody. Because an export can contain
+precise location and cellular metadata, review and protect it before sharing.
+
 ## CSV Export
 
 CSV export is available for:
@@ -459,7 +527,7 @@ Two points matter for analysis:
 
 - **`Lat` / `Lon` are the device's own GPS position** at the moment of the observation, and nothing else. The antenna position reported by WiGLE/OpenCellID lives in its own `ApiLat` / `ApiLon` columns. Before v2.1 both were written to the same pair of columns, which silently mixed two different quantities.
 - **`FailedHeuristics` entries prefixed with `[sub-umbral]`** are heuristics that failed without reaching the alarm threshold. They are observations, not alerts, and they are recorded precisely so that false positives can be studied. Before v2.1 they were stored as `OK`.
-- **`Verified` is a label, not a verdict, and it has five values.** `VERIFIED` (a public database returned *this* cell — identity checked field by field — with a credible coordinate), `NOT_FOUND` (an explicit, reliable negative: OpenCellID's documented "cell not found", or WiGLE answering successfully with zero results), `REJECTED` (a reply arrived but did not survive the checks — wrong identity, sentinel or impossible coordinate, incomplete body), `ERROR` (no interpretable reply: quota, rejected key, timeout, 404) and `PENDING`. Since v2.1 **none of them changes `SecurityScore`**: the score comes only from the 15 local analysis rules, so that the label and the detector stay independent and can be cross-tabulated at the end of the collection phase. A `VERIFIED` older than 30 days is re-checked; the historical rows are kept either way.
+- **`Verified` is a label, not a verdict, and it has five values.** `VERIFIED` (a public database returned *this* cell — identity checked field by field — with a credible coordinate), `NOT_FOUND` (an explicit, reliable negative: OpenCellID's documented "cell not found", or WiGLE answering successfully with zero results), `REJECTED` (a reply arrived but did not survive the checks — wrong identity, sentinel or impossible coordinate, incomplete body), `ERROR` (no interpretable reply: quota, rejected key, timeout, 404) and `PENDING`. Since v2.1 **none of them changes `SecurityScore`**: the score comes only from the 14 heuristics, so that the label and the detector stay independent and can be cross-tabulated at the end of the collection phase. A `VERIFIED` older than 30 days is re-checked; the historical rows are kept either way.
 
 Exports may contain sensitive location and cellular metadata. Users should treat exported files as private forensic material.
 
@@ -555,9 +623,7 @@ Derivative works must remain open-source under GPL-compatible licensing.
 
 Thank you to everyone who has followed the project through its many iterations.
 
-ICdetection is now considered stable and feature-complete within the boundaries of what Android userland allows without root or direct baseband access.
-
-ICdetection is listed in [Awesome Telco](https://github.com/ravens/awesome-telco#imsi-catcher-detection), under its IMSI Catcher Detection resources. Inclusion is appreciated as community visibility; it should not be interpreted as a security certification or independent validation of detection accuracy.
+ICdetection v2.2.0 is considered stable within the boundaries of what Android userland allows without root or direct baseband access.
 
 Future updates will focus on bug fixes, field validation, false-positive analysis, and minor improvements discovered through real-world usage.
 
@@ -567,7 +633,7 @@ I do not have formal telecommunications or Android-development training. This pr
 
 If you have questions, find mistakes, or run into issues, please open an issue. I will review it honestly and fix what I can.
 
-The current version is stable/frozen while I take a break and collect real-world data over the next few months. Future improvements will be based on observed behavior, false positives, and field data rather than adding features for their own sake.
+The detection baseline is stable/frozen while real-world data is collected. Future detection changes will be based on observed behavior, false positives, and field evidence rather than adding heuristics for their own sake.
 
 Best regards,  
 Alexis

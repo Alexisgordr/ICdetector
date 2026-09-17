@@ -1,39 +1,97 @@
 # ICdetection Status
 
-## v2.1.3 — current stable release
+## v2.2.0 — incident traceability and bounded forensic capture
 
-v2.1.3 is a **transparency, diagnostics, and usability release**. It retains the frozen v2.1.2
-detection baseline and introduces no new detection claims.
+**Release:** stable  
+**Version code:** 7  
+**Database schema:** 14  
+**Detection baseline:** unchanged
 
-### Current release status
+v2.2.0 is a major observability and evidence-handling update. It does not add a new heuristic,
+retune the threat score, lower the three-cycle confirmation threshold, or claim that Android
+userland can prove the presence of an IMSI catcher. It makes the existing analysis easier to
+inspect, preserve, and export.
 
-- **Stable release:** `versionName 2.1.3`, `versionCode 6`.
-- **15 visible analysis rules.** The latency/RF correlation rule is now included in the live audit
-  instead of remaining implicit.
-- **Three honest live states:** every rule reports `PASSED`, `FAILED`, or `N/A`.
-- **No-data is no longer success.** A rule is `N/A` when Android or the current context does not
-  expose the telemetry required to evaluate it.
-- **Dynamic reevaluation.** States are recalculated on every analysis cycle and can move between
-  `N/A`, `PASSED`, and `FAILED` as neighbors, location, Timing Advance, latency, or historical
-  context becomes available.
-- **Visible coverage.** The monitor and terminal report how many rules were evaluated, how many
-  failed, and how many lacked sufficient data.
-- **More defensible wording.** The interface now says that no anomalies were detected in the rules
-  that could be evaluated; it does not claim that the cellular environment is proven safe.
-- **Narrow-screen history fix.** Cell identity, verification status, and the expand control now
-  share the available space without the verification label covering the identity.
-- **External databases remain neutral.** OpenCellID/WiGLE status and missing API coordinates do
-  not raise or lower the heuristic score.
-- **Regression coverage** includes dynamic `FAILED -> PASSED` transitions, unavailable inputs,
-  and all three states of the latency/RF rule.
+### Current capability status
 
-This release makes the detector's limits visible. A score must always be read together with the
-evaluated/unavailable count: a clean result over the available evidence is not proof that every
-possible cellular-security property was observable.
+| Capability | Status | Operational meaning |
+|---|---|---|
+| Existing heuristic engine | Stable / unchanged | Existing weights, penalties, and confirmation behavior are preserved. |
+| Temporal phases | Active | `1/3`, `2/3`, and `3/3` are visible and persisted with incident context. |
+| Incident black box | Active | Opens at `1/3`; records the highest phase, score, confidence, reason, and diagnostic snapshot. |
+| Rule diagnostics | Active | Rules report `PASS`, `FAIL`, or explained `N/A` according to available context. |
+| Baseline maturity | Active | Shows readiness of power, quality-fingerprint, PCI-identity, and reputation histories. |
+| Forensic prebuffer | Active | Holds up to 60 seconds / 180 recent samples in memory. |
+| Post-recovery capture | Active | Continues for 60 seconds; recurrence stays in the same case. |
+| Forensic ZIP export | Active | Produces seven documented files plus SHA-256 integrity hashes. |
+| Root/baseband visibility | Unavailable | Android userland still cannot expose all ciphering and baseband state on every device. |
+
+### Incident lifecycle
+
+The incident history is separate from antenna history and uses four states:
+
+- `OBSERVING`: an anomaly reached `1/3` but is not confirmed.
+- `CONFIRMED`: the episode reached `3/3`.
+- `RECOVERED`: later samples returned to normal.
+- `INTERRUPTED`: monitoring ended before the episode completed.
+
+Sub-threshold observations are now reviewable without being mislabeled as confirmed alarms. A
+dynamic transition between `N/A`, `PASS`, and `FAIL` is expected when Android supplies different
+telemetry from one analysis cycle to the next.
+
+### Forensic case lifecycle
+
+The forensic recorder starts automatically at phase `1/3`. It combines up to 60 seconds of
+pre-event context, the full temporal episode, and 60 seconds after recovery. Captures are bounded
+to 30 minutes and use the states `CAPTURING`, `POST_CAPTURE`, `READY`, and `INTERRUPTED`.
+
+The recorder can include serving and neighboring cells; MCC, MNC, TAC, Cell ID, PCI, ARFCN, band,
+RSRP/dBm, RSRQ, SINR and Timing Advance when exposed; device GPS and accuracy; latency and external
+verification state; threat phase, score and confidence; per-rule diagnostics; capability state;
+device/Android information; and relevant terminal context.
+
+It does **not** export API credentials, IMSI, IMEI, or the phone number.
+
+### Export and integrity boundaries
+
+Each exported case contains:
+
+```text
+case.json
+timeline.csv
+cells.csv
+heuristics.csv
+capabilities.json
+terminal.log
+SHA256SUMS.txt
+```
+
+The SHA-256 manifest detects later file modification. It is not a digital signature, does not
+identify who collected the case, and does not by itself provide a legal chain of custody. Exact
+device coordinates may be present, so exported cases must be treated as sensitive material.
+
+### Storage and upgrade behavior
+
+- Schema 13 adds incident records; schema 14 adds forensic cases and samples.
+- Migrations are non-destructive for supported recent releases.
+- Open forensic captures are marked `INTERRUPTED` after an unexpected restart.
+- The existing 60-day cleanup policy also removes expired forensic cases and their samples.
+- Official releases from v2.1.2 onward update in place when signed with the same project key.
+- If an older installation uses a different signing key, Android requires uninstalling it first.
+  Export any history you want to retain before uninstalling.
+
+### Validation focus
+
+The new diagnostic and forensic policies have regression coverage, but the evidence still needs
+field validation across different modems, manufacturers, Android versions, operators, and radio
+conditions. `N/A` is a valid outcome when the required telemetry is not available. A case or alert
+is evidence of an observed anomaly, not definitive attribution to a rogue base station.
 
 ---
 
-## v2.1.1 — data-integrity baseline
+## Historical v2.1 field-status record
+
+## v2.1.1 — final release candidate. Second field-collection phase starts after build validation.
 
 v2.1.1 is a **data-integrity release**. It adds no new heuristics and makes no new detection claims.
 What it does is fix the reasons the *first* collection phase could not answer the questions it was
@@ -98,10 +156,10 @@ designed to answer, and add the tooling to check that the second one can.
 
 ---
 
-## ⚠️ Installation and upgrade note
+## ⚠️ Before installing: uninstall the previous version
 
-**Only users upgrading from a version older than v2.1.1 should uninstall first and perform a clean
-installation.** Two independent reasons point that way:
+**Uninstall ICdetection, then install v2.1.1 as a fresh install.** Two independent reasons, and both
+point the same way:
 
 1. **Signature.** If the v2.1.1 APK is not signed with the same keystore as the copy already on the
    device, Android refuses the update (`INSTALL_FAILED_UPDATE_INCOMPATIBLE`).
@@ -111,11 +169,7 @@ installation.** Two independent reasons point that way:
    reliable way to tell which is which. Uninstalling clears the database, so the new baseline is
    built only from correct data.
 
-v2.1.2 and v2.1.3 use the same project signing identity and can update an existing v2.1.1-or-later
-installation normally. Do not uninstall those versions merely to install v2.1.3.
-
-If you need the clean upgrade and want to keep your old records, **export the CSV before
-uninstalling** — bearing in mind that
+If you want to keep your old records, **export the CSV before uninstalling** — bearing in mind that
 in that old export `Lat`/`Lon` may be either your position or the antenna's, with no way to tell
 them apart. That ambiguity is exactly what v2.1 ends.
 
@@ -180,7 +234,7 @@ exactly why the verification no longer affects the score at all (see below).
   outweighs both: this collection phase exists to find out **whether** the verification status
   carries signal, and that cannot be measured while it is baked into the score used as the
   reference. It stays as an independent label in the `Verified` column, next to a score that comes
-  only from the 15 local analysis rules. `check_export.py` now prints both halves of that comparison.
+  only from the 14 heuristics. `check_export.py` now prints both halves of that comparison.
 - **"Not in the database" and "I could not ask" are no longer the same answer.** There is a fifth
   state, `REJECTED`, for a reply that arrives but does not survive our checks: an identity that does
   not match, a sentinel coordinate, an impossible distance, an incomplete body. `NOT_FOUND` is now
@@ -230,11 +284,10 @@ inspect RRC/NAS/baseband traffic the way dedicated hardware can.
 
 ---
 
-## Now: v2.1.3 field collection
+## Now: three months of collection, and no code changes
 
-The v2.1.3 detection baseline is **frozen for field collection**. No new heuristics and no weight
-tuning are planned during this phase; only genuine bug fixes and corrections supported by field
-evidence.
+The code is **frozen again**, this time for three months. No new heuristics, no new features, no
+tuning. Only genuine bug fixes.
 
 The reason is specific. Everything the project needs next depends on data it does not have yet:
 
@@ -270,32 +323,10 @@ Spanish
 
 En español:
 
-## v2.1.3 — versión estable actual
+## ⚠️ Antes de instalar: desinstala la versión anterior
 
-La v2.1.3 es una versión centrada en **transparencia, diagnóstico y usabilidad**. Mantiene la base
-de detección congelada de la v2.1.2 y no introduce nuevas afirmaciones sobre su capacidad para
-detectar IMSI catchers.
-
-- Las 15 reglas visibles muestran ahora `PASSED`, `FAILED` o `N/A`.
-- `N/A` significa que faltan datos para evaluar la regla; ya no se presenta como si hubiera pasado.
-- Los estados se recalculan en cada ciclo y pueden cambiar cuando aparecen nuevas celdas vecinas,
-  ubicación, Timing Advance, latencia o historial suficiente.
-- La interfaz y el terminal indican cuántas reglas se evaluaron, cuántas fallaron y cuántas quedaron
-  sin datos.
-- Se sustituye la afirmación categórica de “entorno seguro” por “sin anomalías detectadas” en las
-  reglas que realmente pudieron evaluarse.
-- El estado de OpenCellID/WiGLE continúa separado y neutral respecto a la puntuación heurística.
-- Se ha corregido la disposición de las tarjetas del historial en pantallas estrechas.
-- La versión publicada es `versionName 2.1.3`, `versionCode 6`.
-
-La puntuación siempre debe interpretarse junto al número de reglas evaluadas. Un resultado limpio
-con la evidencia disponible no demuestra que Android haya permitido observar todas las propiedades
-de seguridad de la conexión celular.
-
-## ⚠️ Nota de instalación y actualización
-
-**Solo debes desinstalar primero si actualizas desde una versión anterior a la v2.1.1.** Hay dos
-motivos:
+**Desinstala ICdetection e instala la v2.1 como instalación limpia.** Dos motivos independientes, y
+los dos apuntan a lo mismo:
 
 1. **La firma.** Si el APK no está firmado con el mismo keystore que la copia que ya tienes,
    Android rechaza la actualización (`INSTALL_FAILED_UPDATE_INCOMPATIBLE`).
@@ -304,9 +335,7 @@ motivos:
    verificación, en lugar de tu posición GPS. La migración no intenta reescribirlos a propósito:
    después no hay forma fiable de distinguirlos.
 
-Las versiones v2.1.1, v2.1.2 y v2.1.3 publicadas con la misma firma pueden actualizarse normalmente
-sin desinstalar. Si necesitas hacer la instalación limpia y quieres conservar los registros
-antiguos, **exporta el CSV antes de desinstalar**.
+Si quieres conservar tus registros antiguos, **exporta el CSV antes de desinstalar**.
 
 ## Qué encontró la primera fase de recolección
 
@@ -365,7 +394,7 @@ mismo la verificación ya no toca la puntuación (más abajo).
   metodológica, que pesa más que las dos: esta fase existe para averiguar **si** el estado de
   verificación aporta señal, y eso no se puede medir mientras está metido dentro de la puntuación
   que sirve de referencia. Queda como etiqueta independiente en la columna `Verified`, junto a un
-  score que sale solo de las 15 reglas locales de análisis. `check_export.py` imprime ya las dos mitades de esa
+  score que sale solo de las 14 heurísticas. `check_export.py` imprime ya las dos mitades de esa
   comparación.
 - **"No está en la base" y "no he podido preguntar" dejan de ser la misma respuesta.** Hay un quinto
   estado, `REJECTED`, para la respuesta que llega pero no supera nuestras comprobaciones: identidad
@@ -448,10 +477,10 @@ ver — no toca el HAL de telefonía.
 - La fila de identidad en vivo y el historial expandido muestran MCC junto a MNC (`MCC / MNC`) en
   una disposición compacta que conserva las cuatro columnas del monitor.
 
-## Ahora: recolección de campo con la v2.1.3
+## Ahora: validar la compilación y comenzar tres meses de recolección
 
-La base de detección de la v2.1.3 queda congelada durante esta fase: nada de heurísticas nuevas ni
-ajustes de pesos sin evidencia de campo. Solo correcciones de fallos reales.
+Nada de heurísticas nuevas, nada de funciones nuevas, nada de tocar pesos. Solo arreglos de fallos
+reales.
 
 El motivo es concreto: todo lo que el proyecto necesita a continuación depende de datos que
 todavía no existen — qué heurísticas aportan señal de verdad y cuáles son ruido, cuál es la tasa
