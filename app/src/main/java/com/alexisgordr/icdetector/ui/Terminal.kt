@@ -19,7 +19,9 @@ import androidx.compose.ui.unit.sp
 fun LiveTerminalPanel(logs: List<String>) {
     val scrollState = rememberScrollState()
 
-    LaunchedEffect(logs.size) {
+    // El buffer conserva 40 líneas; su tamaño deja de cambiar al llenarse. La última línea sí
+    // identifica cada actualización y mantiene activo el auto-scroll durante toda la sesión.
+    LaunchedEffect(logs.lastOrNull()) {
         scrollState.animateScrollTo(scrollState.maxValue)
     }
 

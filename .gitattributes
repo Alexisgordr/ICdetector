@@ -1,0 +1,20 @@
+# Un único formato de fin de línea para código, configuración y documentación.
+# Git aplicará LF también cuando el repositorio se use desde Windows.
+* text=auto eol=lf
+
+# Archivos binarios: nunca intentar normalizar su contenido.
+*.apk binary
+*.aar binary
+*.jar binary
+*.jks binary
+*.keystore binary
+*.p12 binary
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.webp binary
+*.ico binary
+*.pdf binary
+*.zip binary
+*.gz binary

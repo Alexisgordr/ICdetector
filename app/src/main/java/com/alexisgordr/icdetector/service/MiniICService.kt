@@ -32,12 +32,16 @@ import com.alexisgordr.icdetector.forensics.ForensicRecorder
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlin.time.Duration.Companion.milliseconds
 import okhttp3.OkHttpClient
 import java.text.SimpleDateFormat
 import java.util.*
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.CopyOnWriteArrayList
+import java.util.concurrent.atomic.AtomicLong
 import java.util.concurrent.TimeUnit
 
 class MiniICService : Service() {
@@ -76,7 +80,7 @@ class MiniICService : Service() {
     private fun appendLog(type: String, message: String) {
         val timestamp = SimpleDateFormat("HH:mm:ss.SSS", Locale.getDefault()).format(Date())
         val newLog = "[$timestamp] $type $message"
-        _liveLogs.value = (_liveLogs.value + newLog).takeLast(40)
+        _liveLogs.update { current -> (current + newLog).takeLast(40) }
     }
 
     private lateinit var telephonyManager: TelephonyManager
@@ -86,6 +90,7 @@ class MiniICService : Service() {
     private var toneGenerator: ToneGenerator? = null
     private var telephonyCallback: TelephonyCallback? = null
     private var displayInfoCallback: TelephonyCallback? = null
+    private var securityCallback: TelephonyCallback? = null
     private var screenReceiver: BroadcastReceiver? = null
     private var lastDisplayInfo: TelephonyDisplayInfo? = null
     private var isScreenOn = true
@@ -114,6 +119,10 @@ class MiniICService : Service() {
     // v2.1: la confirmación temporal vive en core/TemporalConfidence para poder testearla de
     // extremo a extremo (ver ScenarioTest). El servicio solo la usa.
     private val temporalConfidence = com.alexisgordr.icdetector.core.TemporalConfidence(CONFIRMATION_CYCLES)
+    // Todas las lecturas comparten cachés, transición y confirmación temporal. Serializarlas evita
+    // que dos callbacks publiquen la firma de una celda con el historial calculado para otra.
+    private val cellProcessingMutex = Mutex()
+    private val enqueuedCellProcessing = AtomicLong(0L)
     private var lastIncidentIdentity: String? = null
     // v2.1 — ¿el TA de este módem es una medida o un campo sin rellenar? Ver TimingAdvanceSanity.
     private val taSanity = com.alexisgordr.icdetector.core.TimingAdvanceSanity()
@@ -133,7 +142,7 @@ class MiniICService : Service() {
     private var cachedReputation: CellReputation? = null
     private var cachedFingerprint: CellRfFingerprint? = null
     // v2.1 — Posición de la antena (api_lat/api_lon) para mostrar la distancia. Solo display.
-    private var cachedApiLocation: Pair<Double, Double>? = null
+    private val apiLocationCache = ConcurrentHashMap<String, Pair<Double, Double>>()
     private var cachedRfSignature = ""
     private var cachedRfTimestamp = 0L
     private var cacheTimestamp = 0L
@@ -388,6 +397,9 @@ class MiniICService : Service() {
         val now = System.currentTimeMillis()
         // Errores de verificación de más de 1 h: ya no deben bloquear reintentos.
         lastVerificationErrorTime.entries.removeIf { now - it.value > 3_600_000L }
+        if (apiLocationCache.size > 256) {
+            apiLocationCache.keys.removeIf { it != activeCacheKey }
+        }
         // NOT_FOUND de más de 1h (el TTL): se retira la marca para acotar el mapa; al volver a
         // observar la celda, el guard la reverificará (last ausente = fuera de ventana).
         lastNotFoundTime.entries.removeIf { now - it.value > NOT_FOUND_REVERIFY_TTL }
@@ -578,6 +590,7 @@ class MiniICService : Service() {
     }
 
     private var lastForcedFixTime = 0L
+    private val forcedFixLock = Any()
     private var forcedFixListener: LocationListener? = null
 
     /**
@@ -590,47 +603,57 @@ class MiniICService : Service() {
      */
     private fun requestHighAccuracyFix(force: Boolean = false) {
         val now = System.currentTimeMillis()
-        if (!force && now - lastForcedFixTime < 30000L) return
-        if (forcedFixListener != null) return  // ya hay una petición en curso
         if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION)
             != PackageManager.PERMISSION_GRANTED) return
         if (!locationManager.isProviderEnabled(LocationManager.GPS_PROVIDER)) return
-        lastForcedFixTime = now
-        appendLog("[GPS]", "Solicitando fix GPS preciso (fresco) para fijar coordenadas")
 
-        forcedFixListener = LocationListener { location ->
-            // Validar el fix ANTES de aceptarlo: precisión, frescura y plausibilidad (el mismo
-            // isPlausibleFix anti-salto que protege getCurrentLocation). Si NO sirve, dejamos el
-            // listener VIVO para esperar uno mejor hasta el timeout, en vez de cancelar a la primera.
-            val freshFix = (System.currentTimeMillis() - location.time) < 120000L
-            if (location.accuracy > 100f || !freshFix || !isPlausibleFix(location)) return@LocationListener
+        lateinit var listener: LocationListener
+        synchronized(forcedFixLock) {
+            if (!force && now - lastForcedFixTime < 30000L) return
+            if (forcedFixListener != null) return
+            lastForcedFixTime = now
+            listener = LocationListener { location ->
+                // Validar el fix ANTES de aceptarlo: precisión, frescura y plausibilidad (el mismo
+                // isPlausibleFix anti-salto que protege getCurrentLocation). Si NO sirve, dejamos el
+                // listener VIVO para esperar uno mejor hasta el timeout.
+                val freshFix = (System.currentTimeMillis() - location.time) < 120000L
+                if (location.accuracy > 100f || !freshFix || !isPlausibleFix(location)) return@LocationListener
 
-            // Fix válido: ahora sí lo aceptamos. Quitamos el listener, fijamos la referencia de
-            // plausibilidad (para que getCurrentLocation y esta ruta compartan el último fix bueno)
-            // y rellenamos la BD. Así un fix "preciso pero corrupto" (salto imposible) ya no contamina.
-            forcedFixListener?.let { try { locationManager.removeUpdates(it) } catch (_: Exception) {} }
-            forcedFixListener = null
-            acceptLocation(location)
-            awaitingFreshCoords = false  // tenemos un fix fresco y válido: pendiente resuelto
-            val cell = _cellFlow.value.firstOrNull { it.isRegistered } ?: return@LocationListener
-            scope.launch(Dispatchers.IO) {
-                val updated = dbHelper.updateNullCoordinates(
-                    cell.cellId, cell.mnc, cell.tac, cell.mcc,
-                    cell.radioTech,
-                    location.latitude, location.longitude
-                )
-                appendLog("[GPS]",
-                    if (updated > 0) "Incidente localizado: $updated registro(s) con coordenadas precisas"
-                    else "Fix preciso obtenido (sin registros pendientes de coordenadas)")
+                val ownsRegistration = synchronized(forcedFixLock) {
+                    if (forcedFixListener === listener) {
+                        forcedFixListener = null
+                        true
+                    } else false
+                }
+                if (!ownsRegistration) return@LocationListener
+                try { locationManager.removeUpdates(listener) } catch (_: Exception) {}
+                acceptLocation(location)
+                awaitingFreshCoords = false
+                val cell = _cellFlow.value.firstOrNull { it.isRegistered } ?: return@LocationListener
+                scope.launch(Dispatchers.IO) {
+                    val updated = dbHelper.updateNullCoordinates(
+                        cell.cellId, cell.mnc, cell.tac, cell.mcc,
+                        cell.radioTech,
+                        location.latitude, location.longitude
+                    )
+                    appendLog("[GPS]",
+                        if (updated > 0) "Incidente localizado: $updated registro(s) con coordenadas precisas"
+                        else "Fix preciso obtenido (sin registros pendientes de coordenadas)")
+                }
             }
+            forcedFixListener = listener
         }
+        appendLog("[GPS]", "Solicitando fix GPS preciso (fresco) para fijar coordenadas")
 
         try {
             locationManager.requestLocationUpdates(
-                LocationManager.GPS_PROVIDER, 0L, 0f, forcedFixListener!!, Looper.getMainLooper()
+                LocationManager.GPS_PROVIDER, 0L, 0f, listener, Looper.getMainLooper()
             )
-        } catch (_: SecurityException) {
-            forcedFixListener = null
+        } catch (error: Exception) {
+            synchronized(forcedFixLock) {
+                if (forcedFixListener === listener) forcedFixListener = null
+            }
+            Log.e("MiniIC", "No se pudo registrar el fix GPS preciso: ${error.message}", error)
             return
         }
 
@@ -642,9 +665,14 @@ class MiniICService : Service() {
         val timeoutMs = if (force) 90000L else 20000L
         scope.launch {
             delay(timeoutMs.milliseconds)
-            forcedFixListener?.let {
-                try { locationManager.removeUpdates(it) } catch (_: Exception) {}
-                forcedFixListener = null
+            val timedOut = synchronized(forcedFixLock) {
+                if (forcedFixListener === listener) {
+                    forcedFixListener = null
+                    true
+                } else false
+            }
+            if (timedOut) {
+                try { locationManager.removeUpdates(listener) } catch (_: Exception) {}
                 appendLog("[GPS]", "Fix GPS preciso no disponible en ${timeoutMs / 1000} s (timeout)")
             }
         }
@@ -678,8 +706,10 @@ class MiniICService : Service() {
     private fun registerAdvancedSecurityCallback() {
         try {
             if (Build.VERSION.SDK_INT >= 34) {
-                val securityCallback = ImsiCatcherSecurityCallback()
-                telephonyManager.registerTelephonyCallback(mainExecutor, securityCallback)
+                if (securityCallback != null) return
+                securityCallback = ImsiCatcherSecurityCallback().also {
+                    telephonyManager.registerTelephonyCallback(mainExecutor, it)
+                }
                 appendLog("[SYS]", "Callback de telefonía registrado (detección de cifrado nulo/IMSI: pendiente API Android 16).")
             }
         } catch (e: Exception) {
@@ -750,6 +780,10 @@ class MiniICService : Service() {
                     telephonyManager = getSystemService(TELEPHONY_SERVICE) as TelephonyManager
                     telephonyCallback?.let { telephonyManager.unregisterTelephonyCallback(it) }
                     displayInfoCallback?.let { telephonyManager.unregisterTelephonyCallback(it) }
+                    securityCallback?.let { telephonyManager.unregisterTelephonyCallback(it) }
+                    telephonyCallback = null
+                    displayInfoCallback = null
+                    securityCallback = null
                 } catch (_: Exception) {}
                 registerTelephonyCallback()
                 registerDisplayInfoCallback()
@@ -802,9 +836,11 @@ class MiniICService : Service() {
         try {
             locationManager.removeUpdates(locationListener)
         } catch (_: Exception) {}
-        forcedFixListener?.let {
+        val pendingForcedFix = synchronized(forcedFixLock) {
+            forcedFixListener.also { forcedFixListener = null }
+        }
+        pendingForcedFix?.let {
             try { locationManager.removeUpdates(it) } catch (_: Exception) {}
-            forcedFixListener = null
         }
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
             telephonyCallback?.let {
@@ -813,11 +849,18 @@ class MiniICService : Service() {
             displayInfoCallback?.let {
                 telephonyManager.unregisterTelephonyCallback(it)
             }
+            securityCallback?.let {
+                telephonyManager.unregisterTelephonyCallback(it)
+            }
+            telephonyCallback = null
+            displayInfoCallback = null
+            securityCallback = null
         }
     }
 
     private fun processCellInfo(infoList: List<CellInfo>?) {
         try {
+            val processingSequence = enqueuedCellProcessing.incrementAndGet()
             if (!infoList.isNullOrEmpty()) {
                 lastCallbackTime = System.currentTimeMillis()
                 connectionRetryCount = 0
@@ -902,6 +945,13 @@ class MiniICService : Service() {
 
             val neighbors = list.filter { !it.isRegistered }
             val activeRaw = list.firstOrNull { it.isRegistered }
+            // CellInfo.timeStamp es monotónico y pertenece a la muestra del módem. Pull-to-refresh
+            // y callbacks duplicados conservan el mismo valor y no deben avanzar 1/3, 2/3, 3/3.
+            @Suppress("DEPRECATION")
+            val observationToken = infoList
+                ?.filter { it.isRegistered }
+                ?.maxOfOrNull { TimeUnit.NANOSECONDS.toMillis(it.timeStamp) }
+                ?: 0L
 
             // Reset del estado de latencia ANTES del análisis si la celda ha cambiado
             // (prevCid aún tiene el id anterior aquí; checkAlerts lo actualiza después).
@@ -913,6 +963,8 @@ class MiniICService : Service() {
             }
 
             scope.launch(Dispatchers.IO) {
+                cellProcessingMutex.withLock {
+                if (processingSequence < enqueuedCellProcessing.get()) return@withLock
                 val currentLocation = getCurrentLocation()
 
                 // H16 se prepara antes de analizar la celda: aquí todavía conservamos la última
@@ -964,9 +1016,11 @@ class MiniICService : Service() {
                         // MOSTRAR la distancia de forma continua (no solo en el ciclo posterior a
                         // la verificación). Misma caché por identidad de celda: una consulta más
                         // cada 60 s como mucho.
-                        cachedApiLocation = dbHelper.getCellApiLocation(
+                        val apiLocation = dbHelper.getCellApiLocation(
                             activeRaw.cellId, activeRaw.mnc, activeRaw.tac, activeRaw.mcc, activeRaw.radioTech
                         )
+                        if (apiLocation != null) apiLocationCache[rfSig] = apiLocation
+                        else apiLocationCache.remove(rfSig)
                         cachedRfSignature = rfSig
                         cachedRfStability = st
                         cachedRfTimestamp = nowRf
@@ -1029,7 +1083,7 @@ class MiniICService : Service() {
                 // y no se le pasa a ninguna heurística: su precisión depende de lo buena que sea
                 // una coordenada colaborativa, que no es comparable con la geometría del TA.
                 // Mezclarlas sería juntar dos magnitudes de fiabilidad muy distinta.
-                val towerDistance: Int? = cachedApiLocation?.let { (tLat, tLon) ->
+                val towerDistance: Int? = activeRaw?.identityKey?.let(apiLocationCache::get)?.let { (tLat, tLon) ->
                     currentLocation?.let { loc ->
                         val r = FloatArray(1)
                         Location.distanceBetween(loc.latitude, loc.longitude, tLat, tLon, r)
@@ -1087,7 +1141,10 @@ class MiniICService : Service() {
                         val knownStatus = verificationCache[cacheKey] ?: VerificationStatus.PENDING
 
                         // Aplicar confirmación temporal antes de alertas
-                        val temporalActive = temporalConfidence.apply(active)
+                        val temporalActive = temporalConfidence.apply(
+                            active,
+                            observationToken.takeIf { it > 0L }
+                        )
                         val diagnosticInputs = com.alexisgordr.icdetector.core.DiagnosticEngine.Inputs(
                             neighborCount = neighbors.size,
                             wifiActive = isWifiConnected(),
@@ -1165,6 +1222,7 @@ class MiniICService : Service() {
                         _cellFlow.value = emptyList()
                         updateNotificationText("Buscando red...")
                     }
+                }
                 }
             }
         } catch (e: Exception) {
@@ -1867,7 +1925,7 @@ class MiniICService : Service() {
         // refresca con el TTL de 60 s. Acabamos de recibirla aquí mismo, así que la ponemos ya:
         // sin esto, tras verificar una celda nueva habría hasta un minuto de espera para ver la
         // distancia, justo en el momento en el que la persona está mirando.
-        cachedApiLocation = lat to lon
+        apiLocationCache[cacheKey] = lat to lon
         dbHelper.updateVerificationStatus(
             cell.mnc,
             cell.tac,

@@ -693,7 +693,7 @@ class CellDbHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME, 
     }
 
     /**
-     * Marca como [status] las observaciones aún PENDING de esta celda y tecnología y, si la API
+     * Asocia [status] a la observación más reciente de esta celda y tecnología y, si la API
      * devolvió la posición de la antena, la guarda en [COLUMN_API_LAT]/[COLUMN_API_LON].
      *
      * v2.1 — CAMBIO IMPORTANTE: antes escribía esa coordenada en lat/lon, es decir, ENCIMA de la
@@ -715,17 +715,28 @@ class CellDbHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME, 
         lon: Double? = null,
         mcc: String? = null,
         radio: RadioTech
-    ) {
+    ): Int {
         val db = this.writableDatabase
         val values = ContentValues().apply {
             put(COLUMN_VERIFIED, status.name)
             if (lat != null) put(COLUMN_API_LAT, lat)
             if (lon != null) put(COLUMN_API_LON, lon)
         }
-        val where = if (mcc != null) "$COLUMN_CID=? AND $COLUMN_MNC=? AND $COLUMN_TAC=? AND $COLUMN_MCC=? AND $COLUMN_RADIO=? AND $COLUMN_VERIFIED='PENDING'"
-                    else "$COLUMN_CID=? AND $COLUMN_MNC=? AND $COLUMN_TAC=? AND $COLUMN_RADIO=? AND $COLUMN_VERIFIED='PENDING'"
-        val args = if (mcc != null) arrayOf(cid, mnc, tac, mcc, radio.name) else arrayOf(cid, mnc, tac, radio.name)
-        db.update(TABLE_HISTORY, values, where, args)
+        val identityWhere = if (mcc != null) {
+            "$COLUMN_CID=? AND $COLUMN_MNC=? AND $COLUMN_TAC=? AND $COLUMN_MCC=? AND $COLUMN_RADIO=?"
+        } else {
+            "$COLUMN_CID=? AND $COLUMN_MNC=? AND $COLUMN_TAC=? AND $COLUMN_RADIO=?"
+        }
+        val args = if (mcc != null) arrayOf(cid, mnc, tac, mcc, radio.name)
+                   else arrayOf(cid, mnc, tac, radio.name)
+
+        // La respuesta describe el estado conocido AHORA. Se adjunta siempre a la observación
+        // más reciente de esta identidad, aunque esa fila naciera como NOT_FOUND/REJECTED por una
+        // consulta anterior. Limitar el UPDATE a PENDING hacía que una verificación posterior no
+        // persistiera coordenadas ni estado. Solo se reescribe la última fila: las respuestas
+        // históricas anteriores conservan su significado forense.
+        val latestWhere = "$COLUMN_ID=(SELECT MAX($COLUMN_ID) FROM $TABLE_HISTORY WHERE $identityWhere)"
+        return db.update(TABLE_HISTORY, values, latestWhere, args)
     }
 
     fun getRecords(): List<HistoryRecord> {
@@ -1273,8 +1284,8 @@ class CellDbHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME, 
                 FROM $TABLE_HISTORY
                 WHERE $COLUMN_API_LAT IS NOT NULL
                   AND $COLUMN_API_LON IS NOT NULL
-                  AND ABS($COLUMN_API_LAT - ?) <= ?
-                  AND ABS($COLUMN_API_LON - ?) <= ?
+                  AND ABS($COLUMN_API_LAT - CAST(? AS REAL)) <= CAST(? AS REAL)
+                  AND ABS($COLUMN_API_LON - CAST(? AS REAL)) <= CAST(? AS REAL)
                   AND NOT ($COLUMN_MCC=? AND $COLUMN_MNC=? AND $COLUMN_TAC=?)
             """.trimIndent()
             db.rawQuery(

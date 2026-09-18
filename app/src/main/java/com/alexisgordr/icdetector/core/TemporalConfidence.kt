@@ -19,10 +19,14 @@ import java.util.concurrent.ConcurrentHashMap
  * No es thread-safe por diseño más allá del mapa: se llama siempre desde el mismo hilo (el bucle
  * de análisis, en Dispatchers.Main).
  */
-class TemporalConfidence(private val confirmationCycles: Int = 3) {
+class TemporalConfidence(
+    private val confirmationCycles: Int = 3,
+    private val minObservationSpacingMs: Long = 2_000L
+) {
 
     private val anomalyStreaks = ConcurrentHashMap<String, Int>()
     private var lastStreakKey = ""
+    private var lastObservationToken: Long? = null
 
     /** Racha actual de la celda (para diagnóstico y tests). */
     fun streakOf(cell: CellData): Int = anomalyStreaks[keyOf(cell)] ?: 0
@@ -31,6 +35,7 @@ class TemporalConfidence(private val confirmationCycles: Int = 3) {
     fun reset() {
         anomalyStreaks.clear()
         lastStreakKey = ""
+        lastObservationToken = null
     }
 
     /**
@@ -40,14 +45,29 @@ class TemporalConfidence(private val confirmationCycles: Int = 3) {
      */
     private fun keyOf(cell: CellData) = cell.identityKey
 
-    fun apply(cell: CellData): CellData {
+    fun apply(cell: CellData, observationToken: Long? = null): CellData {
         val streakKey = keyOf(cell)
 
         // Si cambia la celda activa, resetear todos los streaks
         if (streakKey != lastStreakKey) {
             anomalyStreaks.clear()
             lastStreakKey = streakKey
+            lastObservationToken = null
         }
+
+        // requestCellInfoUpdate, callbacks y refrescos manuales pueden entregar exactamente la
+        // misma muestra del módem varias veces. Una confirmación exige observaciones nuevas, no
+        // invocaciones nuevas. Los tokens del servicio son timestamps monotónicos de CellInfo;
+        // también se ignoran respuestas antiguas que terminen fuera de orden.
+        val previousToken = lastObservationToken
+        val isNewObservation = observationToken == null || previousToken == null ||
+            (observationToken > previousToken &&
+                (!cell.isSuspicious || observationToken - previousToken >= minObservationSpacingMs))
+
+        if (!isNewObservation) {
+            return decorate(cell, anomalyStreaks[streakKey] ?: 0)
+        }
+        lastObservationToken = observationToken
 
         val currentStreak = if (cell.isSuspicious) {
             val newStreak = (anomalyStreaks[streakKey] ?: 0) + 1
@@ -58,6 +78,10 @@ class TemporalConfidence(private val confirmationCycles: Int = 3) {
             0
         }
 
+        return decorate(cell, currentStreak)
+    }
+
+    private fun decorate(cell: CellData, currentStreak: Int): CellData {
         val isConfirmed = cell.isSuspicious && currentStreak >= confirmationCycles
 
         return cell.copy(

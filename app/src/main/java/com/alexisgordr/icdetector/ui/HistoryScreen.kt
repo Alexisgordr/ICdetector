@@ -23,6 +23,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import com.alexisgordr.icdetector.models.HistoryRecord
@@ -171,7 +172,25 @@ fun HistoryPanel(dbHelper: CellDbHelper, onBack: () -> Unit) {
                 val exportLauncher = rememberLauncherForActivityResult(
                     contract = ActivityResultContracts.CreateDocument("text/csv")
                 ) { uri ->
-                    uri?.let { ExportUtils.exportToCsv(context, items, it) }
+                    uri?.let {
+                        scope.launch {
+                            val result = withContext(Dispatchers.IO) {
+                                ExportUtils.exportToCsv(context, items, it)
+                            }
+                            result.fold(
+                                onSuccess = {
+                                    Toast.makeText(context, "✅ CSV exportado con éxito", Toast.LENGTH_LONG).show()
+                                },
+                                onFailure = { error ->
+                                    Toast.makeText(
+                                        context,
+                                        "❌ Error al exportar: ${error.message ?: "desconocido"}",
+                                        Toast.LENGTH_SHORT
+                                    ).show()
+                                }
+                            )
+                        }
+                    }
                 }
 
                 TextButton(
@@ -643,7 +662,7 @@ fun IntelPanel(dbHelper: CellDbHelper) {
     val totalCells = groupedItems.size
     val totalConnections = items.size
     val avgScore = items.asSequence().map { it.score }.average()
-    val suspiciousEvents = items.count { it.score < 70 }
+    val suspiciousCells = groupedItems.count { (_, records) -> records.any { it.score < 70 } }
     val verifiedCells = groupedItems.count { (_, r) -> r.any { it.verified.name == "VERIFIED" } }
     val notFoundCells = groupedItems.count { (_, r) -> r.any { it.verified.name == "NOT_FOUND" } }
     val recordsWithGps = items.count { it.lat != null && it.lon != null }
@@ -696,8 +715,8 @@ fun IntelPanel(dbHelper: CellDbHelper) {
             IntelCell(Modifier.weight(1f), "VERIFIED", verifiedCells.toString(), Color(0xFF4CAF50))
             IntelCell(Modifier.weight(1f), "NOT FOUND", notFoundCells.toString(), Color(0xFFFFA000))
             IntelCell(
-                Modifier.weight(1f), "SOSPECHOSAS", suspiciousEvents.toString(),
-                if (suspiciousEvents > 0) Color(0xFFCF6679) else Color(0xFF4CAF50)
+                Modifier.weight(1f), "SOSPECHOSAS", suspiciousCells.toString(),
+                if (suspiciousCells > 0) Color(0xFFCF6679) else Color(0xFF4CAF50)
             )
         }
 

@@ -1,5 +1,34 @@
 # Changelog
 
+## 2.3.1
+
+### Verification and runtime correctness
+
+- Fixed SQLite numeric affinity in the repeated-coordinate sentinel check. Bound query arguments
+  are now explicitly cast to `REAL`, so unrelated API coordinates no longer compare as equal after
+  three tracking areas have accumulated.
+- A new verification result is now attached to the most recent observation of that full cell
+  identity, even when it was inserted as `NOT_FOUND` or `REJECTED`. Earlier rows intentionally keep
+  their historical state; therefore old `PENDING` rows are not rewritten retroactively in exports.
+- Added an executable SQLite regression check covering both numeric affinity and the transition
+  from `NOT_FOUND` to a persisted `VERIFIED` result.
+- Serialized cellular processing, isolated API-coordinate caches by full identity, and prevented
+  duplicate or rapid modem snapshots from advancing the three-phase confirmation.
+- Made the one-shot high-accuracy GPS listener a synchronized single-flight operation. Concurrent
+  requests can no longer register an orphan listener that remains active at maximum frequency.
+- Fixed lifecycle cleanup for the advanced telephony callback and made terminal log updates atomic.
+
+### Interface and exports
+
+- Notification permission denial no longer blocks the whole application on Android 13 and later.
+- CSV export now runs outside the main thread and reports destination failures.
+- Fixed terminal auto-scroll after its 40-line buffer fills, RF quality presentation, suspicious
+  cell counting, and GPS-status reads during Compose rendering.
+
+### Release metadata
+
+- Updated release metadata to `versionName 2.3.1` and `versionCode 10`.
+
 ## 2.3.0
 
 ### H16 — cellular transition coherence

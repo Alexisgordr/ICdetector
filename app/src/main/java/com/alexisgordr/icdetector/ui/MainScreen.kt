@@ -37,6 +37,8 @@ import com.alexisgordr.icdetector.models.*
 import com.alexisgordr.icdetector.service.MiniICService
 import com.alexisgordr.icdetector.storage.CellDbHelper
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import kotlin.time.Duration.Companion.milliseconds
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.launch
@@ -95,8 +97,10 @@ fun MainLayout(context: Context, dbHelper: CellDbHelper, service: MiniICService?
         }
     }
 
-    // DISPARADOR AUTOMÁTICO DE PERMISOS / INICIO DE SERVICIO
-    LaunchedEffect(hasLoc, hasPhone) {
+    // Solicitud inicial. Notificaciones es opcional para usar la interfaz: Android 13+ permite
+    // denegarla y aun así ejecutar el servicio en primer plano, aunque no lo muestre en el cajón.
+    // No se repite automáticamente tras una denegación permanente.
+    LaunchedEffect(Unit) {
         if (!hasLoc || !hasPhone || (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU && !hasNotif)) {
             val arr = mutableListOf(
                 Manifest.permission.ACCESS_FINE_LOCATION,
@@ -113,14 +117,14 @@ fun MainLayout(context: Context, dbHelper: CellDbHelper, service: MiniICService?
         }
     }
 
-    if (!hasLoc || !hasPhone || !hasNotif) {
+    if (!hasLoc || !hasPhone) {
         Box(modifier = Modifier
             .fillMaxSize()
             .statusBarsPadding()
             .padding(32.dp), contentAlignment = Alignment.Center) {
             Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(16.dp)) {
                 Text(
-                    "ICdetection requiere permisos de localización, teléfono y notificaciones para funcionar.",
+                    "ICdetection requiere permisos de localización y teléfono para funcionar.",
                     color = Color(0xFF888888),
                     textAlign = androidx.compose.ui.text.style.TextAlign.Center,
                     fontSize = 14.sp
@@ -131,7 +135,7 @@ fun MainLayout(context: Context, dbHelper: CellDbHelper, service: MiniICService?
                             Manifest.permission.ACCESS_FINE_LOCATION,
                             Manifest.permission.READ_PHONE_STATE
                         ).apply {
-                            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU && !hasNotif) {
                                 add(Manifest.permission.POST_NOTIFICATIONS)
                             }
                         }.toTypedArray()
@@ -554,27 +558,26 @@ fun SecurityScorePanel(active: CellData, dbmHistory: List<Int>, geoHistory: List
     val context = LocalContext.current
 
     // GPS status — lee el valor cacheado, sin activar hardware
-    val hasGps = remember(active) {
-        try {
-            val lm = context.getSystemService(Context.LOCATION_SERVICE) as LocationManager
-            if (ActivityCompat.checkSelfPermission(
-                    context, Manifest.permission.ACCESS_FINE_LOCATION
-                ) == PackageManager.PERMISSION_GRANTED) {
-                
-                val now = System.currentTimeMillis()
-                val maxAge = 120000L
-                val maxAccuracy = 100f
-
-                // GPS-only: coherente con el servicio (que ya no usa NETWORK_PROVIDER). Si contáramos
-                // la ubicación de red aquí, la UI diría "ubicación disponible" mientras el registro
-                // forense (GPS-only) escribe null — un indicador engañoso.
-                val gpsLoc = lm.getLastKnownLocation(LocationManager.GPS_PROVIDER)
-
-                gpsLoc?.let {
-                    it.accuracy < maxAccuracy && (now - it.time) < maxAge
-                } ?: false
-            } else false
-        } catch (_: Exception) { false }
+    var hasGps by remember { mutableStateOf(false) }
+    LaunchedEffect(active.identityKey) {
+        while (true) {
+            hasGps = withContext(Dispatchers.IO) {
+                try {
+                    val lm = context.getSystemService(Context.LOCATION_SERVICE) as LocationManager
+                    if (ActivityCompat.checkSelfPermission(
+                            context, Manifest.permission.ACCESS_FINE_LOCATION
+                        ) == PackageManager.PERMISSION_GRANTED) {
+                        val now = System.currentTimeMillis()
+                        val maxAge = 120000L
+                        val maxAccuracy = 100f
+                        // GPS-only: coherente con el servicio y fuera de la composición.
+                        val gpsLoc = lm.getLastKnownLocation(LocationManager.GPS_PROVIDER)
+                        gpsLoc?.let { it.accuracy < maxAccuracy && (now - it.time) < maxAge } ?: false
+                    } else false
+                } catch (_: Exception) { false }
+            }
+            delay(30_000L)
+        }
     }
     
     val auditFlow = remember(service) { service?.auditStatus ?: MutableStateFlow("Iniciando...") }
@@ -721,13 +724,13 @@ fun SecurityScorePanel(active: CellData, dbmHistory: List<Int>, geoHistory: List
 
                 // Indicador RF — centro, siempre visible
                 val rsrq = active.rsrq
-                val isRfWarning = netState == "ANOMALA" && rsrq != null && rsrq <= -15
+                val isRfWarning = rsrq != null && rsrq <= -15
 
                 val (rfText, rfColor) = when {
                     rsrq == null          -> "● RF N/A"     to Color(0xFF666666)
-                    isRfWarning           -> "⚠ RF WARNING" to Color(0xFFFFA000)
+                    isRfWarning           -> "⚠ RF POOR"    to Color(0xFFFFA000)
                     rsrq > -15            -> "● RF OK"       to Color(0xFF4CAF50)
-                    else                  -> "● RF N/A"      to Color(0xFF666666)
+                    else                  -> "⚠ RF POOR"    to Color(0xFFFFA000)
                 }
 
                 Text(

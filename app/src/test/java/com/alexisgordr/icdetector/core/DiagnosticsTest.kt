@@ -37,6 +37,39 @@ class DiagnosticsTest {
     }
 
     @Test
+    fun `duplicate modem observation cannot advance confirmation`() {
+        val temporal = TemporalConfidence(3)
+        val suspicious = cell().copy(isSuspicious = true, suspiciousReason = "test")
+
+        val first = temporal.apply(suspicious, observationToken = 10_000L)
+        val duplicate = temporal.apply(suspicious, observationToken = 10_000L)
+        val older = temporal.apply(suspicious, observationToken = 9_000L)
+        val tooSoon = temporal.apply(suspicious, observationToken = 11_000L)
+        val second = temporal.apply(suspicious, observationToken = 12_000L)
+
+        assertEquals(1, first.temporalProgress.phase)
+        assertEquals(1, duplicate.temporalProgress.phase)
+        assertEquals(1, older.temporalProgress.phase)
+        assertEquals(1, tooSoon.temporalProgress.phase)
+        assertEquals(2, second.temporalProgress.phase)
+        assertFalse(duplicate.isSuspicious)
+        assertFalse(second.isSuspicious)
+    }
+
+    @Test
+    fun `three distinct modem observations confirm anomaly`() {
+        val temporal = TemporalConfidence(3)
+        val suspicious = cell().copy(isSuspicious = true, suspiciousReason = "test")
+
+        temporal.apply(suspicious, observationToken = 10_000L)
+        temporal.apply(suspicious, observationToken = 12_000L)
+        val confirmed = temporal.apply(suspicious, observationToken = 14_000L)
+
+        assertEquals(3, confirmed.temporalProgress.phase)
+        assertTrue(confirmed.isSuspicious)
+    }
+
+    @Test
     fun `diagnostics explain unavailable timing advance`() {
         val inputs = DiagnosticEngine.Inputs(
             neighborCount = 0, wifiActive = false, locationAvailable = false,

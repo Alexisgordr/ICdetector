@@ -1,5 +1,20 @@
 # ICdetection Status
 
+## v2.3.1 — correctness and campaign-integrity release
+
+**Release:** stable
+**Version code:** 10
+**Database schema:** 15
+**Detection baseline:** unchanged from v2.3.0
+
+v2.3.1 fixes faults that could reject valid public-database coordinates, fail to persist a later
+successful verification, advance temporal confirmation through duplicate refreshes, mix cell-cache
+state between overlapping callbacks, or leave a high-accuracy GPS listener registered. It also
+hardens permission handling, CSV export, terminal logging, and status presentation.
+
+The release does not add heuristics or change scoring weights, alert thresholds, database schema,
+or export columns. The v2.3.0 H1–H16 field-validation baseline therefore remains comparable.
+
 ## v2.3.0 — mobility-transition coherence release
 
 **Release:** stable  

@@ -2,17 +2,16 @@ package com.alexisgordr.icdetector.utils
 
 import android.content.Context
 import android.net.Uri
-import android.widget.Toast
 import com.alexisgordr.icdetector.models.HistoryRecord
 import java.io.OutputStreamWriter
 import java.nio.charset.StandardCharsets
 
 object ExportUtils {
-    fun exportToCsv(context: Context, items: List<HistoryRecord>, uri: Uri) {
-        try {
+    fun exportToCsv(context: Context, items: List<HistoryRecord>, uri: Uri): Result<Unit> =
+        runCatching {
             val resolver = context.contentResolver
             resolver.openOutputStream(uri).use { outputStream ->
-                if (outputStream != null) {
+                requireNotNull(outputStream) { "El destino no permitió abrir el archivo" }
                     OutputStreamWriter(outputStream, StandardCharsets.UTF_8).use { writer ->
                         // Tres columnas al final (al final a propósito, para no romper scripts
                         // que leyeran el CSV por posición):
@@ -67,14 +66,8 @@ object ExportUtils {
                         }
                         writer.flush()
                     }
-                    Toast.makeText(context, "✅ CSV exportado con éxito", Toast.LENGTH_LONG).show()
-                }
             }
-        } catch (e: Exception) {
-            e.printStackTrace()
-            Toast.makeText(context, "❌ Error al exportar: ${e.message}", Toast.LENGTH_SHORT).show()
         }
-    }
 
     /**
      * Escapa un campo para CSV según RFC 4180: si contiene coma, comillas dobles o saltos de

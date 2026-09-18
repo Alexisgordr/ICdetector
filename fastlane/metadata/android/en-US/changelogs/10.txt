@@ -1,0 +1,4 @@
+Correctness release for the v2.3.0 detection baseline. Fixes external-verification persistence,
+SQLite coordinate validation, duplicate temporal cycles, callback/cache races, GPS listener cleanup,
+notification denial handling, CSV export responsiveness, and monitoring-interface inconsistencies.
+No heuristic weights or alert thresholds changed.

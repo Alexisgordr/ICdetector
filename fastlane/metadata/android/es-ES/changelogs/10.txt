@@ -1,0 +1,4 @@
+Versión de corrección para la línea base de detección v2.3.0. Corrige la persistencia de verificación,
+la validación SQLite de coordenadas, ciclos temporales duplicados, carreras de callbacks y cachés,
+la limpieza del listener GPS, la denegación de notificaciones, la exportación CSV y varias
+inconsistencias de interfaz. No cambian pesos heurísticos ni umbrales de alerta.
