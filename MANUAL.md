@@ -46,6 +46,12 @@ For longer sessions:
 
 Android Doze may reduce fresh GPS fixes when the screen is off and the device is stationary. This is an operating-system restriction, not necessarily an app failure.
 
+From version 2.3.5, when a scheduled background sample is recorded without coordinates while the
+screen is off, ICdetection requests one bounded high-accuracy fix for up to 20 seconds. A successful
+fix is applied only to the newest coordinate-less record for the same complete cell identity. If no
+fresh fix is obtained, the coordinates remain empty; the app does not invent or reuse a stale
+position.
+
 ### External verification
 
 OpenCellID and WiGLE are optional. Configure valid credentials in Settings to enable external cross-referencing. Without them, local and historical analysis still works, while database-dependent rules may report `N/A`, `PENDING`, `NOT FOUND`, or an API error.
@@ -101,7 +107,7 @@ The score is a decision aid, not a measured probability that an IMSI catcher exi
 
 ## 5. Heuristic diagnostics
 
-Version 2.3.3 exposes the state and explanation of each evaluated rule:
+Version 2.3.5 exposes the state and explanation of each evaluated rule:
 
 - **PASS:** The rule ran with sufficient data and did not detect its suspicious condition.
 - **FAIL:** The rule ran and detected its suspicious condition. One failed rule does not automatically confirm a threat.
@@ -241,6 +247,10 @@ The app separates three types of information:
 
 Routine history may be pruned according to the configured retention policy to prevent unlimited database growth. Export important information before clearing application data or uninstalling the app.
 
+Retention and the forensic-sample cap are enforced when monitoring starts and then approximately
+once every 24 hours while the service remains active. The History screen loads the 2,000 most recent
+rows to keep memory use bounded, but **EXPORT CSV** still streams the complete retained database.
+
 ---
 
 ## 10. Forensic capture
@@ -347,6 +357,8 @@ If an event persists to `3/3` and remains concerning after reviewing its explana
 7. **Seek corroboration** from another device, an operator, another data source, or qualified radio/network analysis.
 
 Automatic Airplane Mode requires privileged `WRITE_SECURE_SETTINGS` access granted through ADB. Normal installations do not possess this permission.
+If automatic activation is unavailable, version 2.3.5 posts an actionable security notification
+that opens Android's Airplane Mode settings so the user can decide whether to disconnect.
 
 ---
 
