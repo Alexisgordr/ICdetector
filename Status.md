@@ -2,14 +2,40 @@
 
 ## v2.3.0 — mobility-transition coherence release
 
-**Release:** stable
-**Version code:** 9
-**Database schema:** 15
-**Detection baseline:** H16 added conservatively
+**Release:** stable  
+**Version code:** 9  
+**Database schema:** 15  
+**Detection baseline:** H1–H16 frozen for field validation  
+**Field-validation freeze:** active from 2026-09-18
 
 v2.3.0 adds H16, a local-first check for physically incoherent serving-cell transitions. It does
 not use a fixed tower-spacing rule: it compares the handover with actual device motion, GPS
 quality, previous neighbours, locally learned cell zones, and trusted transition history.
+
+### Field-validation freeze
+
+Starting on **2026-09-18**, the v2.3.0 detection baseline enters a multi-week field-validation
+freeze. H16 is part of this frozen baseline: the freeze begins after its introduction and does not
+mean that v2.3.0 is identical to the earlier v2.2.x baseline.
+
+During this period, no new heuristics, scoring weights, alert thresholds, database semantics, or
+export fields are planned. Changes should be limited to critical correctness, security, privacy,
+compatibility, or data-loss fixes that are clearly documented and assessed for their effect on the
+collection campaign.
+
+The purpose of the freeze is to collect and correlate representative field evidence before making
+further detection changes, with particular attention to:
+
+- H16 outcomes across stationary, walking, driving, and poor-GPS conditions.
+- Transition-topology maturity and trusted-route formation.
+- The distribution and causes of `PASS`, `FAIL`, and explained `N/A` results.
+- Temporal progression through `1/3`, `2/3`, and `3/3`.
+- False positives, short-lived anomalies, incident records, and forensic captures.
+- Differences between devices, modem implementations, operators, radio technologies, and regions.
+
+This is a stability and evidence-collection period, not a claim that detection is complete or that
+an alert proves the presence of an IMSI catcher. Findings will be reviewed after several weeks of
+data collection before another detection-policy change is considered.
 
 ### v2.3.0 detection changes
 
@@ -44,7 +70,7 @@ quality, previous neighbours, locally learned cell zones, and trusted transition
 
 | Capability | Status | Operational meaning |
 |---|---|---|
-| Existing heuristic engine | Stable / unchanged | Existing weights, penalties, and confirmation behavior are preserved. |
+| Heuristic engine H1–H16 | Frozen for field validation | H16 is active in v2.3.0; weights, thresholds, and detection policy are held stable during the collection period. |
 | Temporal phases | Active | `1/3`, `2/3`, and `3/3` are visible and persisted with incident context. |
 | Incident black box | Active | Opens at `1/3`; records the highest phase, score, confidence, reason, and diagnostic snapshot. |
 | Rule diagnostics | Active | Rules report `PASS`, `FAIL`, or explained `N/A` according to available context. |
@@ -103,7 +129,8 @@ device coordinates may be present, so exported cases must be treated as sensitiv
 
 ### Storage and upgrade behavior
 
-- Schema 13 adds incident records; schema 14 adds forensic cases and samples.
+- Schema 13 adds incident records; schema 14 adds forensic cases and samples; schema 15 adds
+  handover-transition history.
 - Migrations are non-destructive for supported recent releases.
 - Open forensic captures are marked `INTERRUPTED` after an unexpected restart.
 - The existing 60-day cleanup policy also removes expired forensic cases and their samples.
@@ -113,10 +140,11 @@ device coordinates may be present, so exported cases must be treated as sensitiv
 
 ### Validation focus
 
-The new diagnostic and forensic policies have regression coverage, but the evidence still needs
-field validation across different modems, manufacturers, Android versions, operators, and radio
-conditions. `N/A` is a valid outcome when the required telemetry is not available. A case or alert
-is evidence of an observed anomaly, not definitive attribution to a rogue base station.
+The H16, topology, diagnostic, and forensic policies have regression coverage, but the evidence
+still needs field validation across different modems, manufacturers, Android versions, operators,
+mobility conditions, and radio environments. `N/A` is a valid outcome when the required telemetry
+is not available. A case or alert is evidence of an observed anomaly, not definitive attribution
+to a rogue base station.
 
 ---
 
@@ -130,7 +158,11 @@ designed to answer, and add the tooling to check that the second one can.
 
 ### Final verification hardening
 
-- Campaign baseline starts clean on 2026-09-15 (frozen build v2.1). The campaign continues on v2.2.0 from 2026-09-17: the     engine, weights and CSV format are identical, so the series is continuous.
+- The earlier campaign baseline started clean on 2026-09-15 with the frozen v2.1 build and
+  continued through v2.2.x. That statement applies only to the historical campaign: v2.3.0 starts
+  a new field-validation baseline on 2026-09-18 because it adds H16, schema 15, and
+  transition-topology evidence. Results from the two baselines must be labelled separately when
+  they are compared or correlated.
 - **Quota-safe inconclusive retry.** `REJECTED` is retried after one hour, not every 15 minutes.
 - **Ping-pong remains observable without creating a raw alarm.** A one-cycle detection writes an
   informational terminal line with no tone; only the confirmed alarm pipeline may sound.
@@ -310,10 +342,12 @@ inspect RRC/NAS/baseband traffic the way dedicated hardware can.
 
 ---
 
-## Now: three months of collection, and no code changes
+## Historical v2.1 collection plan — superseded
 
-The code is **frozen again**, this time for three months. No new heuristics, no new features, no
-tuning. Only genuine bug fixes.
+At the time of v2.1, the project planned a three-month collection period with no new heuristics,
+features, or tuning. This paragraph is retained as a historical record and is no longer the current
+release policy. The active policy is the **multi-week v2.3.0 field-validation freeze beginning on
+2026-09-18**, described at the top of this document. H16 is included in that new frozen baseline.
 
 The reason is specific. Everything the project needs next depends on data it does not have yet:
 
@@ -503,10 +537,14 @@ ver — no toca el HAL de telefonía.
 - La fila de identidad en vivo y el historial expandido muestran MCC junto a MNC (`MCC / MNC`) en
   una disposición compacta que conserva las cuatro columnas del monitor.
 
-## Ahora: validar la compilación y comenzar tres meses de recolección
+## Plan histórico de recolección de v2.1 — sustituido
 
-Nada de heurísticas nuevas, nada de funciones nuevas, nada de tocar pesos. Solo arreglos de fallos
-reales.
+En la etapa de v2.1 se planteó una recolección de tres meses sin heurísticas, funciones ni ajustes
+nuevos. Este apartado se conserva como registro histórico y ya no describe la política vigente.
+La política actual es la **congelación de validación de campo de v2.3.0 durante varias semanas,
+iniciada el 18 de septiembre de 2026**, tal como se explica al principio del documento. H16 forma
+parte de esta nueva línea base congelada. Solo se contemplan correcciones críticas de funcionamiento,
+seguridad, privacidad, compatibilidad o pérdida de datos.
 
 El motivo es concreto: todo lo que el proyecto necesita a continuación depende de datos que
 todavía no existen — qué heurísticas aportan señal de verdad y cuáles son ruido, cuál es la tasa
