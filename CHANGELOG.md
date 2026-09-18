@@ -1,5 +1,35 @@
 # Changelog
 
+## 2.3.3
+
+### Campaign-data protection
+
+- Raised history retention from 60 to 120 days. The previous value was shorter than the planned
+  90-day collection campaign, so the prune that runs on every service start deleted the first
+  month of data — including the start triggered by opening the app to export it.
+- Added a hard cap of 20,000 forensic samples, enforced at startup. Age-based pruning alone did
+  not bound disk growth, and a full disk stops collection silently.
+- A forensic case closed by the 30-minute timeout no longer reopens on the same cell until the
+  anomaly actually clears or the device changes cell.
+- Failed database writes are now detected and surfaced. `SQLiteDatabase.insert()` swallows
+  disk-full and locked-database errors and returns `-1`; the app kept analysing and reporting
+  "monitoring active" while nothing reached the history.
+- A gap since the last successful write is reported at service start, so an interruption caused by
+  a reboot, an OTA or a flat battery is visible in the notification and the terminal instead of
+  appearing as an unexplained hole in the CSV months later.
+- CSV export now streams rows straight from the database cursor and verifies the written row count
+  against the count the database declares. A partial export fails loudly instead of being reported
+  as a success, and the full history is no longer materialised in memory.
+- Clearing the history now requires typing the confirmation word and states how many records will
+  be destroyed. There is no backup: `allowBackup` is disabled by design.
+- Added regression coverage for retention, write-failure escalation, interruption detection,
+  forensic case reopening and export completeness.
+- Detection weights, thresholds, schema and export columns remain unchanged.
+- Updated release metadata to `versionName 2.3.3` and `versionCode 12`.
+- This release begins the definitive collection campaign and a release freeze of at least one
+  month. Only a defect that threatens data integrity, continuity, security, or export can justify
+  an emergency update during that period.
+
 ## 2.3.2
 
 ### Temporal confirmation and callback correctness

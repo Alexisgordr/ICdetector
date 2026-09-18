@@ -3,6 +3,7 @@ package com.alexisgordr.icdetector.forensics
 import android.location.Location
 import android.os.Build
 import android.os.SystemClock
+import com.alexisgordr.icdetector.core.ForensicCasePolicy
 import com.alexisgordr.icdetector.models.*
 import com.alexisgordr.icdetector.storage.CellDbHelper
 import kotlinx.coroutines.sync.Mutex
@@ -27,6 +28,8 @@ class ForensicRecorder(private val db: CellDbHelper) {
     private var caseStartedElapsed = 0L
     private var postCaptureUntil = 0L
     private var lastPhase = 0
+    // v2.3.3 — Identidad cuyo caso se cerró por tiempo agotado. Ver ForensicCasePolicy.
+    private var lockedIdentity: String? = null
 
     suspend fun observe(
         active: CellData,
@@ -56,7 +59,7 @@ class ForensicRecorder(private val db: CellDbHelper) {
             buffer.removeFirst()
         }
 
-        if (phase > 0 && caseId == null) {
+        if (ForensicCasePolicy.shouldOpenCase(phase, caseId != null, lockedIdentity, active.identityKey)) {
             val newCaseId = db.createForensicCase(active)
             caseId = newCaseId
             caseStartedElapsed = elapsed
@@ -65,6 +68,7 @@ class ForensicRecorder(private val db: CellDbHelper) {
             caseId?.let { db.insertForensicSample(it, wall, elapsed, event, payload) }
         }
 
+        var closedByTimeout = false
         val activeCaseId = caseId
         if (activeCaseId != null) {
             db.updateForensicCaseProgress(activeCaseId, active)
@@ -84,8 +88,10 @@ class ForensicRecorder(private val db: CellDbHelper) {
                 caseId = null
                 postCaptureUntil = 0L
                 caseStartedElapsed = 0L
+                closedByTimeout = timedOut
             }
         }
+        lockedIdentity = ForensicCasePolicy.nextLock(lockedIdentity, active.identityKey, phase, closedByTimeout)
         lastPhase = phase
     }
 

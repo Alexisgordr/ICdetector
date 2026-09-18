@@ -20,6 +20,7 @@ import androidx.annotation.RequiresApi
 import androidx.core.app.NotificationCompat
 import androidx.core.content.ContextCompat
 import com.alexisgordr.icdetector.MainActivity
+import com.alexisgordr.icdetector.core.CollectionHealth
 import com.alexisgordr.icdetector.core.ThreatAnalyzer
 import com.alexisgordr.icdetector.core.VerificationDecision
 import com.alexisgordr.icdetector.models.*
@@ -86,6 +87,12 @@ class MiniICService : Service() {
     private lateinit var telephonyManager: TelephonyManager
     private lateinit var dbHelper: CellDbHelper
     private lateinit var forensicRecorder: ForensicRecorder
+    // v2.3.3 — Vigilancia de la recolección: escrituras fallidas e interrupciones.
+    private val collectionHealth = CollectionHealth()
+    // Ventana durante la cual la notificación sigue anunciando que hubo una interrupción, para
+    // que un reinicio nocturno no se quede solo en una línea del terminal que nadie lee.
+    private var interruptionNoticeUntil = 0L
+    private var interruptionNoticeText = ""
     private lateinit var locationManager: LocationManager
     private var toneGenerator: ToneGenerator? = null
     private var telephonyCallback: TelephonyCallback? = null
@@ -266,16 +273,23 @@ class MiniICService : Service() {
         locationManager = getSystemService(LOCATION_SERVICE) as LocationManager
 
         // Poda de histórico antiguo al arrancar (en segundo plano, no bloquea onCreate).
-        // Evita que la tabla crezca sin límite registrando 24/7; conserva 60 días, muy por
-        // encima de la ventana de 30 días que usan las consultas, así que no afecta detección.
+        // Evita que la tabla crezca sin límite registrando 24/7. v2.3.3: conserva
+        // DEFAULT_RETENTION_DAYS (120) — antes 60, que se quedaban CORTOS para una campaña de 90
+        // días y borraban el primer mes justo al abrir la app para exportar.
         scope.launch(Dispatchers.IO) {
             try {
                 // Si el proceso anterior terminó durante un episodio, no puede quedar marcado
                 // eternamente como "en curso". Se conserva y se cierra como interrumpido.
                 dbHelper.closeOpenIncidents(activeIdentity = null, interrupted = true)
                 dbHelper.interruptOpenForensicCases()
-                val deleted = dbHelper.pruneOldRecords(60)
-                if (deleted > 0) appendLog("[SYS]", "Poda de histórico: $deleted registros antiguos eliminados.")
+                val deleted = dbHelper.pruneOldRecords()
+                if (deleted > 0) {
+                    appendLog("[SYS]", "Poda de histórico: $deleted registros de más de ${CellDbHelper.DEFAULT_RETENTION_DAYS} días eliminados.")
+                }
+                val trimmed = dbHelper.enforceForensicSampleCap()
+                if (trimmed > 0) {
+                    appendLog("[SYS]", "Muestras forenses recortadas al tope de ${CellDbHelper.MAX_FORENSIC_SAMPLES}: $trimmed eliminadas.")
+                }
             } catch (_: Exception) {}
         }
         
@@ -287,6 +301,19 @@ class MiniICService : Service() {
         if (wigleRateLimitedUntil <= System.currentTimeMillis()) {
             wigleRateLimitedUntil = 0L
             prefs.edit().remove(KEY_WIGLE_RATE_LIMITED_UNTIL).apply()
+        }
+        // v2.3.3 — Continuidad de la recolección. Si el proceso murió (reinicio del móvil, OTA,
+        // batería agotada) nadie lo anunciaba: la notificación se iba con el proceso y la
+        // recolección quedaba parada sin dejar rastro. Ahora el hueco se calcula al arrancar y se
+        // deja escrito, para que una interrupción sea un hecho observable y no una sorpresa en
+        // diciembre al ver un agujero en el CSV.
+        collectionHealth.restore(prefs.getLong(KEY_LAST_SUCCESSFUL_WRITE, 0L))
+        collectionHealth.interruptionBefore(System.currentTimeMillis())?.let { gapMs ->
+            val horas = gapMs / 3_600_000L
+            val minutos = (gapMs % 3_600_000L) / 60_000L
+            interruptionNoticeText = "⚠ Recolección interrumpida ${horas}h ${minutos}min"
+            interruptionNoticeUntil = System.currentTimeMillis() + INTERRUPTION_NOTICE_MS
+            appendLog("[SYS]", "$interruptionNoticeText — sin registrar nada desde la última escritura. Revisa si el servicio se detuvo (reinicio del móvil, OTA o batería agotada).")
         }
         isProxyEnabled = prefs.getBoolean("proxy_enabled", false)
         isLatencyDetectionEnabled = prefs.getBoolean("latency_detection_enabled", false)
@@ -737,7 +764,7 @@ class MiniICService : Service() {
         updateNotificationText("⚠️ $message")
         
         scope.launch(Dispatchers.IO) {
-            dbHelper.logConnection(
+            val rowId = dbHelper.logConnection(
                 netType = "ALERTA",
                 cid = "SECURITY",
                 mnc = "N/A",
@@ -748,6 +775,7 @@ class MiniICService : Service() {
                 score = 0,
                 failedHeuristics = message
             )
+            noteWriteResult(rowId)
         }
     }
 
@@ -2005,7 +2033,7 @@ class MiniICService : Service() {
 
         scope.launch(Dispatchers.IO) {
             val loc = getCurrentLocation()
-            dbHelper.logConnection(
+            val rowId = dbHelper.logConnection(
                 netType = cell.networkType,
                 cid = cell.cellId,
                 mnc = cell.mnc,
@@ -2026,6 +2054,7 @@ class MiniICService : Service() {
                 timingAdvanceUnit = cell.timingAdvanceUnit,
                 radio = cell.radioTech
             )
+            noteWriteResult(rowId)
         }
     }
 
@@ -2080,7 +2109,7 @@ class MiniICService : Service() {
             // --- NUEVO: REGISTRO INMEDIATO DE LA NUEVA CELDA ---
             scope.launch(Dispatchers.IO) {
                 val loc = getCurrentLocation()
-                dbHelper.logConnection(
+                val rowId = dbHelper.logConnection(
                     netType = net, 
                     cid = cid, 
                     mnc = cell.mnc, 
@@ -2101,6 +2130,7 @@ class MiniICService : Service() {
                 timingAdvanceUnit = cell.timingAdvanceUnit,
                 radio = cell.radioTech
                 )
+                noteWriteResult(rowId)
             }
             // --------------------------------------------------
 
@@ -2187,7 +2217,7 @@ class MiniICService : Service() {
                 lastAlarmLoggedCellId = cid
                 scope.launch(Dispatchers.IO) {
                     val loc = getCurrentLocation()
-                    dbHelper.logConnection(
+                    val rowId = dbHelper.logConnection(
                         netType = net,
                         cid = cid,
                         mnc = cell.mnc,
@@ -2208,6 +2238,7 @@ class MiniICService : Service() {
                 timingAdvanceUnit = cell.timingAdvanceUnit,
                 radio = cell.radioTech
                     )
+                    noteWriteResult(rowId)
                 }
             }
         }
@@ -2255,18 +2286,50 @@ class MiniICService : Service() {
         updateNotificationText(content)
     }
 
+    /**
+     * Resultado de una escritura en el historial.
+     *
+     * v2.3.3 — `SQLiteDatabase.insert()` devuelve -1 y se traga la excepción cuando el disco está
+     * lleno o la base bloqueada. Sin esto, la app seguía analizando y mostrando "Sondeo activo"
+     * con la base de datos sin recibir una sola fila: la campaña moría en silencio.
+     */
+    @Synchronized
+    private fun noteWriteResult(rowId: Long) {
+        val estadoCambio = collectionHealth.noteWrite(rowId, System.currentTimeMillis())
+        if (rowId != -1L) {
+            getSharedPreferences("miniic_prefs", MODE_PRIVATE).edit()
+                .putLong(KEY_LAST_SUCCESSFUL_WRITE, collectionHealth.lastSuccessMs).apply()
+        }
+        if (estadoCambio) {
+            if (collectionHealth.isFailing) {
+                appendLog("[SYS]", "⚠ ESCRITURA FALLIDA: la base de datos rechaza las filas (¿disco lleno?). La recolección NO está guardando datos.")
+                updateNotificationText("⚠ ESCRITURA FALLIDA — no se están guardando datos", force = true)
+            } else {
+                appendLog("[SYS]", "Escritura en base de datos restablecida.")
+            }
+        }
+    }
+
     private var lastNotificationTime = 0L
-    private fun updateNotificationText(text: String) {
+    @Synchronized
+    private fun updateNotificationText(text: String, force: Boolean = false) {
         // Throttle: no repintar la notificación más de una vez cada 2 s. El callback de telefonía
         // puede dispararse muchas veces por segundo en zonas de transición; repintar cada vez satura
         // el System Server (IPC + batería) y Android acaba silenciando con "rate limit exceeded".
         // Los datos (BD, logs y el TONO de alarma) van en tiempo real por su cuenta: esto solo
         // limita el DIBUJO visual de la notificación, no la detección ni el registro.
         val now = System.currentTimeMillis()
-        if (now - lastNotificationTime < 2000L) return
+        if (!force && now - lastNotificationTime < 2000L) return
         lastNotificationTime = now
+        // Un fallo de escritura tapa cualquier otro texto: es la única condición en la que la app
+        // parece funcionar y no está recogiendo nada.
+        val visible = when {
+            collectionHealth.isFailing -> "⚠ ESCRITURA FALLIDA — no se están guardando datos"
+            now < interruptionNoticeUntil -> "$interruptionNoticeText · $text"
+            else -> text
+        }
         val nm = getSystemService(NOTIFICATION_SERVICE) as NotificationManager
-        nm.notify(NOTIFICATION_ID, buildNotification(text))
+        nm.notify(NOTIFICATION_ID, buildNotification(visible))
     }
 
     private fun buildNotification(text: String): Notification {
@@ -2469,6 +2532,9 @@ class MiniICService : Service() {
         // de arranque de isPlausibleFix, donde el primer fix se aceptaba sin comparar).
         private const val KEY_LAST_LOC = "last_accepted_loc"
         private const val KEY_WIGLE_RATE_LIMITED_UNTIL = "wigle_rate_limited_until"
+        private const val KEY_LAST_SUCCESSFUL_WRITE = "last_successful_write_ms"
+        /** Tiempo que la notificación sigue recordando que hubo un hueco en la recolección. */
+        private const val INTERRUPTION_NOTICE_MS = 10L * 60_000L
         private const val WIGLE_RATE_LIMIT_FALLBACK_MS = 24L * 60L * 60L * 1000L
         // Evita que un Retry-After anormalmente corto reactive un bucle de cuota por celda.
         private const val WIGLE_RATE_LIMIT_MINIMUM_MS = 60L * 60L * 1000L

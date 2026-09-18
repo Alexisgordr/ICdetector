@@ -54,6 +54,10 @@ fun HistoryPanel(dbHelper: CellDbHelper, onBack: () -> Unit) {
     var forensicCases by remember { mutableStateOf<List<ForensicCase>>(emptyList()) }
     var transitions by remember { mutableStateOf<List<CellTransitionSummary>>(emptyList()) }
     val showDeleteConfirm = remember { mutableStateOf(false) }
+    // v2.3.3 — Borrar el historial es irreversible y no hay copia (allowBackup="false"). Durante
+    // una campaña de meses, un toque de más al final de esta misma pantalla destruye el trabajo
+    // entero, así que el diálogo exige escribir la palabra a mano.
+    var deleteConfirmText by remember { mutableStateOf("") }
     val scope = rememberCoroutineScope()
 
     LaunchedEffect(Unit) {
@@ -77,17 +81,39 @@ fun HistoryPanel(dbHelper: CellDbHelper, onBack: () -> Unit) {
     }
 
     if (showDeleteConfirm.value) {
+        val deleteArmed = deleteConfirmText.trim().equals("BORRAR", ignoreCase = false)
         AlertDialog(
-            onDismissRequest = { showDeleteConfirm.value = false },
+            onDismissRequest = { showDeleteConfirm.value = false; deleteConfirmText = "" },
             title = { Text("¿Borrar Historial?", color = Color.White, fontFamily = FontFamily.Monospace) },
-            text = { Text("Esta acción eliminará permanentemente todos los registros de antenas y geolocalización. ¿Continuar?", color = Color(0xFF888888), fontFamily = FontFamily.Monospace) },
+            text = {
+                Column {
+                    Text(
+                        "Esta acción eliminará permanentemente ${items.size} registros de antenas, " +
+                            "sus incidentes y sus casos forenses. No hay copia de seguridad y no se puede deshacer.",
+                        color = Color(0xFF888888), fontFamily = FontFamily.Monospace
+                    )
+                    Spacer(modifier = Modifier.height(12.dp))
+                    Text("Escribe BORRAR para confirmar:", color = Color(0xFFCF6679), fontFamily = FontFamily.Monospace, fontSize = 12.sp)
+                    OutlinedTextField(
+                        value = deleteConfirmText,
+                        onValueChange = { deleteConfirmText = it },
+                        singleLine = true,
+                        textStyle = LocalTextStyle.current.copy(color = Color.White, fontFamily = FontFamily.Monospace),
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+            },
             confirmButton = {
                 TextButton(
+                    enabled = deleteArmed,
                     onClick = {
                         scope.launch(Dispatchers.IO) {
                             dbHelper.clear()
                             items = emptyList()
-                            withContext(Dispatchers.Main) { showDeleteConfirm.value = false }
+                            withContext(Dispatchers.Main) {
+                                showDeleteConfirm.value = false
+                                deleteConfirmText = ""
+                            }
                         }
                     },
                     colors = ButtonDefaults.textButtonColors(contentColor = Color(0xFFCF6679))
@@ -96,7 +122,7 @@ fun HistoryPanel(dbHelper: CellDbHelper, onBack: () -> Unit) {
                 }
             },
             dismissButton = {
-                TextButton(onClick = { showDeleteConfirm.value = false }) {
+                TextButton(onClick = { showDeleteConfirm.value = false; deleteConfirmText = "" }) {
                     Text("CANCELAR", color = Color.White, fontFamily = FontFamily.Monospace)
                 }
             },
@@ -174,12 +200,19 @@ fun HistoryPanel(dbHelper: CellDbHelper, onBack: () -> Unit) {
                 ) { uri ->
                     uri?.let {
                         scope.launch {
+                            // v2.3.3 — Export en streaming desde el cursor y con recuento
+                            // verificado: ni se carga el historial entero en memoria ni se da por
+                            // bueno un fichero truncado.
                             val result = withContext(Dispatchers.IO) {
-                                ExportUtils.exportToCsv(context, items, it)
+                                ExportUtils.exportToCsv(
+                                    context = context,
+                                    uri = it,
+                                    streamRecords = { emit -> dbHelper.forEachRecord(emit) }
+                                )
                             }
                             result.fold(
-                                onSuccess = {
-                                    Toast.makeText(context, "✅ CSV exportado con éxito", Toast.LENGTH_LONG).show()
+                                onSuccess = { filas ->
+                                    Toast.makeText(context, "✅ CSV exportado: $filas filas", Toast.LENGTH_LONG).show()
                                 },
                                 onFailure = { error ->
                                     Toast.makeText(

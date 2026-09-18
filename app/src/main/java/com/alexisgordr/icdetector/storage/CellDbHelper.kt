@@ -98,6 +98,25 @@ class CellDbHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME, 
         const val NOT_FOUND_TTL_MS = 60L * 60 * 1000
 
         /**
+         * Días de historial que se conservan.
+         *
+         * v2.3.3 — Eran 60, elegidos contra la ventana de análisis de 30 días de las heurísticas.
+         * Nadie los comparó con la duración de la CAMPAÑA: con una recolección de 90 días, la
+         * poda que corre en cada arranque del servicio borraba el primer mes de datos —incluido
+         * el arranque que ocurre al abrir la app para exportar—. 120 días cubren la campaña
+         * completa con margen y siguen acotando el crecimiento de la tabla.
+         */
+        const val DEFAULT_RETENTION_DAYS = 120
+
+        /**
+         * Tope duro de muestras forenses conservadas. Cada muestra ronda los 6-10 KB (lleva el
+         * terminal y los diagnósticos), así que sin un límite por número de filas —y no solo por
+         * antigüedad— una racha de casos podía llenar el disco, y un disco lleno apaga la
+         * recolección en silencio.
+         */
+        const val MAX_FORENSIC_SAMPLES = 20_000
+
+        /**
          * Distancia máxima creíble entre tú y la antena a la que estás conectado.
          *
          * Una sola cifra para las dos preguntas que antes tenían dos: si se acepta la coordenada
@@ -739,6 +758,79 @@ class CellDbHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME, 
         return db.update(TABLE_HISTORY, values, latestWhere, args)
     }
 
+    /**
+     * Convierte la fila actual del cursor en un [HistoryRecord].
+     *
+     * v2.3.3 — Extraído de [getRecords] para que la lectura en streaming de [forEachRecord] y la
+     * lista completa de la pantalla de historial usen exactamente el mismo mapeo. Un export y una
+     * vista que interpretan las columnas de forma distinta es una fuente de discrepancias que no
+     * se detecta hasta el análisis final.
+     */
+    private fun readRecord(cursor: Cursor): HistoryRecord {
+        // Leer coordenadas (pueden ser NULL)
+        val lat = if (cursor.isNull(cursor.getColumnIndexOrThrow(COLUMN_LAT))) null
+              else cursor.getDouble(cursor.getColumnIndexOrThrow(COLUMN_LAT))
+        val lon = if (cursor.isNull(cursor.getColumnIndexOrThrow(COLUMN_LON))) null
+              else cursor.getDouble(cursor.getColumnIndexOrThrow(COLUMN_LON))
+        val pci = if (cursor.isNull(cursor.getColumnIndexOrThrow(COLUMN_PCI))) null
+              else cursor.getInt(cursor.getColumnIndexOrThrow(COLUMN_PCI))
+        val arfcn = if (cursor.isNull(cursor.getColumnIndexOrThrow(COLUMN_ARFCN))) null
+              else cursor.getInt(cursor.getColumnIndexOrThrow(COLUMN_ARFCN))
+        val rsrq = if (cursor.isNull(cursor.getColumnIndexOrThrow(COLUMN_RSRQ))) null
+              else cursor.getInt(cursor.getColumnIndexOrThrow(COLUMN_RSRQ))
+        val sinr = if (cursor.isNull(cursor.getColumnIndexOrThrow(COLUMN_SINR))) null
+              else cursor.getInt(cursor.getColumnIndexOrThrow(COLUMN_SINR))
+        // Columnas v2.1. getColumnIndex (sin OrThrow) para que un export nunca falle si
+        // la migración no se hubiera aplicado por cualquier motivo: -1 -> valor por defecto.
+        val tpIdx = cursor.getColumnIndex(COLUMN_ANOMALY_CONFIDENCE)
+        val threatProb = if (tpIdx >= 0 && !cursor.isNull(tpIdx)) cursor.getFloat(tpIdx) else 0f
+        val apiLatIdx = cursor.getColumnIndex(COLUMN_API_LAT)
+        val apiLat = if (apiLatIdx >= 0 && !cursor.isNull(apiLatIdx)) cursor.getDouble(apiLatIdx) else null
+        val apiLonIdx = cursor.getColumnIndex(COLUMN_API_LON)
+        val apiLon = if (apiLonIdx >= 0 && !cursor.isNull(apiLonIdx)) cursor.getDouble(apiLonIdx) else null
+        val taIdx = cursor.getColumnIndex(COLUMN_TA)
+        val ta = if (taIdx >= 0 && !cursor.isNull(taIdx)) cursor.getInt(taIdx) else null
+        val taUnitIdx = cursor.getColumnIndex(COLUMN_TA_UNIT)
+        val taUnit = if (taUnitIdx >= 0 && !cursor.isNull(taUnitIdx)) {
+            runCatching { TimingAdvanceUnit.valueOf(cursor.getString(taUnitIdx)) }
+            .getOrDefault(TimingAdvanceUnit.UNKNOWN)
+        } else TimingAdvanceUnit.UNKNOWN
+        val radioIdx = cursor.getColumnIndex(COLUMN_RADIO)
+        val radio = if (radioIdx >= 0 && !cursor.isNull(radioIdx)) {
+            runCatching { RadioTech.valueOf(cursor.getString(radioIdx)) }
+            .getOrDefault(RadioTech.UNKNOWN)
+        } else RadioTech.UNKNOWN
+
+        return HistoryRecord(
+            timestamp = cursor.getString(cursor.getColumnIndexOrThrow(COLUMN_TIMESTAMP)),
+            netType = cursor.getString(cursor.getColumnIndexOrThrow(COLUMN_NET_TYPE)),
+            cid = cursor.getString(cursor.getColumnIndexOrThrow(COLUMN_CID)),
+            mnc = cursor.getString(cursor.getColumnIndexOrThrow(COLUMN_MNC)),
+            tac = cursor.getString(cursor.getColumnIndexOrThrow(COLUMN_TAC)),
+            mcc = cursor.getString(cursor.getColumnIndexOrThrow(COLUMN_MCC)),
+            dbm = cursor.getInt(cursor.getColumnIndexOrThrow(COLUMN_DBM)),
+            verified = try {
+                VerificationStatus.valueOf(cursor.getString(cursor.getColumnIndexOrThrow(COLUMN_VERIFIED)))
+            } catch(_: Exception) {
+                VerificationStatus.PENDING
+            },
+            score = cursor.getInt(cursor.getColumnIndexOrThrow(COLUMN_SCORE)),
+            failedHeuristics = cursor.getString(cursor.getColumnIndexOrThrow(COLUMN_FAILED_H)) ?: "",
+            lat = lat,
+            lon = lon,
+            pci = pci,
+            arfcn = arfcn,
+            rsrq = rsrq,
+            sinr = sinr,
+            anomalyConfidence = threatProb,
+            apiLat = apiLat,
+            apiLon = apiLon,
+            timingAdvance = ta,
+            timingAdvanceUnit = taUnit,
+            radio = radio
+        )
+    }
+
     fun getRecords(): List<HistoryRecord> {
         val list = mutableListOf<HistoryRecord>()
         try {
@@ -747,70 +839,7 @@ class CellDbHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME, 
         try {
         if (cursor.moveToFirst()) {
             do {
-                // Leer coordenadas (pueden ser NULL)
-                val lat = if (cursor.isNull(cursor.getColumnIndexOrThrow(COLUMN_LAT))) null 
-                          else cursor.getDouble(cursor.getColumnIndexOrThrow(COLUMN_LAT))
-                val lon = if (cursor.isNull(cursor.getColumnIndexOrThrow(COLUMN_LON))) null 
-                          else cursor.getDouble(cursor.getColumnIndexOrThrow(COLUMN_LON))
-                val pci = if (cursor.isNull(cursor.getColumnIndexOrThrow(COLUMN_PCI))) null
-                          else cursor.getInt(cursor.getColumnIndexOrThrow(COLUMN_PCI))
-                val arfcn = if (cursor.isNull(cursor.getColumnIndexOrThrow(COLUMN_ARFCN))) null
-                          else cursor.getInt(cursor.getColumnIndexOrThrow(COLUMN_ARFCN))
-                val rsrq = if (cursor.isNull(cursor.getColumnIndexOrThrow(COLUMN_RSRQ))) null
-                          else cursor.getInt(cursor.getColumnIndexOrThrow(COLUMN_RSRQ))
-                val sinr = if (cursor.isNull(cursor.getColumnIndexOrThrow(COLUMN_SINR))) null
-                          else cursor.getInt(cursor.getColumnIndexOrThrow(COLUMN_SINR))
-                // Columnas v2.1. getColumnIndex (sin OrThrow) para que un export nunca falle si
-                // la migración no se hubiera aplicado por cualquier motivo: -1 -> valor por defecto.
-                val tpIdx = cursor.getColumnIndex(COLUMN_ANOMALY_CONFIDENCE)
-                val threatProb = if (tpIdx >= 0 && !cursor.isNull(tpIdx)) cursor.getFloat(tpIdx) else 0f
-                val apiLatIdx = cursor.getColumnIndex(COLUMN_API_LAT)
-                val apiLat = if (apiLatIdx >= 0 && !cursor.isNull(apiLatIdx)) cursor.getDouble(apiLatIdx) else null
-                val apiLonIdx = cursor.getColumnIndex(COLUMN_API_LON)
-                val apiLon = if (apiLonIdx >= 0 && !cursor.isNull(apiLonIdx)) cursor.getDouble(apiLonIdx) else null
-                val taIdx = cursor.getColumnIndex(COLUMN_TA)
-                val ta = if (taIdx >= 0 && !cursor.isNull(taIdx)) cursor.getInt(taIdx) else null
-                val taUnitIdx = cursor.getColumnIndex(COLUMN_TA_UNIT)
-                val taUnit = if (taUnitIdx >= 0 && !cursor.isNull(taUnitIdx)) {
-                    runCatching { TimingAdvanceUnit.valueOf(cursor.getString(taUnitIdx)) }
-                        .getOrDefault(TimingAdvanceUnit.UNKNOWN)
-                } else TimingAdvanceUnit.UNKNOWN
-                val radioIdx = cursor.getColumnIndex(COLUMN_RADIO)
-                val radio = if (radioIdx >= 0 && !cursor.isNull(radioIdx)) {
-                    runCatching { RadioTech.valueOf(cursor.getString(radioIdx)) }
-                        .getOrDefault(RadioTech.UNKNOWN)
-                } else RadioTech.UNKNOWN
-
-                list.add(
-                    HistoryRecord(
-                        timestamp = cursor.getString(cursor.getColumnIndexOrThrow(COLUMN_TIMESTAMP)),
-                        netType = cursor.getString(cursor.getColumnIndexOrThrow(COLUMN_NET_TYPE)),
-                        cid = cursor.getString(cursor.getColumnIndexOrThrow(COLUMN_CID)),
-                        mnc = cursor.getString(cursor.getColumnIndexOrThrow(COLUMN_MNC)),
-                        tac = cursor.getString(cursor.getColumnIndexOrThrow(COLUMN_TAC)),
-                        mcc = cursor.getString(cursor.getColumnIndexOrThrow(COLUMN_MCC)),
-                        dbm = cursor.getInt(cursor.getColumnIndexOrThrow(COLUMN_DBM)),
-                        verified = try { 
-                            VerificationStatus.valueOf(cursor.getString(cursor.getColumnIndexOrThrow(COLUMN_VERIFIED))) 
-                        } catch(_: Exception) { 
-                            VerificationStatus.PENDING 
-                        },
-                        score = cursor.getInt(cursor.getColumnIndexOrThrow(COLUMN_SCORE)),
-                        failedHeuristics = cursor.getString(cursor.getColumnIndexOrThrow(COLUMN_FAILED_H)) ?: "",
-                        lat = lat,
-                        lon = lon,
-                        pci = pci,
-                        arfcn = arfcn,
-                        rsrq = rsrq,
-                        sinr = sinr,
-                        anomalyConfidence = threatProb,
-                        apiLat = apiLat,
-                        apiLon = apiLon,
-                        timingAdvance = ta,
-                        timingAdvanceUnit = taUnit,
-                        radio = radio
-                    )
-                )
+                list.add(readRecord(cursor))
             } while (cursor.moveToNext())
         }
         } finally {
@@ -835,11 +864,12 @@ class CellDbHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME, 
     /**
      * Poda de registros antiguos: borra del historial las filas más viejas que [daysToKeep]
      * días. Las consultas de detección solo miran los últimos 30 días, así que mantener un
-     * margen (60 por defecto) garantiza que NO se borra nada que las heurísticas puedan usar:
+     * margen ([DEFAULT_RETENTION_DAYS] por defecto) garantiza que NO se borra nada que las
+     * heurísticas puedan usar:
      * esto solo evita que la tabla crezca sin límite registrando 24/7. No toca el esquema ni
      * los datos recientes. Devuelve el número de filas borradas.
      */
-    fun pruneOldRecords(daysToKeep: Int = 60): Int {
+    fun pruneOldRecords(daysToKeep: Int = DEFAULT_RETENTION_DAYS): Int {
         return try {
             val cutoff = System.currentTimeMillis() - (daysToKeep.toLong() * 24 * 60 * 60 * 1000)
             val sdf = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault())
@@ -856,6 +886,55 @@ class CellDbHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME, 
             historyDeleted
         } catch (_: Exception) {
             0
+        }
+    }
+
+    /**
+     * Recorta las muestras forenses más antiguas por encima de [maxSamples].
+     *
+     * La poda por antigüedad no basta: lo que llena el disco es el número de muestras, no su
+     * edad. Se conservan siempre las más recientes. Devuelve cuántas se borraron.
+     */
+    fun enforceForensicSampleCap(maxSamples: Int = MAX_FORENSIC_SAMPLES): Int {
+        return try {
+            val db = this.writableDatabase
+            db.delete(
+                TABLE_FORENSIC_SAMPLES,
+                "id NOT IN (SELECT id FROM $TABLE_FORENSIC_SAMPLES ORDER BY id DESC LIMIT ?)",
+                arrayOf(maxSamples.toString())
+            )
+        } catch (_: Exception) {
+            0
+        }
+    }
+
+    /**
+     * Recorre una instantánea coherente del historial sin materializarla en memoria. Devuelve el
+     * número de filas que la instantánea declaró antes de recorrerla.
+     *
+     * v2.3.3 — [getRecords] carga decenas de miles de objetos de golpe y, si algo falla a mitad,
+     * se traga la excepción y devuelve un export parcial que la pantalla celebra como éxito. Para
+     * exportar una campaña entera hace falta lo contrario: streaming y fallo ruidoso. Esta función
+     * NO captura excepciones a propósito.
+     */
+    fun forEachRecord(action: (HistoryRecord) -> Unit): Int {
+        val db = this.readableDatabase
+        db.beginTransactionNonExclusive()
+        try {
+            val expected = db.rawQuery("SELECT COUNT(*) FROM $TABLE_HISTORY", null).use { c ->
+                if (c.moveToFirst()) c.getInt(0) else 0
+            }
+            db.rawQuery("SELECT * FROM $TABLE_HISTORY ORDER BY $COLUMN_ID DESC", null).use { cursor ->
+                if (cursor.moveToFirst()) {
+                    do {
+                        action(readRecord(cursor))
+                    } while (cursor.moveToNext())
+                }
+            }
+            db.setTransactionSuccessful()
+            return expected
+        } finally {
+            db.endTransaction()
         }
     }
 

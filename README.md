@@ -1,7 +1,7 @@
 ![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)
 ![Platform](https://img.shields.io/badge/Platform-Android%2010%2B-green.svg)
 ![Root Required](https://img.shields.io/badge/Root-Not%20Required-brightgreen.svg)
-![Status](https://img.shields.io/badge/Status-Stable%20v2.3.2-success.svg)
+![Status](https://img.shields.io/badge/Status-Stable%20v2.3.3-success.svg)
 [![Featured in Awesome Telco](https://img.shields.io/badge/Featured%20in-Awesome%20Telco-6f42c1.svg)](https://github.com/ravens/awesome-telco#imsi-catcher-detection)
 
 
@@ -54,11 +54,15 @@ The application operates from Android userland without requiring root or direct 
 
 > **⚠️ Upgrading from a version older than v2.1.1:** uninstall the previous version first. Android refuses an in-place update when the APK is not signed with the same keystore, and a clean database is required because records written before v2.1.1 may hold an antenna coordinate where the device GPS position belongs. Export your CSV first if you want to keep the old history. v2.1.2 and later releases signed with the same keystore update in place normally. See `Status.md`.
 
-ICdetection v2.3.2 is the current stable release. It keeps the v2.3.0 detection baseline and fixes
-temporal-confirmation stalls caused by unreliable or mixed LTE/NR modem timestamps. Only fresh
-callbacks may use the bounded recovery path; cached fallback data cannot advance confirmation.
-It also prevents empty callbacks from invalidating valid work and corrects minor permission, cache,
-RF-status, and regression-fixture inconsistencies. No heuristic weights or alert thresholds change.
+ICdetection v2.3.3 is the current stable release. It protects the definitive multi-month data
+collection against silent loss: retention now covers 120 days, failed database writes and long
+collection gaps are visible, forensic storage is bounded, CSV export uses a verified transactional
+stream, and clearing the history requires typed confirmation. The detection baseline, heuristic
+weights, thresholds, database schema, and CSV columns remain unchanged.
+
+> **Definitive field-collection freeze:** v2.3.3 begins the definitive data-collection campaign.
+> No planned releases or detector changes will be made for at least one month, unless a defect
+> threatens data integrity, collection continuity, security, or the ability to export the results.
 
 > **What v2.3.0 changes:** H16 compares a real handover with device movement, GPS quality, visible
 > neighbours, locally learned coverage zones, and trusted previous transitions. It has no fixed

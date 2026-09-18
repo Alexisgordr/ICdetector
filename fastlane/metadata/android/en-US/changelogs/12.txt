@@ -1,0 +1,5 @@
+Protects the definitive collection campaign from silent data loss. Retention now covers 120 days,
+forensic storage is bounded, failed writes and collection gaps are reported, and CSV export uses a
+verified transactional stream. Clearing history requires typed confirmation. Detection weights
+remain unchanged. This is the final planned update for at least one month while definitive field
+data is collected.

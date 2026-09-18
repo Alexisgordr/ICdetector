@@ -1,5 +1,24 @@
 # ICdetection Status
 
+## v2.3.3 — campaign-data protection release
+
+**Release:** stable
+**Version code:** 12
+**Database schema:** 15
+**Detection baseline:** unchanged from v2.3.0
+
+v2.3.3 contains no detection changes. It protects the data a multi-month campaign produces against
+four ways of losing it silently: a retention window shorter than the campaign itself, database
+writes that fail without surfacing, forensic captures that could grow without bound, and an export
+that could be truncated while reporting success. History retention is now 120 days, forensic
+samples are capped, failed writes and collection gaps are reported in the notification, and the CSV
+export streams from the cursor and verifies its own row count.
+
+This release starts the **definitive field-collection campaign**. The project enters a release and
+detection freeze for at least one month: no planned updates, heuristic changes, threshold tuning,
+or schema changes will be made during that period. An emergency release remains possible only if
+a defect threatens data integrity, collection continuity, security, or successful export.
+
 ## v2.3.2 — bounded temporal-recovery release
 
 **Release:** stable
@@ -378,8 +397,9 @@ inspect RRC/NAS/baseband traffic the way dedicated hardware can.
 
 At the time of v2.1, the project planned a three-month collection period with no new heuristics,
 features, or tuning. This paragraph is retained as a historical record and is no longer the current
-release policy. The active policy is the **multi-week v2.3.0 field-validation freeze beginning on
-2026-09-18**, described at the top of this document. H16 is included in that new frozen baseline.
+release policy. The active policy is the **v2.3.3 definitive field-collection freeze beginning on
+2026-09-18**, described at the top of this document. The v2.3.0 detection baseline, including H16,
+remains frozen.
 
 The reason is specific. Everything the project needs next depends on data it does not have yet:
 

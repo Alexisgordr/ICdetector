@@ -1,0 +1,4 @@
+Protege la campaña definitiva frente a la pérdida silenciosa de datos. La retención cubre 120 días,
+el almacenamiento forense tiene tope, se avisan los fallos de escritura y los huecos, y el CSV usa
+una exportación transaccional verificada. Borrar el historial exige confirmación escrita. Los pesos
+no cambian. Es la última actualización prevista durante al menos un mes de recolección definitiva.
