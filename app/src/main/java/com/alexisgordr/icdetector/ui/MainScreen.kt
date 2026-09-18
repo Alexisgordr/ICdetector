@@ -86,11 +86,20 @@ fun MainLayout(context: Context, dbHelper: CellDbHelper, service: MiniICService?
 
     val launcher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestMultiplePermissions()
-    ) { permissions ->
-        hasLoc = permissions[Manifest.permission.ACCESS_FINE_LOCATION] ?: false
-        hasPhone = permissions[Manifest.permission.READ_PHONE_STATE] ?: false
+    ) {
+        // El mapa de resultados solo contiene los permisos incluidos en esta solicitud. Volver a
+        // consultar el sistema evita convertir en false un permiso que ya estaba concedido y por
+        // eso se omitió del array.
+        hasLoc = ContextCompat.checkSelfPermission(
+            context, Manifest.permission.ACCESS_FINE_LOCATION
+        ) == PackageManager.PERMISSION_GRANTED
+        hasPhone = ContextCompat.checkSelfPermission(
+            context, Manifest.permission.READ_PHONE_STATE
+        ) == PackageManager.PERMISSION_GRANTED
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            hasNotif = permissions[Manifest.permission.POST_NOTIFICATIONS] ?: false
+            hasNotif = ContextCompat.checkSelfPermission(
+                context, Manifest.permission.POST_NOTIFICATIONS
+            ) == PackageManager.PERMISSION_GRANTED
         }
         if (hasLoc && hasPhone) {
             (context as? MainActivity)?.startAndBindService()
@@ -729,8 +738,7 @@ fun SecurityScorePanel(active: CellData, dbmHistory: List<Int>, geoHistory: List
                 val (rfText, rfColor) = when {
                     rsrq == null          -> "● RF N/A"     to Color(0xFF666666)
                     isRfWarning           -> "⚠ RF POOR"    to Color(0xFFFFA000)
-                    rsrq > -15            -> "● RF OK"       to Color(0xFF4CAF50)
-                    else                  -> "⚠ RF POOR"    to Color(0xFFFFA000)
+                    else                  -> "● RF OK"       to Color(0xFF4CAF50)
                 }
 
                 Text(

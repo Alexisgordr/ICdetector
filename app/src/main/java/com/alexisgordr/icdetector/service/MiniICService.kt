@@ -398,7 +398,13 @@ class MiniICService : Service() {
         // Errores de verificación de más de 1 h: ya no deben bloquear reintentos.
         lastVerificationErrorTime.entries.removeIf { now - it.value > 3_600_000L }
         if (apiLocationCache.size > 256) {
-            apiLocationCache.keys.removeIf { it != activeCacheKey }
+            if (activeCacheKey != null) {
+                apiLocationCache.keys.removeIf { it != activeCacheKey }
+            } else {
+                // Sin celda activa no hay una clave preferente. Reducir al límite en lugar de
+                // vaciar toda la caché evita perder de golpe todas las distancias conocidas.
+                apiLocationCache.keys.take(apiLocationCache.size - 256).forEach(apiLocationCache::remove)
+            }
         }
         // NOT_FOUND de más de 1h (el TTL): se retira la marca para acotar el mapa; al volver a
         // observar la celda, el guard la reverificará (last ausente = fuera de ventana).
@@ -806,7 +812,10 @@ class MiniICService : Service() {
                     override fun onError(errorCode: Int, detail: Throwable?) {
                         if (ContextCompat.checkSelfPermission(this@MiniICService, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED) {
                             try {
-                                processCellInfo(telephonyManager.allCellInfo)
+                                // allCellInfo es el snapshot cacheado de la plataforma. Puede
+                                // actualizar la pantalla, pero nunca abrir la salida de emergencia
+                                // temporal como si fuera una entrega fresca del módem.
+                                processCellInfo(telephonyManager.allCellInfo, isFreshDelivery = false)
                             } catch (e: SecurityException) { e.printStackTrace() }
                         }
                     }
@@ -858,15 +867,15 @@ class MiniICService : Service() {
         }
     }
 
-    private fun processCellInfo(infoList: List<CellInfo>?) {
+    private fun processCellInfo(infoList: List<CellInfo>?, isFreshDelivery: Boolean = true) {
         try {
-            val processingSequence = enqueuedCellProcessing.incrementAndGet()
             if (!infoList.isNullOrEmpty()) {
                 lastCallbackTime = System.currentTimeMillis()
                 connectionRetryCount = 0
             }
 
             val list = mutableListOf<CellData>()   // v2.1: ya no se reasigna (el TA no se comparte entre celdas)
+            var activeObservationToken: Long? = null
             infoList?.forEach { info ->
                 val networkTypeString = if (info.isRegistered && info is CellInfoLte) {
                     getLteSpecificType()
@@ -888,6 +897,17 @@ class MiniICService : Service() {
                 val parsed = CellParser.parseCell(info, networkTypeString, mcc, mnc)
                 if (parsed != null && parsed.dbm != Int.MAX_VALUE && parsed.dbm < 100) {
                     list.add(parsed)
+                    // El token pertenece a la primera celda registrada que sobrevivió al parser,
+                    // la misma que se convertirá en activeRaw. Una entrada NR inválida ya no puede
+                    // dominar el máximo ni mezclar dominios de reloj con el ancla LTE.
+                    if (parsed.isRegistered && activeObservationToken == null) {
+                        activeObservationToken = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                            info.timestampMillis
+                        } else {
+                            @Suppress("DEPRECATION")
+                            TimeUnit.NANOSECONDS.toMillis(info.timeStamp)
+                        }
+                    }
                 }
             }
 
@@ -896,6 +916,10 @@ class MiniICService : Service() {
                 updateNotificationText("Sin señal / Modo Avión")
                 return
             }
+
+            // Solo una entrega con trabajo real puede invalidar otra que esté esperando el mutex.
+            // Un callback vacío ya no crea una secuencia fantasma que haga perder el ciclo válido.
+            val processingSequence = enqueuedCellProcessing.incrementAndGet()
 
             // v2.1 — EL TIMING ADVANCE NO SE COMPARTE ENTRE CELDAS.
             //
@@ -945,13 +969,8 @@ class MiniICService : Service() {
 
             val neighbors = list.filter { !it.isRegistered }
             val activeRaw = list.firstOrNull { it.isRegistered }
-            // CellInfo.timeStamp es monotónico y pertenece a la muestra del módem. Pull-to-refresh
-            // y callbacks duplicados conservan el mismo valor y no deben avanzar 1/3, 2/3, 3/3.
-            @Suppress("DEPRECATION")
-            val observationToken = infoList
-                ?.filter { it.isRegistered }
-                ?.maxOfOrNull { TimeUnit.NANOSECONDS.toMillis(it.timeStamp) }
-                ?: 0L
+            // Milisegundos desde el arranque de la celda registrada aceptada por el parser.
+            val observationToken = activeObservationToken ?: 0L
 
             // Reset del estado de latencia ANTES del análisis si la celda ha cambiado
             // (prevCid aún tiene el id anterior aquí; checkAlerts lo actualiza después).
@@ -1143,7 +1162,8 @@ class MiniICService : Service() {
                         // Aplicar confirmación temporal antes de alertas
                         val temporalActive = temporalConfidence.apply(
                             active,
-                            observationToken.takeIf { it > 0L }
+                            observationToken.takeIf { it > 0L },
+                            isFreshDelivery = isFreshDelivery
                         )
                         val diagnosticInputs = com.alexisgordr.icdetector.core.DiagnosticEngine.Inputs(
                             neighborCount = neighbors.size,

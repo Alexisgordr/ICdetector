@@ -21,12 +21,15 @@ import java.util.concurrent.ConcurrentHashMap
  */
 class TemporalConfidence(
     private val confirmationCycles: Int = 3,
-    private val minObservationSpacingMs: Long = 2_000L
+    private val minObservationSpacingMs: Long = 2_000L,
+    private val maxObservationStallMs: Long = 30_000L,
+    private val elapsedRealtimeMs: () -> Long = { System.nanoTime() / 1_000_000L }
 ) {
 
     private val anomalyStreaks = ConcurrentHashMap<String, Int>()
     private var lastStreakKey = ""
     private var lastObservationToken: Long? = null
+    private var lastAcceptedAtMs: Long? = null
 
     /** Racha actual de la celda (para diagnóstico y tests). */
     fun streakOf(cell: CellData): Int = anomalyStreaks[keyOf(cell)] ?: 0
@@ -36,6 +39,7 @@ class TemporalConfidence(
         anomalyStreaks.clear()
         lastStreakKey = ""
         lastObservationToken = null
+        lastAcceptedAtMs = null
     }
 
     /**
@@ -45,7 +49,11 @@ class TemporalConfidence(
      */
     private fun keyOf(cell: CellData) = cell.identityKey
 
-    fun apply(cell: CellData, observationToken: Long? = null): CellData {
+    fun apply(
+        cell: CellData,
+        observationToken: Long? = null,
+        isFreshDelivery: Boolean = true
+    ): CellData {
         val streakKey = keyOf(cell)
 
         // Si cambia la celda activa, resetear todos los streaks
@@ -53,6 +61,7 @@ class TemporalConfidence(
             anomalyStreaks.clear()
             lastStreakKey = streakKey
             lastObservationToken = null
+            lastAcceptedAtMs = null
         }
 
         // requestCellInfoUpdate, callbacks y refrescos manuales pueden entregar exactamente la
@@ -60,14 +69,28 @@ class TemporalConfidence(
         // invocaciones nuevas. Los tokens del servicio son timestamps monotónicos de CellInfo;
         // también se ignoran respuestas antiguas que terminen fuera de orden.
         val previousToken = lastObservationToken
+        val now = elapsedRealtimeMs()
+        // Algunos módems entregan timestamps congelados o que retroceden entre LTE y NR. Una
+        // callback que sí llegó correctamente puede abrir la puerta tras 30 s para evitar que la
+        // confirmación quede bloqueada para siempre. El fallback cacheado de allCellInfo pasa
+        // isFreshDelivery=false y nunca puede usar esta salida de emergencia.
+        val stalledFreshDelivery = isFreshDelivery && lastAcceptedAtMs?.let {
+            now - it >= maxObservationStallMs
+        } == true
         val isNewObservation = observationToken == null || previousToken == null ||
             (observationToken > previousToken &&
-                (!cell.isSuspicious || observationToken - previousToken >= minObservationSpacingMs))
+                (!cell.isSuspicious || observationToken - previousToken >= minObservationSpacingMs)) ||
+            stalledFreshDelivery
 
         if (!isNewObservation) {
             return decorate(cell, anomalyStreaks[streakKey] ?: 0)
         }
-        lastObservationToken = observationToken
+        // Una aceptación de emergencia no debe hacer retroceder la marca de agua: si lo hiciera,
+        // un token pequeño posterior parecería nuevo y podría avanzar otro ciclo inmediatamente.
+        if (observationToken != null && (previousToken == null || observationToken > previousToken)) {
+            lastObservationToken = observationToken
+        }
+        lastAcceptedAtMs = now
 
         val currentStreak = if (cell.isSuspicious) {
             val newStreak = (anomalyStreaks[streakKey] ?: 0) + 1

@@ -48,7 +48,7 @@ def check_numeric_affinity(db: sqlite3.Connection) -> None:
 def check_latest_observation_update(db: sqlite3.Connection) -> None:
     db.execute(
         "CREATE TABLE history("
-        "_id INTEGER PRIMARY KEY, verified TEXT, api_lat REAL, api_lon REAL, "
+        "id INTEGER PRIMARY KEY, verified TEXT, api_lat REAL, api_lon REAL, "
         "cid TEXT, mnc TEXT, tac TEXT, mcc TEXT, radio TEXT)"
     )
     db.executemany(
@@ -60,12 +60,12 @@ def check_latest_observation_update(db: sqlite3.Connection) -> None:
     )
     db.execute(
         "UPDATE history SET verified=?, api_lat=?, api_lon=? "
-        "WHERE _id=(SELECT MAX(_id) FROM history "
+        "WHERE id=(SELECT MAX(id) FROM history "
         "WHERE cid=? AND mnc=? AND tac=? AND mcc=? AND radio=?)",
         ("VERIFIED", 40.1, -3.2, "10", "07", "42", "214", "LTE"),
     )
     rows = db.execute(
-        "SELECT _id, verified, api_lat FROM history ORDER BY _id"
+        "SELECT id, verified, api_lat FROM history ORDER BY id"
     ).fetchall()
     assert rows == [(1, "NOT_FOUND", None), (2, "VERIFIED", 40.1)], rows
 

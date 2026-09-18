@@ -34,6 +34,11 @@ jobs:
       - name: Make wrapper executable
         run: chmod +x gradlew
 
+      - name: Run source and SQLite regression checks
+        run: |
+          python3 tools/check_sql_affinity.py
+          python3 tools/check_when_exhaustive.py
+
       - name: Run unit tests
         run: ./gradlew testDebugUnitTest
 

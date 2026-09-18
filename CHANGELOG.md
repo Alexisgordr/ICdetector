@@ -1,5 +1,36 @@
 # Changelog
 
+## 2.3.2
+
+### Temporal confirmation and callback correctness
+
+- The modem-observation token now comes from the registered cell that actually survives parsing,
+  instead of the maximum timestamp across raw registered LTE/NR entries.
+- Added a bounded 30-second recovery path for fresh modem callbacks whose timestamp freezes or
+  moves backwards. Cached `allCellInfo` data returned after `onError` cannot use that recovery path
+  and therefore cannot manufacture a three-cycle confirmation.
+- Migrated to `CellInfo.timestampMillis` on Android 11 and later while retaining the Android 10
+  compatibility path.
+- Empty or wholly invalid callback payloads no longer increment the processing sequence and cannot
+  invalidate a valid cycle waiting for serialized analysis.
+- Temporal confirmation remains deliberately conservative: a genuinely newer clean observation
+  still resets a suspicious streak immediately.
+
+### State and regression fixes
+
+- Permission results are read back from Android, so omitting an already granted notification
+  permission from a request cannot incorrectly mark it as denied.
+- Capped the tower-location cache without clearing every entry when no serving cell is available.
+- Removed an unreachable RF-status branch and kept the RSRQ warning explicitly independent from
+  network-latency status.
+- Updated the SQLite regression fixture to use the production `id` column name and run the source
+  regression checks in CI.
+- Added regression tests for frozen timestamps, cached fallback data, and token-watermark rollback.
+
+### Release metadata
+
+- Updated release metadata to `versionName 2.3.2` and `versionCode 11`.
+
 ## 2.3.1
 
 ### Verification and runtime correctness

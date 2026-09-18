@@ -1,0 +1,4 @@
+Prevents temporal confirmation from freezing on unreliable LTE/NR modem timestamps. Fresh callbacks
+can recover after a bounded delay, while cached error fallback data can never advance an alert.
+Also prevents empty callbacks from discarding valid analysis and fixes notification state, cache
+retention, RF status logic, and the SQLite regression fixture. Detection weights are unchanged.

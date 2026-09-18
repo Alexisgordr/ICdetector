@@ -1,0 +1,4 @@
+Evita que la confirmación temporal quede bloqueada por timestamps LTE/NR poco fiables. Las callbacks
+frescas pueden recuperarse tras una espera limitada, mientras los datos cacheados de error nunca
+avanzan una alerta. También evita que callbacks vacías descarten análisis válidos y corrige el estado
+de notificaciones, la caché, el indicador RF y la prueba SQLite. Los pesos no cambian.

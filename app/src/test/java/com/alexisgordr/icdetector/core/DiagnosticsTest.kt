@@ -70,6 +70,58 @@ class DiagnosticsTest {
     }
 
     @Test
+    fun `fresh delivery escapes a frozen modem timestamp after thirty seconds`() {
+        var elapsed = 0L
+        val temporal = TemporalConfidence(3, elapsedRealtimeMs = { elapsed })
+        val suspicious = cell().copy(isSuspicious = true, suspiciousReason = "test")
+
+        val first = temporal.apply(suspicious, observationToken = 10_000L)
+        elapsed = 29_999L
+        val stillFrozen = temporal.apply(suspicious, observationToken = 10_000L)
+        elapsed = 30_000L
+        val escaped = temporal.apply(suspicious, observationToken = 10_000L)
+
+        assertEquals(1, first.temporalProgress.phase)
+        assertEquals(1, stillFrozen.temporalProgress.phase)
+        assertEquals(2, escaped.temporalProgress.phase)
+    }
+
+    @Test
+    fun `cached fallback never escapes a frozen modem timestamp`() {
+        var elapsed = 0L
+        val temporal = TemporalConfidence(3, elapsedRealtimeMs = { elapsed })
+        val suspicious = cell().copy(isSuspicious = true, suspiciousReason = "test")
+
+        temporal.apply(suspicious, observationToken = 10_000L)
+        elapsed = 120_000L
+        val cached = temporal.apply(
+            suspicious,
+            observationToken = 10_000L,
+            isFreshDelivery = false
+        )
+
+        assertEquals(1, cached.temporalProgress.phase)
+        assertFalse(cached.isSuspicious)
+    }
+
+    @Test
+    fun `emergency acceptance never lowers the token watermark`() {
+        var elapsed = 0L
+        val temporal = TemporalConfidence(3, elapsedRealtimeMs = { elapsed })
+        val suspicious = cell().copy(isSuspicious = true, suspiciousReason = "test")
+
+        temporal.apply(suspicious, observationToken = 10_000L)
+        elapsed = 30_000L
+        val escaped = temporal.apply(suspicious, observationToken = 1_000L)
+        elapsed = 30_001L
+        val apparentAdvance = temporal.apply(suspicious, observationToken = 2_000L)
+
+        assertEquals(2, escaped.temporalProgress.phase)
+        assertEquals(2, apparentAdvance.temporalProgress.phase)
+        assertFalse(apparentAdvance.isSuspicious)
+    }
+
+    @Test
     fun `diagnostics explain unavailable timing advance`() {
         val inputs = DiagnosticEngine.Inputs(
             neighborCount = 0, wifiActive = false, locationAvailable = false,

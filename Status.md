@@ -1,5 +1,22 @@
 # ICdetection Status
 
+## v2.3.2 — bounded temporal-recovery release
+
+**Release:** stable
+**Version code:** 11
+**Database schema:** 15
+**Detection baseline:** unchanged from v2.3.0
+
+v2.3.2 prevents temporal confirmation from remaining frozen when a modem repeats or moves backwards
+its `CellInfo` timestamp. The timestamp now belongs to the registered cell that actually enters the
+analysis. A fresh callback may recover after 30 seconds, while cached `allCellInfo` data obtained
+from an error path can never use that recovery mechanism.
+
+The release also prevents empty callbacks from invalidating queued valid work, corrects permission
+state after partial requests, preserves the bounded API-location cache when no cell is active, and
+aligns the SQLite regression fixture with the production schema. Scoring, thresholds, schema, and
+export columns remain unchanged.
+
 ## v2.3.1 — correctness and campaign-integrity release
 
 **Release:** stable

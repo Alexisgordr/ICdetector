@@ -101,7 +101,7 @@ The score is a decision aid, not a measured probability that an IMSI catcher exi
 
 ## 5. Heuristic diagnostics
 
-Version 2.3.1 exposes the state and explanation of each evaluated rule:
+Version 2.3.2 exposes the state and explanation of each evaluated rule:
 
 - **PASS:** The rule ran with sufficient data and did not detect its suspicious condition.
 - **FAIL:** The rule ran and detected its suspicious condition. One failed rule does not automatically confirm a threat.
