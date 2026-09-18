@@ -1,5 +1,25 @@
 # Changelog
 
+## 2.3.5
+
+### Long-running collection reliability
+
+- Periodic screen-off samples now request one bounded GPS fix when the cached position has expired,
+  so the observation can feed geographic baselines without restoring continuous background GPS.
+- History retention and the forensic-sample cap now run daily as well as at service startup.
+- Polling responses no longer refresh the registered telephony-callback watchdog.
+- Database timestamps now use `Locale.ROOT`, preserving lexicographic date comparisons on every
+  Android locale.
+- API credentials are trimmed and OpenCellID query parameters are encoded safely; request creation
+  failures now produce a retryable API error instead of leaving a cell pending.
+- A detected 2G/3G fallback now posts a high-priority action that reliably opens Airplane Mode
+  settings when tapped; no restricted full-screen intent is used.
+- The history screen loads at most 2,000 recent rows while verified streaming export continues to
+  include the complete database.
+- Automatic startup after a reboot remains intentionally opt-in through opening the app; no boot
+  receiver was added. Detection weights, thresholds, database schema and CSV columns are unchanged.
+- Updated release metadata to `versionName 2.3.5` and `versionCode 14`.
+
 ## 2.3.4
 
 ### WiGLE cooldown label integrity

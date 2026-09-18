@@ -249,7 +249,7 @@ class CellDbHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME, 
     /** Últimas posiciones GPS válidas donde este dispositivo observó la identidad indicada. */
     fun getCellLocationSamples(cell: CellData, limit: Int = 40): List<CellLocationSample> {
         if (cell.cellId == "N/A" || cell.radioTech == RadioTech.UNKNOWN) return emptyList()
-        val cutoff = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault()).format(
+        val cutoff = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.ROOT).format(
             Date(System.currentTimeMillis() - 30L * 24 * 60 * 60 * 1000)
         )
         val out = mutableListOf<CellLocationSample>()
@@ -358,7 +358,7 @@ class CellDbHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME, 
 
     fun createForensicCase(cell: CellData): Long {
         val db = writableDatabase
-        val now = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault()).format(Date())
+        val now = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.ROOT).format(Date())
         val provisional = ContentValues().apply {
             put("case_code", "PENDING")
             put("created_at", now); put("updated_at", now)
@@ -381,7 +381,7 @@ class CellDbHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME, 
     }
 
     fun updateForensicCaseProgress(caseId: Long, cell: CellData) {
-        val now = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault()).format(Date())
+        val now = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.ROOT).format(Date())
         writableDatabase.execSQL(
             "UPDATE $TABLE_FORENSIC_CASES SET updated_at=?, highest_phase=MAX(highest_phase, ?), " +
                 "confirmed=MAX(confirmed, ?) WHERE id=?",
@@ -394,14 +394,14 @@ class CellDbHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME, 
     }
 
     fun finishForensicCase(caseId: Long, state: ForensicCaseState) {
-        val now = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault()).format(Date())
+        val now = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.ROOT).format(Date())
         writableDatabase.update(TABLE_FORENSIC_CASES, ContentValues().apply {
             put("state", state.name); put("updated_at", now); put("closed_at", now)
         }, "id=?", arrayOf(caseId.toString()))
     }
 
     fun interruptOpenForensicCases() {
-        val now = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault()).format(Date())
+        val now = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.ROOT).format(Date())
         writableDatabase.update(TABLE_FORENSIC_CASES, ContentValues().apply {
             put("state", ForensicCaseState.INTERRUPTED.name); put("updated_at", now); put("closed_at", now)
         }, "state IN (?,?)", arrayOf(ForensicCaseState.CAPTURING.name, ForensicCaseState.POST_CAPTURE.name))
@@ -461,7 +461,7 @@ class CellDbHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME, 
         val progress = cell.temporalProgress
         if (!progress.active) return
         val db = writableDatabase
-        val now = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault()).format(Date())
+        val now = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.ROOT).format(Date())
         val openId = findOpenIncidentId(db, cell.identityKey)
         val state = if (progress.confirmed) IncidentState.CONFIRMED else IncidentState.OBSERVING
         val values = ContentValues().apply {
@@ -488,7 +488,7 @@ class CellDbHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME, 
     /** Cierra episodios que dejaron de observarse o fueron interrumpidos por un handover. */
     fun closeOpenIncidents(activeIdentity: String?, interrupted: Boolean = false) {
         val db = writableDatabase
-        val now = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault()).format(Date())
+        val now = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.ROOT).format(Date())
         val values = ContentValues().apply {
             put("updated_at", now)
             put("ended_at", now)
@@ -587,7 +587,7 @@ class CellDbHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME, 
     ): Long {
         val db = this.writableDatabase
         val values = ContentValues().apply {
-            val sdf = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault())
+            val sdf = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.ROOT)
             put(COLUMN_TIMESTAMP, sdf.format(Date()))
             put(COLUMN_NET_TYPE, netType)
             put(COLUMN_CID, cid)
@@ -626,7 +626,7 @@ class CellDbHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME, 
     private fun edadDeRegistro(timestamp: String?): Long? {
         if (timestamp.isNullOrBlank()) return null
         return try {
-            val sdf = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault())
+            val sdf = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.ROOT)
             val fecha = sdf.parse(timestamp) ?: return null
             (Date().time - fecha.time).coerceAtLeast(0L)
         } catch (_: Exception) {
@@ -831,11 +831,14 @@ class CellDbHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME, 
         )
     }
 
-    fun getRecords(): List<HistoryRecord> {
+    fun getRecords(limit: Int? = null): List<HistoryRecord> {
         val list = mutableListOf<HistoryRecord>()
         try {
         val db = this.readableDatabase
-        val cursor: Cursor = db.rawQuery("SELECT * FROM $TABLE_HISTORY ORDER BY $COLUMN_ID DESC", null)
+        val boundedLimit = limit?.coerceAtLeast(1)
+        val query = "SELECT * FROM $TABLE_HISTORY ORDER BY $COLUMN_ID DESC" +
+            (boundedLimit?.let { " LIMIT $it" } ?: "")
+        val cursor: Cursor = db.rawQuery(query, null)
         try {
         if (cursor.moveToFirst()) {
             do {
@@ -850,6 +853,14 @@ class CellDbHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME, 
             // (export parcial) en lugar de crashear. Leer el historial nunca debe tumbar la app.
         }
         return list
+    }
+
+    fun getRecordCount(): Int = try {
+        readableDatabase.rawQuery("SELECT COUNT(*) FROM $TABLE_HISTORY", null).use { cursor ->
+            if (cursor.moveToFirst()) cursor.getInt(0) else 0
+        }
+    } catch (_: Exception) {
+        0
     }
 
     fun clear() {
@@ -872,7 +883,7 @@ class CellDbHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME, 
     fun pruneOldRecords(daysToKeep: Int = DEFAULT_RETENTION_DAYS): Int {
         return try {
             val cutoff = System.currentTimeMillis() - (daysToKeep.toLong() * 24 * 60 * 60 * 1000)
-            val sdf = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault())
+            val sdf = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.ROOT)
             val threshold = sdf.format(Date(cutoff))
             val db = this.writableDatabase
             val historyDeleted = db.delete(TABLE_HISTORY, "$COLUMN_TIMESTAMP < ?", arrayOf(threshold))
@@ -1005,7 +1016,7 @@ class CellDbHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME, 
         // Decaimiento temporal: Solo considerar registros de los últimos 30 días
         val thirtyDaysAgo = System.currentTimeMillis() - (30L * 24 * 60 * 60 * 1000)
         
-        val dateFormat = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault())
+        val dateFormat = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.ROOT)
         val recentThreshold = dateFormat.format(Date(fiveMinutesAgo))
         val oldThreshold = dateFormat.format(Date(thirtyDaysAgo))
         
@@ -1098,7 +1109,7 @@ class CellDbHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME, 
     ): SignalBaseline? {
         val db = this.readableDatabase
         val thirtyDaysAgo = System.currentTimeMillis() - (30L * 24 * 60 * 60 * 1000)
-        val dateFormat = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault())
+        val dateFormat = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.ROOT)
         val oldThreshold = dateFormat.format(Date(thirtyDaysAgo))
 
         val query = """
@@ -1174,7 +1185,7 @@ class CellDbHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME, 
     fun getCellReputation(cellId: String, mnc: String, tac: String, mcc: String, radio: RadioTech): CellReputation {
         val db = this.readableDatabase
         val ninetyDaysAgo = System.currentTimeMillis() - (90L * 24 * 60 * 60 * 1000)
-        val dateFormat = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault())
+        val dateFormat = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.ROOT)
         val threshold = dateFormat.format(Date(ninetyDaysAgo))
 
         val query = """
@@ -1244,7 +1255,7 @@ class CellDbHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME, 
     ): CellRfFingerprint? {
         val db = this.readableDatabase
         val ninetyDaysAgo = System.currentTimeMillis() - (90L * 24 * 60 * 60 * 1000)
-        val dateFormat = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault())
+        val dateFormat = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.ROOT)
         val threshold = dateFormat.format(Date(ninetyDaysAgo))
 
         val query = """
@@ -1476,7 +1487,7 @@ class CellDbHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME, 
         val now = System.currentTimeMillis()
         val thirtyDaysAgo = now - (30L * 24 * 60 * 60 * 1000)
         val recentWindow = now - (48L * 60 * 60 * 1000)   // últimas 48 h
-        val dateFormat = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault())
+        val dateFormat = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.ROOT)
         val oldThreshold = dateFormat.format(Date(thirtyDaysAgo))
         val recentThreshold = dateFormat.format(Date(recentWindow))
 

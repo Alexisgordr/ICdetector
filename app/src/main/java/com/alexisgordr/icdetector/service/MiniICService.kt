@@ -240,6 +240,7 @@ class MiniICService : Service() {
     private var lastCallbackTime = 0L
     private val callbackTimeoutMs = 30_000L
     private var connectionRetryCount = 0
+    private var lastDatabaseMaintenanceMs = 0L
     private val cellChangeHistory = CopyOnWriteArrayList<Pair<String, Long>>()
 
     private data class ServingSnapshot(
@@ -276,27 +277,21 @@ class MiniICService : Service() {
         // Evita que la tabla crezca sin límite registrando 24/7. v2.3.3: conserva
         // DEFAULT_RETENTION_DAYS (120) — antes 60, que se quedaban CORTOS para una campaña de 90
         // días y borraban el primer mes justo al abrir la app para exportar.
+        lastDatabaseMaintenanceMs = SystemClock.elapsedRealtime()
         scope.launch(Dispatchers.IO) {
+            // Si el proceso anterior terminó durante un episodio, no puede quedar marcado
+            // eternamente como "en curso". Se conserva y se cierra como interrumpido.
             try {
-                // Si el proceso anterior terminó durante un episodio, no puede quedar marcado
-                // eternamente como "en curso". Se conserva y se cierra como interrumpido.
                 dbHelper.closeOpenIncidents(activeIdentity = null, interrupted = true)
                 dbHelper.interruptOpenForensicCases()
-                val deleted = dbHelper.pruneOldRecords()
-                if (deleted > 0) {
-                    appendLog("[SYS]", "Poda de histórico: $deleted registros de más de ${CellDbHelper.DEFAULT_RETENTION_DAYS} días eliminados.")
-                }
-                val trimmed = dbHelper.enforceForensicSampleCap()
-                if (trimmed > 0) {
-                    appendLog("[SYS]", "Muestras forenses recortadas al tope de ${CellDbHelper.MAX_FORENSIC_SAMPLES}: $trimmed eliminadas.")
-                }
             } catch (_: Exception) {}
+            runDatabaseMaintenance()
         }
         
         val prefs = getSharedPreferences("miniic_prefs", MODE_PRIVATE)
-        openCellIdKey = prefs.getString("opencellid_key", "") ?: ""
-        wigleApiName = prefs.getString("wigle_api_name", "") ?: ""
-        wigleApiToken = prefs.getString("wigle_api_token", "") ?: ""
+        openCellIdKey = (prefs.getString("opencellid_key", "") ?: "").trim()
+        wigleApiName = (prefs.getString("wigle_api_name", "") ?: "").trim()
+        wigleApiToken = (prefs.getString("wigle_api_token", "") ?: "").trim()
         wigleRateLimitedUntil = prefs.getLong(KEY_WIGLE_RATE_LIMITED_UNTIL, 0L)
         if (wigleRateLimitedUntil <= System.currentTimeMillis()) {
             wigleRateLimitedUntil = 0L
@@ -387,6 +382,7 @@ class MiniICService : Service() {
                             activeForPrune?.cellId,
                             activeForPrune?.identityKey
                         )
+                        scheduleDailyDatabaseMaintenance()
 
                         // En reposo (pantalla apagada) con una celda esperando coordenadas
                         // frescas: despertamos el GPS despacio (cada 90 s, hasta 10 min) hasta
@@ -412,6 +408,29 @@ class MiniICService : Service() {
 
                 delay(delayTime.milliseconds)
             }
+        }
+    }
+
+    /** Aplica retención y límite forense también en servicios que permanecen vivos durante meses. */
+    private fun scheduleDailyDatabaseMaintenance() {
+        val now = SystemClock.elapsedRealtime()
+        if (now - lastDatabaseMaintenanceMs < DATABASE_MAINTENANCE_INTERVAL_MS) return
+        lastDatabaseMaintenanceMs = now
+        scope.launch(Dispatchers.IO) { runDatabaseMaintenance() }
+    }
+
+    private fun runDatabaseMaintenance() {
+        try {
+            val deleted = dbHelper.pruneOldRecords()
+            if (deleted > 0) {
+                appendLog("[SYS]", "Poda de histórico: $deleted registros de más de ${CellDbHelper.DEFAULT_RETENTION_DAYS} días eliminados.")
+            }
+            val trimmed = dbHelper.enforceForensicSampleCap()
+            if (trimmed > 0) {
+                appendLog("[SYS]", "Muestras forenses recortadas al tope de ${CellDbHelper.MAX_FORENSIC_SAMPLES}: $trimmed eliminadas.")
+            }
+        } catch (e: Exception) {
+            appendLog("[SYS]", "⚠️ Mantenimiento de base de datos fallido: ${e.message}")
         }
     }
 
@@ -717,8 +736,7 @@ class MiniICService : Service() {
                 try {
                     val callback = object : TelephonyCallback(), TelephonyCallback.CellInfoListener {
                         override fun onCellInfoChanged(cellInfo: MutableList<CellInfo>) {
-                            lastCallbackTime = System.currentTimeMillis()
-                            processCellInfo(cellInfo)
+                            processCellInfo(cellInfo, fromRegisteredCallback = true)
                         }
                     }
                     telephonyCallback = callback
@@ -835,6 +853,8 @@ class MiniICService : Service() {
             try {
                 telephonyManager.requestCellInfoUpdate(mainExecutor, object : TelephonyManager.CellInfoCallback() {
                     override fun onCellInfo(cellInfo: MutableList<CellInfo>) {
+                        // Es una respuesta al polling explícito, no una señal de que el
+                        // TelephonyCallback registrado siga vivo.
                         processCellInfo(cellInfo)
                     }
                     override fun onError(errorCode: Int, detail: Throwable?) {
@@ -895,9 +915,13 @@ class MiniICService : Service() {
         }
     }
 
-    private fun processCellInfo(infoList: List<CellInfo>?, isFreshDelivery: Boolean = true) {
+    private fun processCellInfo(
+        infoList: List<CellInfo>?,
+        isFreshDelivery: Boolean = true,
+        fromRegisteredCallback: Boolean = false
+    ) {
         try {
-            if (!infoList.isNullOrEmpty()) {
+            if (fromRegisteredCallback && !infoList.isNullOrEmpty()) {
                 lastCallbackTime = System.currentTimeMillis()
                 connectionRetryCount = 0
             }
@@ -2017,9 +2041,9 @@ class MiniICService : Service() {
      *
      * Esto registra una observación cada pocos minutos mientras sigues en la misma celda, que es
      * lo que de verdad alimenta los baselines (H13, huella RSRQ/SINR, reputación). Coste real:
-     *  - Batería: ninguna apreciable. NO despierta el GPS (usa getLastKnownLocation, que es lo que
-     *    ya haya) y NO fuerza lecturas de radio: se limita a persistir el análisis que el bucle
-     *    acaba de hacer de todas formas.
+     *  - Batería: con pantalla encendida reutiliza el stream. En reposo pide un único fix preciso
+     *    solo cuando la muestra ya toca y el fix cacheado ha caducado; se desregistra al obtenerlo
+     *    o a los 20 s. No fuerza lecturas extra de radio.
      *  - Disco: ~150 filas/día, unas 9.000 en los 60 días de retención. Trivial para SQLite.
      *
      * La cadencia es más lenta con la pantalla apagada, coherente con el diseño de bajo consumo.
@@ -2057,6 +2081,15 @@ class MiniICService : Service() {
                 radio = cell.radioTech
             )
             noteWriteResult(rowId)
+            // En reposo el stream GPS está apagado y el último fix caduca a los dos minutos.
+            // La fila se inserta primero para que el listener puntual pueda completar ESTA
+            // observación mediante updateNullCoordinates, sin atribuir la posición a una fila
+            // antigua. Si no llega un fix válido, NULL sigue siendo el dato honesto.
+            if (rowId != -1L && loc == null && !isScreenOn) {
+                awaitingFreshCoords = true
+                pendingCoordsSince = now
+                requestHighAccuracyFix()
+            }
         }
     }
 
@@ -2268,9 +2301,33 @@ class MiniICService : Service() {
                 sendBroadcast(intent)
             }
         } catch (_: SecurityException) {
-            val intent = Intent(Settings.ACTION_AIRPLANE_MODE_SETTINGS).apply { addFlags(Intent.FLAG_ACTIVITY_NEW_TASK) }
-            startActivity(intent)
+            // Android 10+ puede bloquear startActivity() desde segundo plano. Una notificación
+            // explícita y accionable funciona también con la pantalla bloqueada sin abusar de
+            // fullScreenIntent (reservado por Android para alarmas y llamadas).
+            showAirplaneModeActionNotification()
         }
+    }
+
+    private fun showAirplaneModeActionNotification() {
+        val settingsIntent = Intent(Settings.ACTION_AIRPLANE_MODE_SETTINGS)
+        val settingsPending = PendingIntent.getActivity(
+            this,
+            2,
+            settingsIntent,
+            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
+        )
+        val notification = NotificationCompat.Builder(this, ALERT_CHANNEL_ID)
+            .setContentTitle("ICdetection: red 2G/3G detectada")
+            .setContentText("Toca para abrir los ajustes de Modo Avión.")
+            .setSmallIcon(android.R.drawable.stat_sys_warning)
+            .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .setCategory(NotificationCompat.CATEGORY_ALARM)
+            .setContentIntent(settingsPending)
+            .addAction(android.R.drawable.ic_menu_manage, "ABRIR AJUSTES", settingsPending)
+            .setAutoCancel(true)
+            .build()
+        getSystemService(NotificationManager::class.java)
+            .notify(AIRPLANE_ACTION_NOTIFICATION_ID, notification)
     }
 
     private fun updateNotification(cell: CellData) {
@@ -2354,6 +2411,13 @@ class MiniICService : Service() {
         val chan = NotificationChannel(CHANNEL_ID, "miniIC Channel", NotificationManager.IMPORTANCE_LOW)
         val nm = getSystemService(NotificationManager::class.java)
         nm.createNotificationChannel(chan)
+        nm.createNotificationChannel(
+            NotificationChannel(
+                ALERT_CHANNEL_ID,
+                "Alertas de seguridad",
+                NotificationManager.IMPORTANCE_HIGH
+            ).apply { description = "Avisos accionables de degradación celular" }
+        )
     }
 
     private fun getNetworkOperatorMcc(): String {
@@ -2524,8 +2588,10 @@ class MiniICService : Service() {
 
     companion object {
         const val CHANNEL_ID = "miniic_channel"
+        const val ALERT_CHANNEL_ID = "miniic_security_alerts"
         const val NOTIFICATION_ID = 202
         const val LATENCY_NOTIFICATION_ID = 3  // distinto al NOTIFICATION_ID principal
+        const val AIRPLANE_ACTION_NOTIFICATION_ID = 204
         const val ACTION_STOP = "com.alexisgordr.icdetector.STOP"
         // Cap de seguridad para los mapas en memoria indexados por celda: evita crecimiento
         // ilimitado en sesiones muy largas o viajes con miles de celdas distintas.
@@ -2553,6 +2619,7 @@ class MiniICService : Service() {
         // Más lenta con la pantalla apagada, coherente con el diseño de bajo consumo.
         private const val PERIODIC_LOG_INTERVAL_SCREEN_ON = 5L * 60 * 1000    // 5 min
         private const val PERIODIC_LOG_INTERVAL_SCREEN_OFF = 15L * 60 * 1000  // 15 min
+        private const val DATABASE_MAINTENANCE_INTERVAL_MS = 24L * 60 * 60 * 1000
         // Ciclos consecutivos de sospecha necesarios para confirmar una alarma.
         private const val CONFIRMATION_CYCLES = 3
     }

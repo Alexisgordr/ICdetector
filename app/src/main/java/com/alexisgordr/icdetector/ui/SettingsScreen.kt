@@ -202,16 +202,19 @@ fun SettingsPanel(service: MiniICService?, onSave: () -> Unit) {
 
             Button(
                 onClick = {
+                    val cleanToken = token.trim()
+                    val cleanWigleName = wigleName.trim()
+                    val cleanWigleToken = wigleToken.trim()
                     prefs.edit {
-                        putString("opencellid_key", token)
-                        putString("wigle_api_name", wigleName)
-                        putString("wigle_api_token", wigleToken)
+                        putString("opencellid_key", cleanToken)
+                        putString("wigle_api_name", cleanWigleName)
+                        putString("wigle_api_token", cleanWigleToken)
                         putBoolean("proxy_enabled", proxyEnabled)
                         putBoolean("latency_detection_enabled", latencyDetectionEnabled)
                     }
-                    service?.openCellIdKey = token
-                    service?.wigleApiName = wigleName
-                    service?.wigleApiToken = wigleToken
+                    service?.openCellIdKey = cleanToken
+                    service?.wigleApiName = cleanWigleName
+                    service?.wigleApiToken = cleanWigleToken
                     service?.isProxyEnabled = proxyEnabled
                     service?.isLatencyDetectionEnabled = latencyDetectionEnabled
                     onSave()

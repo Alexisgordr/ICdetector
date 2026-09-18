@@ -1,0 +1,3 @@
+Mejora la recolección prolongada: GPS puntual en muestras con pantalla apagada, poda y tope forense
+diarios, watchdog correcto, fechas independientes del idioma, peticiones API robustas, aviso 2G/3G
+accionable e historial acotado en memoria. La detección no cambia.

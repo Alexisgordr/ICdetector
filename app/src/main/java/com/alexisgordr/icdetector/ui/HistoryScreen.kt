@@ -44,9 +44,12 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.delay
 
+private const val HISTORY_UI_RECORD_LIMIT = 2_000
+
 @Composable
 fun HistoryPanel(dbHelper: CellDbHelper, onBack: () -> Unit) {
     var items by remember { mutableStateOf<List<HistoryRecord>>(emptyList()) }
+    var totalRecordCount by remember { mutableIntStateOf(0) }
     var incidents by remember { mutableStateOf<List<IncidentRecord>>(emptyList()) }
     var showIncidents by remember { mutableStateOf(false) }
     var showForensics by remember { mutableStateOf(false) }
@@ -62,7 +65,8 @@ fun HistoryPanel(dbHelper: CellDbHelper, onBack: () -> Unit) {
 
     LaunchedEffect(Unit) {
         withContext(Dispatchers.IO) {
-            items = dbHelper.getRecords()
+            totalRecordCount = dbHelper.getRecordCount()
+            items = dbHelper.getRecords(limit = HISTORY_UI_RECORD_LIMIT)
             incidents = dbHelper.getIncidents()
             forensicCases = dbHelper.getForensicCases()
             transitions = dbHelper.getCellTransitions()
@@ -88,7 +92,7 @@ fun HistoryPanel(dbHelper: CellDbHelper, onBack: () -> Unit) {
             text = {
                 Column {
                     Text(
-                        "Esta acción eliminará permanentemente ${items.size} registros de antenas, " +
+                        "Esta acción eliminará permanentemente $totalRecordCount registros de antenas, " +
                             "sus incidentes y sus casos forenses. No hay copia de seguridad y no se puede deshacer.",
                         color = Color(0xFF888888), fontFamily = FontFamily.Monospace
                     )
@@ -110,6 +114,7 @@ fun HistoryPanel(dbHelper: CellDbHelper, onBack: () -> Unit) {
                         scope.launch(Dispatchers.IO) {
                             dbHelper.clear()
                             items = emptyList()
+                            totalRecordCount = 0
                             withContext(Dispatchers.Main) {
                                 showDeleteConfirm.value = false
                                 deleteConfirmText = ""
@@ -186,13 +191,22 @@ fun HistoryPanel(dbHelper: CellDbHelper, onBack: () -> Unit) {
             return@Column
         }
 
-        if (items.isEmpty()) {
+        if (totalRecordCount == 0) {
             Box(modifier = Modifier
                 .fillMaxWidth()
                 .weight(1f), contentAlignment = Alignment.Center) {
                 Text("HISTORIAL VACÍO", color = Color(0xFF444444), fontFamily = FontFamily.Monospace, fontSize = 12.sp)
             }
         } else {
+            if (totalRecordCount > items.size) {
+                Text(
+                    "Mostrando las ${items.size} observaciones más recientes de $totalRecordCount. " +
+                        "La exportación incluye el historial completo.",
+                    color = Color(0xFF888888),
+                    fontFamily = FontFamily.Monospace,
+                    fontSize = 11.sp
+                )
+            }
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
                 val context = LocalContext.current
                 val exportLauncher = rememberLauncherForActivityResult(

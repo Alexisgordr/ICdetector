@@ -1,13 +1,19 @@
 # ICdetection Status
 
-## v2.3.4 — WiGLE cooldown label-integrity release
+## v2.3.5 — long-running collection reliability release
 
 **Release:** stable
-**Version code:** 13
+**Version code:** 14
 **Database schema:** 15
 **Detection baseline:** unchanged from v2.3.0
 
-v2.3.4 fixes one campaign-data labeling defect without changing detection. A WiGLE source skipped
+v2.3.5 fixes long-running collection paths without changing the frozen detector: bounded GPS
+refresh for screen-off samples, daily retention and forensic caps, an honest callback watchdog,
+locale-independent stored timestamps, robust API credential/query handling, an actionable 2G/3G
+warning, and bounded history rendering with complete streaming export. Automatic reboot startup
+remains an explicit user choice and is not added in this release.
+
+v2.3.4 fixed one campaign-data labeling defect without changing detection. A WiGLE source skipped
 because its global quota cooldown is active no longer contributes a synthetic `ERROR`; the real
 OpenCellID verdict is preserved. During that pause, `NOT_FOUND` means specifically that OpenCellID
 returned its documented negative response, not that every public database was queried.
@@ -405,7 +411,7 @@ inspect RRC/NAS/baseband traffic the way dedicated hardware can.
 
 At the time of v2.1, the project planned a three-month collection period with no new heuristics,
 features, or tuning. This paragraph is retained as a historical record and is no longer the current
-release policy. The active policy is the **v2.3.4 definitive field-collection freeze beginning on
+release policy. The active policy is the **v2.3.5 definitive field-collection freeze beginning on
 2026-09-18**, described at the top of this document. The v2.3.0 detection baseline, including H16,
 remains frozen.
 

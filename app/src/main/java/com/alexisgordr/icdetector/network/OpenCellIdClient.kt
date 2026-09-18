@@ -4,6 +4,7 @@ import com.alexisgordr.icdetector.core.VerificationDecision
 import com.alexisgordr.icdetector.models.CellData
 import com.alexisgordr.icdetector.models.VerificationStatus
 import okhttp3.OkHttpClient
+import okhttp3.HttpUrl
 import okhttp3.Request
 import org.json.JSONObject
 import java.net.InetSocketAddress
@@ -42,12 +43,21 @@ object OpenCellIdClient {
             client
         }
 
-        val radioParam = cell.radioTech.apiName?.let { "&radio=$it" } ?: ""
-        val url = "https://opencellid.org/cell/get?key=$openCellIdKey&mcc=${cell.mcc}&mnc=${cell.mnc}" +
-            "&lac=${cell.tac}&cellid=${cell.cellId}$radioParam&format=json"
-        val request = Request.Builder().url(url).build()
-
         return try {
+            val cleanKey = openCellIdKey.trim()
+            val url = HttpUrl.Builder()
+                .scheme("https")
+                .host("opencellid.org")
+                .addPathSegments("cell/get")
+                .addQueryParameter("key", cleanKey)
+                .addQueryParameter("mcc", cell.mcc)
+                .addQueryParameter("mnc", cell.mnc)
+                .addQueryParameter("lac", cell.tac)
+                .addQueryParameter("cellid", cell.cellId)
+                .apply { cell.radioTech.apiName?.let { addQueryParameter("radio", it) } }
+                .addQueryParameter("format", "json")
+                .build()
+            val request = Request.Builder().url(url).build()
             currentClient.newCall(request).execute().use { response ->
                 val body = response.body.string()
                 val json = runCatching { JSONObject(body) }.getOrNull()
@@ -56,8 +66,8 @@ object OpenCellIdClient {
                 // NO se registra; el cuerpo no la contiene.
                 // El error "API Key not known" puede repetir literalmente la clave enviada.
                 // Nunca dejarla en el terminal ni en un informe compartido.
-                val cuerpoSeguro = if (openCellIdKey.isNotEmpty()) {
-                    body.replace(openCellIdKey, "[REDACTED]")
+                val cuerpoSeguro = if (cleanKey.isNotEmpty()) {
+                    body.replace(cleanKey, "[REDACTED]")
                 } else body
                 val crudo = cuerpoSeguro
                     .take(160)

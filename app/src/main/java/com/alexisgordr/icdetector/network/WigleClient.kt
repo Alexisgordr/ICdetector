@@ -56,30 +56,25 @@ object WigleClient {
             client
         }
 
-        val credentials = okhttp3.Credentials.basic(wigleApiName, wigleApiToken)
-
-        // Operador tal y como lo identifica WiGLE: MCC y MNC concatenados, conservando el cero a
-        // la izquierda que reporta el módem (214 + 01 = "21401", no "2141").
-        val operador = "${cell.mcc}${cell.mnc}"
-
-        // Nombres usados por el cliente Android oficial de WiGLE. No se añaden alias camelCase:
-        // una consulta de verificación debe contener únicamente filtros cuyo significado conocemos.
-        val url = buildString {
-            append("https://api.wigle.net/api/v2/cell/search")
-            append("?cell_op=").append(operador)
-            append("&cell_net=").append(cell.tac)
-            append("&cell_id=").append(cell.cellId)
-            append("&resultsPerPage=5")
-        }
-
-        val request = Request.Builder()
-            .url(url)
-            .header("Authorization", credentials)
-            .header("User-Agent", "ICdetection/2.1 (Android)")
-            .header("Accept", "application/json")
-            .build()
-
         return try {
+            val credentials = okhttp3.Credentials.basic(wigleApiName.trim(), wigleApiToken.trim())
+
+            // Operador tal y como lo identifica WiGLE: MCC y MNC concatenados, conservando el cero
+            // a la izquierda que reporta el módem (214 + 01 = "21401", no "2141").
+            val operador = "${cell.mcc}${cell.mnc}"
+            val url = buildString {
+                append("https://api.wigle.net/api/v2/cell/search")
+                append("?cell_op=").append(operador)
+                append("&cell_net=").append(cell.tac)
+                append("&cell_id=").append(cell.cellId)
+                append("&resultsPerPage=5")
+            }
+            val request = Request.Builder()
+                .url(url)
+                .header("Authorization", credentials)
+                .header("User-Agent", "ICdetection/2.1 (Android)")
+                .header("Accept", "application/json")
+                .build()
             currentClient.newCall(request).execute().use { response ->
                 val body = response.body.string()
                 val json = runCatching { JSONObject(body) }.getOrNull()

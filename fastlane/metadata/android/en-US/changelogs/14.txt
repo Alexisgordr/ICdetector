@@ -1,0 +1,3 @@
+Improves long-running collection reliability: bounded GPS refresh for screen-off samples, daily
+retention and forensic caps, accurate callback watchdog timing, locale-safe timestamps, robust API
+requests, actionable 2G/3G alerts, and memory-bounded history viewing. Detection is unchanged.
