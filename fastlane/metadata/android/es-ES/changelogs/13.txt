@@ -1,0 +1,3 @@
+Corrige las etiquetas de verificación durante la pausa por cuota de WiGLE. Cuando WiGLE no se
+consulta a propósito, ya no aporta un error API sintético que cambiaba un NOT_FOUND real de
+OpenCellID a REJECTED. No cambian reglas, umbrales, esquema ni columnas de exportación.

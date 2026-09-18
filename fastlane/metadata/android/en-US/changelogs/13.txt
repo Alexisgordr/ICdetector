@@ -1,0 +1,3 @@
+Fixes verification labels during the WiGLE quota cooldown. When WiGLE is deliberately skipped,
+it no longer contributes a synthetic API error that changes a real OpenCellID NOT_FOUND result
+into REJECTED. Detection rules, thresholds, database schema and export columns are unchanged.

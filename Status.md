@@ -1,13 +1,18 @@
 # ICdetection Status
 
-## v2.3.3 — campaign-data protection release
+## v2.3.4 — WiGLE cooldown label-integrity release
 
 **Release:** stable
-**Version code:** 12
+**Version code:** 13
 **Database schema:** 15
 **Detection baseline:** unchanged from v2.3.0
 
-v2.3.3 contains no detection changes. It protects the data a multi-month campaign produces against
+v2.3.4 fixes one campaign-data labeling defect without changing detection. A WiGLE source skipped
+because its global quota cooldown is active no longer contributes a synthetic `ERROR`; the real
+OpenCellID verdict is preserved. During that pause, `NOT_FOUND` means specifically that OpenCellID
+returned its documented negative response, not that every public database was queried.
+
+v2.3.3 introduced the protections for data a multi-month campaign produces against
 four ways of losing it silently: a retention window shorter than the campaign itself, database
 writes that fail without surfacing, forensic captures that could grow without bound, and an export
 that could be truncated while reporting success. History retention is now 120 days, forensic
@@ -111,6 +116,9 @@ data collection before another detection-policy change is considered.
 - OpenCellID and all local heuristic analysis continue normally while WiGLE is paused.
 - The terminal explains the cooldown and approximate remaining time; a rate-limited source remains
   unavailable context and does not become evidence against a cell.
+- While WiGLE is paused, `NOT_FOUND` means specifically that OpenCellID returned its documented
+  negative response. WiGLE was not queried, so the label does not claim absence from every public
+  database. A skipped WiGLE request contributes no synthetic `ERROR` to the combined verdict.
 - The forensic prebuffer now uses monotonic elapsed time rather than wall-clock subtraction, so an
   NTP or manual clock adjustment cannot disturb its retention window.
 - Safe access to the prebuffer head removes the nullable Kotlin release-build warning.
@@ -397,7 +405,7 @@ inspect RRC/NAS/baseband traffic the way dedicated hardware can.
 
 At the time of v2.1, the project planned a three-month collection period with no new heuristics,
 features, or tuning. This paragraph is retained as a historical record and is no longer the current
-release policy. The active policy is the **v2.3.3 definitive field-collection freeze beginning on
+release policy. The active policy is the **v2.3.4 definitive field-collection freeze beginning on
 2026-09-18**, described at the top of this document. The v2.3.0 detection baseline, including H16,
 remains frozen.
 

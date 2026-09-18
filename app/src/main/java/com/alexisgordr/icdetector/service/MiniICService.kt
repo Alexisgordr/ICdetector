@@ -1812,7 +1812,9 @@ class MiniICService : Service() {
             val now = System.currentTimeMillis()
             val wigleCoolingDown = now < wigleRateLimitedUntil
             if (wigleConfigured && wigleCoolingDown) {
-                finalStatus = mejorRespuesta(finalStatus, VerificationStatus.ERROR)
+                // WiGLE no se ha consultado: el cooldown no es una respuesta y no puede aportar
+                // evidencia a la agregación. Inyectar ERROR aquí convertía un NOT_FOUND real de
+                // OpenCellID en REJECTED durante toda la pausa global.
                 if (!hasLoggedWigleCooldown) {
                     val minutes = ((wigleRateLimitedUntil - now + 59_999L) / 60_000L).coerceAtLeast(1L)
                     appendLog("[API]", "WiGLE: cuota diaria agotada; consultas pausadas (${minutes} min restantes). OpenCellID y el análisis local siguen activos.")

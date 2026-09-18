@@ -1,5 +1,17 @@
 # Changelog
 
+## 2.3.4
+
+### WiGLE cooldown label integrity
+
+- A paused WiGLE source no longer injects a synthetic `ERROR` into verification aggregation.
+  OpenCellID's real `NOT_FOUND` response therefore remains `NOT_FOUND` while the global WiGLE
+  cooldown is active instead of being mislabeled as `REJECTED`.
+- Clarified that `NOT_FOUND` during a WiGLE cooldown means that OpenCellID did not contain the
+  cell; it does not claim absence from WiGLE or every public database.
+- Detection weights, thresholds, database schema and export columns remain unchanged.
+- Updated release metadata to `versionName 2.3.4` and `versionCode 13`.
+
 ## 2.3.3
 
 ### Campaign-data protection

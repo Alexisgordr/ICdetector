@@ -1,7 +1,7 @@
 ![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)
 ![Platform](https://img.shields.io/badge/Platform-Android%2010%2B-green.svg)
 ![Root Required](https://img.shields.io/badge/Root-Not%20Required-brightgreen.svg)
-![Status](https://img.shields.io/badge/Status-Stable%20v2.3.3-success.svg)
+![Status](https://img.shields.io/badge/Status-Stable%20v2.3.4-success.svg)
 [![Featured in Awesome Telco](https://img.shields.io/badge/Featured%20in-Awesome%20Telco-6f42c1.svg)](https://github.com/ravens/awesome-telco#imsi-catcher-detection)
 
 
@@ -54,13 +54,13 @@ The application operates from Android userland without requiring root or direct 
 
 > **⚠️ Upgrading from a version older than v2.1.1:** uninstall the previous version first. Android refuses an in-place update when the APK is not signed with the same keystore, and a clean database is required because records written before v2.1.1 may hold an antenna coordinate where the device GPS position belongs. Export your CSV first if you want to keep the old history. v2.1.2 and later releases signed with the same keystore update in place normally. See `Status.md`.
 
-ICdetection v2.3.3 is the current stable release. It protects the definitive multi-month data
-collection against silent loss: retention now covers 120 days, failed database writes and long
-collection gaps are visible, forensic storage is bounded, CSV export uses a verified transactional
-stream, and clearing the history requires typed confirmation. The detection baseline, heuristic
-weights, thresholds, database schema, and CSV columns remain unchanged.
+ICdetection v2.3.4 is the current stable release. It preserves OpenCellID's real `NOT_FOUND`
+verdict while WiGLE is paused by its global quota cooldown, instead of injecting an unqueried
+`ERROR` and mislabeling the result as `REJECTED`. Detection weights, thresholds, database schema,
+and CSV columns remain unchanged.
 
-> **Definitive field-collection freeze:** v2.3.3 begins the definitive data-collection campaign.
+> **Definitive field-collection freeze:** v2.3.3 began the definitive data-collection campaign;
+> v2.3.4 is an emergency data-label integrity correction permitted by that freeze.
 > No planned releases or detector changes will be made for at least one month, unless a defect
 > threatens data integrity, collection continuity, security, or the ability to export the results.
 
