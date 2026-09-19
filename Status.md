@@ -1,17 +1,28 @@
 # ICdetection Status
 
-## v2.3.5 — long-running collection reliability release
+## v2.4.0 — continuous GPS collection release
 
 **Release:** stable
-**Version code:** 14
+**Version code:** 15
 **Database schema:** 15
 **Detection baseline:** unchanged from v2.3.0
 
-v2.3.5 fixes long-running collection paths without changing the frozen detector: bounded GPS
-refresh for screen-off samples, daily retention and forensic caps, an honest callback watchdog,
-locale-independent stored timestamps, robust API credential/query handling, an actionable 2G/3G
-warning, and bounded history rendering with complete streaming export. Automatic reboot startup
-remains an explicit user choice and is not added in this release.
+v2.4.0 keeps the GPS-only stream and collection loop active throughout the lifetime of the
+foreground service, including with the screen off. A partial wake lock reduces overnight CPU-sleep
+gaps. Continuous GPS pauses only below 5% battery while unplugged and resumes automatically after
+recovery or charging. The higher battery cost is accepted explicitly because contemporaneous device
+coordinates feed H11, H13 and H16. Network-derived location remains forbidden, and all existing
+accuracy, freshness and anti-jump validation remains in force.
+
+This is a collection-continuity change, not a detector retune. Detection weights, thresholds,
+database schema and CSV columns remain unchanged. Automatic reboot startup remains an explicit user
+choice. Manual exemption from Android battery optimization is recommended and no privileged
+exemption permission is requested.
+
+v2.3.5 fixed long-running collection paths without changing the detector: bounded GPS refresh,
+daily retention and forensic caps, an honest callback watchdog, locale-independent timestamps,
+robust API request construction, an actionable 2G/3G warning, and bounded history rendering with
+complete streaming export.
 
 v2.3.4 fixed one campaign-data labeling defect without changing detection. A WiGLE source skipped
 because its global quota cooldown is active no longer contributes a synthetic `ERROR`; the real
@@ -411,9 +422,9 @@ inspect RRC/NAS/baseband traffic the way dedicated hardware can.
 
 At the time of v2.1, the project planned a three-month collection period with no new heuristics,
 features, or tuning. This paragraph is retained as a historical record and is no longer the current
-release policy. The active policy is the **v2.3.5 definitive field-collection freeze beginning on
-2026-09-18**, described at the top of this document. The v2.3.0 detection baseline, including H16,
-remains frozen.
+release policy. The active policy is the **v2.4.0 definitive field-collection freeze**, described at
+the top of this document. The v2.3.0 detection baseline, including H16, remains frozen; v2.4.0 changes
+only collection continuity and location availability.
 
 The reason is specific. Everything the project needs next depends on data it does not have yet:
 

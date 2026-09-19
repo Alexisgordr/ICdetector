@@ -1,5 +1,23 @@
 # Changelog
 
+## 2.4.0
+
+### Continuous GPS collection
+
+- Keeps the GPS-only location stream active while the foreground monitoring service is running,
+  including with the screen off, so H11, H13 and H16 receive substantially more contemporaneous
+  device positions during overnight and pocket collection.
+- Holds a non-reference-counted partial wake lock to keep the collection loop running through CPU
+  sleep. The persistent notification explicitly identifies continuous GPS operation.
+- Pauses continuous GPS and releases the wake lock only below 5% battery while unplugged, then
+  resumes both automatically after charging or battery recovery.
+- Rechecks the GPS provider idempotently so turning location off and back on restores the stream.
+- Continues to use GPS only. Network-derived location, stale coordinates and invented backfills are
+  never accepted; existing accuracy, freshness and physical-plausibility filters remain unchanged.
+- Documents the intentionally higher battery cost and the recommended manual battery-optimization
+  exemption. No detection weights, thresholds, database schema or CSV columns changed.
+- Updated release metadata to `versionName 2.4.0` and `versionCode 15`.
+
 ## 2.3.5
 
 ### Long-running collection reliability

@@ -31,6 +31,9 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_LOCATION" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.INTERNET" />
+    <!-- Mantiene el bucle de recolección activo con la pantalla apagada. Es un permiso normal:
+         no muestra diálogo ni concede acceso adicional a datos. -->
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
 
     <!-- memtagMode="sync" enforces MTE on GrapheneOS / MTE devices to prevent memory corruption attacks -->
     <application

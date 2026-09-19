@@ -1,0 +1,4 @@
+Mantiene activa 24/7 la ubicación solo por GPS y el bucle de recolección mientras se monitoriza,
+también con la pantalla apagada, para mejorar la evidencia geográfica de H11, H13 y H16. Un wakelock
+parcial reduce huecos en reposo. El GPS continuo solo se pausa con menos del 5 % de batería y sin
+cargar, y se reanuda automáticamente. No cambian pesos, esquema ni columnas CSV.

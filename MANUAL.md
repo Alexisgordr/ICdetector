@@ -41,16 +41,23 @@ If a permission is unavailable, ICdetection should continue with the remaining i
 For longer sessions:
 
 1. Allow ICdetection to operate in the background.
-2. Exclude it from aggressive manufacturer battery optimisation if necessary.
+2. Exclude it manually from Android and manufacturer battery optimisation.
 3. Confirm that its persistent monitoring notification remains visible.
 
-Android Doze may reduce fresh GPS fixes when the screen is off and the device is stationary. This is an operating-system restriction, not necessarily an app failure.
+Version 2.4.0 keeps the GPS-only location stream and collection loop active continuously while the
+monitoring service runs, including with the screen off. This intentionally consumes more battery so
+H11, H13 and H16 have contemporaneous positions. The persistent notification states that continuous
+GPS is active. The app does not request the privileged battery-optimization exemption itself; the
+user remains in control of that system setting.
 
-From version 2.3.5, when a scheduled background sample is recorded without coordinates while the
-screen is off, ICdetection requests one bounded high-accuracy fix for up to 20 seconds. A successful
-fix is applied only to the newest coordinate-less record for the same complete cell identity. If no
-fresh fix is obtained, the coordinates remain empty; the app does not invent or reuse a stale
-position.
+Below 5% battery while unplugged, continuous GPS and the collection wake lock pause to prevent the
+phone from powering off and losing all collection. They resume automatically when charging starts
+or the battery recovers.
+
+If a scheduled sample is still recorded without coordinates, ICdetection requests a bounded
+high-accuracy fix. A successful fix is applied only to the newest coordinate-less record for the
+same complete cell identity. If GPS cannot produce a valid fix, the coordinates remain empty; the
+app never invents, reuses or retroactively assigns a stale position.
 
 ### External verification
 
@@ -107,7 +114,7 @@ The score is a decision aid, not a measured probability that an IMSI catcher exi
 
 ## 5. Heuristic diagnostics
 
-Version 2.3.5 exposes the state and explanation of each evaluated rule:
+Version 2.4.0 exposes the state and explanation of each evaluated rule:
 
 - **PASS:** The rule ran with sufficient data and did not detect its suspicious condition.
 - **FAIL:** The rule ran and detected its suspicious condition. One failed rule does not automatically confirm a threat.

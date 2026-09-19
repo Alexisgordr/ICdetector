@@ -1,7 +1,7 @@
 ![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)
 ![Platform](https://img.shields.io/badge/Platform-Android%2010%2B-green.svg)
 ![Root Required](https://img.shields.io/badge/Root-Not%20Required-brightgreen.svg)
-![Status](https://img.shields.io/badge/Status-Stable%20v2.3.5-success.svg)
+![Status](https://img.shields.io/badge/Status-Stable%20v2.4.0-success.svg)
 [![Featured in Awesome Telco](https://img.shields.io/badge/Featured%20in-Awesome%20Telco-6f42c1.svg)](https://github.com/ravens/awesome-telco#imsi-catcher-detection)
 
 
@@ -54,14 +54,15 @@ The application operates from Android userland without requiring root or direct 
 
 > **⚠️ Upgrading from a version older than v2.1.1:** uninstall the previous version first. Android refuses an in-place update when the APK is not signed with the same keystore, and a clean database is required because records written before v2.1.1 may hold an antenna coordinate where the device GPS position belongs. Export your CSV first if you want to keep the old history. v2.1.2 and later releases signed with the same keystore update in place normally. See `Status.md`.
 
-ICdetection v2.3.5 is the current stable release. It improves collection reliability during long
-sessions: bounded GPS refresh for screen-off samples, daily database maintenance, honest callback
-watchdog timing, locale-independent timestamps, robust API request construction, actionable
-downgrade alerts, and bounded history rendering with complete streaming export. Detection weights,
-thresholds, database schema, and CSV columns remain unchanged.
+ICdetection v2.4.0 is the current stable release. It keeps the GPS-only location stream and the
+collection loop active while the foreground service runs, including with the screen off. This is an
+intentional product choice: contemporaneous coordinates are required by H11, H13 and H16. A partial
+wake lock maintains CPU collection through idle periods; continuous GPS pauses only below 5% battery
+while unplugged and resumes automatically. Detection weights, thresholds, database schema, and CSV
+columns remain unchanged.
 
 > **Definitive field-collection freeze:** v2.3.3 began the definitive data-collection campaign;
-> v2.3.4 and v2.3.5 are emergency data-integrity corrections permitted by that freeze.
+> v2.3.4, v2.3.5 and v2.4.0 are targeted data-integrity and collection-continuity corrections.
 > No planned releases or detector changes will be made for at least one month, unless a defect
 > threatens data integrity, collection continuity, security, or the ability to export the results.
 
@@ -427,7 +428,12 @@ threat score.
 
 ICdetection requires unoptimized battery settings to ensure reliable long-running monitoring.
 
-The application runs a continuous foreground service that scans cells, registers telephony callbacks, and manages location fixes. Android battery optimization mechanisms such as Doze and App Standby may throttle this behavior when the phone is idle with the screen off.
+Version 2.4.0 deliberately keeps the GPS-only stream active 24/7 while monitoring and holds a partial
+wake lock so the collection loop continues with the screen off. This materially increases battery
+use. Below 5% battery while unplugged, GPS and the wake lock pause to avoid losing the entire
+collection session to a powered-off phone; they resume automatically after recovery or charging.
+Android battery optimization and manufacturer policies may still interfere, so exclude the app
+manually when continuity matters.
 
 Recommended setting:
 

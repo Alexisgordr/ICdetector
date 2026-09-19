@@ -1,6 +1,7 @@
 package com.alexisgordr.icdetector.service
 
 import android.Manifest
+import android.annotation.SuppressLint
 import android.app.*
 import android.content.*
 import android.content.pm.PackageManager
@@ -102,6 +103,8 @@ class MiniICService : Service() {
     private var lastDisplayInfo: TelephonyDisplayInfo? = null
     private var isScreenOn = true
     private var locationUpdatesActive = false
+    private var collectionWakeLock: PowerManager.WakeLock? = null
+    private var collectionPausedForCriticalBattery = false
     private var isServiceRunning = false
     private var lastAirplaneTriggerTime = 0L
     private var lastStrongSignalAlarmTime = 0L
@@ -341,11 +344,19 @@ class MiniICService : Service() {
             return
         }
 
+        appendLog("[SYS]", "Ubicación continua activa (24/7). Consumo de batería elevado por diseño: las coordenadas son necesarias para H11, H13 y H16.")
+
         registerTelephonyCallback()
         registerDisplayInfoCallback()
         registerScreenReceiver()
 
-        startLocationUpdates()
+        collectionPausedForCriticalBattery = isBatteryCritical()
+        if (collectionPausedForCriticalBattery) {
+            appendLog("[SYS]", "⚠ Batería crítica (<$CRITICAL_BATTERY_PCT %): ubicación continua en pausa hasta conectar el cargador.")
+        } else {
+            ensureCollectionWakeLock()
+            startLocationUpdates()
+        }
 
         scope.launch(Dispatchers.Default) {
             var wasAirplaneModeOn = false
@@ -353,6 +364,24 @@ class MiniICService : Service() {
                 val delayTime = if (isScreenOn) 3000L else 10000L
 
                 try {
+                    val batteryCritical = isBatteryCritical()
+                    if (batteryCritical) {
+                        stopLocationUpdates()
+                        releaseCollectionWakeLock()
+                        if (!collectionPausedForCriticalBattery) {
+                            collectionPausedForCriticalBattery = true
+                            appendLog("[SYS]", "⚠ Batería crítica (<$CRITICAL_BATTERY_PCT %): ubicación continua en pausa hasta conectar el cargador.")
+                            updateNotificationText("Batería crítica: GPS continuo en pausa")
+                        }
+                    } else {
+                        ensureCollectionWakeLock()
+                        startLocationUpdates()
+                        if (collectionPausedForCriticalBattery) {
+                            collectionPausedForCriticalBattery = false
+                            appendLog("[SYS]", "Alimentación recuperada: ubicación continua y recolección 24/7 reanudadas.")
+                        }
+                    }
+
                     val isAirplaneModeOn = Settings.Global.getInt(
                         contentResolver,
                         Settings.Global.AIRPLANE_MODE_ON, 0
@@ -589,14 +618,8 @@ class MiniICService : Service() {
         screenReceiver = object : BroadcastReceiver() {
             override fun onReceive(context: Context?, intent: Intent?) {
                 when (intent?.action) {
-                    Intent.ACTION_SCREEN_ON -> {
-                        isScreenOn = true
-                        startLocationUpdates()
-                    }
-                    Intent.ACTION_SCREEN_OFF -> {
-                        isScreenOn = false
-                        stopLocationUpdates()
-                    }
+                    Intent.ACTION_SCREEN_ON -> isScreenOn = true
+                    Intent.ACTION_SCREEN_OFF -> isScreenOn = false
                 }
             }
         }
@@ -604,22 +627,25 @@ class MiniICService : Service() {
     }
 
     /**
-     * Pide ubicación a GPS satelital + NETWORK. Intervalo relajado (15 s / 20 m) para
-     * ahorrar batería: las celdas no se mueven y no hace falta un fix cada pocos segundos.
-     * El GPS satelital se mantiene a propósito porque es independiente de la red, así que
-     * sigue siendo fiable ante un IMSI-catcher (a diferencia de la ubicación por red).
+     * Mantiene una suscripción continua al GPS satelital (15 s / 20 m) durante toda la vida del
+     * servicio, también con la pantalla apagada. No usa NETWORK_PROVIDER: la ubicación de red se
+     * deriva en parte de las propias torres y sería circular para detectar antenas falsas.
      */
     private fun startLocationUpdates() {
-        if (locationUpdatesActive) return
         if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION)
             != PackageManager.PERMISSION_GRANTED) return
         try {
-            if (locationManager.isProviderEnabled(LocationManager.GPS_PROVIDER)) {
-                locationManager.requestLocationUpdates(
-                    LocationManager.GPS_PROVIDER,
-                    15000L, 20f, locationListener, Looper.getMainLooper()
-                )
+            if (!locationManager.isProviderEnabled(LocationManager.GPS_PROVIDER)) {
+                // Permite que el bucle vuelva a registrar la suscripción cuando el usuario
+                // reactive el proveedor. Mantener true aquí impediría la recuperación.
+                stopLocationUpdates()
+                return
             }
+            if (locationUpdatesActive) return
+            locationManager.requestLocationUpdates(
+                LocationManager.GPS_PROVIDER,
+                15000L, 20f, locationListener, Looper.getMainLooper()
+            )
             // GPS-only por diseño: NO nos suscribimos a NETWORK_PROVIDER. La localización de red se
             // deriva en parte de las propias torres (circular para un detector de antenas) y devolvía
             // una posición fija/cacheada falsa cuando el GPS no llegaba, envenenando el historial y
@@ -629,9 +655,8 @@ class MiniICService : Service() {
     }
 
     /**
-     * Suspende el stream de localización (se llama al apagar la pantalla). El escaneo de
-     * celdas sigue corriendo; para los chequeos de fondo se usa getLastKnownLocation, que
-     * no consume batería extra.
+     * Suspende el stream únicamente al destruir el servicio, desactivar el proveedor o alcanzar
+     * batería crítica sin estar cargando. La pantalla apagada ya no detiene la ubicación.
      */
     private fun stopLocationUpdates() {
         if (!locationUpdatesActive) return
@@ -639,6 +664,31 @@ class MiniICService : Service() {
             locationManager.removeUpdates(locationListener)
         } catch (_: Exception) {}
         locationUpdatesActive = false
+    }
+
+    /** El wakelock es deliberadamente continuo: la recolección 24/7 es una función elegida. */
+    @SuppressLint("WakelockTimeout")
+    private fun ensureCollectionWakeLock() {
+        val lock = collectionWakeLock ?: (getSystemService(POWER_SERVICE) as PowerManager)
+            .newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "ICdetector::collection")
+            .apply { setReferenceCounted(false) }
+            .also { collectionWakeLock = it }
+        if (!lock.isHeld) lock.acquire()
+    }
+
+    private fun releaseCollectionWakeLock() {
+        collectionWakeLock?.let { lock ->
+            if (lock.isHeld) lock.release()
+        }
+    }
+
+    /** Solo protege frente al apagado inminente; cargando nunca se pausa la recolección. */
+    private fun isBatteryCritical(): Boolean = try {
+        val batteryManager = getSystemService(BATTERY_SERVICE) as BatteryManager
+        val percentage = batteryManager.getIntProperty(BatteryManager.BATTERY_PROPERTY_CAPACITY)
+        !batteryManager.isCharging && percentage in 1..CRITICAL_BATTERY_PCT
+    } catch (_: Exception) {
+        false
     }
 
     private var lastForcedFixTime = 0L
@@ -893,6 +943,9 @@ class MiniICService : Service() {
         try {
             locationManager.removeUpdates(locationListener)
         } catch (_: Exception) {}
+        locationUpdatesActive = false
+        releaseCollectionWakeLock()
+        collectionWakeLock = null
         val pendingForcedFix = synchronized(forcedFixLock) {
             forcedFixListener.also { forcedFixListener = null }
         }
@@ -2041,9 +2094,8 @@ class MiniICService : Service() {
      *
      * Esto registra una observación cada pocos minutos mientras sigues en la misma celda, que es
      * lo que de verdad alimenta los baselines (H13, huella RSRQ/SINR, reputación). Coste real:
-     *  - Batería: con pantalla encendida reutiliza el stream. En reposo pide un único fix preciso
-     *    solo cuando la muestra ya toca y el fix cacheado ha caducado; se desregistra al obtenerlo
-     *    o a los 20 s. No fuerza lecturas extra de radio.
+     *  - Batería: desde v2.4 el stream GPS permanece activo 24/7 por decisión de producto. Si aun
+     *    así no existe un fix fresco, se conserva el refuerzo puntual y acotado de 20 s.
      *  - Disco: ~150 filas/día, unas 9.000 en los 60 días de retención. Trivial para SQLite.
      *
      * La cadencia es más lenta con la pantalla apagada, coherente con el diseño de bajo consumo.
@@ -2081,8 +2133,8 @@ class MiniICService : Service() {
                 radio = cell.radioTech
             )
             noteWriteResult(rowId)
-            // En reposo el stream GPS está apagado y el último fix caduca a los dos minutos.
-            // La fila se inserta primero para que el listener puntual pueda completar ESTA
+            // Aunque el stream continuo esté activo, interiores o falta de visibilidad satelital
+            // pueden dejar una muestra sin fix fresco. La fila se inserta primero para que el listener puntual pueda completar ESTA
             // observación mediante updateNullCoordinates, sin atribuir la posición a una fila
             // antigua. Si no llega un fix válido, NULL sigue siendo el dato honesto.
             if (rowId != -1L && loc == null && !isScreenOn) {
@@ -2115,13 +2167,9 @@ class MiniICService : Service() {
             // Esta celda queda pendiente de coordenadas frescas hasta que un fix las rellene.
             awaitingFreshCoords = true
             pendingCoordsSince = System.currentTimeMillis()
-            // Cambio de celda: pedimos un fix GPS fresco SOLO con la pantalla encendida (donde
-            // el stream ya está activo). Con pantalla apagada el GPS está pausado a propósito y
-            // NO queremos despertarlo en cada handover rutinario yendo en el bolsillo; si la
-            // celda fuera sospechosa, el disparador de sospecha (más abajo) lo fuerza igualmente.
-            // En reposo, el reintento periódico del bucle se encarga mientras siga pendiente.
-            // Debounce normal de 30 s.
-            if (isScreenOn) requestHighAccuracyFix()
+            // El stream GPS permanece activo 24/7. Este listener puntual da prioridad al handover
+            // si todavía no existe un fix contemporáneo; conserva el debounce y single-flight.
+            requestHighAccuracyFix()
             generateAuditLog(cell) 
 
             val currentTime = System.currentTimeMillis()
@@ -2398,7 +2446,7 @@ class MiniICService : Service() {
         val stopPending = PendingIntent.getService(this, 1, stopIntent, PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
 
         return NotificationCompat.Builder(this, CHANNEL_ID)
-            .setContentTitle("ICdetection: Monitoreo")
+            .setContentTitle("ICdetection: Monitoreo · GPS continuo")
             .setContentText(text)
             .setSmallIcon(android.R.drawable.ic_menu_info_details)
             .setContentIntent(pendingIntent)
@@ -2619,6 +2667,7 @@ class MiniICService : Service() {
         // Más lenta con la pantalla apagada, coherente con el diseño de bajo consumo.
         private const val PERIODIC_LOG_INTERVAL_SCREEN_ON = 5L * 60 * 1000    // 5 min
         private const val PERIODIC_LOG_INTERVAL_SCREEN_OFF = 15L * 60 * 1000  // 15 min
+        private const val CRITICAL_BATTERY_PCT = 5
         private const val DATABASE_MAINTENANCE_INTERVAL_MS = 24L * 60 * 60 * 1000
         // Ciclos consecutivos de sospecha necesarios para confirmar una alarma.
         private const val CONFIRMATION_CYCLES = 3

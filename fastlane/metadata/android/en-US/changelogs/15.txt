@@ -1,0 +1,4 @@
+Keeps GPS-only location and the collection loop active 24/7 while monitoring, including with the
+screen off, to improve geographic evidence for H11, H13 and H16. A partial wake lock reduces idle
+collection gaps. Continuous GPS pauses only below 5% battery while unplugged and resumes
+automatically. No detection weights, database schema or CSV columns changed.
