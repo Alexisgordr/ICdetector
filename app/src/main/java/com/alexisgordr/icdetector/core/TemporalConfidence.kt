@@ -3,6 +3,7 @@ package com.alexisgordr.icdetector.core
 import com.alexisgordr.icdetector.models.CellData
 import com.alexisgordr.icdetector.models.identityKey
 import com.alexisgordr.icdetector.models.SUBTHRESHOLD_PREFIX
+import com.alexisgordr.icdetector.models.HeuristicStatus
 import java.util.concurrent.ConcurrentHashMap
 
 /**
@@ -102,17 +103,18 @@ class TemporalConfidence(
     }
 
     private fun decorate(cell: CellData, currentStreak: Int): CellData {
-        val isConfirmed = cell.isSuspicious && currentStreak >= confirmationCycles
+        val requiredCycles = requiredCycles(cell)
+        val isConfirmed = cell.isSuspicious && currentStreak >= requiredCycles
 
         return cell.copy(
             isSuspicious = isConfirmed,
             temporalProgress = com.alexisgordr.icdetector.models.TemporalProgress(
-                phase = currentStreak.coerceAtMost(confirmationCycles),
-                required = confirmationCycles
+                phase = currentStreak.coerceAtMost(requiredCycles),
+                required = requiredCycles
             ),
             suspiciousReason = when {
                 isConfirmed -> cell.suspiciousReason
-                cell.isSuspicious -> "[$currentStreak/$confirmationCycles ciclos confirmando] ${cell.suspiciousReason}"
+                cell.isSuspicious -> "[$currentStreak/$requiredCycles ciclos confirmando] ${cell.suspiciousReason}"
                 // La celda no llega al umbral de sospecha, pero SÍ falló heurísticas. Antes esto
                 // era `null` y el motivo se perdía para siempre: la fila acababa en el historial
                 // como "85 / OK". Ahora se conserva marcado como sub-umbral. No cambia nada del
@@ -122,5 +124,21 @@ class TemporalConfidence(
                 else -> null
             }
         )
+    }
+
+    /**
+     * Dos evidencias fuertes e independientes reducen la confirmación a dos observaciones reales.
+     * Una señal aislada —aunque tenga mucho peso— conserva los tres ciclos para no convertir una
+     * lectura defectuosa del módem o del GPS en alarma instantánea.
+     */
+    private fun requiredCycles(cell: CellData): Int {
+        val report = cell.heuristicReport
+        val strongFailures = listOf(
+            report.mobileCellId,       // H11: contradicción geográfica
+            report.signalBaseline,     // H13: ruptura del baseline local
+            report.rfStability,        // H15: identidad RF cambiante
+            report.transitionCoherence // H16: handover físicamente incoherente
+        ).count { it == HeuristicStatus.FAILED }
+        return if (cell.isSuspicious && strongFailures >= 2) 2 else confirmationCycles
     }
 }

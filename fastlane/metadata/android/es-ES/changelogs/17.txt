@@ -1,0 +1,4 @@
+Los históricos de detección quedan protegidos contra contaminación: una celda nueva permanece en
+cuarentena hasta reunir cinco observaciones limpias en dos días distintos, y solo las muestras
+limpias entrenan H11, H13, H15 y H16. Las señales débiles mantienen tres ciclos de confirmación;
+dos evidencias fuertes independientes confirman en dos. Sin migración ni pérdida de datos.

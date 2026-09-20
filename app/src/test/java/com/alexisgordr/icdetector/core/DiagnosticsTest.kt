@@ -70,6 +70,36 @@ class DiagnosticsTest {
     }
 
     @Test
+    fun `two independent strong failures confirm in two observations`() {
+        val temporal = TemporalConfidence(3)
+        val report = HeuristicReport(
+            mobileCellId = HeuristicStatus.FAILED,
+            rfStability = HeuristicStatus.FAILED
+        )
+        val suspicious = cell(report).copy(isSuspicious = true, suspiciousReason = "strong pair")
+
+        val first = temporal.apply(suspicious, observationToken = 10_000L)
+        val second = temporal.apply(suspicious, observationToken = 12_000L)
+
+        assertEquals(2, first.temporalProgress.required)
+        assertFalse(first.isSuspicious)
+        assertTrue(second.isSuspicious)
+    }
+
+    @Test
+    fun `one strong failure still requires three observations`() {
+        val temporal = TemporalConfidence(3)
+        val report = HeuristicReport(mobileCellId = HeuristicStatus.FAILED)
+        val suspicious = cell(report).copy(isSuspicious = true, suspiciousReason = "single strong")
+
+        temporal.apply(suspicious, observationToken = 10_000L)
+        val second = temporal.apply(suspicious, observationToken = 12_000L)
+
+        assertEquals(3, second.temporalProgress.required)
+        assertFalse(second.isSuspicious)
+    }
+
+    @Test
     fun `fresh delivery escapes a frozen modem timestamp after thirty seconds`() {
         var elapsed = 0L
         val temporal = TemporalConfidence(3, elapsedRealtimeMs = { elapsed })

@@ -1,5 +1,23 @@
 # Changelog
 
+## 2.5.1
+
+### Trusted baselines and evidence-aware confirmation
+
+- Historical observations now enter detection baselines only after the complete cell identity has
+  accumulated at least five clean observations (`score >= 85`) across two different days. Until
+  then they remain preserved and exportable but quarantined from learning.
+- H11 geographic history, H13 signal baseline, the RSRQ/SINR fingerprint, H15 RF stability and H16
+  location profiles consume only trusted clean observations. Suspicious rows can no longer teach
+  the reference that will later judge them.
+- Temporal confirmation remains conservative for isolated or weak signals: three distinct modem
+  observations are still required. When at least two independent high-value checks among H11,
+  H13, H15 and H16 fail together, confirmation requires two distinct observations instead.
+- Duplicate, stale and cached modem deliveries still cannot advance confirmation.
+- No database migration or data deletion: existing history and CSV fields remain intact. This is a
+  detector-baseline change; record the installation date when comparing campaign data.
+- Updated release metadata to `versionName 2.5.1` and `versionCode 17`.
+
 ## 2.5.0
 
 ### Cell geometry tab

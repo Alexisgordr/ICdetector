@@ -19,7 +19,8 @@ While monitoring, it can:
 - Evaluate multiple anomaly heuristics during every analysis cycle.
 - Learn historical behaviour for repeatedly observed cells.
 - Cross-reference cells with OpenCellID and WiGLE when configured.
-- Require suspicious behaviour to persist through three analysis phases.
+- Require suspicious behaviour to persist through three analysis phases, or two when two
+  independent high-value historical/physical checks fail together.
 - Explain which checks passed, failed, or could not run.
 - Preserve incidents separately from routine antenna history.
 - Capture and export a forensic package around qualifying incidents.
@@ -236,6 +237,19 @@ Historical GPS observations can reveal a Cell ID appearing in physically inconsi
 ### Historical RF baseline
 
 The app learns normal signal strength and, when available, RSRQ/SINR characteristics for cells repeatedly observed by this device. Once sufficiently mature, the baseline can detect an unusually strong or inconsistent observation.
+
+From version 2.5.1, a new complete cell identity is quarantined from detector learning until it has
+at least five clean observations (`score >= 85`) on two different days. All observations are still
+stored and exported. After promotion, only clean observations train the geographic, signal,
+RSRQ/SINR and RF-identity baselines. A suspicious observation therefore cannot redefine the normal
+reference that will later judge it. This may make new cells show an immature baseline for longer;
+that abstention is intentional.
+
+Temporal confirmation is also evidence-aware. A single or weak anomaly still needs three distinct
+modem observations. If two or more independent high-value checks among geographic consistency
+(H11), signal baseline (H13), RF identity stability (H15) and transition coherence (H16) fail in
+the same observation, two distinct observations are required. Repeated delivery of the same modem
+sample never counts as another phase.
 
 ### Band downgrade
 

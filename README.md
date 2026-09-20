@@ -1,7 +1,7 @@
 ![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)
 ![Platform](https://img.shields.io/badge/Platform-Android%2010%2B-green.svg)
 ![Root Required](https://img.shields.io/badge/Root-Not%20Required-brightgreen.svg)
-![Status](https://img.shields.io/badge/Status-Stable%20v2.5.0-success.svg)
+![Status](https://img.shields.io/badge/Status-Stable%20v2.5.1-success.svg)
 [![Featured in Awesome Telco](https://img.shields.io/badge/Featured%20in-Awesome%20Telco-6f42c1.svg)](https://github.com/ravens/awesome-telco#imsi-catcher-detection)
 
 
@@ -54,15 +54,16 @@ The application operates from Android userland without requiring root or direct 
 
 > **⚠️ Upgrading from a version older than v2.1.1:** uninstall the previous version first. Android refuses an in-place update when the APK is not signed with the same keystore, and a clean database is required because records written before v2.1.1 may hold an antenna coordinate where the device GPS position belongs. Export your CSV first if you want to keep the old history. v2.1.2 and later releases signed with the same keystore update in place normally. See `Status.md`.
 
-ICdetection v2.5.0 is the current stable release. It adds an offline **GEOMETRÍA** view that draws
-the locally observed cell and handover graph without maps, tiles or external location services.
-H16 now checks mature contradictory geometry before accepting neighbour or previously trusted-route
-shortcuts, and Timing Advance hardware evidence survives service restarts. The database schema and
-CSV columns remain unchanged.
+ICdetection v2.5.1 is the current stable release. It quarantines new or suspicious observations
+from detection learning until a complete cell identity has accumulated five clean observations on
+two different days. Once promoted, only clean rows train H11, H13, H15 and H16. Weak or isolated
+signals still require three distinct observations; two independent high-value failures confirm in
+two. The database schema and CSV columns remain unchanged.
 
 > **Definitive field-collection freeze:** v2.3.3 began the definitive data-collection campaign;
 > v2.3.4, v2.3.5 and v2.4.0 are targeted data-integrity and collection-continuity corrections.
-> v2.5.0 deliberately changes H16 shortcut handling; record its installation date as a dataset cut.
+> v2.5.0 changed H16 shortcut handling and v2.5.1 changes baseline admission and temporal
+> confirmation; record both installation dates as dataset cuts.
 > No planned releases or detector changes will be made for at least one month, unless a defect
 > threatens data integrity, collection continuity, security, or the ability to export the results.
 

@@ -1,5 +1,25 @@
 # ICdetection Status
 
+## v2.5.1 — trusted-baseline hardening
+
+**Release:** stable
+**Version code:** 17
+**Database schema:** 15 (unchanged)
+**Detection baseline:** trusted learning and evidence-aware temporal confirmation introduced
+
+v2.5.1 prevents suspicious or newly seen observations from immediately training the historical
+reference used by H11, H13, H15 and H16. Every row remains stored and exportable, but a complete
+cell identity is quarantined from learning until it has at least five clean observations
+(`score >= 85`) spread across two different days. After promotion, only clean observations feed
+the detector baselines.
+
+Temporal confirmation still requires three distinct modem observations for isolated or weak
+signals. It requires two only when at least two independent high-value checks among H11, H13, H15
+and H16 fail together. Duplicate, stale and cached deliveries cannot advance either path.
+
+No database migration, deletion or CSV change is required. Existing data remains useful, but this
+is a detector-baseline change and its installation date must be recorded for campaign comparisons.
+
 ## v2.5.0 — offline cell geometry release
 
 **Release:** stable

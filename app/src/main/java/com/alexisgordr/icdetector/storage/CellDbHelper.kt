@@ -117,6 +117,15 @@ class CellDbHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME, 
         const val MAX_FORENSIC_SAMPLES = 20_000
 
         /**
+         * Una fila solo puede entrenar los baselines si el motor la consideró limpia. Además, la
+         * identidad completa debe haber acumulado varias filas limpias en días distintos: hasta
+         * entonces sus observaciones se conservan, pero permanecen en cuarentena.
+         */
+        const val TRUSTED_BASELINE_MIN_SCORE = 85
+        const val TRUSTED_BASELINE_MIN_SAMPLES = 5
+        const val TRUSTED_BASELINE_MIN_DAYS = 2
+
+        /**
          * Distancia máxima creíble entre tú y la antena a la que estás conectado.
          *
          * Una sola cifra para las dos preguntas que antes tenían dos: si se acepta la coordenada
@@ -253,12 +262,19 @@ class CellDbHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME, 
             Date(System.currentTimeMillis() - 30L * 24 * 60 * 60 * 1000)
         )
         val out = mutableListOf<CellLocationSample>()
+        if (!hasMatureTrustedBaseline(cell.cellId, cell.mnc, cell.tac, cell.mcc, cell.radioTech, cutoff)) {
+            return emptyList()
+        }
         readableDatabase.rawQuery(
             "SELECT $COLUMN_LAT,$COLUMN_LON FROM $TABLE_HISTORY " +
                 "WHERE $COLUMN_CID=? AND $COLUMN_MNC=? AND $COLUMN_TAC=? AND $COLUMN_MCC=? " +
                 "AND $COLUMN_RADIO=? AND $COLUMN_LAT IS NOT NULL AND $COLUMN_LON IS NOT NULL " +
+                "AND $COLUMN_SCORE>=? " +
                 "AND $COLUMN_TIMESTAMP>=? ORDER BY $COLUMN_ID DESC LIMIT ?",
-            arrayOf(cell.cellId, cell.mnc, cell.tac, cell.mcc, cell.radioTech.name, cutoff, limit.toString())
+            arrayOf(
+                cell.cellId, cell.mnc, cell.tac, cell.mcc, cell.radioTech.name,
+                TRUSTED_BASELINE_MIN_SCORE.toString(), cutoff, limit.toString()
+            )
         ).use { cursor ->
             while (cursor.moveToNext()) {
                 val lat = cursor.getDouble(0)
@@ -269,6 +285,30 @@ class CellDbHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME, 
             }
         }
         return out
+    }
+
+    /**
+     * Puerta de promoción de la cuarentena. No crea otra tabla ni modifica filas: el historial
+     * completo sigue siendo auditable/exportable y solo cambia qué subconjunto aprende el motor.
+     */
+    private fun hasMatureTrustedBaseline(
+        cellId: String,
+        mnc: String,
+        tac: String,
+        mcc: String,
+        radio: RadioTech,
+        since: String
+    ): Boolean = readableDatabase.rawQuery(
+        "SELECT COUNT(*),COUNT(DISTINCT substr($COLUMN_TIMESTAMP,1,10)) FROM $TABLE_HISTORY " +
+            "WHERE $COLUMN_CID=? AND $COLUMN_MNC=? AND $COLUMN_TAC=? AND $COLUMN_MCC=? " +
+            "AND $COLUMN_RADIO=? AND $COLUMN_TIMESTAMP>=? AND $COLUMN_SCORE>=?",
+        arrayOf(
+            cellId, mnc, tac, mcc, radio.name, since,
+            TRUSTED_BASELINE_MIN_SCORE.toString()
+        )
+    ).use { cursor ->
+        cursor.moveToFirst() && cursor.getInt(0) >= TRUSTED_BASELINE_MIN_SAMPLES &&
+            cursor.getInt(1) >= TRUSTED_BASELINE_MIN_DAYS
     }
 
     /**
@@ -1065,6 +1105,10 @@ class CellDbHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME, 
         val dateFormat = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.ROOT)
         val recentThreshold = dateFormat.format(Date(fiveMinutesAgo))
         val oldThreshold = dateFormat.format(Date(thirtyDaysAgo))
+
+        if (!hasMatureTrustedBaseline(cellId, mnc, tac, mcc, radio, oldThreshold)) {
+            return emptyList()
+        }
         
         val query = """
             SELECT * 
@@ -1076,6 +1120,7 @@ class CellDbHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME, 
               AND $COLUMN_LON IS NOT NULL
               AND $COLUMN_MCC = ?
               AND $COLUMN_RADIO = ?
+              AND $COLUMN_SCORE >= ?
               AND $COLUMN_TIMESTAMP < ?
               AND $COLUMN_TIMESTAMP > ?
             ORDER BY $COLUMN_ID DESC
@@ -1083,7 +1128,13 @@ class CellDbHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME, 
         """.trimIndent()
 
         val maxUsableRecords = 20
-        val cursor = db.rawQuery(query, arrayOf(cellId, mnc, tac, mcc, radio.name, recentThreshold, oldThreshold))
+        val cursor = db.rawQuery(
+            query,
+            arrayOf(
+                cellId, mnc, tac, mcc, radio.name, TRUSTED_BASELINE_MIN_SCORE.toString(),
+                recentThreshold, oldThreshold
+            )
+        )
         try {
 
         if (cursor.moveToFirst()) {
@@ -1158,6 +1209,8 @@ class CellDbHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME, 
         val dateFormat = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.ROOT)
         val oldThreshold = dateFormat.format(Date(thirtyDaysAgo))
 
+        if (!hasMatureTrustedBaseline(cellId, mnc, tac, mcc, radio, oldThreshold)) return null
+
         val query = """
             SELECT $COLUMN_DBM, $COLUMN_LAT, $COLUMN_LON
             FROM $TABLE_HISTORY
@@ -1168,12 +1221,16 @@ class CellDbHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME, 
               AND $COLUMN_LON IS NOT NULL
               AND $COLUMN_MCC = ?
               AND $COLUMN_RADIO = ?
+              AND $COLUMN_SCORE >= ?
               AND $COLUMN_TIMESTAMP > ?
             ORDER BY $COLUMN_ID DESC
             LIMIT 200
         """.trimIndent()
 
-        val cursor = db.rawQuery(query, arrayOf(cellId, mnc, tac, mcc, radio.name, oldThreshold))
+        val cursor = db.rawQuery(
+            query,
+            arrayOf(cellId, mnc, tac, mcc, radio.name, TRUSTED_BASELINE_MIN_SCORE.toString(), oldThreshold)
+        )
         val samples = mutableListOf<Int>()
         try {
         if (cursor.moveToFirst()) {
@@ -1304,6 +1361,8 @@ class CellDbHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME, 
         val dateFormat = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.ROOT)
         val threshold = dateFormat.format(Date(ninetyDaysAgo))
 
+        if (!hasMatureTrustedBaseline(cellId, mnc, tac, mcc, radio, threshold)) return null
+
         val query = """
             SELECT $COLUMN_RSRQ, $COLUMN_SINR, $COLUMN_LAT, $COLUMN_LON
             FROM $TABLE_HISTORY
@@ -1314,6 +1373,7 @@ class CellDbHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME, 
               AND $COLUMN_RADIO = ?
               AND $COLUMN_RSRQ IS NOT NULL
               AND $COLUMN_SINR IS NOT NULL
+              AND $COLUMN_SCORE >= ?
               AND $COLUMN_TIMESTAMP > ?
             ORDER BY $COLUMN_ID DESC
             LIMIT 200
@@ -1321,7 +1381,10 @@ class CellDbHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME, 
 
         val rsrqs = mutableListOf<Int>()
         val sinrs = mutableListOf<Int>()
-        db.rawQuery(query, arrayOf(cellId, mnc, tac, mcc, radio.name, threshold)).use { cursor ->
+        db.rawQuery(
+            query,
+            arrayOf(cellId, mnc, tac, mcc, radio.name, TRUSTED_BASELINE_MIN_SCORE.toString(), threshold)
+        ).use { cursor ->
             if (cursor.moveToFirst()) {
                 do {
                     val rsrq = cursor.getInt(0)
@@ -1537,6 +1600,10 @@ class CellDbHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME, 
         val oldThreshold = dateFormat.format(Date(thirtyDaysAgo))
         val recentThreshold = dateFormat.format(Date(recentWindow))
 
+        if (!hasMatureTrustedBaseline(cellId, mnc, tac, mcc, radio, oldThreshold)) {
+            return CellRfStability(0, emptyList(), emptyList())
+        }
+
         val query = """
             SELECT $COLUMN_PCI, $COLUMN_ARFCN, $COLUMN_TIMESTAMP
             FROM $TABLE_HISTORY
@@ -1545,10 +1612,14 @@ class CellDbHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME, 
               AND $COLUMN_TAC = ?
               AND $COLUMN_MCC = ?
               AND $COLUMN_RADIO = ?
+              AND $COLUMN_SCORE >= ?
               AND $COLUMN_TIMESTAMP > ?
         """.trimIndent()
 
-        val cursor = db.rawQuery(query, arrayOf(cellId, mnc, tac, mcc, radio.name, oldThreshold))
+        val cursor = db.rawQuery(
+            query,
+            arrayOf(cellId, mnc, tac, mcc, radio.name, TRUSTED_BASELINE_MIN_SCORE.toString(), oldThreshold)
+        )
         try {
             if (cursor.moveToFirst()) {
                 val pciIdx = cursor.getColumnIndexOrThrow(COLUMN_PCI)

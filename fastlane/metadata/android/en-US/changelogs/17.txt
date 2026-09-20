@@ -1,0 +1,4 @@
+Detection history is now protected from baseline poisoning: a new cell remains quarantined until
+it has five clean observations across two different days, and only clean samples train H11, H13,
+H15 and H16. Weak signals still require three confirmation cycles; two independent strong signals
+confirm in two. No database migration or data loss.
