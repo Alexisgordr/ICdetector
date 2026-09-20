@@ -294,6 +294,40 @@ fun MainScreenContent(dbHelper: CellDbHelper, service: MiniICService?) {
                                     Spacer(Modifier.height(2.dp))
                                     Text(verificationNote, color = Color(0xFF777777), fontFamily = FontFamily.Monospace, fontSize = 9.sp)
                                 }
+                                active?.localCellTrust?.let { trust ->
+                                    val trustLabel = stringResource(when (trust.state) {
+                                        LocalCellTrustState.NEW -> R.string.trust_state_new
+                                        LocalCellTrustState.LEARNING -> R.string.trust_state_learning
+                                        LocalCellTrustState.ESTABLISHED -> R.string.trust_state_established
+                                        LocalCellTrustState.CHANGED -> R.string.trust_state_changed
+                                        LocalCellTrustState.QUARANTINED -> R.string.trust_state_quarantined
+                                    })
+                                    val trustDescription = when (trust.state) {
+                                        LocalCellTrustState.NEW -> stringResource(R.string.trust_desc_new)
+                                        LocalCellTrustState.LEARNING -> stringResource(R.string.trust_desc_learning)
+                                        LocalCellTrustState.ESTABLISHED -> stringResource(R.string.trust_desc_established)
+                                        LocalCellTrustState.CHANGED -> stringResource(
+                                            R.string.trust_desc_changed,
+                                            trust.contradictions.joinToString(" + ")
+                                        )
+                                        LocalCellTrustState.QUARANTINED -> stringResource(R.string.trust_desc_quarantined)
+                                    }
+                                    Spacer(Modifier.height(10.dp))
+                                    Text(stringResource(R.string.local_trust_title), color = Color(0xFF666666), fontFamily = FontFamily.Monospace, fontSize = 9.sp)
+                                    Text(stringResource(R.string.local_trust_format, trustLabel, trust.confidencePercent), color = when (trust.state) {
+                                        LocalCellTrustState.CHANGED, LocalCellTrustState.QUARANTINED -> Color(0xFFFFA000)
+                                        LocalCellTrustState.ESTABLISHED -> Color(0xFF4CAF50)
+                                        else -> Color(0xFF90A4AE)
+                                    }, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                                    LinearProgressIndicator(
+                                        progress = { trust.confidencePercent / 98f },
+                                        modifier = Modifier.fillMaxWidth(0.78f).padding(vertical = 3.dp),
+                                        color = if (trust.state == LocalCellTrustState.ESTABLISHED) Color(0xFF4CAF50) else Color(0xFF42A5F5)
+                                    )
+                                    Text(stringResource(R.string.local_trust_progress, trust.distinctDays, trust.requiredDays, trust.cleanObservations, trust.requiredObservations, trust.ageHours), color = Color(0xFF888888), fontFamily = FontFamily.Monospace, fontSize = 9.sp)
+                                    Text(trustDescription, color = Color(0xFF777777), fontSize = 9.sp)
+                                    Text(stringResource(R.string.local_trust_ceiling), color = Color(0xFF666666), fontFamily = FontFamily.Monospace, fontSize = 8.sp)
+                                }
                             }
                             if (active?.isSuspicious == true) {
                                 Icon(Icons.Default.Warning, contentDescription = null, tint = Color.Red, modifier = Modifier.size(24.dp))

@@ -1,0 +1,5 @@
+Adds multi-signal episodes, intensive monitoring, H1 hysteresis and protection against poisoned
+baselines. A bilingual local-confidence profile learns from independent days, GPS, RF identity and
+trusted handovers. Confidence is revocable, capped at 98%, and never proof of authenticity. RF
+identity is learned per carrier; operator reconfigurations require a separate 14-day quarantine.
+The database and existing history remain compatible.

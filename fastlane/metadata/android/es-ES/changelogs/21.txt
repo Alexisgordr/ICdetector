@@ -1,0 +1,5 @@
+Añade episodios multiseñal, vigilancia intensiva, histéresis H1 y protección contra históricos
+envenenados. Un perfil bilingüe de confianza local aprende mediante días independientes, GPS,
+identidad RF y handovers fiables. La confianza es revocable, tiene un techo del 98 % y no demuestra
+autenticidad. La identidad RF se aprende por portadora; las reconfiguraciones requieren una
+cuarentena separada de 14 días. La base de datos y el historial siguen siendo compatibles.

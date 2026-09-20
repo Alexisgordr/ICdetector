@@ -2,6 +2,36 @@
 
 ## Unreleased
 
+## 2.7.0
+
+### Revocable local cell confidence
+
+- Added conservative multi-signal episodes: independent evidence families can correlate across a
+  90-second window, bridge short normal gaps for 30 seconds and still require temporal confirmation.
+- Added three-fresh-observation hysteresis to H1 so transient empty neighbour snapshots cannot
+  become retained episode evidence; corrected H12 so unavailable latency never penalizes silently.
+- Suspicious observations are preserved for audit but excluded from geographic, signal, RF,
+  reputation and transition learning to resist baseline poisoning.
+- Added a bilingual local-confidence profile with `NEW`, `LEARNING`, `ESTABLISHED`, `CHANGED`
+  and `QUARANTINED` states (localized in Spanish).
+- Confidence grows slowly from clean observations capped per day, distinct days, elapsed time,
+  GPS-backed history, stable PCI/ARFCN evidence and trusted handovers. OpenCellID remains separate
+  context and never raises local confidence.
+- Confidence is capped at 98%: it is explicitly historical local evidence, never proof that a
+  transmitter is authentic or safe.
+- Promotion requires at least fourteen distinct days, twenty capped clean observations, geographic
+  evidence, RF history and trusted transitions. Suspicious observations cannot train the profile.
+- A single RF change is displayed as `CHANGED`, is excluded from learning and freezes the trusted
+  profile without sounding an alarm. Its 15% RF acceptance boundary matches H15.
+- PCI is evaluated inside its ARFCN carrier, preventing legitimate carrier aggregation from
+  appearing as an identity change. A genuinely new pair remains quarantined and can replace the
+  old pair only after fourteen coherent days, sufficient located samples and trusted transitions,
+  with no old PCI still active on that carrier during the previous 48 hours.
+  Only an established RF contradiction combined with independent geographic or handover evidence
+  enters the existing temporal-confirmation alarm path.
+- Uses the existing history and transition tables; database schema 15 and existing data remain
+  compatible. Updated metadata to `versionName 2.7.0` and `versionCode 21`.
+
 ## 2.6.0
 
 ### Service refactor and complete localization

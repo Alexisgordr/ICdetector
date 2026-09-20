@@ -27,4 +27,23 @@ class TerminalLocalizationTest {
         assertTrue(result.contains("429"))
         assertFalse(result.contains("Respuesta"))
     }
+
+    @Test
+    fun `terminal translates multi-signal episode reason`() {
+        val source = "Episodio multiseñal (RF_DOMINANCE+MOBILITY) | familias independientes"
+        val result = localizeTerminalLine(source)
+
+        assertTrue(result.contains("Multi-signal episode"))
+        assertTrue(result.contains("independent families"))
+        assertFalse(result.contains("Episodio"))
+    }
+
+    @Test
+    fun `terminal translates established local identity change`() {
+        val source = "Cambio en identidad celular consolidada (PCI+HANDOVER)"
+        val result = localizeTerminalLine(source)
+
+        assertTrue(result.contains("Established local cell identity changed"))
+        assertFalse(result.contains("Cambio en identidad"))
+    }
 }

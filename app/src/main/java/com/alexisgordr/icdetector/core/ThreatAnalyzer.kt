@@ -136,7 +136,8 @@ object ThreatAnalyzer {
         rfStability: CellRfStability? = null,
         reputation: CellReputation? = null,
         rfFingerprint: CellRfFingerprint? = null,
-        transitionCoherence: TransitionCoherenceResult = TransitionCoherenceResult()
+        transitionCoherence: TransitionCoherenceResult = TransitionCoherenceResult(),
+        isolatedCellConfirmed: Boolean = true
     ): CellData {
         val reasons = mutableListOf<String>()
         var score = 100
@@ -175,7 +176,7 @@ object ThreatAnalyzer {
         val eTransitionCoherence = transitionCoherence.status != HeuristicStatus.NOT_EVALUATED
 
         // 1. Neighbor analysis
-        if (!isWifiActive && neighbors.isEmpty() && active.dbm >= -80) {
+        if (!isWifiActive && neighbors.isEmpty() && active.dbm >= -80 && isolatedCellConfirmed) {
             hIsolated = false
             reasons.add("Celda aislada")
             score -= 15
@@ -347,7 +348,7 @@ object ThreatAnalyzer {
         // 12. RF Quality + Latency Cross-Layer Correlation (Experimental)
         eLatencyCorrelation = !isWifiActive && isNetworkLatencyAvailable &&
             (active.rsrq != null || active.sinr != null)
-        if (!isWifiActive && isNetworkLatencyAnomalous && active.dbm >= -70) {
+        if (!isWifiActive && isNetworkLatencyAvailable && isNetworkLatencyAnomalous && active.dbm >= -70) {
             val rsrqAnomalous = active.rsrq != null && active.rsrq <= -15
             val sinrAnomalous = active.sinr != null && active.sinr <= 0
             if (rsrqAnomalous || sinrAnomalous) {

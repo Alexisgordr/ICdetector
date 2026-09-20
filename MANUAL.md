@@ -80,6 +80,26 @@ Displayed states are dynamic. A rule may move from `N/A` to `PASS` after GPS, ne
 
 If the service stops or the device restarts while an incident or forensic capture is open, the record is closed as `INTERRUPTED`. The app must not describe an unobserved period as continuous monitoring.
 
+### Local cell confidence (private v2.7.0 field build)
+
+The main status card shows a confidence percentage and one of five states: `NEW`, `LEARNING`,
+`ESTABLISHED`, `CHANGED` or `QUARANTINED` (translated when Spanish is selected). The percentage
+grows from clean observations across days, GPS evidence, stable RF identity and trusted handover
+routes. It requires at least fourteen distinct days to reach `ESTABLISHED`. Rapid sampling is
+capped and cannot accelerate trust indefinitely. OpenCellID is displayed separately and never
+increases this local confidence.
+
+The maximum is 98%. `ESTABLISHED` is not proof that a transmitter is genuine; it means the current
+observation matches a repeatedly observed local pattern. A changed parameter is shown immediately
+and is excluded from subsequent learning,
+but an alarm requires an RF contradiction plus independent geographic or handover evidence and
+still passes through temporal confirmation. Failed observations are quarantined from learning.
+
+PCI values are learned inside their ARFCN carrier so legitimate carrier aggregation does not look
+like an identity change. A permanent operator reconfiguration is kept separate from the trusted
+profile for at least fourteen coherent days. It is accepted only with enough located observations,
+trusted transitions and no recent alternation with the previous PCI on the same carrier.
+
 ---
 
 ## 4. Reading cellular data

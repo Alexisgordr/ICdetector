@@ -25,6 +25,9 @@ import com.alexisgordr.icdetector.models.CellLocationSample
 import com.alexisgordr.icdetector.models.TransitionCoherenceResult
 import com.alexisgordr.icdetector.models.HeuristicStatus
 import com.alexisgordr.icdetector.models.CellTransitionSummary
+import com.alexisgordr.icdetector.models.LocalCellTrustEvidence
+import com.alexisgordr.icdetector.models.LocalRfReconfiguration
+import com.alexisgordr.icdetector.models.LOCAL_TRUST_RECONFIGURATION_HISTORY_LIKE
 import kotlin.math.sqrt
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -269,7 +272,7 @@ class CellDbHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME, 
             "SELECT $COLUMN_LAT,$COLUMN_LON FROM $TABLE_HISTORY " +
                 "WHERE $COLUMN_CID=? AND $COLUMN_MNC=? AND $COLUMN_TAC=? AND $COLUMN_MCC=? " +
                 "AND $COLUMN_RADIO=? AND $COLUMN_LAT IS NOT NULL AND $COLUMN_LON IS NOT NULL " +
-                "AND $COLUMN_SCORE>=? " +
+                "AND $COLUMN_SCORE>=? AND ($COLUMN_FAILED_H IS NULL OR TRIM($COLUMN_FAILED_H)='' OR $COLUMN_FAILED_H='OK') " +
                 "AND $COLUMN_TIMESTAMP>=? ORDER BY $COLUMN_ID DESC LIMIT ?",
             arrayOf(
                 cell.cellId, cell.mnc, cell.tac, cell.mcc, cell.radioTech.name,
@@ -301,7 +304,8 @@ class CellDbHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME, 
     ): Boolean = readableDatabase.rawQuery(
         "SELECT COUNT(*),COUNT(DISTINCT substr($COLUMN_TIMESTAMP,1,10)) FROM $TABLE_HISTORY " +
             "WHERE $COLUMN_CID=? AND $COLUMN_MNC=? AND $COLUMN_TAC=? AND $COLUMN_MCC=? " +
-            "AND $COLUMN_RADIO=? AND $COLUMN_TIMESTAMP>=? AND $COLUMN_SCORE>=?",
+            "AND $COLUMN_RADIO=? AND $COLUMN_TIMESTAMP>=? AND $COLUMN_SCORE>=? " +
+            "AND ($COLUMN_FAILED_H IS NULL OR TRIM($COLUMN_FAILED_H)='' OR $COLUMN_FAILED_H='OK')",
         arrayOf(
             cellId, mnc, tac, mcc, radio.name, since,
             TRUSTED_BASELINE_MIN_SCORE.toString()
@@ -336,8 +340,10 @@ class CellDbHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME, 
             "SELECT $COLUMN_MCC,$COLUMN_MNC,$COLUMN_TAC,$COLUMN_CID,$COLUMN_RADIO," +
                 "$COLUMN_LAT,$COLUMN_LON FROM $TABLE_HISTORY " +
                 "WHERE $COLUMN_LAT IS NOT NULL AND $COLUMN_LON IS NOT NULL " +
+                "AND $COLUMN_SCORE>=? " +
+                "AND ($COLUMN_FAILED_H IS NULL OR TRIM($COLUMN_FAILED_H)='' OR $COLUMN_FAILED_H='OK') " +
                 "AND $COLUMN_TIMESTAMP>=? ORDER BY $COLUMN_ID DESC",
-            arrayOf(cutoff)
+            arrayOf(TRUSTED_BASELINE_MIN_SCORE.toString(), cutoff)
         ).use { cursor ->
             while (cursor.moveToNext()) {
                 val cid = cursor.getString(3) ?: continue
@@ -1121,6 +1127,7 @@ class CellDbHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME, 
               AND $COLUMN_MCC = ?
               AND $COLUMN_RADIO = ?
               AND $COLUMN_SCORE >= ?
+              AND ($COLUMN_FAILED_H IS NULL OR TRIM($COLUMN_FAILED_H) = '' OR $COLUMN_FAILED_H = 'OK')
               AND $COLUMN_TIMESTAMP < ?
               AND $COLUMN_TIMESTAMP > ?
             ORDER BY $COLUMN_ID DESC
@@ -1222,6 +1229,7 @@ class CellDbHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME, 
               AND $COLUMN_MCC = ?
               AND $COLUMN_RADIO = ?
               AND $COLUMN_SCORE >= ?
+              AND ($COLUMN_FAILED_H IS NULL OR TRIM($COLUMN_FAILED_H) = '' OR $COLUMN_FAILED_H = 'OK')
               AND $COLUMN_TIMESTAMP > ?
             ORDER BY $COLUMN_ID DESC
             LIMIT 200
@@ -1292,7 +1300,7 @@ class CellDbHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME, 
         val threshold = dateFormat.format(Date(ninetyDaysAgo))
 
         val query = """
-            SELECT $COLUMN_SCORE, $COLUMN_TIMESTAMP
+            SELECT $COLUMN_SCORE, $COLUMN_TIMESTAMP, $COLUMN_FAILED_H
             FROM $TABLE_HISTORY
             WHERE $COLUMN_CID = ?
               AND $COLUMN_MNC = ?
@@ -1313,7 +1321,8 @@ class CellDbHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME, 
                     val score = cursor.getInt(0)
                     val ts = cursor.getString(1) ?: ""
                     total++
-                    if (score >= 85) clean++                 // observación "limpia"
+                    val reason = cursor.getString(2).orEmpty()
+                    if (score >= 85 && (reason.isBlank() || reason == "OK")) clean++
                     if (ts.length >= 10) days.add(ts.substring(0, 10))  // día calendario distinto
                 } while (cursor.moveToNext())
             }
@@ -1337,6 +1346,132 @@ class CellDbHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME, 
             distinctDays = distinctDays,
             cleanRatio = cleanRatio,
             trustScore = trustScore
+        )
+    }
+
+    /**
+     * Evidence for the revocable local-cell confidence profile. No new table is needed: only
+     * clean rows are read, with a three-samples-per-day cap so rapid sampling cannot manufacture
+     * trust. Suspicious/quarantined observations remain auditable but never contribute.
+     */
+    fun getLocalCellTrustEvidence(cell: CellData): LocalCellTrustEvidence {
+        if (cell.cellId == "N/A" || cell.radioTech == RadioTech.UNKNOWN) return LocalCellTrustEvidence()
+        val threshold = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.ROOT).format(
+            Date(System.currentTimeMillis() - 90L * 24 * 60 * 60 * 1000)
+        )
+        val args = arrayOf(
+            cell.cellId, cell.mnc, cell.tac, cell.mcc, cell.radioTech.name,
+            TRUSTED_BASELINE_MIN_SCORE.toString(), threshold
+        )
+        val dayCounts = LinkedHashMap<String, Int>()
+        val pciCounts = HashMap<Int, Int>()
+        val arfcnCounts = HashMap<Int, Int>()
+        val pciByArfcn = HashMap<Int, HashMap<Int, Int>>()
+        val recentCleanPcisByArfcn = HashMap<Int, MutableSet<Int>>()
+        var clean = 0
+        var located = 0
+        var rf = 0
+        var firstMs: Long? = null
+        var lastMs: Long? = null
+        val format = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.ROOT)
+        val recentThreshold = format.format(Date(System.currentTimeMillis() - 48L * 60 * 60 * 1000))
+        readableDatabase.rawQuery(
+            "SELECT $COLUMN_TIMESTAMP,$COLUMN_LAT,$COLUMN_LON,$COLUMN_PCI,$COLUMN_ARFCN " +
+                "FROM $TABLE_HISTORY WHERE $COLUMN_CID=? AND $COLUMN_MNC=? AND $COLUMN_TAC=? " +
+                "AND $COLUMN_MCC=? AND $COLUMN_RADIO=? AND $COLUMN_SCORE>=? " +
+                "AND ($COLUMN_FAILED_H IS NULL OR TRIM($COLUMN_FAILED_H)='' OR $COLUMN_FAILED_H='OK') " +
+                "AND $COLUMN_TIMESTAMP>=? ORDER BY $COLUMN_ID DESC LIMIT 500",
+            args
+        ).use { c ->
+            while (c.moveToNext()) {
+                val ts = c.getString(0).orEmpty()
+                clean++
+                if (ts.length >= 10) dayCounts[ts.substring(0, 10)] = (dayCounts[ts.substring(0, 10)] ?: 0) + 1
+                runCatching { format.parse(ts)?.time }.getOrNull()?.let { time ->
+                    firstMs = minOf(firstMs ?: time, time); lastMs = maxOf(lastMs ?: time, time)
+                }
+                if (!c.isNull(1) && !c.isNull(2)) located++
+                val pci = if (!c.isNull(3)) c.getInt(3).takeIf { it in 0..1007 } else null
+                val arfcn = if (!c.isNull(4)) c.getInt(4).takeIf { it > 0 } else null
+                if (pci != null) { pciCounts[pci] = (pciCounts[pci] ?: 0) + 1; rf++ }
+                if (arfcn != null) arfcnCounts[arfcn] = (arfcnCounts[arfcn] ?: 0) + 1
+                if (pci != null && arfcn != null) {
+                    val perCarrier = pciByArfcn.getOrPut(arfcn) { HashMap() }
+                    perCarrier[pci] = (perCarrier[pci] ?: 0) + 1
+                    if (ts >= recentThreshold) recentCleanPcisByArfcn.getOrPut(arfcn) { linkedSetOf() } += pci
+                }
+            }
+        }
+        fun establishedValues(counts: Map<Int, Int>): Set<Int> = counts
+            .filterValues { count -> count >= 2 && (clean == 0 || count.toDouble() / clean >= 0.15) }
+            .keys
+        val knownPcisByArfcn = pciByArfcn.mapNotNull { (carrier, counts) ->
+            val carrierTotal = counts.values.sum()
+            val established = counts.filterValues { count ->
+                count >= 2 && carrierTotal > 0 && count.toDouble() / carrierTotal >= 0.15
+            }.keys
+            if (established.isEmpty()) null else carrier to established
+        }.toMap()
+        var trustedTransitions = 0
+        var trustedRoutes = 0
+        readableDatabase.rawQuery(
+            "SELECT trusted_observations FROM $TABLE_CELL_TRANSITIONS " +
+                "WHERE (from_identity=? OR to_identity=?) AND trusted_observations>0",
+            arrayOf(cell.identityKey, cell.identityKey)
+        ).use { c -> while (c.moveToNext()) { trustedTransitions += c.getInt(0); trustedRoutes++ } }
+        val candidate = if (cell.pci != null && cell.arfcn != null &&
+            cell.pci !in knownPcisByArfcn[cell.arfcn].orEmpty()) {
+            val candidateDays = LinkedHashMap<String, Int>()
+            var candidateLocated = 0
+            var candidateFirstMs: Long? = null
+            var candidateLastMs: Long? = null
+            readableDatabase.rawQuery(
+                "SELECT $COLUMN_TIMESTAMP,$COLUMN_LAT,$COLUMN_LON FROM $TABLE_HISTORY " +
+                    "WHERE $COLUMN_CID=? AND $COLUMN_MNC=? AND $COLUMN_TAC=? AND $COLUMN_MCC=? " +
+                    "AND $COLUMN_RADIO=? AND $COLUMN_PCI=? AND $COLUMN_ARFCN=? AND $COLUMN_SCORE>=100 " +
+                    "AND $COLUMN_FAILED_H LIKE ? AND $COLUMN_TIMESTAMP>=? ORDER BY $COLUMN_ID DESC LIMIT 500",
+                arrayOf(
+                    cell.cellId, cell.mnc, cell.tac, cell.mcc, cell.radioTech.name,
+                    cell.pci.toString(), cell.arfcn.toString(),
+                    LOCAL_TRUST_RECONFIGURATION_HISTORY_LIKE, threshold
+                )
+            ).use { c ->
+                while (c.moveToNext()) {
+                    val ts = c.getString(0).orEmpty()
+                    if (ts.length >= 10) candidateDays[ts.substring(0, 10)] =
+                        (candidateDays[ts.substring(0, 10)] ?: 0) + 1
+                    runCatching { format.parse(ts)?.time }.getOrNull()?.let { time ->
+                        candidateFirstMs = minOf(candidateFirstMs ?: time, time)
+                        candidateLastMs = maxOf(candidateLastMs ?: time, time)
+                    }
+                    if (!c.isNull(1) && !c.isNull(2)) candidateLocated++
+                }
+            }
+            LocalRfReconfiguration(
+                pci = cell.pci,
+                arfcn = cell.arfcn,
+                distinctDays = candidateDays.size,
+                cappedObservations = candidateDays.values.sumOf { minOf(it, 3) },
+                locatedObservations = candidateLocated,
+                ageHours = if (candidateFirstMs != null && candidateLastMs != null)
+                    ((candidateLastMs!! - candidateFirstMs!!) / 3_600_000L).coerceAtLeast(0) else 0,
+                oldPairSeenRecently = recentCleanPcisByArfcn[cell.arfcn].orEmpty().any { it != cell.pci }
+            )
+        } else null
+        val ageHours = if (firstMs != null && lastMs != null) ((lastMs!! - firstMs!!) / 3_600_000L).coerceAtLeast(0) else 0
+        return LocalCellTrustEvidence(
+            cleanObservations = clean,
+            cappedCleanObservations = dayCounts.values.sumOf { minOf(it, 3) },
+            distinctDays = dayCounts.size,
+            ageHours = ageHours,
+            locatedObservations = located,
+            knownPcis = establishedValues(pciCounts),
+            knownArfcns = establishedValues(arfcnCounts),
+            knownPcisByArfcn = knownPcisByArfcn,
+            reconfigurationCandidate = candidate,
+            rfObservations = rf,
+            trustedTransitions = trustedTransitions,
+            trustedRoutes = trustedRoutes
         )
     }
 
@@ -1374,6 +1509,7 @@ class CellDbHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME, 
               AND $COLUMN_RSRQ IS NOT NULL
               AND $COLUMN_SINR IS NOT NULL
               AND $COLUMN_SCORE >= ?
+              AND ($COLUMN_FAILED_H IS NULL OR TRIM($COLUMN_FAILED_H) = '' OR $COLUMN_FAILED_H = 'OK')
               AND $COLUMN_TIMESTAMP > ?
             ORDER BY $COLUMN_ID DESC
             LIMIT 200
@@ -1613,6 +1749,7 @@ class CellDbHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME, 
               AND $COLUMN_MCC = ?
               AND $COLUMN_RADIO = ?
               AND $COLUMN_SCORE >= ?
+              AND ($COLUMN_FAILED_H IS NULL OR TRIM($COLUMN_FAILED_H) = '' OR $COLUMN_FAILED_H = 'OK')
               AND $COLUMN_TIMESTAMP > ?
         """.trimIndent()
 

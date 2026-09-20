@@ -126,6 +126,22 @@ class HeuristicsTest {
         assertEquals(HeuristicStatus.PASSED, passed.latencyCorrelation)
     }
 
+    @Test fun `latencia no disponible nunca penaliza aunque el flag anomalous sea contradictorio`() {
+        val result = ThreatAnalyzer.analyzeThreats(
+            active = active(dbm = -65, rsrq = -18),
+            neighbors = listOf(neighbor(-75)),
+            isHardwareCipheringActive = true,
+            cellChangeHistory = emptyList(),
+            currentLocation = null,
+            isNetworkLatencyAnomalous = true,
+            isNetworkLatencyAvailable = false
+        )
+
+        assertEquals(HeuristicStatus.NOT_EVALUATED, result.heuristicReport.latencyCorrelation)
+        assertEquals(100, result.securityScore)
+        assertNull(result.suspiciousReason)
+    }
+
     // ---------- H1: Celda aislada ----------
     @Test fun `H1 dispara sin vecinas y senal fuerte`() {
         assertFalse(analyze(active(dbm = -70), neighbors = emptyList()).isolatedCellPassed)

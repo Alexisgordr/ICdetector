@@ -1,7 +1,7 @@
 ![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)
 ![Platform](https://img.shields.io/badge/Platform-Android%2010%2B-green.svg)
 ![Root Required](https://img.shields.io/badge/Root-Not%20Required-brightgreen.svg)
-![Status](https://img.shields.io/badge/Status-Stable%20v2.6.0-success.svg)
+![Status](https://img.shields.io/badge/Status-Stable%20v2.7.0-success.svg)
 [![Featured in Awesome Telco](https://img.shields.io/badge/Featured%20in-Awesome%20Telco-6f42c1.svg)](https://github.com/ravens/awesome-telco#imsi-catcher-detection)
 
 
@@ -48,24 +48,33 @@ The application operates from Android userland without requiring root or direct 
 
 **Important:** ICdetection is not an IMSI-catcher proof tool. It is a local-first cellular anomaly auditor. Alerts should be interpreted as signals that the cellular environment deserves closer attention, not as definitive proof of surveillance or interception.
 
+The v2.7.0 release also displays a revocable local confidence profile for the serving
+cell. It learns only from clean observations spread across independent days and never exceeds 98%.
+`ESTABLISHED` means “consistent with this device's historical local pattern”, not “operator-
+authenticated” or “guaranteed safe”.
+
 ---
 
 # Project Status
 
 > **⚠️ Upgrading from a version older than v2.1.1:** uninstall the previous version first. Android refuses an in-place update when the APK is not signed with the same keystore, and a clean database is required because records written before v2.1.1 may hold an antenna coordinate where the device GPS position belongs. Export your CSV first if you want to keep the old history. v2.1.2 and later releases signed with the same keystore update in place normally. See `Status.md`.
 
-ICdetection v2.6.0 is the current stable release. It refactors the monitoring service into focused
-controllers without changing detection thresholds or the database schema, adds complete Spanish
-and English UI localization, and uses OpenCellID as the sole external verification source. The
-trusted-baseline, GNSS-continuity and evidence-aware confirmation policies remain unchanged.
+ICdetection v2.7.0 is the current recommended release. It materially hardens detection by
+correlating independent anomaly families across short episodes, protecting learned baselines from
+suspicious observations, adding hysteresis to noisy neighbour readings, and introducing revocable
+local cell confidence. RF identity is learned per carrier, while possible legitimate operator
+reconfigurations remain quarantined until they accumulate fourteen coherent days of evidence.
+These changes improve sensitivity without removing temporal confirmation or presenting historical
+consistency as proof that a transmitter is authentic.
 
 > **Definitive field-collection freeze:** v2.3.3 began the definitive data-collection campaign;
 > v2.3.4, v2.3.5 and v2.4.0 are targeted data-integrity and collection-continuity corrections.
 > v2.5.0 changed H16 shortcut handling, v2.5.1 changed baseline admission and temporal
-> confirmation, v2.5.2 changes GNSS admission for geographic evidence, and v2.6.0 restructures the
-> service and localizes the interface without changing stored evidence; record these
+> confirmation, v2.5.2 changes GNSS admission for geographic evidence, v2.6.0 restructures the
+> service and localizes the interface, and v2.7.0 hardens multi-signal detection and trusted
+> learning; record these
 > installation dates as dataset cuts.
-> No planned releases or detector changes will be made for at least one month, unless a defect
+> No further planned releases or detector changes will be made for at least one month, unless a defect
 > threatens data integrity, collection continuity, security, or the ability to export the results.
 
 > **A note to users:** We apologize for the unusually frequent updates during this development

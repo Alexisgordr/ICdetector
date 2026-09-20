@@ -1,5 +1,25 @@
 # ICdetection Status
 
+## v2.7.0 — detection hardening and revocable local confidence
+
+**Release:** stable / field validation continues
+**Version code:** 21
+**Database schema:** 15 (unchanged)
+**Detection baseline:** new revocable local-confidence layer
+
+This recommended update strengthens multi-signal detection and learns a slow local confidence
+profile for each complete cellular identity. It correlates independent evidence across short
+episodes while preserving temporal confirmation, and shows confidence progress in the main status
+card. Confidence is built only from local evidence, capped at
+98%, requires evidence across at least fourteen distinct days, and is never described as proof of
+authenticity. A lone parameter change is visible and excluded from learning but cannot alarm; only
+an established RF change corroborated by independent geometry or handover evidence enters temporal
+confirmation. Existing history is reused and no reset is needed.
+
+RF identity is evaluated as an `ARFCN → PCI` relationship. New pairs remain in a separate
+quarantine and cannot train the trusted profile. A coherent replacement needs fourteen days of
+evidence and the previous PCI must have disappeared from that carrier for at least 48 hours.
+
 ## v2.6.0 — service refactor and bilingual interface
 
 **Release:** stable

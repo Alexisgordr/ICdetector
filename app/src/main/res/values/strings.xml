@@ -115,4 +115,16 @@
     <string name="audit_updated">Security audit updated</string><string name="temporal_confirmed_format">TEMPORAL CONFIRMATION %1$s · CONFIRMED</string><string name="temporal_observing_format">TEMPORAL CONFIRMATION %1$s · OBSERVING</string>
     <string name="heuristic_index">HEURISTIC INDEX · EVALUATED DATA ONLY</string><string name="evaluation_summary_format">%1$d/%2$d evaluated · %3$d failures · %4$d unavailable</string><string name="evaluation_short_format">%1$d/%2$d EVALUATED · %3$d FAILURES</string><string name="anomaly_confidence_format">Anomaly confidence (uncalibrated): %1$s%%</string>
     <string name="baseline_signal">RSRP power</string><string name="baseline_fingerprint">RSRQ/SINR fingerprint</string><string name="baseline_pci">PCI identity</string><string name="baseline_reputation">Local reputation</string>
+    <string name="episode_watch_started">Initial evidence: temporary intensive monitoring enabled.</string>
+    <string name="episode_promoted_format">Multi-signal episode: independent families %1$s.</string>
+    <string name="local_trust_title">LOCAL CELL CONFIDENCE</string>
+    <string name="local_trust_format">%1$s · %2$d%%</string>
+    <string name="local_trust_progress">%1$d/%2$d days · %3$d/%4$d clean samples · %5$d h observed</string>
+    <string name="local_trust_ceiling">Revocable local evidence · epistemic ceiling 98%%</string>
+    <string name="trust_state_new">NEW</string><string name="trust_state_learning">LEARNING</string><string name="trust_state_established">ESTABLISHED</string><string name="trust_state_changed">CHANGED</string><string name="trust_state_quarantined">QUARANTINED</string>
+    <string name="trust_desc_new">Not enough clean history yet; no legitimacy claim is made.</string>
+    <string name="trust_desc_learning">Building a local profile across independent days, RF identity, GPS and trusted handovers.</string>
+    <string name="trust_desc_established">Matches a repeatedly observed local pattern. This is confidence, not proof of authenticity.</string>
+    <string name="trust_desc_changed">The current RF, geometry or handover pattern contradicts the established local profile: %1$s.</string>
+    <string name="trust_desc_quarantined">This observation cannot train the profile because one or more anomaly rules failed.</string>
 </resources>

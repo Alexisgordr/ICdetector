@@ -107,6 +107,10 @@ class MiniICService : Service() {
     // v2.1: la confirmación temporal vive en core/TemporalConfidence para poder testearla de
     // extremo a extremo (ver ScenarioTest). El servicio solo la usa.
     private val temporalConfidence = com.alexisgordr.icdetector.core.TemporalConfidence(CONFIRMATION_CYCLES)
+    private val threatEpisodeTracker = com.alexisgordr.icdetector.core.ThreatEpisodeTracker()
+    private val isolatedCellConfidence = com.alexisgordr.icdetector.core.IsolatedCellConfidence()
+    @Volatile private var intensiveMonitoringUntilMs = 0L
+    private var intensiveMonitoringStartedAtMs = 0L
     // Todas las lecturas comparten cachés, transición y confirmación temporal. Serializarlas evita
     // que dos callbacks publiquen la firma de una celda con el historial calculado para otra.
     private val cellProcessingMutex = Mutex()
@@ -128,6 +132,7 @@ class MiniICService : Service() {
     private var cachedRfStability: CellRfStability? = null
     private var cachedReputation: CellReputation? = null
     private var cachedFingerprint: CellRfFingerprint? = null
+    private var cachedLocalTrustEvidence = com.alexisgordr.icdetector.models.LocalCellTrustEvidence()
     // v2.1 — Posición de la antena (api_lat/api_lon) para mostrar la distancia. Solo display.
     private val apiLocationCache = ConcurrentHashMap<String, Pair<Double, Double>>()
     private var cachedRfSignature = ""
@@ -353,7 +358,8 @@ class MiniICService : Service() {
         scope.launch(Dispatchers.Default) {
             var wasAirplaneModeOn = false
             while (isActive && isServiceRunning) {
-                val delayTime = if (isScreenOn) 3000L else 10000L
+                val intensive = SystemClock.elapsedRealtime() < intensiveMonitoringUntilMs
+                val delayTime = if (isScreenOn || intensive) 3000L else 10000L
 
                 try {
                     val batteryCritical = isBatteryCritical()
@@ -743,6 +749,7 @@ class MiniICService : Service() {
                             radio = activeRaw.radioTech,
                             nearLocation = currentLocation
                         )
+                        cachedLocalTrustEvidence = dbHelper.getLocalCellTrustEvidence(activeRaw)
                         // v2.1 — Posición de la antena según las bases públicas, para poder
                         // MOSTRAR la distancia de forma continua (no solo en el ciclo posterior a
                         // la verificación). Misma caché por identidad de celda: una consulta más
@@ -760,6 +767,7 @@ class MiniICService : Service() {
                 }
                 val reputation: CellReputation? = cachedReputation
                 val rfFingerprint: CellRfFingerprint? = cachedFingerprint
+                val localTrustEvidence = cachedLocalTrustEvidence
 
                 if (canQuery) {
                     val signature = activeRaw.identityKey
@@ -822,6 +830,18 @@ class MiniICService : Service() {
                     }
                 }
 
+                // The modem can briefly publish an empty neighbour list even in ordinary
+                // coverage. Do not let one such snapshot become H1 evidence that an episode can
+                // retain: require three fresh consecutive deliveries for the same serving cell.
+                val wifiActive = isWifiConnected()
+                val isolatedCellConfirmed = activeRaw?.let { active ->
+                    isolatedCellConfidence.observe(
+                        identity = active.identityKey,
+                        candidate = !wifiActive && neighbors.isEmpty() && active.dbm >= -80,
+                        observationToken = observationToken
+                    )
+                } ?: false
+
                 val analyzedList = list.map { cell ->
                     if (cell.isRegistered) {
                         // FIX (coherencia de score): resolver el estado de verificación conocido
@@ -833,7 +853,7 @@ class MiniICService : Service() {
                         // serlo. Una celda nueva sigue siendo PENDING aquí (aún no verificada): correcto.
                         val knownCk = cell.identityKey
                         val knownVerified = verificationCache[knownCk] ?: VerificationStatus.PENDING
-                        ThreatAnalyzer.analyzeThreats(
+                        val analyzed = ThreatAnalyzer.analyzeThreats(
                             active = cell.copy(verified = knownVerified),
                             neighbors = neighbors,
                             isHardwareCipheringActive = isHardwareCipheringActive,
@@ -841,7 +861,7 @@ class MiniICService : Service() {
                             cellChangeHistory = cellChangeHistory,
                             currentLocation = currentLocation,
                             preloadedHistory = preloadedHistory,
-                            isWifiActive = isWifiConnected(),
+                            isWifiActive = wifiActive,
                             isNetworkLatencyAnomalous = networkLatencyState.value == "ANOMALA",
                             isNetworkLatencyAvailable = networkLatencyState.value != "N/A",
                             signalBaseline = signalBaseline,
@@ -851,8 +871,13 @@ class MiniICService : Service() {
                             rfStability = rfStability,
                             reputation = reputation,
                             rfFingerprint = rfFingerprint,
-                            transitionCoherence = transitionCoherence
+                            transitionCoherence = transitionCoherence,
+                            isolatedCellConfirmed = isolatedCellConfirmed
                         ).copy(distanceToTowerMeters = towerDistance)
+                        com.alexisgordr.icdetector.core.LocalCellTrustEngine.apply(
+                            analyzed,
+                            localTrustEvidence
+                        )
                     } else {
                         // Las vecinas no se evalúan como amenaza; se mantienen como contexto.
                         cell
@@ -872,10 +897,32 @@ class MiniICService : Service() {
                         val knownStatus = verificationCache[cacheKey] ?: VerificationStatus.PENDING
 
                         // Aplicar confirmación temporal antes de alertas
-                        val temporalActive = temporalConfidence.apply(
+                        val episode = threatEpisodeTracker.apply(
                             active,
                             observationToken.takeIf { it > 0L },
                             isFreshDelivery = isFreshDelivery
+                        )
+                        if (episode.startedWatching) {
+                            appendLog("[SEC]", getString(R.string.episode_watch_started))
+                            locationController.requestPreciseFix(force = true)
+                            requestFreshCellInfo()
+                        }
+                        if (episode.promoted) {
+                            appendLog("[SEC]", getString(
+                                R.string.episode_promoted_format,
+                                episode.families.joinToString()
+                            ))
+                        }
+
+                        val temporalActive = temporalConfidence.apply(
+                            episode.cell,
+                            observationToken.takeIf { it > 0L },
+                            isFreshDelivery = isFreshDelivery
+                        )
+                        updateIntensiveMonitoring(
+                            watching = episode.watching,
+                            startedWatching = episode.startedWatching,
+                            confirmed = temporalActive.isSuspicious
                         )
                         val diagnosticInputs = com.alexisgordr.icdetector.core.DiagnosticEngine.Inputs(
                             neighborCount = neighbors.size,
@@ -999,6 +1046,36 @@ class MiniICService : Service() {
 
     private fun getCurrentLocation(): Location? {
         return locationController.currentLocation()
+    }
+
+    /**
+     * Keeps short-lived evidence responsive without allowing intermittent H1 noise to pin the
+     * screen-off loop at 3 seconds forever. The hard cap is monotonic and is not extended until
+     * the episode has fully expired and a later episode starts from zero.
+     */
+    private fun updateIntensiveMonitoring(
+        watching: Boolean,
+        startedWatching: Boolean,
+        confirmed: Boolean
+    ) {
+        val now = SystemClock.elapsedRealtime()
+        if (!watching && !confirmed) {
+            intensiveMonitoringStartedAtMs = 0L
+            intensiveMonitoringUntilMs = 0L
+            return
+        }
+        if (startedWatching || intensiveMonitoringStartedAtMs == 0L) {
+            intensiveMonitoringStartedAtMs = now
+        }
+        if (confirmed) {
+            // Maximum resolution is useful while the forensic case can still accept samples.
+            // ForensicRecorder locks the same identity after this timeout until recovery, so
+            // keeping a 3-second loop beyond the case lifetime would only waste battery.
+            intensiveMonitoringUntilMs = intensiveMonitoringStartedAtMs + ForensicRecorder.MAX_CASE_MS
+            return
+        }
+        val hardStop = intensiveMonitoringStartedAtMs + MAX_INTENSIVE_MONITORING_MS
+        intensiveMonitoringUntilMs = minOf(now + INTENSIVE_MONITORING_TAIL_MS, hardStop)
     }
 
     private fun isWifiConnected(): Boolean {
@@ -1279,5 +1356,7 @@ class MiniICService : Service() {
         private const val KEY_TA_ZERO_CELLS = "ta_zero_only_cells"
         // Ciclos consecutivos de sospecha necesarios para confirmar una alarma.
         private const val CONFIRMATION_CYCLES = 3
+        private const val INTENSIVE_MONITORING_TAIL_MS = 60_000L
+        private const val MAX_INTENSIVE_MONITORING_MS = 5L * 60L * 1000L
     }
 }
