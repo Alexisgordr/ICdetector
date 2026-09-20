@@ -12,6 +12,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.res.stringResource
+import com.alexisgordr.icdetector.R
 
 @Composable
 fun LocationButton(lat: Double?, lon: Double?, cellId: String) {
@@ -30,7 +32,7 @@ fun LocationButton(lat: Double?, lon: Double?, cellId: String) {
     ) {
         Icon(
             Icons.Default.Map,
-            contentDescription = "Ver ubicación en OpenStreetMap",
+            contentDescription = stringResource(R.string.openstreetmap_location),
             tint = Color(0xFF4CAF50),
             modifier = Modifier.size(18.dp)
         )

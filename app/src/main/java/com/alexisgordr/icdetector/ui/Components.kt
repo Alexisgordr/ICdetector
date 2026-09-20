@@ -15,6 +15,10 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.res.stringArrayResource
+import androidx.compose.ui.res.stringResource
+import com.alexisgordr.icdetector.R
 import com.alexisgordr.icdetector.models.VerificationStatus
 import com.alexisgordr.icdetector.models.HeuristicStatus
 import com.alexisgordr.icdetector.models.HeuristicDiagnostic
@@ -29,7 +33,7 @@ fun AuthorSignature() {
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
         Text(
-            text = "HECHO POR ALEXIS G. // OPEN SOURCE",
+            text = stringResource(R.string.author_signature),
             fontFamily = FontFamily.Monospace,
             fontSize = 10.sp,
             color = Color(0xFF333333),
@@ -84,8 +88,8 @@ fun HeuristicItem(label: String, status: HeuristicStatus) {
         Text(label, modifier = Modifier.weight(1f), color = Color(0xFFCCCCCC), fontSize = 11.sp, fontFamily = FontFamily.Monospace)
         Spacer(Modifier.width(8.dp))
         val (text, color) = when (status) {
-            HeuristicStatus.PASSED -> "PASSED" to Color(0xFF4CAF50)
-            HeuristicStatus.FAILED -> "FAILED" to Color(0xFFCF6679)
+            HeuristicStatus.PASSED -> stringResource(R.string.status_passed) to Color(0xFF4CAF50)
+            HeuristicStatus.FAILED -> stringResource(R.string.status_failed) to Color(0xFFCF6679)
             HeuristicStatus.NOT_EVALUATED -> "N/A" to Color(0xFFFFA000)
         }
         Text(text, color = color, fontSize = 10.sp, fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace)
@@ -94,25 +98,27 @@ fun HeuristicItem(label: String, status: HeuristicStatus) {
 
 @Composable
 fun HeuristicDiagnosticItem(item: HeuristicDiagnostic) {
+    val names = stringArrayResource(R.array.heuristic_names)
+    val name = names.getOrNull(item.id - 1) ?: stringResource(R.string.heuristic_rule_format, item.id)
+    val english = LocalConfiguration.current.locales[0].language != "es"
+    val explanation = if (english) localizeTerminalLine(item.explanation) else item.explanation
     Column(modifier = Modifier.fillMaxWidth().padding(vertical = 3.dp)) {
-        HeuristicItem("${item.id}. ${item.name}", item.status)
-        if (item.status == HeuristicStatus.NOT_EVALUATED) {
-            Text(
-                item.explanation,
-                color = Color(0xFF777777),
-                fontSize = 8.sp,
-                fontFamily = FontFamily.Monospace,
-                modifier = Modifier.padding(start = 12.dp, top = 1.dp)
-            )
-        }
+        HeuristicItem("H${item.id} · $name", item.status)
+        Text(
+            explanation,
+            color = Color(0xFF777777),
+            fontSize = 8.sp,
+            fontFamily = FontFamily.Monospace,
+            modifier = Modifier.padding(start = 12.dp, top = 1.dp)
+        )
     }
 }
 
 @Composable
 fun TransitionCoherenceCard(result: TransitionCoherenceResult) {
     val (label, color) = when (result.status) {
-        HeuristicStatus.PASSED -> "COHERENTE" to Color(0xFF4CAF50)
-        HeuristicStatus.FAILED -> "INCOHERENTE" to Color(0xFFCF6679)
+        HeuristicStatus.PASSED -> stringResource(R.string.status_coherent) to Color(0xFF4CAF50)
+        HeuristicStatus.FAILED -> stringResource(R.string.status_incoherent) to Color(0xFFCF6679)
         HeuristicStatus.NOT_EVALUATED -> "N/A" to Color(0xFFFFA000)
     }
     Surface(
@@ -124,14 +130,18 @@ fun TransitionCoherenceCard(result: TransitionCoherenceResult) {
         Column(Modifier.padding(10.dp)) {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                 Text(
-                    "CORDURA DE MOVILIDAD · H16",
+                    stringResource(R.string.mobility_sanity),
                     color = Color(0xFFCCCCCC), fontSize = 10.sp,
                     fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Bold
                 )
                 Text(label, color = color, fontSize = 10.sp, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Bold)
             }
             Spacer(Modifier.height(5.dp))
-            Text(result.explanation, color = Color(0xFF888888), fontSize = 8.sp, fontFamily = FontFamily.Monospace)
+            Text(when (result.status) {
+                HeuristicStatus.PASSED -> stringResource(R.string.transition_explanation_passed)
+                HeuristicStatus.FAILED -> stringResource(R.string.transition_explanation_failed)
+                HeuristicStatus.NOT_EVALUATED -> stringResource(R.string.transition_explanation_na)
+            }, color = Color(0xFF888888), fontSize = 8.sp, fontFamily = FontFamily.Monospace)
         }
     }
 }
@@ -139,14 +149,14 @@ fun TransitionCoherenceCard(result: TransitionCoherenceResult) {
 @Composable
 fun VerificationBadge(status: VerificationStatus, compact: Boolean = false) {
     val (text, color) = when (status) {
-        VerificationStatus.VERIFIED -> "REGISTRADA" to Color(0xFF4CAF50)
+        VerificationStatus.VERIFIED -> stringResource(R.string.badge_registered) to Color(0xFF4CAF50)
         // "NO ENCONTRADA" en rojo era otra herencia de cuando no estar en una base pública se
         // trataba como un indicio. No lo es: las bases están incompletas. Gris, como corresponde a
         // un dato de contexto que no acusa a nadie.
-        VerificationStatus.NOT_FOUND -> "SIN REGISTRO" to Color(0xFF888888)
-        VerificationStatus.REJECTED -> "RESPUESTA DESCARTADA" to Color(0xFFFFA000)
-        VerificationStatus.PENDING -> "PENDIENTE" to Color(0xFF888888)
-        VerificationStatus.ERROR -> "ERROR API" to Color(0xFFFFA000)
+        VerificationStatus.NOT_FOUND -> stringResource(R.string.badge_not_found) to Color(0xFF888888)
+        VerificationStatus.REJECTED -> stringResource(R.string.badge_rejected) to Color(0xFFFFA000)
+        VerificationStatus.PENDING -> stringResource(R.string.badge_pending) to Color(0xFF888888)
+        VerificationStatus.ERROR -> stringResource(R.string.badge_error) to Color(0xFFFFA000)
     }
     
     Surface(

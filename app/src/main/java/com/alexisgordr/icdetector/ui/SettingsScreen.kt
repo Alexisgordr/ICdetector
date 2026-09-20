@@ -11,6 +11,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
@@ -19,11 +20,14 @@ import androidx.compose.ui.unit.sp
 import androidx.core.content.edit
 import androidx.core.net.toUri
 import android.content.Intent
+import android.app.Activity
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.border
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Favorite
 import com.alexisgordr.icdetector.service.MiniICService
+import com.alexisgordr.icdetector.R
+import com.alexisgordr.icdetector.util.LocaleController
 import kotlin.time.Duration.Companion.milliseconds
 
 @Composable
@@ -31,12 +35,11 @@ fun SettingsPanel(service: MiniICService?, onSave: () -> Unit) {
     val context = LocalContext.current
     val prefs = remember { context.getSharedPreferences("miniic_prefs", Context.MODE_PRIVATE) }
     var token by remember { mutableStateOf(prefs.getString("opencellid_key", "") ?: "") }
-    var wigleName by remember { mutableStateOf(prefs.getString("wigle_api_name", "") ?: "") }
-    var wigleToken by remember { mutableStateOf(prefs.getString("wigle_api_token", "") ?: "") }
     var proxyEnabled by remember { mutableStateOf(prefs.getBoolean("proxy_enabled", false)) }
     var latencyDetectionEnabled by remember {
         mutableStateOf(prefs.getBoolean("latency_detection_enabled", false))
     }
+    var selectedLanguage by remember { mutableStateOf(LocaleController.selectedLanguage(context)) }
 
     val scrollState = rememberScrollState()
 
@@ -51,43 +54,38 @@ fun SettingsPanel(service: MiniICService?, onSave: () -> Unit) {
                 .verticalScroll(scrollState),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            Text("CONFIGURACIÓN", color = Color(0xFF666666), fontFamily = FontFamily.Monospace, fontSize = 12.sp)
-            Text("APIS", color = Color.White, fontSize = 14.sp, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Bold)
-            Text("OpenCellID Token", color = Color(0xFF888888), fontSize = 11.sp, fontFamily = FontFamily.Monospace)
+            Text(stringResource(R.string.settings_title), color = Color(0xFF666666), fontFamily = FontFamily.Monospace, fontSize = 12.sp)
+            Text(stringResource(R.string.settings_language), color = Color.White, fontSize = 14.sp, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Bold)
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                listOf(
+                    "es" to stringResource(R.string.language_spanish),
+                    "en" to stringResource(R.string.language_english)
+                ).forEach { (tag, label) ->
+                    FilterChip(
+                        selected = selectedLanguage == tag,
+                        onClick = {
+                            if (selectedLanguage != tag) {
+                                selectedLanguage = tag
+                                LocaleController.selectLanguage(context, tag)
+                                (context as? Activity)?.recreate()
+                            }
+                        },
+                        label = { Text(label, fontFamily = FontFamily.Monospace) }
+                    )
+                }
+            }
+            HorizontalDivider(color = Color(0xFF1A1A1A), modifier = Modifier.padding(vertical = 4.dp))
+            Text(stringResource(R.string.settings_apis), color = Color.White, fontSize = 14.sp, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Bold)
+            Text(stringResource(R.string.opencellid_token), color = Color(0xFF888888), fontSize = 11.sp, fontFamily = FontFamily.Monospace)
             OutlinedTextField(
                 value = token,
                 onValueChange = { token = it },
                 modifier = Modifier.fillMaxWidth(),
                 textStyle = LocalTextStyle.current.copy(color = Color.White, fontFamily = FontFamily.Monospace, fontSize = 12.sp),
                 placeholder = { Text("pk.xxxxxxxxxxxxxxxx", color = Color(0xFF444444), fontSize = 12.sp) },
-                visualTransformation = PasswordVisualTransformation(),
-                colors = OutlinedTextFieldDefaults.colors(
-                    focusedBorderColor = Color(0xFF4CAF50),
-                    unfocusedBorderColor = Color(0xFF333333),
-                    cursorColor = Color.White
-                )
-            )
-            HorizontalDivider(color = Color(0xFF1A1A1A), modifier = Modifier.padding(vertical = 4.dp))
-            Text("WiGLE API Name", color = Color(0xFF888888), fontSize = 11.sp, fontFamily = FontFamily.Monospace)
-            OutlinedTextField(
-                value = wigleName,
-                onValueChange = { wigleName = it },
-                modifier = Modifier.fillMaxWidth(),
-                textStyle = LocalTextStyle.current.copy(color = Color.White, fontFamily = FontFamily.Monospace, fontSize = 12.sp),
-                placeholder = { Text("AIDxxxxxxxxxxxxxxxx", color = Color(0xFF444444), fontSize = 12.sp) },
-                colors = OutlinedTextFieldDefaults.colors(
-                    focusedBorderColor = Color(0xFF4CAF50),
-                    unfocusedBorderColor = Color(0xFF333333),
-                    cursorColor = Color.White
-                )
-            )
-            Text("WiGLE API Token", color = Color(0xFF888888), fontSize = 11.sp, fontFamily = FontFamily.Monospace)
-            OutlinedTextField(
-                value = wigleToken,
-                onValueChange = { wigleToken = it },
-                modifier = Modifier.fillMaxWidth(),
-                textStyle = LocalTextStyle.current.copy(color = Color.White, fontFamily = FontFamily.Monospace, fontSize = 12.sp),
-                placeholder = { Text("xxxxxxxxxxxxxxxx", color = Color(0xFF444444), fontSize = 12.sp) },
                 visualTransformation = PasswordVisualTransformation(),
                 colors = OutlinedTextFieldDefaults.colors(
                     focusedBorderColor = Color(0xFF4CAF50),
@@ -141,16 +139,16 @@ fun SettingsPanel(service: MiniICService?, onSave: () -> Unit) {
             ) {
                 Column(Modifier.weight(1f)) {
                     Text(
-                        "Proxy Tor (Orbot)",
+                        stringResource(R.string.tor_proxy),
                         color = if (latencyDetectionEnabled) Color(0xFF444444) else Color.White,
                         fontSize = 14.sp,
                         fontFamily = FontFamily.Monospace
                     )
                     Text(
                         if (latencyDetectionEnabled) {
-                            "No disponible con la sonda de latencia activa: Tor falsearía la medida."
+                            stringResource(R.string.tor_unavailable_latency)
                         } else {
-                            "Enruta API por Tor (SOCKS5 9050)"
+                            stringResource(R.string.tor_description)
                         },
                         color = Color(0xFF666666),
                         fontSize = 10.sp,
@@ -179,16 +177,16 @@ fun SettingsPanel(service: MiniICService?, onSave: () -> Unit) {
             ) {
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
-                        "Detección de Latencia (Experimental)",
+                        stringResource(R.string.latency_detection),
                         color = if (latencyBlocked) Color(0xFF444444) else Color.White,
                         fontSize = 14.sp,
                         fontFamily = FontFamily.Monospace
                     )
                     Text(
                         when {
-                            isWifiActive -> "No disponible con WiFi activo."
-                            isVpnActive -> "No disponible con VPN activa."
-                            else -> "3 peticiones HEAD cada 30s. Incompatible con Proxy Tor."
+                            isWifiActive -> stringResource(R.string.unavailable_wifi)
+                            isVpnActive -> stringResource(R.string.unavailable_vpn)
+                            else -> stringResource(R.string.latency_description)
                         },
                         color = Color(0xFF666666),
                         fontSize = 9.sp,
@@ -224,18 +222,15 @@ fun SettingsPanel(service: MiniICService?, onSave: () -> Unit) {
             Button(
                 onClick = {
                     val cleanToken = token.trim()
-                    val cleanWigleName = wigleName.trim()
-                    val cleanWigleToken = wigleToken.trim()
                     prefs.edit {
                         putString("opencellid_key", cleanToken)
-                        putString("wigle_api_name", cleanWigleName)
-                        putString("wigle_api_token", cleanWigleToken)
+                        remove("wigle_api_name")
+                        remove("wigle_api_token")
+                        remove("wigle_rate_limited_until")
                         putBoolean("proxy_enabled", proxyEnabled)
                         putBoolean("latency_detection_enabled", latencyDetectionEnabled)
                     }
                     service?.openCellIdKey = cleanToken
-                    service?.wigleApiName = cleanWigleName
-                    service?.wigleApiToken = cleanWigleToken
                     service?.isProxyEnabled = proxyEnabled
                     service?.isLatencyDetectionEnabled = latencyDetectionEnabled
                     onSave()
@@ -244,14 +239,14 @@ fun SettingsPanel(service: MiniICService?, onSave: () -> Unit) {
                 colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF333333)),
                 shape = RoundedCornerShape(4.dp)
             ) {
-                Text("GUARDAR AJUSTES", color = Color.White, fontFamily = FontFamily.Monospace)
+                Text(stringResource(R.string.save_settings), color = Color.White, fontFamily = FontFamily.Monospace)
             }
 
             HorizontalDivider(color = Color(0xFF1A1A1A), modifier = Modifier.padding(vertical = 4.dp))
 
-            Text("AVISO TÉCNICO", color = Color(0xFFCF6679), fontSize = 12.sp, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Bold)
+            Text(stringResource(R.string.technical_notice), color = Color(0xFFCF6679), fontSize = 12.sp, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Bold)
             Text(
-                "La detección directa de cifrado nulo e IMSI Disclosure no está implementada en v2.0 para instalaciones Android estándar. Requiere APIs/permisos privilegiados que una app no-root no recibe; por eso esta regla se muestra como N/A cuando el sistema no expone el dato.",
+                stringResource(R.string.technical_notice_body),
                 color = Color(0xFF888888),
                 fontSize = 9.sp,
                 fontFamily = FontFamily.Monospace,
@@ -280,7 +275,7 @@ fun SettingsPanel(service: MiniICService?, onSave: () -> Unit) {
                 )
                 Spacer(Modifier.width(6.dp))
                 Text(
-                    "APOYAR PROYECTO",
+                    stringResource(R.string.support_project),
                     fontFamily = FontFamily.Monospace,
                     fontSize = 10.sp,
                     fontWeight = FontWeight.Bold

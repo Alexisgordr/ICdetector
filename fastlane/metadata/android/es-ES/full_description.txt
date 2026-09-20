@@ -8,13 +8,13 @@ ICdetection no garantiza la detección de IMSI-catchers. Android no permite a la
 
 La aplicación funciona sin root y almacena el historial localmente en el dispositivo. No contiene publicidad, analítica ni rastreadores.
 
-Las consultas a WiGLE y OpenCellID son opcionales. El usuario debe aportar sus propias credenciales y puede utilizar la aplicación sin estos servicios.
+Las consultas a OpenCellID son opcionales. El usuario debe aportar su propio token y puede utilizar la aplicación sin este servicio.
 
 Permisos:
 
 • Ubicación: Android la exige para acceder a determinada información celular y se utiliza en comprobaciones geográficas.
 • Estado del teléfono: necesario para consultar la red y las celdas visibles.
-• Internet: utilizado opcionalmente para WiGLE, OpenCellID y las comprobaciones de red activadas por el usuario.
+• Internet: utilizado opcionalmente para OpenCellID y las comprobaciones de red activadas por el usuario.
 • Servicio en primer plano y notificaciones: permiten mantener la monitorización visible y controlable.
 
 La cantidad y calidad de la telemetría dependen del teléfono, el módem, el firmware y la versión de Android.

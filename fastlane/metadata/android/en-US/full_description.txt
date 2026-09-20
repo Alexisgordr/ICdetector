@@ -8,11 +8,11 @@ ICdetection does not guarantee IMSI-catcher detection. Standard Android applicat
 
 The application works without root and stores its history locally on the device. It contains no advertising, analytics or tracking libraries.
 
-WiGLE and OpenCellID verification is optional. Users provide their own credentials, and the application can operate without these services.
+OpenCellID verification is optional. Users provide their own token, and the application can operate without this service.
 
 Permissions:
 
 • Location: required by Android for access to certain cellular information and used for geographical consistency checks.
 • Phone state: required to inspect cellular network and cell information.
-• Internet: used optionally for WiGLE, OpenCellID and user-enabled network checks.
+• Internet: used optionally for OpenCellID and user-enabled network checks.
 • Foreground service and notifications: keep persistent monitoring visible and controllable.

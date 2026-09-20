@@ -1,5 +1,19 @@
 # ICdetection Status
 
+## v2.6.0 — service refactor and bilingual interface
+
+**Release:** stable
+**Version code:** 19
+**Database schema:** 15 (unchanged)
+**Detection baseline:** unchanged
+
+v2.6.0 decomposes the monitoring service into focused controllers and completes the Spanish and
+English interface, including the forensic terminal and the H1–H16 diagnostic panel. External
+verification now uses OpenCellID alone; WiGLE quota state can no longer alter a verdict.
+
+The release changes no heuristic weight, temporal confirmation threshold, database schema or CSV
+column. Existing v2.5.x data remains compatible and no database reset is required.
+
 ## v2.5.2 — GNSS continuity hardening
 
 **Release:** stable
@@ -208,7 +222,7 @@ data collection before another detection-policy change is considered.
 | Topology export | Active | ZIP includes cell/transition CSV, directed GraphML, metadata, and SHA-256 checksums after a privacy warning. |
 | Baseline maturity | Active | Shows readiness of power, quality-fingerprint, PCI-identity, and reputation histories. |
 | Forensic prebuffer | Active | Holds up to 60 seconds / 180 recent samples using monotonic timing. |
-| WiGLE quota control | Active | Pauses WiGLE globally and persistently after rate limiting; OpenCellID and local analysis continue. |
+| External verification | Active | OpenCellID is the sole external source; WiGLE is no longer configured or queried. |
 | Post-recovery capture | Active | Continues for 60 seconds; recurrence stays in the same case. |
 | Forensic ZIP export | Active | Produces seven documented files plus SHA-256 integrity hashes. |
 | Root/baseband visibility | Unavailable | Android userland still cannot expose all ciphering and baseband state on every device. |

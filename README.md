@@ -1,7 +1,7 @@
 ![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)
 ![Platform](https://img.shields.io/badge/Platform-Android%2010%2B-green.svg)
 ![Root Required](https://img.shields.io/badge/Root-Not%20Required-brightgreen.svg)
-![Status](https://img.shields.io/badge/Status-Stable%20v2.5.2-success.svg)
+![Status](https://img.shields.io/badge/Status-Stable%20v2.6.0-success.svg)
 [![Featured in Awesome Telco](https://img.shields.io/badge/Featured%20in-Awesome%20Telco-6f42c1.svg)](https://github.com/ravens/awesome-telco#imsi-catcher-detection)
 
 
@@ -54,20 +54,29 @@ The application operates from Android userland without requiring root or direct 
 
 > **⚠️ Upgrading from a version older than v2.1.1:** uninstall the previous version first. Android refuses an in-place update when the APK is not signed with the same keystore, and a clean database is required because records written before v2.1.1 may hold an antenna coordinate where the device GPS position belongs. Export your CSV first if you want to keep the old history. v2.1.2 and later releases signed with the same keystore update in place normally. See `Status.md`.
 
-ICdetection v2.5.2 is the current stable release. It prevents an isolated GNSS excursion from
-reaching geographic heuristics or being stored as a valid device position. Ordinary movement is
-accepted immediately; high-speed travel remains provisional until a second, genuinely newer and
-spatially coherent fix confirms the trajectory. This preserves legitimate train travel without
-letting repeated reads of one cached GPS outlier manufacture confirmation. The trusted-baseline
-policy introduced in v2.5.1, database schema and CSV columns remain unchanged.
+ICdetection v2.6.0 is the current stable release. It refactors the monitoring service into focused
+controllers without changing detection thresholds or the database schema, adds complete Spanish
+and English UI localization, and uses OpenCellID as the sole external verification source. The
+trusted-baseline, GNSS-continuity and evidence-aware confirmation policies remain unchanged.
 
 > **Definitive field-collection freeze:** v2.3.3 began the definitive data-collection campaign;
 > v2.3.4, v2.3.5 and v2.4.0 are targeted data-integrity and collection-continuity corrections.
 > v2.5.0 changed H16 shortcut handling, v2.5.1 changed baseline admission and temporal
-> confirmation, and v2.5.2 changes GNSS admission for geographic evidence; record these
+> confirmation, v2.5.2 changes GNSS admission for geographic evidence, and v2.6.0 restructures the
+> service and localizes the interface without changing stored evidence; record these
 > installation dates as dataset cuts.
 > No planned releases or detector changes will be made for at least one month, unless a defect
 > threatens data integrity, collection continuity, security, or the ability to export the results.
+
+> **A note to users:** We apologize for the unusually frequent updates during this development
+> phase. They were necessary to correct issues discovered through real-world testing. The project
+> is now entering a stabilization period, with no further changes planned unless a significant bug
+> is found.
+>
+> **Nota para los usuarios:** Pedimos disculpas por la frecuencia inusual de las actualizaciones
+> durante esta fase de desarrollo. Fueron necesarias para corregir problemas encontrados durante
+> las pruebas reales. El proyecto entra ahora en una fase de estabilización y no se prevén más
+> cambios salvo que aparezca un error importante.
 
 > **What v2.3.0 changes:** H16 compares a real handover with device movement, GPS quality, visible
 > neighbours, locally learned coverage zones, and trusted previous transitions. It has no fixed
@@ -475,10 +484,7 @@ Session-aware logging and local infrastructure observation tracking.
 
 # Infrastructure Verification
 
-ICdetection can optionally cross-reference observed infrastructure using:
-
-- OpenCellID
-- WiGLE
+ICdetection can optionally cross-reference observed infrastructure using OpenCellID.
 
 These services are used to compare observed cells against publicly known crowdsourced databases.
 
@@ -493,10 +499,8 @@ A "not found" result does **not** imply malicious infrastructure.
 
 External requests are only made when the user configures and enables infrastructure verification APIs.
 
-WiGLE applies account-specific query limits. When WiGLE reports that its allowance is exhausted,
-v2.2.1 pauses WiGLE requests globally and persists that cooldown across service restarts. The app
-continues using OpenCellID and its local heuristic engine during the pause. A rate-limited external
-source is treated as unavailable context, not as evidence that a cell is suspicious or absent.
+WiGLE is no longer queried. Its limited quota and inconclusive replies could obscure a valid
+OpenCellID result without adding dependable coverage. Existing local history remains compatible.
 
 ---
 
@@ -577,9 +581,9 @@ design guarantees and prints how mature the history is.
 
 Two points matter for analysis:
 
-- **`Lat` / `Lon` are the device's own GPS position** at the moment of the observation, and nothing else. The antenna position reported by WiGLE/OpenCellID lives in its own `ApiLat` / `ApiLon` columns. Before v2.1 both were written to the same pair of columns, which silently mixed two different quantities.
+- **`Lat` / `Lon` are the device's own GPS position** at the moment of the observation, and nothing else. The antenna position reported by OpenCellID lives in its own `ApiLat` / `ApiLon` columns. Before v2.1 both were written to the same pair of columns, which silently mixed two different quantities.
 - **`FailedHeuristics` entries prefixed with `[sub-umbral]`** are heuristics that failed without reaching the alarm threshold. They are observations, not alerts, and they are recorded precisely so that false positives can be studied. Before v2.1 they were stored as `OK`.
-- **`Verified` is a label, not a verdict, and it has five values.** `VERIFIED` (a public database returned *this* cell — identity checked field by field — with a credible coordinate), `NOT_FOUND` (an explicit, reliable negative: OpenCellID's documented "cell not found", or WiGLE answering successfully with zero results), `REJECTED` (a reply arrived but did not survive the checks — wrong identity, sentinel or impossible coordinate, incomplete body), `ERROR` (no interpretable reply: quota, rejected key, timeout, 404) and `PENDING`. Since v2.1 **none of them changes `SecurityScore`**: the score comes only from the local heuristic engine, so that the label and the detector stay independent and can be cross-tabulated at the end of the collection phase. A `VERIFIED` older than 30 days is re-checked; the historical rows are kept either way.
+- **`Verified` is a label, not a verdict, and it has five values.** `VERIFIED` (OpenCellID returned *this* cell — identity checked field by field — with a credible coordinate), `NOT_FOUND` (OpenCellID's documented "cell not found" response), `REJECTED` (a reply arrived but did not survive the checks — wrong identity, sentinel or impossible coordinate, incomplete body), `ERROR` (no interpretable reply: quota, rejected key, timeout, 404) and `PENDING`. None of them changes `SecurityScore`: the score comes only from the local heuristic engine. A `VERIFIED` older than 30 days is re-checked; historical rows are kept either way.
 
 Exports may contain sensitive location and cellular metadata. Users should treat exported files as private forensic material.
 

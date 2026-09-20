@@ -24,6 +24,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
@@ -133,7 +134,7 @@ fun MainLayout(context: Context, dbHelper: CellDbHelper, service: MiniICService?
             .padding(32.dp), contentAlignment = Alignment.Center) {
             Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(16.dp)) {
                 Text(
-                    "ICdetection requiere permisos de localización y teléfono para funcionar.",
+                    stringResource(R.string.permissions_required),
                     color = Color(0xFF888888),
                     textAlign = androidx.compose.ui.text.style.TextAlign.Center,
                     fontSize = 14.sp
@@ -152,7 +153,7 @@ fun MainLayout(context: Context, dbHelper: CellDbHelper, service: MiniICService?
                     },
                     colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF333333))
                 ) {
-                    Text("Otorgar", color = Color.White)
+                    Text(stringResource(R.string.grant), color = Color.White)
                 }
             }
         }
@@ -221,13 +222,13 @@ fun MainScreenContent(dbHelper: CellDbHelper, service: MiniICService?) {
             
             Row {
                 IconButton(onClick = { showSettings = !showSettings; showHistory = false }) {
-                    Icon(Icons.Default.Settings, contentDescription = "Settings", tint = if (showSettings) Color.White else Color(0xFF888888))
+                    Icon(Icons.Default.Settings, contentDescription = stringResource(R.string.settings_accessibility), tint = if (showSettings) Color.White else Color(0xFF888888))
                 }
                 TextButton(
                     onClick = { showHistory = !showHistory; showSettings = false },
                     colors = ButtonDefaults.textButtonColors(contentColor = Color(0xFF888888))
                 ) {
-                    Text(if (showHistory) "MONITOR" else "HISTORIAL", fontFamily = FontFamily.Monospace, fontSize = 12.sp)
+                    Text(if (showHistory) stringResource(R.string.monitor) else stringResource(R.string.history), fontFamily = FontFamily.Monospace, fontSize = 12.sp)
                 }
             }
         }
@@ -251,22 +252,22 @@ fun MainScreenContent(dbHelper: CellDbHelper, service: MiniICService?) {
                     // misma función que usa el panel. Lo que las bases públicas contestaron no es
                     // un veredicto de seguridad: es un dato de contexto, y va en su propia línea.
                     val (statusText, statusColor) = when {
-                        active == null -> "BUSCANDO SEÑAL..." to Color(0xFF888888)
-                        active.isSuspicious -> "SISTEMA EN COMPROMISO" to Color(0xFFCF6679)
-                        active.securityScore >= SCORE_SAFE -> "SIN ANOMALÍAS DETECTADAS" to securityScoreColor(active.securityScore)
-                        active.securityScore >= SCORE_WATCH -> "OBSERVANDO — ${active.securityScore}%" to securityScoreColor(active.securityScore)
-                        else -> "ANOMALÍA SIN CONFIRMAR — ${active.securityScore}%" to securityScoreColor(active.securityScore)
+                        active == null -> stringResource(R.string.searching_signal) to Color(0xFF888888)
+                        active.isSuspicious -> stringResource(R.string.system_compromised) to Color(0xFFCF6679)
+                        active.securityScore >= SCORE_SAFE -> stringResource(R.string.no_anomalies) to securityScoreColor(active.securityScore)
+                        active.securityScore >= SCORE_WATCH -> stringResource(R.string.observing_score, active.securityScore) to securityScoreColor(active.securityScore)
+                        else -> stringResource(R.string.unconfirmed_anomaly_score, active.securityScore) to securityScoreColor(active.securityScore)
                     }
 
-                    // Contexto, no veredicto: qué contestaron WiGLE/OpenCellID. Que una celda no
+                    // Contexto, no veredicto: qué contestó OpenCellID. Que una celda no
                     // esté en una base pública no la hace sospechosa —las bases están incompletas
                     // y las celdas nuevas tardan meses en aparecer—, sólo la deja sin respaldo.
                     val verificationNote = when (active?.verified) {
-                        VerificationStatus.VERIFIED -> "Registrada en bases públicas"
-                        VerificationStatus.NOT_FOUND -> "Sin registro en bases públicas (no implica amenaza)"
-                        VerificationStatus.REJECTED -> "Respuesta de las bases descartada; se reintentará"
-                        VerificationStatus.PENDING -> "Consultando bases públicas…"
-                        VerificationStatus.ERROR -> "Bases públicas sin respuesta"
+                        VerificationStatus.VERIFIED -> stringResource(R.string.public_db_registered)
+                        VerificationStatus.NOT_FOUND -> stringResource(R.string.public_db_not_found)
+                        VerificationStatus.REJECTED -> stringResource(R.string.public_db_rejected)
+                        VerificationStatus.PENDING -> stringResource(R.string.public_db_pending)
+                        VerificationStatus.ERROR -> stringResource(R.string.public_db_error)
                         null -> null
                     }
 
@@ -287,7 +288,7 @@ fun MainScreenContent(dbHelper: CellDbHelper, service: MiniICService?) {
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Column {
-                                Text("ESTADO DEL SECTOR", color = Color(0xFF666666), fontFamily = FontFamily.Monospace, fontSize = 10.sp)
+                                Text(stringResource(R.string.sector_status), color = Color(0xFF666666), fontFamily = FontFamily.Monospace, fontSize = 10.sp)
                                 Text(statusText, color = statusColor, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Bold, fontSize = 16.sp, letterSpacing = 1.sp)
                                 if (verificationNote != null) {
                                     Spacer(Modifier.height(2.dp))
@@ -324,7 +325,7 @@ fun MainScreenContent(dbHelper: CellDbHelper, service: MiniICService?) {
                                             .padding(horizontal = 16.dp, vertical = 14.dp)
                                     ) {
                                         Text(
-                                            "TECNOLOGÍA",
+                                            stringResource(R.string.current_technology),
                                             color = Color(0xFF555555),
                                             fontFamily = FontFamily.Monospace,
                                             fontSize = 9.sp,
@@ -356,7 +357,7 @@ fun MainScreenContent(dbHelper: CellDbHelper, service: MiniICService?) {
                                             .padding(horizontal = 16.dp, vertical = 14.dp)
                                     ) {
                                         Text(
-                                            "POTENCIA",
+                                            stringResource(R.string.signal_power),
                                             color = Color(0xFF555555),
                                             fontFamily = FontFamily.Monospace,
                                             fontSize = 9.sp,
@@ -565,6 +566,7 @@ fun MainScreenContent(dbHelper: CellDbHelper, service: MiniICService?) {
 fun SecurityScorePanel(active: CellData, dbmHistory: List<Int>, geoHistory: List<Float>, dbHelper: CellDbHelper, service: MiniICService?) {
     var viewMode by remember { mutableStateOf("NONE") } // NONE, GRAPH, GEO, HEUR
     val context = LocalContext.current
+    val englishUi = androidx.compose.ui.platform.LocalConfiguration.current.locales[0].language != "es"
 
     // GPS status — lee el valor cacheado, sin activar hardware
     var hasGps by remember { mutableStateOf(false) }
@@ -598,10 +600,10 @@ fun SecurityScorePanel(active: CellData, dbmHistory: List<Int>, geoHistory: List
         Column(modifier = Modifier.padding(16.dp)) {
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                 Column {
-                    Text("AUDITORÍA DE SEGURIDAD", color = Color(0xFF666666), fontFamily = FontFamily.Monospace, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                    Text(stringResource(R.string.security_audit), color = Color(0xFF666666), fontFamily = FontFamily.Monospace, fontSize = 10.sp, fontWeight = FontWeight.Bold)
                     if (auditStatus.isNotEmpty()) {
                         Spacer(Modifier.height(4.dp))
-                        Text(auditStatus, color = Color(0xFF00FF00), fontFamily = FontFamily.Monospace, fontSize = 11.sp)
+                        Text(if (englishUi) stringResource(R.string.audit_updated) else auditStatus, color = Color(0xFF00FF00), fontFamily = FontFamily.Monospace, fontSize = 11.sp)
                     }
 
                     // Fase estructurada: ya no depende de analizar un texto de presentación.
@@ -609,8 +611,7 @@ fun SecurityScorePanel(active: CellData, dbmHistory: List<Int>, geoHistory: List
                     if (active.temporalProgress.active) {
                         Spacer(Modifier.height(4.dp))
                         Text(
-                            "CONFIRMACIÓN TEMPORAL ${active.temporalProgress.label}" +
-                                if (active.temporalProgress.confirmed) " · CONFIRMADA" else " · OBSERVANDO",
+                            stringResource(if (active.temporalProgress.confirmed) R.string.temporal_confirmed_format else R.string.temporal_observing_format, active.temporalProgress.label),
                             color = if (active.temporalProgress.confirmed) Color(0xFFCF6679) else Color(0xFFFFA000),
                             fontSize = 10.sp,
                             fontFamily = FontFamily.Monospace,
@@ -622,7 +623,7 @@ fun SecurityScorePanel(active: CellData, dbmHistory: List<Int>, geoHistory: List
                         // en gris, como observación, nunca como amenaza: informar sin alarmar.
                         Spacer(Modifier.height(4.dp))
                         Text(
-                            streakText.removePrefix(SUBTHRESHOLD_PREFIX).trim(),
+                            if (englishUi) stringResource(R.string.audit_updated) else streakText.removePrefix(SUBTHRESHOLD_PREFIX).trim(),
                             color = Color(0xFF777777),
                             fontSize = 9.sp,
                             fontFamily = FontFamily.Monospace,
@@ -633,16 +634,14 @@ fun SecurityScorePanel(active: CellData, dbmHistory: List<Int>, geoHistory: List
                     Spacer(Modifier.height(4.dp))
                     Text("${active.securityScore}%", color = scoreColor, fontFamily = FontFamily.Monospace, fontSize = 28.sp, fontWeight = FontWeight.ExtraBold)
                     Text(
-                        "ÍNDICE HEURÍSTICO · SOLO DATOS EVALUADOS",
+                        stringResource(R.string.heuristic_index),
                         color = Color(0xFF777777),
                         fontFamily = FontFamily.Monospace,
                         fontSize = 8.sp,
                         fontWeight = FontWeight.Bold
                     )
                     Text(
-                        "${active.heuristicReport.evaluatedCount}/${active.heuristicReport.totalCount} evaluadas · " +
-                            "${active.heuristicReport.failedCount} fallos · " +
-                            "${active.heuristicReport.totalCount - active.heuristicReport.evaluatedCount} sin datos",
+                        stringResource(R.string.evaluation_summary_format, active.heuristicReport.evaluatedCount, active.heuristicReport.totalCount, active.heuristicReport.failedCount, active.heuristicReport.totalCount - active.heuristicReport.evaluatedCount),
                         color = Color(0xFF666666),
                         fontFamily = FontFamily.Monospace,
                         fontSize = 9.sp
@@ -659,7 +658,7 @@ fun SecurityScorePanel(active: CellData, dbmHistory: List<Int>, geoHistory: List
                     // criterio experto, no medidos: es una confianza heurística, y la etiqueta
                     // ahora lo dice. El valor no cambia, solo deja de prometer lo que no es.
                     Text(
-                        "Confianza de anomalía (no calibrada): ${String.format(java.util.Locale.ROOT, "%.1f", active.anomalyConfidence)}%",
+                        stringResource(R.string.anomaly_confidence_format, String.format(java.util.Locale.ROOT, "%.1f", active.anomalyConfidence)),
                         color = threatColor,
                         fontSize = 9.sp,
                         fontFamily = FontFamily.Monospace
@@ -680,9 +679,9 @@ fun SecurityScorePanel(active: CellData, dbmHistory: List<Int>, geoHistory: List
                         "GRAPH" -> IntelPanel(dbHelper)
                         "GEO" -> GeoGraph(active, geoHistory)
                         "HEUR" -> {
-                            Text("AUDITORÍA DE PARÁMETROS", color = Color(0xFF555555), fontFamily = FontFamily.Monospace, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                            Text(stringResource(R.string.parameter_audit), color = Color(0xFF555555), fontFamily = FontFamily.Monospace, fontSize = 10.sp, fontWeight = FontWeight.Bold)
                             Text(
-                                "${active.heuristicReport.evaluatedCount}/${active.heuristicReport.totalCount} EVALUADAS · ${active.heuristicReport.failedCount} FALLOS",
+                                stringResource(R.string.evaluation_short_format, active.heuristicReport.evaluatedCount, active.heuristicReport.totalCount, active.heuristicReport.failedCount),
                                 color = Color(0xFF777777), fontFamily = FontFamily.Monospace, fontSize = 9.sp
                             )
                             Spacer(Modifier.height(8.dp))
@@ -690,15 +689,15 @@ fun SecurityScorePanel(active: CellData, dbmHistory: List<Int>, geoHistory: List
                             Spacer(Modifier.height(8.dp))
                             active.heuristicDiagnostics.forEach { HeuristicDiagnosticItem(it) }
                             if (active.heuristicDiagnostics.isEmpty()) {
-                                Text("Preparando diagnóstico del primer ciclo…", color = Color(0xFF777777), fontSize = 9.sp)
+                                Text(stringResource(R.string.preparing_diagnostics), color = Color(0xFF777777), fontSize = 9.sp)
                             }
                             Spacer(Modifier.height(12.dp))
-                            Text("MADUREZ DE BASELINES", color = Color(0xFF555555), fontFamily = FontFamily.Monospace, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                            Text(stringResource(R.string.baseline_maturity), color = Color(0xFF555555), fontFamily = FontFamily.Monospace, fontSize = 10.sp, fontWeight = FontWeight.Bold)
                             val maturity = active.baselineMaturity
-                            BaselineMaturityRow("Potencia RSRP", maturity.signalSamples, maturity.signalLevel)
-                            BaselineMaturityRow("Huella RSRQ/SINR", maturity.fingerprintSamples, maturity.fingerprintLevel)
-                            BaselineMaturityRow("Identidad PCI", maturity.rfIdentitySamples, maturity.rfIdentityLevel)
-                            BaselineMaturityRow("Reputación local", maturity.reputationSamples, maturity.reputationLevel)
+                            BaselineMaturityRow(stringResource(R.string.baseline_signal), maturity.signalSamples, maturity.signalLevel)
+                            BaselineMaturityRow(stringResource(R.string.baseline_fingerprint), maturity.fingerprintSamples, maturity.fingerprintLevel)
+                            BaselineMaturityRow(stringResource(R.string.baseline_pci), maturity.rfIdentitySamples, maturity.rfIdentityLevel)
+                            BaselineMaturityRow(stringResource(R.string.baseline_reputation), maturity.reputationSamples, maturity.reputationLevel)
                         }
                     }
                 }
@@ -810,6 +809,6 @@ private fun BaselineMaturityRow(label: String, samples: Int, level: BaselineLeve
     }
     Row(Modifier.fillMaxWidth().padding(vertical = 2.dp), horizontalArrangement = Arrangement.SpaceBetween) {
         Text(label, color = Color(0xFFAAAAAA), fontFamily = FontFamily.Monospace, fontSize = 9.sp)
-        Text("${level.name} · $samples muestras", color = color, fontFamily = FontFamily.Monospace, fontSize = 9.sp)
+        Text(stringResource(R.string.samples_format, level.name, samples), color = color, fontFamily = FontFamily.Monospace, fontSize = 9.sp)
     }
 }

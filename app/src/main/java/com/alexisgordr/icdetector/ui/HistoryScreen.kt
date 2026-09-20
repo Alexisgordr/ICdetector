@@ -1,5 +1,9 @@
 package com.alexisgordr.icdetector.ui
 
+import android.annotation.SuppressLint
+import com.alexisgordr.icdetector.R
+import androidx.compose.ui.res.stringResource
+
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.rememberScrollState
@@ -47,6 +51,7 @@ import kotlinx.coroutines.delay
 private const val HISTORY_UI_RECORD_LIMIT = 2_000
 
 @Composable
+@SuppressLint("LocalContextGetResourceValueCall")
 fun HistoryPanel(dbHelper: CellDbHelper, onBack: () -> Unit) {
     var items by remember { mutableStateOf<List<HistoryRecord>>(emptyList()) }
     var totalRecordCount by remember { mutableIntStateOf(0) }
@@ -91,7 +96,7 @@ fun HistoryPanel(dbHelper: CellDbHelper, onBack: () -> Unit) {
         val deleteArmed = deleteConfirmText.trim().equals("BORRAR", ignoreCase = false)
         AlertDialog(
             onDismissRequest = { showDeleteConfirm.value = false; deleteConfirmText = "" },
-            title = { Text("¿Borrar Historial?", color = Color.White, fontFamily = FontFamily.Monospace) },
+            title = { Text(stringResource(R.string.history_delete_title), color = Color.White, fontFamily = FontFamily.Monospace) },
             text = {
                 Column {
                     Text(
@@ -100,7 +105,7 @@ fun HistoryPanel(dbHelper: CellDbHelper, onBack: () -> Unit) {
                         color = Color(0xFF888888), fontFamily = FontFamily.Monospace
                     )
                     Spacer(modifier = Modifier.height(12.dp))
-                    Text("Escribe BORRAR para confirmar:", color = Color(0xFFCF6679), fontFamily = FontFamily.Monospace, fontSize = 12.sp)
+                    Text(stringResource(R.string.history_delete_prompt), color = Color(0xFFCF6679), fontFamily = FontFamily.Monospace, fontSize = 12.sp)
                     OutlinedTextField(
                         value = deleteConfirmText,
                         onValueChange = { deleteConfirmText = it },
@@ -126,12 +131,12 @@ fun HistoryPanel(dbHelper: CellDbHelper, onBack: () -> Unit) {
                     },
                     colors = ButtonDefaults.textButtonColors(contentColor = Color(0xFFCF6679))
                 ) {
-                    Text("BORRAR TODO", fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace)
+                    Text(stringResource(R.string.delete_all), fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace)
                 }
             },
             dismissButton = {
                 TextButton(onClick = { showDeleteConfirm.value = false; deleteConfirmText = "" }) {
-                    Text("CANCELAR", color = Color.White, fontFamily = FontFamily.Monospace)
+                    Text(stringResource(R.string.cancel), color = Color.White, fontFamily = FontFamily.Monospace)
                 }
             },
             containerColor = Color(0xFF111111)
@@ -161,7 +166,7 @@ fun HistoryPanel(dbHelper: CellDbHelper, onBack: () -> Unit) {
             verticalAlignment = Alignment.CenterVertically
         ) {
             IconButton(onClick = onBack) {
-                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back", tint = Color.White)
+                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.back), tint = Color.White)
             }
             Text(when {
                 showForensics -> "LABORATORIO FORENSE"
@@ -176,11 +181,11 @@ fun HistoryPanel(dbHelper: CellDbHelper, onBack: () -> Unit) {
             Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
             horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            FilterChip(selected = !showIncidents && !showForensics && !showTopology && !showGeometry, onClick = { showIncidents = false; showForensics = false; showTopology = false; showGeometry = false }, label = { Text("ANTENAS") })
-            FilterChip(selected = showIncidents, onClick = { showIncidents = true; showForensics = false; showTopology = false; showGeometry = false }, label = { Text("INCIDENTES") })
-            FilterChip(selected = showForensics, onClick = { showIncidents = false; showForensics = true; showTopology = false; showGeometry = false }, label = { Text("FORENSE") })
-            FilterChip(selected = showTopology, onClick = { showIncidents = false; showForensics = false; showTopology = true; showGeometry = false }, label = { Text("TOPOLOGÍA") })
-            FilterChip(selected = showGeometry, onClick = { showIncidents = false; showForensics = false; showTopology = false; showGeometry = true }, label = { Text("GEOMETRÍA") })
+            FilterChip(selected = !showIncidents && !showForensics && !showTopology && !showGeometry, onClick = { showIncidents = false; showForensics = false; showTopology = false; showGeometry = false }, label = { Text(stringResource(R.string.tab_antennas)) })
+            FilterChip(selected = showIncidents, onClick = { showIncidents = true; showForensics = false; showTopology = false; showGeometry = false }, label = { Text(stringResource(R.string.tab_incidents)) })
+            FilterChip(selected = showForensics, onClick = { showIncidents = false; showForensics = true; showTopology = false; showGeometry = false }, label = { Text(stringResource(R.string.tab_forensics)) })
+            FilterChip(selected = showTopology, onClick = { showIncidents = false; showForensics = false; showTopology = true; showGeometry = false }, label = { Text(stringResource(R.string.tab_topology)) })
+            FilterChip(selected = showGeometry, onClick = { showIncidents = false; showForensics = false; showTopology = false; showGeometry = true }, label = { Text(stringResource(R.string.tab_geometry)) })
         }
 
         if (showForensics) {
@@ -204,7 +209,7 @@ fun HistoryPanel(dbHelper: CellDbHelper, onBack: () -> Unit) {
             Box(modifier = Modifier
                 .fillMaxWidth()
                 .weight(1f), contentAlignment = Alignment.Center) {
-                Text("HISTORIAL VACÍO", color = Color(0xFF444444), fontFamily = FontFamily.Monospace, fontSize = 12.sp)
+                Text(stringResource(R.string.empty_history), color = Color(0xFF444444), fontFamily = FontFamily.Monospace, fontSize = 12.sp)
             }
         } else {
             if (totalRecordCount > items.size) {
@@ -235,7 +240,7 @@ fun HistoryPanel(dbHelper: CellDbHelper, onBack: () -> Unit) {
                             }
                             result.fold(
                                 onSuccess = { filas ->
-                                    Toast.makeText(context, "✅ CSV exportado: $filas filas", Toast.LENGTH_LONG).show()
+                                    Toast.makeText(context, context.getString(R.string.csv_exported_format, filas), Toast.LENGTH_LONG).show()
                                 },
                                 onFailure = { error ->
                                     Toast.makeText(
@@ -258,7 +263,7 @@ fun HistoryPanel(dbHelper: CellDbHelper, onBack: () -> Unit) {
                 ) {
                     Icon(Icons.Default.Share, contentDescription = null, modifier = Modifier.size(14.dp))
                     Spacer(Modifier.width(4.dp))
-                    Text("EXPORTAR CSV", fontFamily = FontFamily.Monospace, fontSize = 11.sp)
+                    Text(stringResource(R.string.export_csv), fontFamily = FontFamily.Monospace, fontSize = 11.sp)
                 }
             }
             LazyColumn(modifier = Modifier.fillMaxWidth().weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -294,7 +299,7 @@ fun HistoryPanel(dbHelper: CellDbHelper, onBack: () -> Unit) {
                                         maxLines = 1,
                                         overflow = TextOverflow.Ellipsis
                                     )
-                                    Text("CONEXIONES: ${records.size}", color = Color(0xFF888888), fontSize = 10.sp, fontFamily = FontFamily.Monospace)
+                                    Text(stringResource(R.string.connections_format, records.size), color = Color(0xFF888888), fontSize = 10.sp, fontFamily = FontFamily.Monospace)
                                 }
                                 Row(
                                     modifier = Modifier.wrapContentWidth(),
@@ -390,7 +395,7 @@ fun HistoryPanel(dbHelper: CellDbHelper, onBack: () -> Unit) {
                     border = BorderStroke(1.dp, Color(0xFFCF6679).copy(alpha = 0.3f)),
                     shape = RoundedCornerShape(4.dp)
                 ) {
-                    Text("LIMPIAR BASE DE DATOS", fontFamily = FontFamily.Monospace, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                    Text(stringResource(R.string.clear_database), fontFamily = FontFamily.Monospace, fontSize = 11.sp, fontWeight = FontWeight.Bold)
                 }
             }
 
@@ -422,7 +427,7 @@ private fun TopologyPanel(
     }
     if (confirmExport) AlertDialog(
         onDismissRequest = { confirmExport = false },
-        title = { Text("Exportar topología") },
+        title = { Text(stringResource(R.string.export_topology_title)) },
         text = {
             Text(
                 "El paquete contiene identidades celulares y rutas de handover que pueden " +
@@ -433,8 +438,8 @@ private fun TopologyPanel(
         confirmButton = { TextButton(onClick = {
             confirmExport = false
             exportLauncher.launch("ICD-topology-${System.currentTimeMillis()}.zip")
-        }) { Text("EXPORTAR") } },
-        dismissButton = { TextButton(onClick = { confirmExport = false }) { Text("CANCELAR") } }
+        }) { Text(stringResource(R.string.export)) } },
+        dismissButton = { TextButton(onClick = { confirmExport = false }) { Text(stringResource(R.string.cancel)) } }
     )
     var filter by remember { mutableStateOf("ALL") }
     val visible = remember(transitions, filter) {
@@ -467,9 +472,9 @@ private fun TopologyPanel(
             Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
             horizontalArrangement = Arrangement.spacedBy(6.dp)
         ) {
-            FilterChip(filter == "ALL", { filter = "ALL" }, label = { Text("TODAS") })
-            FilterChip(filter == "TRUSTED", { filter = "TRUSTED" }, label = { Text("APRENDIDAS") })
-            FilterChip(filter == "REVIEW", { filter = "REVIEW" }, label = { Text("REVISAR") })
+            FilterChip(filter == "ALL", { filter = "ALL" }, label = { Text(stringResource(R.string.filter_all)) })
+            FilterChip(filter == "TRUSTED", { filter = "TRUSTED" }, label = { Text(stringResource(R.string.filter_learned)) })
+            FilterChip(filter == "REVIEW", { filter = "REVIEW" }, label = { Text(stringResource(R.string.filter_review)) })
         }
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
             TextButton(
@@ -479,7 +484,7 @@ private fun TopologyPanel(
             ) {
                 Icon(Icons.Default.Share, contentDescription = null, modifier = Modifier.size(14.dp))
                 Spacer(Modifier.width(4.dp))
-                Text("EXPORTAR TOPOLOGÍA", fontFamily = FontFamily.Monospace, fontSize = 9.sp)
+                Text(stringResource(R.string.export_topology), fontFamily = FontFamily.Monospace, fontSize = 9.sp)
             }
         }
         exportMessage?.let {
@@ -497,7 +502,7 @@ private fun TopologyPanel(
             }
         } else if (visible.isEmpty()) {
             Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                Text("SIN RUTAS PARA ESTE FILTRO", color = Color(0xFF555555), fontFamily = FontFamily.Monospace, fontSize = 11.sp)
+                Text(stringResource(R.string.no_routes_filter), color = Color(0xFF555555), fontFamily = FontFamily.Monospace, fontSize = 11.sp)
             }
         } else {
             LazyColumn(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -537,7 +542,7 @@ private fun TopologyRouteCard(route: CellTransitionSummary) {
     ) {
         Column(Modifier.fillMaxWidth().padding(11.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                Text("RUTA DE HANDOVER", color = Color(0xFF777777), fontFamily = FontFamily.Monospace, fontSize = 8.sp)
+                Text(stringResource(R.string.handover_route), color = Color(0xFF777777), fontFamily = FontFamily.Monospace, fontSize = 8.sp)
                 Text(statusText, color = statusColor, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Bold, fontSize = 9.sp)
             }
             Text(
@@ -589,13 +594,13 @@ private fun ForensicCaseList(dbHelper: CellDbHelper, cases: List<ForensicCase>, 
     }
     if (confirmExport) AlertDialog(
         onDismissRequest = { confirmExport = false },
-        title = { Text("Exportar caso forense") },
-        text = { Text("El paquete puede contener ubicación GPS precisa, datos de radio, modelo del dispositivo y registros técnicos. Revísalo antes de compartirlo; nunca contiene claves de API, IMSI ni IMEI.") },
+        title = { Text(stringResource(R.string.export_forensic_title)) },
+        text = { Text(stringResource(R.string.forensic_privacy_warning)) },
         confirmButton = { TextButton(onClick = {
             confirmExport = false
             selectedForExport?.let { launcher.launch("${it.caseCode}.zip") }
-        }) { Text("EXPORTAR") } },
-        dismissButton = { TextButton(onClick = { confirmExport = false }) { Text("CANCELAR") } }
+        }) { Text(stringResource(R.string.export)) } },
+        dismissButton = { TextButton(onClick = { confirmExport = false }) { Text(stringResource(R.string.cancel)) } }
     )
     Column(modifier) {
         Text(
@@ -606,7 +611,7 @@ private fun ForensicCaseList(dbHelper: CellDbHelper, cases: List<ForensicCase>, 
         exportMessage?.let { Text(it, color = Color(0xFF80CBC4), fontFamily = FontFamily.Monospace, fontSize = 9.sp) }
         if (cases.isEmpty()) {
             Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                Text("SIN CASOS FORENSES\nLa captura comienza automáticamente en 1/3", color = Color(0xFF555555), fontFamily = FontFamily.Monospace, fontSize = 11.sp)
+                Text(stringResource(R.string.no_forensic_cases), color = Color(0xFF555555), fontFamily = FontFamily.Monospace, fontSize = 11.sp)
             }
         } else LazyColumn(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             items(cases, key = { it.id }) { fc ->
@@ -622,17 +627,17 @@ private fun ForensicCaseList(dbHelper: CellDbHelper, cases: List<ForensicCase>, 
                             Text(fc.caseCode, color = Color.White, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Bold, fontSize = 11.sp)
                             Text(fc.state.name, color = color, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Bold, fontSize = 9.sp)
                         }
-                        Text("Fase máxima ${fc.highestPhase}/3 · ${fc.sampleCount} muestras", color = Color(0xFFAAAAAA), fontFamily = FontFamily.Monospace, fontSize = 9.sp)
-                        Text("${fc.createdAt} → ${fc.closedAt ?: "EN CURSO"}", color = Color(0xFF777777), fontFamily = FontFamily.Monospace, fontSize = 9.sp)
+                        Text(stringResource(R.string.forensic_phase_format, fc.highestPhase, fc.sampleCount), color = Color(0xFFAAAAAA), fontFamily = FontFamily.Monospace, fontSize = 9.sp)
+                        Text("${fc.createdAt} → ${fc.closedAt ?: stringResource(R.string.in_progress)}", color = Color(0xFF777777), fontFamily = FontFamily.Monospace, fontSize = 9.sp)
                         if (fc.state == ForensicCaseState.READY || fc.state == ForensicCaseState.INTERRUPTED) {
                             OutlinedButton(onClick = {
                                 selectedForExport = fc
                                 confirmExport = true
                             }, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(4.dp)) {
                                 Icon(Icons.Default.Share, null, Modifier.size(14.dp)); Spacer(Modifier.width(6.dp))
-                                Text("EXPORTAR CASO FORENSE", fontFamily = FontFamily.Monospace, fontSize = 9.sp)
+                                Text(stringResource(R.string.export_forensic_case), fontFamily = FontFamily.Monospace, fontSize = 9.sp)
                             }
-                        } else Text("CAPTURA AUTOMÁTICA EN CURSO", color = color, fontFamily = FontFamily.Monospace, fontSize = 9.sp)
+                        } else Text(stringResource(R.string.automatic_capture_running), color = color, fontFamily = FontFamily.Monospace, fontSize = 9.sp)
                     }
                 }
             }
@@ -644,7 +649,7 @@ private fun ForensicCaseList(dbHelper: CellDbHelper, cases: List<ForensicCase>, 
 private fun IncidentList(incidents: List<IncidentRecord>, modifier: Modifier = Modifier) {
     if (incidents.isEmpty()) {
         Box(modifier = modifier, contentAlignment = Alignment.Center) {
-            Text("SIN INCIDENTES REGISTRADOS", color = Color(0xFF555555), fontFamily = FontFamily.Monospace, fontSize = 11.sp)
+            Text(stringResource(R.string.no_incidents), color = Color(0xFF555555), fontFamily = FontFamily.Monospace, fontSize = 11.sp)
         }
         return
     }
@@ -666,10 +671,16 @@ private fun IncidentList(incidents: List<IncidentRecord>, modifier: Modifier = M
                 Column(Modifier.fillMaxWidth().padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                         Text("CID ${incident.cid} · ${incident.radio.name}", color = Color.White, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Bold, fontSize = 11.sp)
-                        Text("${incident.highestPhase}/${incident.requiredPhases} ${incident.state.name}", color = stateColor, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Bold, fontSize = 10.sp)
+                        val stateLabel = when (incident.state) {
+                            com.alexisgordr.icdetector.models.IncidentState.OBSERVING -> stringResource(R.string.incident_observing)
+                            com.alexisgordr.icdetector.models.IncidentState.CONFIRMED -> stringResource(R.string.incident_confirmed)
+                            com.alexisgordr.icdetector.models.IncidentState.RECOVERED -> stringResource(R.string.incident_recovered)
+                            com.alexisgordr.icdetector.models.IncidentState.INTERRUPTED -> stringResource(R.string.incident_interrupted)
+                        }
+                        Text("${incident.highestPhase}/${incident.requiredPhases} $stateLabel", color = stateColor, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Bold, fontSize = 10.sp)
                     }
-                    Text("${incident.startedAt} → ${incident.endedAt ?: "EN CURSO"}", color = Color(0xFF777777), fontFamily = FontFamily.Monospace, fontSize = 9.sp)
-                    Text("Score ${incident.score}% · confianza ${String.format(java.util.Locale.ROOT, "%.1f", incident.anomalyConfidence)}%", color = Color(0xFFAAAAAA), fontFamily = FontFamily.Monospace, fontSize = 9.sp)
+                    Text("${incident.startedAt} → ${incident.endedAt ?: stringResource(R.string.in_progress)}", color = Color(0xFF777777), fontFamily = FontFamily.Monospace, fontSize = 9.sp)
+                    Text(stringResource(R.string.score_confidence_format, incident.score, String.format(java.util.Locale.ROOT, "%.1f", incident.anomalyConfidence)), color = Color(0xFFAAAAAA), fontFamily = FontFamily.Monospace, fontSize = 9.sp)
                     if (expanded) {
                         HorizontalDivider(color = Color(0xFF222222))
                         Text(incident.reason, color = Color(0xFFCCCCCC), fontFamily = FontFamily.Monospace, fontSize = 9.sp)
@@ -694,7 +705,7 @@ fun IntelPanel(dbHelper: CellDbHelper) {
     if (items.isEmpty()) {
         Box(modifier = Modifier.fillMaxWidth().padding(16.dp),
             contentAlignment = Alignment.Center) {
-            Text("SIN DATOS AÚN", color = Color(0xFF444444),
+            Text(stringResource(R.string.no_data_yet), color = Color(0xFF444444),
                 fontFamily = FontFamily.Monospace, fontSize = 11.sp)
         }
         return
@@ -791,7 +802,7 @@ fun IntelPanel(dbHelper: CellDbHelper) {
                 modifier = Modifier.weight(1f),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
-                Text("PERÍODO", color = Color(0xFF555555), fontSize = 7.sp,
+                Text(stringResource(R.string.period), color = Color(0xFF555555), fontSize = 7.sp,
                     fontFamily = FontFamily.Monospace)
                 Text(dateFrom, color = Color.White, fontSize = 8.sp,
                     fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Bold)
@@ -811,7 +822,7 @@ fun IntelPanel(dbHelper: CellDbHelper) {
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Text("MÁS VISTA", color = Color(0xFF555555),
+                Text(stringResource(R.string.most_seen), color = Color(0xFF555555),
                     fontSize = 8.sp, fontFamily = FontFamily.Monospace)
                 Text(cid, color = Color.White,
                     fontSize = 9.sp, fontFamily = FontFamily.Monospace,
@@ -832,7 +843,7 @@ fun IntelPanel(dbHelper: CellDbHelper) {
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Text("REDES", color = Color(0xFF555555),
+                Text(stringResource(R.string.networks), color = Color(0xFF555555),
                     fontSize = 8.sp, fontFamily = FontFamily.Monospace)
                 networkTypes.take(3).forEach { (type, count) ->
                     Row(verticalAlignment = Alignment.CenterVertically,

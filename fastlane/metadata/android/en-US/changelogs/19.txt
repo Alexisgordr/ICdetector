@@ -1,0 +1,3 @@
+Refactors the monitoring service into focused controllers and adds complete Spanish/English UI
+localization, including heuristic names, explanations and the live terminal. OpenCellID is now the
+sole external verification source. No database, CSV, heuristic-weight or threshold changes.

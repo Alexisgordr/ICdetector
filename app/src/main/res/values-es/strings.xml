@@ -1,0 +1,118 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="settings_title">CONFIGURACIÓN</string>
+    <string name="settings_language">IDIOMA</string>
+    <string name="language_spanish">Español</string>
+    <string name="language_english">English</string>
+    <string name="settings_apis">APIS</string>
+    <string name="tor_proxy">Proxy Tor (Orbot)</string>
+    <string name="tor_unavailable_latency">No disponible con la sonda de latencia activa: Tor falsearía la medida.</string>
+    <string name="tor_description">Enruta las API por Tor (SOCKS5 9050)</string>
+    <string name="latency_detection">Detección de latencia (Experimental)</string>
+    <string name="unavailable_wifi">No disponible con Wi-Fi activo.</string>
+    <string name="unavailable_vpn">No disponible con VPN activa.</string>
+    <string name="latency_description">3 peticiones HEAD cada 30 s. Incompatible con el proxy Tor.</string>
+    <string name="save_settings">GUARDAR AJUSTES</string>
+    <string name="technical_notice">AVISO TÉCNICO</string>
+    <string name="technical_notice_body">La detección directa de cifrado nulo e IMSI Disclosure no está implementada para instalaciones Android estándar. Requiere APIs o permisos privilegiados que una app no-root no recibe; por eso esta regla se muestra como N/A cuando el sistema no expone el dato.</string>
+    <string name="support_project">APOYAR PROYECTO</string>
+    <string name="opencellid_token">Token de OpenCellID</string>
+    <string name="signal_comparison">COMPARATIVA DE SEÑAL</string>
+    <string name="active_cell_format">ACTIVA (%1$s)</string>
+    <string name="neighbor_cell_format">VECINA (%1$s)</string>
+    <string name="geometric_telemetry">TELEMETRÍA GEOMÉTRICA (TA)</string>
+    <string name="ta_distance">DISTANCIA POR TA</string>
+    <string name="public_database_distance">DISTANCIA SEGÚN BASE PÚBLICA</string>
+    <string name="ta_unavailable">NO DISPONIBLE</string>
+    <string name="ta_no_conversion">SIN CONVERSIÓN</string>
+    <string name="ta_blocked">Timing Advance: BLOQUEADO</string>
+    <string name="ta_value_format">Timing Advance: %1$d (%2$s)</string>
+    <string name="ta_not_reported">⚠️ NOTA: el módem no está reportando Timing Advance en esta celda. Es una limitación del firmware, no un fallo de la app; sin ese dato H6 no juzga geometría.</string>
+    <string name="ta_stub_zero">⚠️ Tu módem devuelve 0 en todas las celdas: no es una medida, sino un campo que el firmware no rellena. La distancia verde superior procede de otra fuente y no depende del TA.</string>
+    <string name="ta_no_conversion_format">⚠️ TA recibido (%1$s), pero sin conversión a distancia demostrable. Se registra en crudo y no se usa para geometría.</string>
+    <string name="ta_zero_format">⚠️ TA=0: distancia menor que un paso de %1$d m, o limitación del módem.</string>
+    <string name="ta_graph_legend">NARANJA = VARIACIÓN DE DISTANCIA (TA)</string>
+    <string name="author_signature">HECHO POR ALEXIS G. // OPEN SOURCE</string>
+    <string name="openstreetmap_location">Ver ubicación en OpenStreetMap</string>
+    <string name="history_delete_title">¿Borrar historial?</string>
+    <string name="history_delete_prompt">Escribe BORRAR para confirmar:</string>
+    <string name="delete_all">BORRAR TODO</string>
+    <string name="cancel">CANCELAR</string>
+    <string name="tab_antennas">ANTENAS</string>
+    <string name="tab_incidents">INCIDENTES</string>
+    <string name="tab_forensics">FORENSE</string>
+    <string name="tab_topology">TOPOLOGÍA</string>
+    <string name="tab_geometry">GEOMETRÍA</string>
+    <string name="empty_history">HISTORIAL VACÍO</string>
+    <string name="export_csv">EXPORTAR CSV</string>
+    <string name="clear_database">LIMPIAR BASE DE DATOS</string>
+    <string name="export">EXPORTAR</string>
+    <string name="back">Volver</string>
+    <string name="connections_format">CONEXIONES: %1$d</string>
+    <string name="export_topology_title">Exportar topología</string>
+    <string name="filter_all">TODAS</string>
+    <string name="filter_learned">APRENDIDAS</string>
+    <string name="filter_review">REVISAR</string>
+    <string name="export_topology">EXPORTAR TOPOLOGÍA</string>
+    <string name="no_routes_filter">SIN RUTAS PARA ESTE FILTRO</string>
+    <string name="handover_route">RUTA DE HANDOVER</string>
+    <string name="export_forensic_title">Exportar caso forense</string>
+    <string name="forensic_privacy_warning">El paquete puede contener ubicación GPS precisa, datos de radio, modelo del dispositivo y registros técnicos. Revísalo antes de compartirlo; nunca contiene claves de API, IMSI ni IMEI.</string>
+    <string name="no_forensic_cases">SIN CASOS FORENSES\nLa captura comienza automáticamente en 1/3</string>
+    <string name="forensic_phase_format">Fase máxima %1$d/3 · %2$d muestras</string>
+    <string name="in_progress">EN CURSO</string>
+    <string name="export_forensic_case">EXPORTAR CASO FORENSE</string>
+    <string name="automatic_capture_running">CAPTURA AUTOMÁTICA EN CURSO</string>
+    <string name="no_incidents">SIN INCIDENTES REGISTRADOS</string>
+    <string name="score_confidence_format">Score %1$d%% · confianza %2$s%%</string>
+    <string name="no_data_yet">SIN DATOS AÚN</string>
+    <string name="period">PERÍODO</string>
+    <string name="most_seen">MÁS VISTA</string>
+    <string name="networks">REDES</string>
+    <string name="grant">Otorgar</string>
+    <string name="settings_accessibility">Configuración</string>
+    <string name="sector_status">ESTADO DEL SECTOR</string>
+    <string name="security_audit">AUDITORÍA DE SEGURIDAD</string>
+    <string name="parameter_audit">AUDITORÍA DE PARÁMETROS</string>
+    <string name="preparing_diagnostics">Preparando diagnóstico del primer ciclo…</string>
+    <string name="baseline_maturity">MADUREZ DE BASELINES</string>
+    <string name="samples_format">%1$s · %2$d muestras</string>
+    <string name="close">CERRAR</string>
+    <string name="geometry_calculating">CALCULANDO GEOMETRÍA…</string>
+    <string name="geometry_insufficient_format">GEOMETRÍA INSUFICIENTE\n\n%1$d celda(s) con perfil de las %2$d vistas con GPS.\nHacen falta al menos %3$d muestras geolocalizadas por celda.\nSe llena al repetir tus trayectos habituales.</string>
+    <string name="geometry_disclaimer">CENTRO DE OBSERVACIÓN · NO ES LA POSICIÓN DE LA ANTENA · NO MODIFICA EL SCORE</string>
+    <string name="profiled">PERFILADAS</string><string name="sites">SITIOS</string><string name="routes">RUTAS</string><string name="review">REVISAR</string>
+    <string name="geometry_legend">Círculo = radio P90 de tus observaciones, a escala. Flecha = handover; grosor por observaciones, verde por coherencia aprendida. Toca un nodo para ver su ficha.</string>
+    <string name="site_coherence">COHERENCIA DE EMPLAZAMIENTO</string>
+    <string name="site_coherence_help">En LTE el Cell ID agrupa sectores por eNodeB (CID/256). Una separación grande merece revisión, aunque un eNodeB lógico puede usar cabezas de radio remotas y no siempre equivale a una torre física.</string>
+    <string name="route_coherence">COHERENCIA DE RUTA</string>
+    <string name="route_coherence_help">Las celdas que se pasan el móvil se solapan en cobertura. El hueco sin explicar entre centros menos ambos radios P90 debería ser cero o pequeño. Ordenadas de peor a mejor.</string>
+    <string name="geolocated_samples">Muestras geolocalizadas</string><string name="observation_p90">Radio P90 de observación</string><string name="site_enodeb">Emplazamiento (eNodeB)</string><string name="incoming_outgoing">Rutas entrantes / salientes</string>
+    <string name="sector_format">%1$s · sector %2$s</string><string name="not_deducible_lte">no deducible (solo LTE)</string>
+    <string name="coherent">COHERENTE</string><string name="site_spread_format">%1$d sectores · separación %2$d–%3$d m</string>
+    <string name="site_warning">Los sectores agrupados bajo este eNodeB aparecen muy separados. Puede indicar una identidad reutilizada o anómala, pero también una red distribuida; revísalo con el resto de evidencias.</string>
+    <string name="route_distance_format">centros %1$d m · sin explicar %2$d m</string>
+    <string name="monitoring_active">Sondeo activo</string>
+    <string name="verified_label">✅ VERIFICADA</string><string name="not_found_label">➖ SIN REGISTRO</string><string name="rejected_label">⚠️ RESPUESTA DESCARTADA</string><string name="api_error_label">⚠️ ERROR API</string><string name="pending_label">⏳ PENDIENTE</string>
+    <string name="security_alerts_channel">Alertas de seguridad</string><string name="stop">Detener</string>
+    <string name="permissions_required">ICdetection requiere permisos de localización y teléfono para funcionar.</string>
+    <string name="monitor">MONITOR</string><string name="history">HISTORIAL</string>
+    <string name="searching_signal">BUSCANDO SEÑAL…</string><string name="system_compromised">SISTEMA EN COMPROMISO</string><string name="no_anomalies">SIN ANOMALÍAS DETECTADAS</string>
+    <string name="observing_score">OBSERVANDO — %1$d%%</string><string name="unconfirmed_anomaly_score">ANOMALÍA SIN CONFIRMAR — %1$d%%</string>
+    <string name="public_db_registered">Registrada en base pública</string><string name="public_db_not_found">Sin registro en base pública (no implica amenaza)</string><string name="public_db_rejected">Respuesta de la base descartada; se reintentará</string><string name="public_db_pending">Consultando base pública…</string><string name="public_db_error">Base pública sin respuesta</string>
+    <string name="csv_exported_format">✅ CSV exportado: %1$d filas</string>
+    <string name="incident_observing">OBSERVANDO</string><string name="incident_confirmed">CONFIRMADO</string><string name="incident_recovered">RECUPERADO</string><string name="incident_interrupted">INTERRUMPIDO</string>
+    <string name="critical_battery_gps_paused">Batería crítica: GPS continuo en pausa</string><string name="no_signal_airplane">Sin señal / Modo Avión</string><string name="searching_network">Buscando red…</string>
+    <string name="latency_warning">Latencia anómala persistente — posible interferencia MITM</string><string name="airplane_settings_hint">Toca para abrir los ajustes de Modo Avión.</string>
+    <string name="heuristic_rule_format">H%1$d · regla de detección</string><string name="status_passed">SUPERADA</string><string name="status_failed">FALLIDA</string><string name="status_coherent">COHERENTE</string><string name="status_incoherent">INCOHERENTE</string>
+    <string-array name="heuristic_names"><item>Celda aislada</item><item>Estabilidad de potencia</item><item>Consistencia MCC</item><item>Límite MNC</item><item>Validación regional TAC</item><item>Coherencia geométrica (TA)</item><item>Espectro de vecinos</item><item>Sanidad ARFCN</item><item>Cifrado hardware</item><item>Anti ping-pong</item><item>Consistencia geográfica</item><item>Correlación latencia + RF</item><item>Baseline y huella RF</item><item>Downgrade de banda</item><item>Estabilidad de identidad RF</item><item>Coherencia de transición celular</item></string-array>
+    <string name="not_evaluated_explanation">No hay suficientes datos fiables para evaluar esta regla.</string><string name="transition_explanation_passed">El handover observado es coherente con las rutas locales aprendidas.</string><string name="transition_explanation_failed">El handover observado no concuerda con las rutas locales aprendidas.</string><string name="transition_explanation_na">No hay suficiente historial fiable de rutas para evaluar esta transición.</string>
+    <string name="mobility_sanity">CORDURA DE MOVILIDAD · H16</string>
+    <string name="badge_registered">REGISTRADA</string><string name="badge_not_found">SIN REGISTRO</string><string name="badge_rejected">RESPUESTA DESCARTADA</string><string name="badge_pending">PENDIENTE</string><string name="badge_error">ERROR API</string>
+    <string name="raw_terminal_output">SALIDA RAW DEL TERMINAL</string>
+    <string name="terminal_technical_event">Evento técnico de diagnóstico; el detalle original permanece disponible en la exportación forense.</string>
+    <string name="current_technology">TECNOLOGÍA</string><string name="signal_power">POTENCIA</string><string name="radio_band">BANDA</string>
+    <string name="audit_updated">Auditoría de seguridad actualizada</string><string name="temporal_confirmed_format">CONFIRMACIÓN TEMPORAL %1$s · CONFIRMADA</string><string name="temporal_observing_format">CONFIRMACIÓN TEMPORAL %1$s · OBSERVANDO</string>
+    <string name="heuristic_index">ÍNDICE HEURÍSTICO · SOLO DATOS EVALUADOS</string><string name="evaluation_summary_format">%1$d/%2$d evaluadas · %3$d fallos · %4$d sin datos</string><string name="evaluation_short_format">%1$d/%2$d EVALUADAS · %3$d FALLOS</string><string name="anomaly_confidence_format">Confianza de anomalía (no calibrada): %1$s%%</string>
+    <string name="baseline_signal">Potencia RSRP</string><string name="baseline_fingerprint">Huella RSRQ/SINR</string><string name="baseline_pci">Identidad PCI</string><string name="baseline_reputation">Reputación local</string>
+</resources>

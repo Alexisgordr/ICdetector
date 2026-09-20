@@ -18,7 +18,7 @@ While monitoring, it can:
 - Record MCC, MNC, Cell ID, TAC, PCI, channel, RSRP, RSRQ, SINR, radio technology, and Timing Advance when available.
 - Evaluate multiple anomaly heuristics during every analysis cycle.
 - Learn historical behaviour for repeatedly observed cells.
-- Cross-reference cells with OpenCellID and WiGLE when configured.
+- Cross-reference cells with OpenCellID when configured.
 - Require suspicious behaviour to persist through three analysis phases, or two when two
   independent high-value historical/physical checks fail together.
 - Explain which checks passed, failed, or could not run.
@@ -62,7 +62,7 @@ app never invents, reuses or retroactively assigns a stale position.
 
 ### External verification
 
-OpenCellID and WiGLE are optional. Configure valid credentials in Settings to enable external cross-referencing. Without them, local and historical analysis still works, while database-dependent rules may report `N/A`, `PENDING`, `NOT FOUND`, or an API error.
+OpenCellID is optional. Configure its token in Settings to enable external cross-referencing. Without it, local and historical analysis still works, while database-dependent rules may report `N/A` or `PENDING`.
 
 A missing public-database record does not make a cell malicious. Public datasets can be incomplete or outdated.
 

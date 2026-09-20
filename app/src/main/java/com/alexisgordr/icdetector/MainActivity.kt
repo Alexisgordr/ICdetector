@@ -7,11 +7,12 @@ package com.alexisgordr.icdetector
 
 import android.os.Bundle
 import android.os.IBinder
+import android.content.Context
 import android.content.ComponentName
 import android.content.Intent
 import android.content.ServiceConnection
-import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.activity.ComponentActivity
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.ui.graphics.Color
@@ -21,6 +22,7 @@ import androidx.compose.runtime.setValue
 import com.alexisgordr.icdetector.service.MiniICService
 import com.alexisgordr.icdetector.storage.CellDbHelper
 import com.alexisgordr.icdetector.ui.MainLayout
+import com.alexisgordr.icdetector.util.LocaleController
 
 class MainActivity : ComponentActivity() {
     private var service by mutableStateOf<MiniICService?>(null)
@@ -41,6 +43,10 @@ class MainActivity : ComponentActivity() {
             isBound = false
             isBinding = false
         }
+    }
+
+    override fun attachBaseContext(newBase: Context) {
+        super.attachBaseContext(LocaleController.localizedContext(newBase))
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {

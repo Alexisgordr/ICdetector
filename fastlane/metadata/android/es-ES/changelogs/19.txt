@@ -1,0 +1,4 @@
+Refactoriza el servicio de monitorización en controladores especializados y completa la interfaz
+en español e inglés, incluidos los nombres y explicaciones de las heurísticas y el terminal en
+directo. OpenCellID es ahora la única fuente externa. Sin cambios de base de datos, CSV, pesos ni
+umbrales.

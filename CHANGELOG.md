@@ -1,5 +1,29 @@
 # Changelog
 
+## Unreleased
+
+## 2.6.0
+
+### Service refactor and complete localization
+
+- Split `MiniICService` responsibilities into focused controllers for telephony, location,
+  persistence, verification, alerts, transitions, power, health, maintenance and telemetry.
+- Added complete Spanish and English interface localization, including monitoring labels,
+  heuristic names and explanations, geometry, history, settings and live-terminal presentation.
+- Added an in-app language selector and Android locale configuration.
+- Removed WiGLE from runtime verification and Settings. OpenCellID is now the sole external source,
+  preventing WiGLE quota failures or inconclusive replies from altering OpenCellID results.
+- Preserved the database schema, CSV format, heuristic weights and confirmation thresholds.
+- Updated release metadata to `versionName 2.6.0` and `versionCode 19`.
+
+### OpenCellID-only external verification
+
+- Removed WiGLE from the runtime verification pipeline and from Settings. OpenCellID is now the
+  sole external source, so quota failures or inconclusive replies from WiGLE cannot alter its
+  result.
+- Stored WiGLE credentials and cooldown state are deleted during upgrade. Existing history and
+  database schema remain compatible; local heuristics and scoring are unchanged.
+
 ## 2.5.2
 
 ### GNSS continuity validation

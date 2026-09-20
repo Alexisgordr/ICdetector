@@ -19,6 +19,8 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.res.stringResource
+import com.alexisgordr.icdetector.R
 import com.alexisgordr.icdetector.models.CellData
 import com.alexisgordr.icdetector.models.TimingAdvanceUnit
 import com.alexisgordr.icdetector.core.BandPlan
@@ -32,10 +34,10 @@ fun SignalVisualizer(active: CellData, neighbors: List<CellData>) {
             .padding(top = 8.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        Text("COMPARATIVA DE SEÑAL", color = Color(0xFF444444), fontFamily = FontFamily.Monospace, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+        Text(stringResource(R.string.signal_comparison), color = Color(0xFF444444), fontFamily = FontFamily.Monospace, fontSize = 10.sp, fontWeight = FontWeight.Bold)
         
         SignalBarSegmented(
-            label = "ACTIVA (${active.networkType})", 
+            label = stringResource(R.string.active_cell_format, active.networkType),
             dbm = active.dbm, 
             isMain = true,
             isSuspicious = active.isSuspicious
@@ -43,7 +45,7 @@ fun SignalVisualizer(active: CellData, neighbors: List<CellData>) {
         
         neighbors.asSequence().sortedByDescending { it.dbm }.take(3).forEach { neighbor ->
             SignalBarSegmented(
-                label = "VECINA (${neighbor.cellId})", 
+                label = stringResource(R.string.neighbor_cell_format, neighbor.cellId),
                 dbm = neighbor.dbm, 
                 isMain = false,
                 isSuspicious = neighbor.isSuspicious
@@ -73,8 +75,8 @@ fun GeoGraph(active: CellData, geoHistory: List<Float>) {
     val unitStep: Int? = taUnit.toMeters(1)
 
     val distanceText = when {
-        !isTaAvailable || taValue < 0 -> "NO DISPONIBLE"
-        distanceMeters == null -> "SIN CONVERSIÓN"
+        !isTaAvailable || taValue < 0 -> stringResource(R.string.ta_unavailable)
+        distanceMeters == null -> stringResource(R.string.ta_no_conversion)
         distanceMeters == 0 && unitStep != null -> "< $unitStep m"
         distanceMeters >= 1000 -> String.format(Locale.ROOT, "%.2f km", distanceMeters / 1000f)
         else -> "$distanceMeters m"
@@ -85,15 +87,15 @@ fun GeoGraph(active: CellData, geoHistory: List<Float>) {
         Spacer(Modifier.height(8.dp))
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.Bottom) {
             Column {
-                Text("TELEMETRÍA GEOMÉTRICA (TA)", color = Color(0xFF555555), fontFamily = FontFamily.Monospace, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                Text(stringResource(R.string.geometric_telemetry), color = Color(0xFF555555), fontFamily = FontFamily.Monospace, fontSize = 10.sp, fontWeight = FontWeight.Bold)
                 Text(
-                    if (isTaAvailable && taValue >= 0) "Timing Advance: $taValue (${taUnit.name})"
-                    else "Timing Advance: BLOQUEADO",
+                    if (isTaAvailable && taValue >= 0) stringResource(R.string.ta_value_format, taValue, taUnit.name)
+                    else stringResource(R.string.ta_blocked),
                     color = Color(0xFFFFA000), fontFamily = FontFamily.Monospace, fontSize = 14.sp, fontWeight = FontWeight.Bold
                 )
             }
             Column(horizontalAlignment = Alignment.End) {
-                Text("DISTANCIA POR TA", color = Color(0xFF444444), fontSize = 8.sp, fontFamily = FontFamily.Monospace)
+                Text(stringResource(R.string.ta_distance), color = Color(0xFF444444), fontSize = 8.sp, fontFamily = FontFamily.Monospace)
                 Text(distanceText, color = if (distanceMeters != null) Color.White else Color(0xFF888888), fontFamily = FontFamily.Monospace, fontSize = 16.sp, fontWeight = FontWeight.ExtraBold)
 
                 // v2.1 — Segunda estimación, por una vía completamente distinta: la coordenada
@@ -104,7 +106,7 @@ fun GeoGraph(active: CellData, geoHistory: List<Float>) {
                 val towerDistance = active.distanceToTowerMeters
                 if (towerDistance != null) {
                     Spacer(Modifier.height(6.dp))
-                    Text("DISTANCIA SEGÚN BASE PÚBLICA", color = Color(0xFF444444), fontSize = 8.sp, fontFamily = FontFamily.Monospace)
+                    Text(stringResource(R.string.public_database_distance), color = Color(0xFF444444), fontSize = 8.sp, fontFamily = FontFamily.Monospace)
                     Text(
                         if (towerDistance >= 1000) String.format(Locale.ROOT, "%.2f km", towerDistance / 1000f)
                         else "$towerDistance m",
@@ -140,15 +142,15 @@ fun GeoGraph(active: CellData, geoHistory: List<Float>) {
         }
         
         if (!isTaAvailable || taValue < 0) {
-             Text("⚠️ NOTA: el módem no está reportando Timing Advance en esta celda. Es una limitación del firmware del teléfono, no un fallo de la app: sin ese dato H6 no juzga geometría.", color = Color(0xFFCF6679), fontSize = 9.sp, fontFamily = FontFamily.Monospace)
+             Text(stringResource(R.string.ta_not_reported), color = Color(0xFFCF6679), fontSize = 9.sp, fontFamily = FontFamily.Monospace)
         } else if (taUnit == TimingAdvanceUnit.STUB_ZERO) {
-             Text("⚠️ Tu módem devuelve 0 en todas las celdas: no es una medida, es un campo que el firmware no rellena. Sin root no hay forma de obtener el TA real en este teléfono. La distancia verde de arriba viene de otra fuente y no depende del TA.", color = Color(0xFFCF6679), fontSize = 9.sp, fontFamily = FontFamily.Monospace)
+             Text(stringResource(R.string.ta_stub_zero), color = Color(0xFFCF6679), fontSize = 9.sp, fontFamily = FontFamily.Monospace)
         } else if (distanceMeters == null) {
-             Text("⚠️ TA recibido (${taUnit.name}) pero sin conversión a distancia demostrable. Se registra en el historial en crudo; no se usa para geometría ni se dibuja.", color = Color(0xFFCF6679), fontSize = 9.sp, fontFamily = FontFamily.Monospace)
+             Text(stringResource(R.string.ta_no_conversion_format, taUnit.name), color = Color(0xFFCF6679), fontSize = 9.sp, fontFamily = FontFamily.Monospace)
         } else if (taValue == 0) {
-            Text("⚠️ TA=0: distancia menor que un paso de ${unitStep ?: 0} m, o limitación del módem", color = Color(0xFFCF6679), fontSize = 9.sp, fontFamily = FontFamily.Monospace)
+            Text(stringResource(R.string.ta_zero_format, unitStep ?: 0), color = Color(0xFFCF6679), fontSize = 9.sp, fontFamily = FontFamily.Monospace)
         } else {
-             Text("NARANJA = VARIACIÓN DE DISTANCIA (TA)", color = Color(0xFFFFA000), fontSize = 9.sp, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Bold)
+             Text(stringResource(R.string.ta_graph_legend), color = Color(0xFFFFA000), fontSize = 9.sp, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Bold)
         }
     }
 }
@@ -365,7 +367,7 @@ fun BandIndicator(arfcn: Int?, networkType: String, suspicious: Boolean) {
 
     Column {
         Text(
-            text = "BANDA",
+            text = stringResource(R.string.radio_band),
             color = Color(0xFF555555),
             fontSize = 9.sp,
             fontFamily = FontFamily.Monospace,

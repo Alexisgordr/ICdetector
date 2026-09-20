@@ -1,0 +1,118 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="settings_title">SETTINGS</string>
+    <string name="settings_language">LANGUAGE</string>
+    <string name="language_spanish">Español</string>
+    <string name="language_english">English</string>
+    <string name="settings_apis">APIS</string>
+    <string name="tor_proxy">Tor proxy (Orbot)</string>
+    <string name="tor_unavailable_latency">Unavailable while the latency probe is active: Tor would distort the measurement.</string>
+    <string name="tor_description">Route API traffic through Tor (SOCKS5 9050)</string>
+    <string name="latency_detection">Latency detection (Experimental)</string>
+    <string name="unavailable_wifi">Unavailable while Wi-Fi is active.</string>
+    <string name="unavailable_vpn">Unavailable while a VPN is active.</string>
+    <string name="latency_description">3 HEAD requests every 30 s. Incompatible with the Tor proxy.</string>
+    <string name="save_settings">SAVE SETTINGS</string>
+    <string name="technical_notice">TECHNICAL NOTICE</string>
+    <string name="technical_notice_body">Direct detection of null encryption and IMSI disclosure is not implemented for standard Android installations. It requires privileged APIs or permissions that a non-root app does not receive, so this rule is shown as N/A when the system does not expose the data.</string>
+    <string name="support_project">SUPPORT PROJECT</string>
+    <string name="opencellid_token">OpenCellID token</string>
+    <string name="signal_comparison">SIGNAL COMPARISON</string>
+    <string name="active_cell_format">ACTIVE (%1$s)</string>
+    <string name="neighbor_cell_format">NEIGHBOR (%1$s)</string>
+    <string name="geometric_telemetry">GEOMETRIC TELEMETRY (TA)</string>
+    <string name="ta_distance">TA DISTANCE</string>
+    <string name="public_database_distance">PUBLIC DATABASE DISTANCE</string>
+    <string name="ta_unavailable">UNAVAILABLE</string>
+    <string name="ta_no_conversion">NO CONVERSION</string>
+    <string name="ta_blocked">Timing Advance: BLOCKED</string>
+    <string name="ta_value_format">Timing Advance: %1$d (%2$s)</string>
+    <string name="ta_not_reported">⚠️ NOTE: the modem is not reporting Timing Advance for this cell. This is a phone firmware limitation, not an app failure; H6 does not assess geometry without it.</string>
+    <string name="ta_stub_zero">⚠️ Your modem returns 0 for every cell: this is not a measurement but an unpopulated firmware field. The green distance above comes from another source and does not depend on TA.</string>
+    <string name="ta_no_conversion_format">⚠️ TA received (%1$s), but it has no defensible distance conversion. It is stored raw and is not used for geometry.</string>
+    <string name="ta_zero_format">⚠️ TA=0: distance below one %1$d m step, or a modem limitation.</string>
+    <string name="ta_graph_legend">ORANGE = DISTANCE VARIATION (TA)</string>
+    <string name="author_signature">MADE BY ALEXIS G. // OPEN SOURCE</string>
+    <string name="openstreetmap_location">View location in OpenStreetMap</string>
+    <string name="history_delete_title">Delete history?</string>
+    <string name="history_delete_prompt">Type DELETE to confirm:</string>
+    <string name="delete_all">DELETE ALL</string>
+    <string name="cancel">CANCEL</string>
+    <string name="tab_antennas">CELLS</string>
+    <string name="tab_incidents">INCIDENTS</string>
+    <string name="tab_forensics">FORENSICS</string>
+    <string name="tab_topology">TOPOLOGY</string>
+    <string name="tab_geometry">GEOMETRY</string>
+    <string name="empty_history">EMPTY HISTORY</string>
+    <string name="export_csv">EXPORT CSV</string>
+    <string name="clear_database">CLEAR DATABASE</string>
+    <string name="export">EXPORT</string>
+    <string name="back">Back</string>
+    <string name="connections_format">CONNECTIONS: %1$d</string>
+    <string name="export_topology_title">Export topology</string>
+    <string name="filter_all">ALL</string>
+    <string name="filter_learned">LEARNED</string>
+    <string name="filter_review">REVIEW</string>
+    <string name="export_topology">EXPORT TOPOLOGY</string>
+    <string name="no_routes_filter">NO ROUTES FOR THIS FILTER</string>
+    <string name="handover_route">HANDOVER ROUTE</string>
+    <string name="export_forensic_title">Export forensic case</string>
+    <string name="forensic_privacy_warning">The package may contain precise GPS location, radio data, device model and technical logs. Review it before sharing; it never contains API keys, IMSI or IMEI.</string>
+    <string name="no_forensic_cases">NO FORENSIC CASES\nCapture starts automatically at 1/3</string>
+    <string name="forensic_phase_format">Highest phase %1$d/3 · %2$d samples</string>
+    <string name="in_progress">IN PROGRESS</string>
+    <string name="export_forensic_case">EXPORT FORENSIC CASE</string>
+    <string name="automatic_capture_running">AUTOMATIC CAPTURE IN PROGRESS</string>
+    <string name="no_incidents">NO RECORDED INCIDENTS</string>
+    <string name="score_confidence_format">Score %1$d%% · confidence %2$s%%</string>
+    <string name="no_data_yet">NO DATA YET</string>
+    <string name="period">PERIOD</string>
+    <string name="most_seen">MOST SEEN</string>
+    <string name="networks">NETWORKS</string>
+    <string name="grant">Grant</string>
+    <string name="settings_accessibility">Settings</string>
+    <string name="sector_status">SECTOR STATUS</string>
+    <string name="security_audit">SECURITY AUDIT</string>
+    <string name="parameter_audit">PARAMETER AUDIT</string>
+    <string name="preparing_diagnostics">Preparing first-cycle diagnostics…</string>
+    <string name="baseline_maturity">BASELINE MATURITY</string>
+    <string name="samples_format">%1$s · %2$d samples</string>
+    <string name="close">CLOSE</string>
+    <string name="geometry_calculating">CALCULATING GEOMETRY…</string>
+    <string name="geometry_insufficient_format">INSUFFICIENT GEOMETRY\n\n%1$d profiled cell(s) out of %2$d seen with GPS.\nAt least %3$d geolocated samples per cell are required.\nIt fills as you repeat your usual routes.</string>
+    <string name="geometry_disclaimer">OBSERVATION CENTRE · NOT THE ANTENNA POSITION · DOES NOT CHANGE THE SCORE</string>
+    <string name="profiled">PROFILED</string><string name="sites">SITES</string><string name="routes">ROUTES</string><string name="review">REVIEW</string>
+    <string name="geometry_legend">Circle = P90 radius of your observations, to scale. Arrow = handover; thickness by observations, green by learned coherence. Tap a node for details.</string>
+    <string name="site_coherence">SITE COHERENCE</string>
+    <string name="site_coherence_help">On LTE, the Cell ID groups sectors by eNodeB (CID/256). A large separation deserves review, although a logical eNodeB may use remote radio heads and is not always one physical tower.</string>
+    <string name="route_coherence">ROUTE COHERENCE</string>
+    <string name="route_coherence_help">Cells handing the phone to each other overlap in coverage. The unexplained gap between centres minus both P90 radii should be zero or small. Ordered worst to best.</string>
+    <string name="geolocated_samples">Geolocated samples</string><string name="observation_p90">Observation P90 radius</string><string name="site_enodeb">Site (eNodeB)</string><string name="incoming_outgoing">Incoming / outgoing routes</string>
+    <string name="sector_format">%1$s · sector %2$s</string><string name="not_deducible_lte">not deducible (LTE only)</string>
+    <string name="coherent">COHERENT</string><string name="site_spread_format">%1$d sectors · separation %2$d–%3$d m</string>
+    <string name="site_warning">Sectors grouped under this eNodeB appear far apart. This may indicate reused or anomalous identity, but also a distributed network; review it with the remaining evidence.</string>
+    <string name="route_distance_format">centres %1$d m · unexplained %2$d m</string>
+    <string name="monitoring_active">Monitoring active</string>
+    <string name="verified_label">✅ VERIFIED</string><string name="not_found_label">➖ NOT REGISTERED</string><string name="rejected_label">⚠️ RESPONSE REJECTED</string><string name="api_error_label">⚠️ API ERROR</string><string name="pending_label">⏳ PENDING</string>
+    <string name="security_alerts_channel">Security alerts</string><string name="stop">Stop</string>
+    <string name="permissions_required">ICdetection requires location and phone permissions to work.</string>
+    <string name="monitor">MONITOR</string><string name="history">HISTORY</string>
+    <string name="searching_signal">SEARCHING FOR SIGNAL…</string><string name="system_compromised">SYSTEM COMPROMISED</string><string name="no_anomalies">NO ANOMALIES DETECTED</string>
+    <string name="observing_score">OBSERVING — %1$d%%</string><string name="unconfirmed_anomaly_score">UNCONFIRMED ANOMALY — %1$d%%</string>
+    <string name="public_db_registered">Registered in public database</string><string name="public_db_not_found">Not registered in public database (does not imply a threat)</string><string name="public_db_rejected">Public-database response rejected; retry pending</string><string name="public_db_pending">Querying public database…</string><string name="public_db_error">Public database did not respond</string>
+    <string name="csv_exported_format">✅ CSV exported: %1$d rows</string>
+    <string name="incident_observing">OBSERVING</string><string name="incident_confirmed">CONFIRMED</string><string name="incident_recovered">RECOVERED</string><string name="incident_interrupted">INTERRUPTED</string>
+    <string name="critical_battery_gps_paused">Critical battery: continuous GPS paused</string><string name="no_signal_airplane">No signal / Airplane mode</string><string name="searching_network">Searching for network…</string>
+    <string name="latency_warning">Persistent anomalous latency — possible MITM interference</string><string name="airplane_settings_hint">Tap to open Airplane mode settings.</string>
+    <string name="heuristic_rule_format">H%1$d · detection rule</string><string name="status_passed">PASSED</string><string name="status_failed">FAILED</string><string name="status_coherent">COHERENT</string><string name="status_incoherent">INCOHERENT</string>
+    <string-array name="heuristic_names"><item>Isolated cell</item><item>Signal-power stability</item><item>MCC consistency</item><item>MNC limit</item><item>Regional TAC validation</item><item>Geometric coherence (TA)</item><item>Neighbor spectrum</item><item>ARFCN sanity</item><item>Hardware ciphering</item><item>Anti ping-pong</item><item>Geographic consistency</item><item>Latency + RF correlation</item><item>Baseline and RF fingerprint</item><item>Band downgrade</item><item>RF identity stability</item><item>Cellular-transition coherence</item></string-array>
+    <string name="not_evaluated_explanation">Not enough reliable data to evaluate this rule.</string><string name="transition_explanation_passed">The observed handover is coherent with learned local routes.</string><string name="transition_explanation_failed">The observed handover is inconsistent with learned local routes.</string><string name="transition_explanation_na">There is not enough trusted route history to evaluate this transition.</string>
+    <string name="mobility_sanity">MOBILITY SANITY · H16</string>
+    <string name="badge_registered">REGISTERED</string><string name="badge_not_found">NOT REGISTERED</string><string name="badge_rejected">RESPONSE REJECTED</string><string name="badge_pending">PENDING</string><string name="badge_error">API ERROR</string>
+    <string name="raw_terminal_output">RAW TERMINAL OUTPUT</string>
+    <string name="terminal_technical_event">Technical diagnostic event; raw detail remains available in forensic export.</string>
+    <string name="current_technology">TECHNOLOGY</string><string name="signal_power">POWER</string><string name="radio_band">BAND</string>
+    <string name="audit_updated">Security audit updated</string><string name="temporal_confirmed_format">TEMPORAL CONFIRMATION %1$s · CONFIRMED</string><string name="temporal_observing_format">TEMPORAL CONFIRMATION %1$s · OBSERVING</string>
+    <string name="heuristic_index">HEURISTIC INDEX · EVALUATED DATA ONLY</string><string name="evaluation_summary_format">%1$d/%2$d evaluated · %3$d failures · %4$d unavailable</string><string name="evaluation_short_format">%1$d/%2$d EVALUATED · %3$d FAILURES</string><string name="anomaly_confidence_format">Anomaly confidence (uncalibrated): %1$s%%</string>
+    <string name="baseline_signal">RSRP power</string><string name="baseline_fingerprint">RSRQ/SINR fingerprint</string><string name="baseline_pci">PCI identity</string><string name="baseline_reputation">Local reputation</string>
+</resources>

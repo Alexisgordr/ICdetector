@@ -16,6 +16,7 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -23,6 +24,7 @@ import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.alexisgordr.icdetector.core.CellGeometry
+import com.alexisgordr.icdetector.R
 import com.alexisgordr.icdetector.models.CellTransitionSummary
 import com.alexisgordr.icdetector.storage.CellDbHelper
 import kotlinx.coroutines.Dispatchers
@@ -96,7 +98,7 @@ fun GeometryScreen(dbHelper: CellDbHelper, modifier: Modifier = Modifier) {
     if (snap == null) {
         Box(modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
             Text(
-                "CALCULANDO GEOMETRÍA…",
+                stringResource(R.string.geometry_calculating),
                 color = Color(0xFF555555), fontFamily = FontFamily.Monospace, fontSize = 11.sp
             )
         }
@@ -106,10 +108,7 @@ fun GeometryScreen(dbHelper: CellDbHelper, modifier: Modifier = Modifier) {
     if (snap.nodes.size < 2 || snap.bounds == null) {
         Box(modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
             Text(
-                "GEOMETRÍA INSUFICIENTE\n\n${snap.nodes.size} celda(s) con perfil de las " +
-                    "${snap.cellsSeen} vistas con GPS.\nHacen falta ≥ " +
-                    "${CellGeometry.MIN_SAMPLES_FOR_PROFILE} muestras geolocalizadas por celda.\n" +
-                    "Se llena solo al repetir tus trayectos habituales.",
+                stringResource(R.string.geometry_insufficient_format, snap.nodes.size, snap.cellsSeen, CellGeometry.MIN_SAMPLES_FOR_PROFILE),
                 color = Color(0xFF555555), fontFamily = FontFamily.Monospace,
                 fontSize = 11.sp, lineHeight = 16.sp
             )
@@ -150,17 +149,17 @@ fun GeometryScreen(dbHelper: CellDbHelper, modifier: Modifier = Modifier) {
 
     Column(modifier) {
         Text(
-            "CENTRO DE OBSERVACIÓN · NO ES LA POSICIÓN DE LA ANTENA · NO MODIFICA EL SCORE",
+            stringResource(R.string.geometry_disclaimer),
             color = Color(0xFF777777), fontFamily = FontFamily.Monospace, fontSize = 8.sp,
             lineHeight = 11.sp
         )
         Spacer(Modifier.height(8.dp))
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-            GeometryMetric("PERFILADAS", snap.nodes.size.toString(), Modifier.weight(1f))
-            GeometryMetric("SITIOS", snap.sites.size.toString(), Modifier.weight(1f))
-            GeometryMetric("RUTAS", snap.routeChecks.size.toString(), Modifier.weight(1f))
+            GeometryMetric(stringResource(R.string.profiled), snap.nodes.size.toString(), Modifier.weight(1f))
+            GeometryMetric(stringResource(R.string.sites), snap.sites.size.toString(), Modifier.weight(1f))
+            GeometryMetric(stringResource(R.string.routes), snap.routeChecks.size.toString(), Modifier.weight(1f))
             GeometryMetric(
-                "REVISAR", (incoherentSites + incoherentRoutes).toString(), Modifier.weight(1f),
+                stringResource(R.string.review), (incoherentSites + incoherentRoutes).toString(), Modifier.weight(1f),
                 value = if (incoherentSites + incoherentRoutes > 0) Color(0xFFCF6679) else Color(0xFF4CAF50)
             )
         }
@@ -231,8 +230,7 @@ fun GeometryScreen(dbHelper: CellDbHelper, modifier: Modifier = Modifier) {
 
         Spacer(Modifier.height(4.dp))
         Text(
-            "Círculo = radio P90 de tus observaciones, a escala. Flecha = handover; grosor por " +
-                "veces observadas, verde por coherencia aprendida. Toca un nodo para su ficha.",
+            stringResource(R.string.geometry_legend),
             color = Color(0xFF555555), fontFamily = FontFamily.Monospace, fontSize = 8.sp,
             lineHeight = 11.sp
         )
@@ -258,12 +256,10 @@ fun GeometryScreen(dbHelper: CellDbHelper, modifier: Modifier = Modifier) {
             }
 
             if (snap.sites.isNotEmpty()) {
-                item { SectionHeader("COHERENCIA DE EMPLAZAMIENTO") }
+                item { SectionHeader(stringResource(R.string.site_coherence)) }
                 item {
                     Text(
-                        "En LTE el Cell ID permite agrupar sectores por eNodeB (CID/256). Una " +
-                            "separación grande merece revisión, aunque un eNodeB lógico puede usar " +
-                            "cabezas de radio remotas y no equivale siempre a una torre física.",
+                        stringResource(R.string.site_coherence_help),
                         color = Color(0xFF555555), fontFamily = FontFamily.Monospace,
                         fontSize = 8.sp, lineHeight = 11.sp,
                         modifier = Modifier.padding(bottom = 6.dp)
@@ -274,12 +270,10 @@ fun GeometryScreen(dbHelper: CellDbHelper, modifier: Modifier = Modifier) {
 
             val worstRoutes = snap.routeChecks.take(12)
             if (worstRoutes.isNotEmpty()) {
-                item { SectionHeader("COHERENCIA DE RUTA") }
+                item { SectionHeader(stringResource(R.string.route_coherence)) }
                 item {
                     Text(
-                        "Dos celdas que se pasan el móvil se solapan en cobertura: el hueco sin " +
-                            "explicar (distancia entre centros menos ambos radios P90) debería ser " +
-                            "cero o casi. Ordenadas de peor a mejor.",
+                        stringResource(R.string.route_coherence_help),
                         color = Color(0xFF555555), fontFamily = FontFamily.Monospace,
                         fontSize = 8.sp, lineHeight = 11.sp,
                         modifier = Modifier.padding(bottom = 6.dp)
@@ -345,17 +339,17 @@ private fun NodeCard(
                     maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f)
                 )
                 TextButton(onClick = onClose, contentPadding = PaddingValues(4.dp)) {
-                    Text("CERRAR", fontFamily = FontFamily.Monospace, fontSize = 8.sp, color = Color(0xFF666666))
+                    Text(stringResource(R.string.close), fontFamily = FontFamily.Monospace, fontSize = 8.sp, color = Color(0xFF666666))
                 }
             }
             Spacer(Modifier.height(4.dp))
-            GeometryLine("Muestras geolocalizadas", sampleCount.toString())
-            GeometryLine("Radio P90 de observación", "${radiusP90.roundToInt()} m")
+            GeometryLine(stringResource(R.string.geolocated_samples), sampleCount.toString())
+            GeometryLine(stringResource(R.string.observation_p90), "${radiusP90.roundToInt()} m")
             GeometryLine(
-                "Emplazamiento (eNodeB)",
-                if (enodeb != null) "$enodeb · sector $sector" else "no deducible (solo LTE)"
+                stringResource(R.string.site_enodeb),
+                if (enodeb != null) stringResource(R.string.sector_format, enodeb.toString(), sector.toString()) else stringResource(R.string.not_deducible_lte)
             )
-            GeometryLine("Rutas entrantes / salientes", "$incoming / $outgoing")
+            GeometryLine(stringResource(R.string.incoming_outgoing), "$incoming / $outgoing")
         }
     }
 }
@@ -375,19 +369,17 @@ private fun SiteCard(site: CellGeometry.SiteCheck) {
                     fontFamily = FontFamily.Monospace, fontSize = 11.sp, fontWeight = FontWeight.Bold
                 )
                 Text(
-                    if (site.coherent) "COHERENTE" else "REVISAR",
+                    if (site.coherent) stringResource(R.string.coherent) else stringResource(R.string.review),
                     color = color, fontFamily = FontFamily.Monospace, fontSize = 9.sp, fontWeight = FontWeight.Bold
                 )
             }
             Text(
-                "${site.identities.size} sectores · separación ${site.minSpreadM.roundToInt()}–${site.maxSpreadM.roundToInt()} m",
+                stringResource(R.string.site_spread_format, site.identities.size, site.minSpreadM.roundToInt(), site.maxSpreadM.roundToInt()),
                 color = Color(0xFF888888), fontFamily = FontFamily.Monospace, fontSize = 9.sp
             )
             if (!site.coherent) {
                 Text(
-                    "Los sectores agrupados bajo este eNodeB aparecen muy separados. Puede indicar " +
-                        "una identidad reutilizada o anómala, pero también una red distribuida; " +
-                        "revísalo junto con el resto de evidencias.",
+                    stringResource(R.string.site_warning),
                     color = Color(0xFFCF6679), fontFamily = FontFamily.Monospace,
                     fontSize = 8.sp, lineHeight = 11.sp, modifier = Modifier.padding(top = 3.dp)
                 )
@@ -412,7 +404,7 @@ private fun RouteGeometryCard(route: CellGeometry.RouteCheck) {
             )
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                 Text(
-                    "centros ${route.centerDistanceM.roundToInt()} m · sin explicar ${route.unexplainedGapM.roundToInt()} m",
+                    stringResource(R.string.route_distance_format, route.centerDistanceM.roundToInt(), route.unexplainedGapM.roundToInt()),
                     color = Color(0xFF888888), fontFamily = FontFamily.Monospace, fontSize = 9.sp
                 )
                 Text(
