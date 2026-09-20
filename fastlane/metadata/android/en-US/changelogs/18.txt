@@ -1,0 +1,3 @@
+Prevents isolated GPS jumps from triggering geographic anomalies. High-speed movement now remains
+provisional until a second, genuinely new fix confirms a coherent trajectory; cached repeats never
+count. Legitimate train travel remains supported. No database, CSV or heuristic-threshold change.

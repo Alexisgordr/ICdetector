@@ -1,5 +1,23 @@
 # Changelog
 
+## 2.5.2
+
+### GNSS continuity validation
+
+- Replaced the single `400 km/h` plausibility cutoff with a continuity gate. Ordinary movement is
+  still accepted immediately, while a high-speed displacement remains provisional until a second,
+  genuinely newer GNSS fix confirms a coherent trajectory.
+- Cached repetitions of the same `Location` timestamp can no longer advance recovery or turn one
+  bad coordinate into several confirmations.
+- A return to the last accepted area cancels a provisional excursion immediately. Rejected or
+  provisional coordinates never reach H11/H13 and are not persisted as valid device positions.
+- Sustained high-speed rail travel remains supported: two distinct, spatially coherent fixes admit
+  the new trajectory instead of relying on a lower hard speed limit.
+- Added regression coverage for the field case that jumped 18.5 km and returned, duplicate cached
+  fixes, normal road travel and a coherent high-speed train trajectory.
+- No database migration, heuristic weight, confirmation threshold or CSV schema change.
+- Updated release metadata to `versionName 2.5.2` and `versionCode 18`.
+
 ## 2.5.1
 
 ### Trusted baselines and evidence-aware confirmation

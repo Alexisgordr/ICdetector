@@ -245,6 +245,13 @@ RSRQ/SINR and RF-identity baselines. A suspicious observation therefore cannot r
 reference that will later judge it. This may make new cells show an immature baseline for longer;
 that abstention is intentional.
 
+From version 2.5.2, geographic evidence also passes a GNSS continuity gate. Ordinary movement is
+accepted immediately. A displacement implying high speed remains provisional until a second,
+genuinely newer fix continues coherently in the new area. Repeated reads of one cached fix do not
+count, and an immediate return to the accepted area discards the excursion. During validation the
+location is unavailable to H11/H13 rather than being treated as evidence. This also supports fast
+trains without lowering a single hard speed limit for every journey.
+
 Temporal confirmation is also evidence-aware. A single or weak anomaly still needs three distinct
 modem observations. If two or more independent high-value checks among geographic consistency
 (H11), signal baseline (H13), RF identity stability (H15) and transition coherence (H16) fail in

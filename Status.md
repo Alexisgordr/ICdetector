@@ -1,5 +1,24 @@
 # ICdetection Status
 
+## v2.5.2 — GNSS continuity hardening
+
+**Release:** stable
+**Version code:** 18
+**Database schema:** 15 (unchanged)
+**Detection baseline:** unchanged; invalid GNSS candidates are stopped before geographic analysis
+
+v2.5.2 fixes a field-confirmed path to a false H11 observation. A fresh GPS coordinate with stated
+accuracy below 100 metres could still be many kilometres wrong; when enough time had elapsed since
+the previous accepted fix, the old `400 km/h` cutoff could classify that excursion as plausible.
+Repeated reads could then trigger the old three-rejection recovery path.
+
+High-speed displacement is now provisional until a second, distinct GNSS timestamp confirms a
+spatially coherent trajectory. Cached repetitions cannot advance the gate, and returning to the
+last accepted area cancels the excursion. A real train remains supported after one confirmation
+interval, while a single out-and-back GPS spike never reaches H11/H13 or valid-position storage.
+
+The patch changes no heuristic weight, temporal threat threshold, database schema or CSV column.
+
 ## v2.5.1 — trusted-baseline hardening
 
 **Release:** stable

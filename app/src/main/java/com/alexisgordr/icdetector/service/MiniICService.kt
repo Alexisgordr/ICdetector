@@ -22,6 +22,7 @@ import androidx.core.app.NotificationCompat
 import androidx.core.content.ContextCompat
 import com.alexisgordr.icdetector.MainActivity
 import com.alexisgordr.icdetector.core.CollectionHealth
+import com.alexisgordr.icdetector.core.GpsFixContinuity
 import com.alexisgordr.icdetector.core.ThreatAnalyzer
 import com.alexisgordr.icdetector.core.VerificationDecision
 import com.alexisgordr.icdetector.models.*
@@ -1429,31 +1430,21 @@ class MiniICService : Service() {
 
     // Fix #2: último fix GPS aceptado como bueno, para validar plausibilidad del siguiente.
     private var lastAcceptedLocation: Location? = null
-    private var implausibleFixCount = 0
+    private val gpsFixContinuity = GpsFixContinuity()
     private var lastPersistedLocTime = 0L  // evita reescribir prefs con el mismo getLastKnownLocation
 
-    // ¿Es plausible este fix respecto al último aceptado? Un fix puede pasar los filtros de
-    // precisión y antigüedad y aun así situarte a cientos de km por un error del GPS (visto en
-    // campo: una observación en Pamplona con coordenada en los Países Bajos, ~1.100 km). Si la
-    // velocidad implícita respecto al último fix bueno supera 400 km/h —por encima de cualquier
-    // desplazamiento terrestre normal (coche/tren)— el fix es basura y se descarta. Si se
-    // rechazan varios seguidos, la referencia es la sospechosa: se suelta y se acepta el nuevo
-    // para no quedarnos bloqueados sin coordenada indefinidamente (auto-recuperación).
+    // Los desplazamientos ordinarios se aceptan inmediatamente. Un salto que implique alta
+    // velocidad queda provisional hasta que otro fix NUEVO confirme continuidad. Así un tren no
+    // se bloquea, pero un salto GPS aislado no llega a H11 ni puede confirmarse leyendo tres veces
+    // el mismo getLastKnownLocation.
     private fun isPlausibleFix(candidate: Location): Boolean {
-        val prev = lastAcceptedLocation ?: return true
-        val meters = prev.distanceTo(candidate)
-        val seconds = ((candidate.time - prev.time) / 1000.0).coerceAtLeast(1.0)
-        val speedKmh = (meters / seconds) * 3.6
-        if (speedKmh <= 400.0) {
-            implausibleFixCount = 0
-            return true
-        }
-        implausibleFixCount++
-        if (implausibleFixCount >= 3) {
-            implausibleFixCount = 0
-            return true
-        }
-        return false
+        fun Location.asContinuityFix() = GpsFixContinuity.Fix(
+            latitude = latitude,
+            longitude = longitude,
+            timeMillis = time,
+            accuracyMeters = accuracy
+        )
+        return gpsFixContinuity.accept(lastAcceptedLocation?.asContinuityFix(), candidate.asContinuityFix())
     }
 
     // Acepta un fix como nueva referencia de plausibilidad y lo persiste, de modo que la

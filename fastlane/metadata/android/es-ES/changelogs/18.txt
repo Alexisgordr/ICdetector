@@ -1,0 +1,4 @@
+Evita que saltos GPS aislados activen anomalías geográficas. Un desplazamiento rápido queda
+provisional hasta que un segundo fix realmente nuevo confirme una trayectoria coherente; las
+repeticiones en caché no cuentan. Mantiene los viajes legítimos en tren. Sin cambios de base de
+datos, CSV ni umbrales heurísticos.
