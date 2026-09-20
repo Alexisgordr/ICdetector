@@ -1,0 +1,4 @@
+Nueva pestaña GEOMETRÍA sin conexión para celdas y handovers observados localmente, sin mapas ni
+bases externas. Señala para revisión sectores LTE muy separados agrupados bajo el mismo eNodeB
+lógico. H16 comprueba geometría madura contradictoria antes de aceptar los atajos de vecina o ruta
+confiable. La evidencia de Timing Advance sobrevive a reinicios. Corregido el bloqueo Tor/latencia.

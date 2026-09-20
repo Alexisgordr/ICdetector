@@ -28,9 +28,22 @@ import com.alexisgordr.icdetector.models.TimingAdvanceUnit
  *    celda distintas, todas reportando 0, para concluir que es un stub. Con una sola celda no se
  *    puede afirmar: quizá de verdad la tienes encima.
  *
- * El estado vive en memoria y se reconstruye en minutos tras un reinicio. Es a propósito: es una
- * conclusión sobre el hardware, barata de rederivar, y prefiero que se vuelva a comprobar sola
- * antes que arrastrar en disco un veredicto que quizá se emitió con datos pobres.
+ * ── v2.5: LA EVIDENCIA SE PERSISTE, EL VEREDICTO NO ─────────────────────────────────────────
+ *
+ * Hasta v2.4 todo el estado vivía solo en memoria, con este argumento: es una conclusión sobre el
+ * hardware, barata de rederivar, y más vale recomprobarla que arrastrar en disco un veredicto
+ * emitido con datos pobres. El argumento sigue siendo bueno; el efecto medido, no.
+ *
+ * Lo que se vio en 713 filas de campo: **394 muestras etiquetadas `STUB_ZERO` y 319 etiquetadas
+ * `LTE_INDEX`, todas con TA = 0.** Mismo módem, mismo cero, dos etiquetas distintas según si el
+ * servicio había reiniciado hacía poco. Esa columna del historial deja de ser autoconsistente, y
+ * en una campaña de tres meses eso no se arregla después: no hay forma de saber, mirando una fila
+ * vieja, si el `LTE_INDEX` significa "medida real" o "todavía no había pruebas suficientes".
+ *
+ * La solución conserva el argumento original: se persiste la EVIDENCIA (el latch de que el módem
+ * reportó alguna vez, y las identidades vistas con cero), nunca la conclusión. [isStub] se sigue
+ * derivando de la evidencia en cada consulta, así que un cambio futuro de [MIN_DISTINCT_CELLS]
+ * reevalúa el pasado en lugar de heredar un veredicto congelado.
  */
 class TimingAdvanceSanity {
 
@@ -48,19 +61,47 @@ class TimingAdvanceSanity {
     val zeroOnlyCellCount: Int
         get() = zeroOnlyCells.size
 
+    /** Evidencia acumulada, para que quien llama la guarde entre arranques. Copia defensiva. */
+    val zeroOnlyCellKeys: Set<String>
+        get() = zeroOnlyCells.toSet()
+
+    /**
+     * Restaura la evidencia de un arranque anterior. Devuelve true si el estado visible cambió,
+     * para que quien llama sepa si merece la pena repintar el diagnóstico.
+     *
+     * No restaura un veredicto: [isStub] se recalcula igual que siempre a partir de lo restaurado.
+     * Un latch [hasSeenRealValue] a true descarta la lista de ceros, porque ya no aporta nada.
+     */
+    fun restore(hasSeenRealValue: Boolean, zeroOnlyCellKeys: Set<String>): Boolean {
+        val before = isStub
+        if (hasSeenRealValue) {
+            this.hasSeenRealValue = true
+            zeroOnlyCells.clear()
+        } else {
+            zeroOnlyCells.addAll(zeroOnlyCellKeys.take(MAX_PERSISTED_CELLS))
+        }
+        return before != isStub
+    }
+
     /**
      * Registra una observación. [cellKey] debe ser la identidad completa de la celda
      * (`MCC-MNC-TAC-CID`); un TA null (el módem declaró honestamente que no hay dato) no aporta
      * evidencia en ninguna dirección y se ignora.
+     *
+     * Devuelve true si la EVIDENCIA cambió y conviene volver a guardarla en disco. Así el
+     * servicio escribe en preferencias solo cuando hay algo nuevo, y no en cada muestra.
      */
-    fun observe(cellKey: String, timingAdvance: Int?) {
-        if (timingAdvance == null) return
+    fun observe(cellKey: String, timingAdvance: Int?): Boolean {
+        if (timingAdvance == null) return false
         if (timingAdvance != 0) {
+            if (hasSeenRealValue) return false
             hasSeenRealValue = true
             zeroOnlyCells.clear()
-            return
+            return true
         }
-        if (!hasSeenRealValue) zeroOnlyCells.add(cellKey)
+        if (hasSeenRealValue) return false
+        if (zeroOnlyCells.size >= MAX_PERSISTED_CELLS) return false
+        return zeroOnlyCells.add(cellKey)
     }
 
     /**
@@ -84,5 +125,13 @@ class TimingAdvanceSanity {
          * primeros minutos de uso en movimiento.
          */
         const val MIN_DISTINCT_CELLS = 3
+
+        /**
+         * Tope de identidades guardadas en disco. La conclusión queda fijada a las
+         * [MIN_DISTINCT_CELLS], así que acumular más no cambia nada: solo hincharía las
+         * preferencias durante una campaña larga. Se mantiene holgado para que el diagnóstico
+         * ("N celdas distintas comprobadas") siga siendo informativo.
+         */
+        const val MAX_PERSISTED_CELLS = 64
     }
 }

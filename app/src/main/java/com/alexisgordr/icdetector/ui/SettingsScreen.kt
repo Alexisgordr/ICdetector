@@ -96,37 +96,7 @@ fun SettingsPanel(service: MiniICService?, onSave: () -> Unit) {
                 )
             )
             HorizontalDivider(color = Color(0xFF222222), modifier = Modifier.padding(vertical = 4.dp))
-            // Proxy Tor — se oculta si latencia experimental está activa
-            if (!latencyDetectionEnabled) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Column {
-                        Text(
-                            "Proxy Tor (Orbot)",
-                            color = Color.White,
-                            fontSize = 14.sp,
-                            fontFamily = FontFamily.Monospace
-                        )
-                        Text(
-                            "Enruta API por Tor (SOCKS5 9050)",
-                            color = Color(0xFF666666),
-                            fontSize = 10.sp,
-                            fontFamily = FontFamily.Monospace
-                        )
-                    }
-                    Switch(
-                        checked = proxyEnabled,
-                        onCheckedChange = { proxyEnabled = it },
-                        colors = SwitchDefaults.colors(
-                            checkedThumbColor = Color.White,
-                            checkedTrackColor = Color(0xFF4CAF50)
-                        )
-                    )
-                }
-            }
+
             // Leer estado WiFi de forma reactiva
             val isWifiActive by produceState(initialValue = false) {
                 while (true) {
@@ -157,6 +127,49 @@ fun SettingsPanel(service: MiniICService?, onSave: () -> Unit) {
             // La latencia se bloquea con WiFi o VPN activos.
             val latencyBlocked = isWifiActive || isVpnActive
 
+            // ── Proxy Tor ───────────────────────────────────────────────────────────────────
+            // v2.5 — Esta fila ya NO se oculta cuando la latencia está activa. Antes se ocultaba,
+            // y combinado con que el interruptor de latencia se deshabilita con Wi-Fi/VPN se
+            // producía un callejón sin salida: con la latencia guardada en ON y entrando a Ajustes
+            // con Wi-Fi puesto, no se podía apagar la latencia (interruptor gris) ni tocar Tor
+            // (fila oculta). La única salida era apagar el Wi-Fi y volver a entrar.
+            // Ahora la fila siempre está, en gris y con el motivo escrito cuando no se puede usar.
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column(Modifier.weight(1f)) {
+                    Text(
+                        "Proxy Tor (Orbot)",
+                        color = if (latencyDetectionEnabled) Color(0xFF444444) else Color.White,
+                        fontSize = 14.sp,
+                        fontFamily = FontFamily.Monospace
+                    )
+                    Text(
+                        if (latencyDetectionEnabled) {
+                            "No disponible con la sonda de latencia activa: Tor falsearía la medida."
+                        } else {
+                            "Enruta API por Tor (SOCKS5 9050)"
+                        },
+                        color = Color(0xFF666666),
+                        fontSize = 10.sp,
+                        fontFamily = FontFamily.Monospace,
+                        lineHeight = 13.sp
+                    )
+                }
+                Spacer(Modifier.width(8.dp))
+                Switch(
+                    checked = proxyEnabled,
+                    enabled = !latencyDetectionEnabled,
+                    onCheckedChange = { proxyEnabled = it },
+                    colors = SwitchDefaults.colors(
+                        checkedThumbColor = Color.White,
+                        checkedTrackColor = Color(0xFF4CAF50)
+                    )
+                )
+            }
+
             HorizontalDivider(color = Color(0xFF222222), modifier = Modifier.padding(vertical = 4.dp))
 
             Row(
@@ -186,10 +199,18 @@ fun SettingsPanel(service: MiniICService?, onSave: () -> Unit) {
                 Spacer(Modifier.width(8.dp))
                 Switch(
                     checked = latencyDetectionEnabled,
-                    enabled = !latencyBlocked,
-                    onCheckedChange = {
-                        latencyDetectionEnabled = it
-                        if (it) proxyEnabled = false
+                    // v2.5 — Wi-Fi/VPN bloquean ENCENDER la sonda, nunca apagarla. Antes bloqueaban
+                    // las dos direcciones, así que quien la dejaba activada se quedaba sin poder
+                    // desactivarla mientras hubiera Wi-Fi. Apagar algo siempre debe ser posible.
+                    enabled = !latencyBlocked || latencyDetectionEnabled,
+                    onCheckedChange = { requested ->
+                        // Encender exige que no haya Wi-Fi/VPN. Apagar siempre se permite.
+                        if (!requested) {
+                            latencyDetectionEnabled = false
+                        } else if (!latencyBlocked) {
+                            latencyDetectionEnabled = true
+                            proxyEnabled = false
+                        }
                     },
                     colors = SwitchDefaults.colors(
                         checkedThumbColor = Color.White,

@@ -66,6 +66,38 @@ class TransitionCoherenceTest {
         assertEquals(HeuristicStatus.PASSED, result.status)
     }
 
+    // ── v2.5: los atajos ya no ganan a la geometría ──────────────────────────────────────────
+
+    @Test fun `una vecina que contradice la geografia ya no se libra por serlo`() {
+        // EL ATAQUE QUE ESTO CIERRA: un IMSI-catcher local aparece en la lista de vecinas del
+        // módem antes de que el móvil se enganche. Hasta v2.4 eso bastaba para devolver PASSED
+        // sin llegar a comparar las zonas aprendidas — es decir, el ataque que H16 existe para
+        // cazar se saltaba H16 entera anunciándose como vecina.
+        val result = TransitionCoherence.evaluate(input(neighbor = true))
+        assertEquals(HeuristicStatus.FAILED, result.status)
+        assertTrue(result.explanation.contains("vecina"))
+    }
+
+    @Test fun `una ruta aprendida tampoco tapa una imposibilidad fisica`() {
+        val result = TransitionCoherence.evaluate(input(prior = 5, neighbor = true))
+        assertEquals(HeuristicStatus.FAILED, result.status)
+    }
+
+    @Test fun `sin baseline maduro la vecina sigue pasando como antes`() {
+        // La regresión que hay que evitar: exigir geometría donde no hay historial convertiría
+        // cada celda nueva en sospechosa. Sin muestras suficientes no hay nada que contradecir.
+        val result = TransitionCoherence.evaluate(input(to = emptyList(), neighbor = true))
+        assertEquals(HeuristicStatus.PASSED, result.status)
+        assertTrue("No puede enseñar la ruta al baseline sin historial", !result.eligibleForLearning)
+    }
+
+    @Test fun `una vecina coherente pasa y ademas es apta para aprender`() {
+        val nearby = madrid.map { CellLocationSample(it.latitude + 0.002, it.longitude + 0.002) }
+        val result = TransitionCoherence.evaluate(input(to = nearby, neighbor = true))
+        assertEquals(HeuristicStatus.PASSED, result.status)
+        assertTrue(result.eligibleForLearning)
+    }
+
     @Test fun `H16 entra en el informe y no puede activar una alerta por si sola`() {
         val cell = CellData(
             isRegistered = true, networkType = "4G LTE", cellId = "B", mnc = "01",

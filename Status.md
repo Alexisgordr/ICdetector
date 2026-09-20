@@ -1,11 +1,26 @@
 # ICdetection Status
 
-## v2.4.0 — continuous GPS collection release
+## v2.5.0 — offline cell geometry release
 
 **Release:** stable
-**Version code:** 15
+**Version code:** 16
 **Database schema:** 15
-**Detection baseline:** unchanged from v2.3.0
+**Detection baseline:** H16 shortcut handling updated in v2.5.0
+
+v2.5.0 adds a fifth, read-only **GEOMETRÍA** tab. It renders observation centres, P90 radii,
+handover routes and LTE eNodeB groupings from the device's own database without maps, tiles or
+external location services. The view is diagnostic and never changes the score or learned data.
+
+H16 now evaluates mature contradictory geometry before accepting the neighbour and previously
+trusted-route shortcuts. Timing Advance hardware evidence is persisted across service restarts so
+the same modem zero is not alternately exported as `LTE_INDEX` and `STUB_ZERO`. This release is a
+dataset cut: record the installation date. Database schema and CSV columns remain unchanged.
+
+An eNodeB grouping is not asserted to be a physical tower. Large separation is shown as a review
+signal because legitimate distributed deployments or remote radio heads may share one logical
+eNodeB.
+
+### v2.4.0 — continuous GPS collection
 
 v2.4.0 keeps the GPS-only stream and collection loop active throughout the lifetime of the
 foreground service, including with the screen off. A partial wake lock reduces overnight CPU-sleep

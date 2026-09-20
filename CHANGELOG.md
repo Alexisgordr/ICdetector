@@ -1,5 +1,62 @@
 # Changelog
 
+## 2.5.0
+
+### Cell geometry tab
+
+- New `GEOMETRÍA` tab in the history screen: draws the handover graph over the positions this
+  device itself observed, with no map tiles, no map SDK and no external cell database. The whole
+  view is rendered offline on a `Canvas`, so displaying it emits no network request that could
+  reveal where the user lives.
+- Node circles represent the P90 radius of the device's own observations, drawn to scale. Edges are
+  handovers, weighted by observation count and coloured by learned trust ratio.
+- LTE eNodeB grouping check (`eNodeB = CID / 256`): sectors grouped under one logical eNodeB are
+  highlighted when their learned observation centres are unusually far apart. This is a review
+  signal, not proof of a rogue cell: distributed deployments and remote radio heads can be
+  legitimate. Deliberately restricted to LTE because NR uses an operator-chosen gNB/cell split.
+- Route coherence check: unexplained gap between the learned centres of two cells that hand over
+  to each other, after subtracting both P90 radii.
+- The tab is read-only and diagnostic. It does not alter the score, open forensic cases or teach
+  routes to the baseline. Centres are labelled "observation centre", never "antenna position".
+- Centroid mathematics now lives in a single place (`CellGeometry`) and H16 consumes it from
+  there, so the screen cannot drift from what the detector actually decides.
+- New aggregate query `getAllCellLocationSamples()`: profiles every cell in one pass instead of one
+  query per cell. Read-only, no schema change.
+
+### H16: shortcuts no longer override geometry
+
+- Until 2.4.0 the first check in `TransitionCoherence.evaluate()` returned PASSED whenever the
+  destination cell had been visible as a neighbour before the handover, without ever comparing the
+  learned zones. A local IMSI catcher appears in the neighbour list, so the attack H16 exists to
+  detect could bypass H16 entirely by announcing itself. The same applied to the
+  `priorTrustedTransitions >= 2` shortcut.
+- Geometry is now computed first, and both shortcuts apply only when no geometric contradiction
+  exists over mature baselines. Cells without sufficient history still pass as before: abstaining
+  where there is nothing to contradict remains correct.
+
+### Timing Advance diagnosis survives restarts
+
+- Field measurement over 713 rows: 394 samples labelled `STUB_ZERO` and 319 labelled `LTE_INDEX`,
+  all with TA = 0. Same modem, same zero, different labels depending on how recently the service
+  had restarted, leaving that history column not self-consistent.
+- The evidence (the real-value latch and the zero-only cell identities) is now persisted; the
+  verdict is not. `isStub` is still derived from the evidence on every query, so a future change to
+  `MIN_DISTINCT_CELLS` re-evaluates the past instead of inheriting a frozen conclusion.
+
+### Fixes and cleanup
+
+- Settings could trap the user: the Tor proxy row was hidden while latency detection was enabled,
+  and the latency switch was disabled under Wi-Fi/VPN, so entering settings with latency saved as
+  on and Wi-Fi active left neither control reachable. The Tor row is now always shown (greyed with
+  the reason), and Wi-Fi/VPN block only turning latency on, never off.
+- Audit log said "15 REGLAS" while the report counts 16.
+- Retention comment corrected from 60 to 120 days.
+- Removed unreachable code: `DataBox`, `TemporalConfidence.streakOf`, `VerificationStatus.isConclusive`,
+  the unused `neighbors` parameter of `verifyCell`, and the `FileProvider` manifest entry plus
+  `file_paths.xml` (exports use the Storage Access Framework; nothing referenced the provider).
+- Test suite: 216 tests passing under the real Android/Compose Gradle build.
+- Updated release metadata to `versionName 2.5.0` and `versionCode 16`.
+
 ## 2.4.0
 
 ### Continuous GPS collection

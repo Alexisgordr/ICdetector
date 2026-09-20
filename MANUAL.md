@@ -114,7 +114,7 @@ The score is a decision aid, not a measured probability that an IMSI catcher exi
 
 ## 5. Heuristic diagnostics
 
-Version 2.4.0 exposes the state and explanation of each evaluated rule:
+Version 2.5.0 exposes the state and explanation of each evaluated rule:
 
 - **PASS:** The rule ran with sufficient data and did not detect its suspicious condition.
 - **FAIL:** The rule ran and detected its suspicious condition. One failed rule does not automatically confirm a threat.
@@ -138,6 +138,17 @@ The **CORDURA DE MOVILIDAD · H16** card audits a real serving-cell transition. 
 distance actually travelled by the phone, GPS accuracy, cells visible as neighbours immediately
 before the handover, the locally learned observation zones of both cells, and trusted previous
 transitions.
+
+From v2.5.0, a neighbour announcement or a previously trusted route no longer overrides a mature,
+contradictory geographic baseline. Without enough samples at both endpoints, H16 still abstains or
+accepts the shortcut as before; it does not treat a new cell as suspicious merely for being new.
+
+### Offline geometry view
+
+The **GEOMETRÍA** tab draws observation centres, P90 coverage of the phone's own samples and known
+handover routes entirely on-device. It makes no map or external database request and does not alter
+the score. LTE sectors grouped under one logical eNodeB are highlighted when unusually separated,
+but this is only a review signal: distributed radio deployments can also produce that pattern.
 
 - `COHERENT` means that the available movement evidence explains the handover.
 - `INCOHERENT` means that mature local evidence describes a physically implausible jump. H16 has

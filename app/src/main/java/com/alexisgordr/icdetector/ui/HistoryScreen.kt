@@ -54,6 +54,9 @@ fun HistoryPanel(dbHelper: CellDbHelper, onBack: () -> Unit) {
     var showIncidents by remember { mutableStateOf(false) }
     var showForensics by remember { mutableStateOf(false) }
     var showTopology by remember { mutableStateOf(false) }
+    // v2.5 — Pestaña de geometría: grafo de handovers sobre las posiciones observadas por este
+    // propio teléfono, sin mapas ni bases externas. Ver GeometryScreen.
+    var showGeometry by remember { mutableStateOf(false) }
     var forensicCases by remember { mutableStateOf<List<ForensicCase>>(emptyList()) }
     var transitions by remember { mutableStateOf<List<CellTransitionSummary>>(emptyList()) }
     val showDeleteConfirm = remember { mutableStateOf(false) }
@@ -163,6 +166,7 @@ fun HistoryPanel(dbHelper: CellDbHelper, onBack: () -> Unit) {
             Text(when {
                 showForensics -> "LABORATORIO FORENSE"
                 showTopology -> "TOPOLOGÍA DE HANDOVERS"
+                showGeometry -> "GEOMETRÍA DE CELDAS"
                 showIncidents -> "CAJA NEGRA DE INCIDENTES"
                 else -> "HISTORIAL DE ANTENAS"
             }, color = Color(0xFF666666), fontFamily = FontFamily.Monospace, fontSize = 12.sp)
@@ -172,10 +176,11 @@ fun HistoryPanel(dbHelper: CellDbHelper, onBack: () -> Unit) {
             Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
             horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            FilterChip(selected = !showIncidents && !showForensics && !showTopology, onClick = { showIncidents = false; showForensics = false; showTopology = false }, label = { Text("ANTENAS") })
-            FilterChip(selected = showIncidents, onClick = { showIncidents = true; showForensics = false; showTopology = false }, label = { Text("INCIDENTES") })
-            FilterChip(selected = showForensics, onClick = { showForensics = true; showIncidents = false; showTopology = false }, label = { Text("FORENSE") })
-            FilterChip(selected = showTopology, onClick = { showTopology = true; showIncidents = false; showForensics = false }, label = { Text("TOPOLOGÍA") })
+            FilterChip(selected = !showIncidents && !showForensics && !showTopology && !showGeometry, onClick = { showIncidents = false; showForensics = false; showTopology = false; showGeometry = false }, label = { Text("ANTENAS") })
+            FilterChip(selected = showIncidents, onClick = { showIncidents = true; showForensics = false; showTopology = false; showGeometry = false }, label = { Text("INCIDENTES") })
+            FilterChip(selected = showForensics, onClick = { showIncidents = false; showForensics = true; showTopology = false; showGeometry = false }, label = { Text("FORENSE") })
+            FilterChip(selected = showTopology, onClick = { showIncidents = false; showForensics = false; showTopology = true; showGeometry = false }, label = { Text("TOPOLOGÍA") })
+            FilterChip(selected = showGeometry, onClick = { showIncidents = false; showForensics = false; showTopology = false; showGeometry = true }, label = { Text("GEOMETRÍA") })
         }
 
         if (showForensics) {
@@ -188,6 +193,10 @@ fun HistoryPanel(dbHelper: CellDbHelper, onBack: () -> Unit) {
         }
         if (showTopology) {
             TopologyPanel(transitions, Modifier.fillMaxWidth().weight(1f))
+            return@Column
+        }
+        if (showGeometry) {
+            GeometryScreen(dbHelper, Modifier.fillMaxWidth().weight(1f))
             return@Column
         }
 

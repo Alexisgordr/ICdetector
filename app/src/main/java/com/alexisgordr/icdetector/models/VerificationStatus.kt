@@ -51,13 +51,4 @@ enum class VerificationStatus {
      * 403, 429, 503, JSON corrupto. Se reintenta enseguida.
      */
     ERROR;
-
-    /**
-     * ¿Es una respuesta firme sobre la antena, que merece guardarse como conclusión?
-     *
-     * Solo [VERIFIED] y [NOT_FOUND]. [REJECTED] y [ERROR] son estados de la conversación con la
-     * API, no conclusiones, y por eso no se consolidan en el historial como veredicto.
-     */
-    val isConclusive: Boolean
-        get() = this == VERIFIED || this == NOT_FOUND
 }

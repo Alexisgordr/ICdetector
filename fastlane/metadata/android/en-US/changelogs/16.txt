@@ -1,0 +1,4 @@
+New offline GEOMETRY tab for locally observed cells and handovers, with no maps or external cell
+database. Highlights unusually separated LTE sectors grouped under one logical eNodeB as a review
+signal. H16 now checks mature contradictory geometry before accepting neighbour or trusted-route
+shortcuts. Timing Advance evidence survives restarts. Fixes the Tor/latency settings deadlock.

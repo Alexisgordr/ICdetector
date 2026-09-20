@@ -316,6 +316,7 @@ class MiniICService : Service() {
         isProxyEnabled = prefs.getBoolean("proxy_enabled", false)
         isLatencyDetectionEnabled = prefs.getBoolean("latency_detection_enabled", false)
         loadPersistedLastAcceptedLocation()  // referencia de plausibilidad superviviente a reinicios
+        restoreTaSanityEvidence()            // evidencia de TA superviviente a reinicios (v2.5)
 
         if (wigleApiName.isNotBlank() || openCellIdKey.isNotBlank()) {
             hasLoggedMissingCredentials = false
@@ -1065,7 +1066,10 @@ class MiniICService : Service() {
                 // "Proximidad anómala (TA)" originado en el firmware, no en la red.
                 val current = list[activeIndex]
                 val taKey = current.identityKey
-                taSanity.observe(taKey, current.timingAdvance)
+                // v2.5 — La evidencia sobrevive a los reinicios del servicio; sin esto, la misma
+                // lectura de TA=0 se etiquetaba LTE_INDEX o STUB_ZERO según cuánto llevara vivo el
+                // proceso, y el historial dejaba de ser autoconsistente (medido: 319 vs 394 filas).
+                if (taSanity.observe(taKey, current.timingAdvance)) persistTaSanityEvidence()
                 val effectiveUnit = taSanity.effectiveUnit(current.timingAdvanceUnit, current.timingAdvance)
                 if (effectiveUnit != current.timingAdvanceUnit) {
                     list[activeIndex] = current.copy(timingAdvanceUnit = effectiveUnit)
@@ -1322,7 +1326,7 @@ class MiniICService : Service() {
                         checkAlerts(confirmedActive.copy(verified = knownStatus), confirmed = true)
 
                         // 3. Iniciar proceso de verificación (solo si es necesario)
-                        verifyCell(active, neighbors)
+                        verifyCell(active)
                         
                         val finalStatus = verificationCache[cacheKey] ?: knownStatus
                         
@@ -1490,6 +1494,41 @@ class MiniICService : Service() {
         } catch (_: Exception) {}
     }
 
+    /**
+     * Recupera la evidencia del diagnóstico de Timing Advance guardada por arranques anteriores.
+     *
+     * Se restaura EVIDENCIA, no veredicto: `isStub` se sigue derivando de ella, de modo que si
+     * algún día cambia `MIN_DISTINCT_CELLS` el pasado se reevalúa en lugar de heredar una
+     * conclusión congelada. Si las preferencias están corruptas o vacías, se empieza de cero:
+     * la evidencia se rederiva sola en unos minutos de uso en movimiento.
+     */
+    private fun restoreTaSanityEvidence() {
+        try {
+            val p = getSharedPreferences("miniic_prefs", MODE_PRIVATE)
+            val seenReal = p.getBoolean(KEY_TA_SEEN_REAL, false)
+            val cells = p.getStringSet(KEY_TA_ZERO_CELLS, emptySet()).orEmpty()
+            if (!seenReal && cells.isEmpty()) return
+            taSanity.restore(seenReal, cells)
+            if (taSanity.isStub) {
+                appendLog(
+                    "[TA]",
+                    "Diagnóstico de TA recuperado del arranque anterior: el módem no rellena el campo " +
+                        "(${taSanity.zeroOnlyCellCount} celdas distintas con 0). No se deduce distancia."
+                )
+            }
+        } catch (_: Exception) {}
+    }
+
+    /** Guarda la evidencia de TA. Se llama solo cuando [TimingAdvanceSanity.observe] dice que cambió. */
+    private fun persistTaSanityEvidence() {
+        try {
+            getSharedPreferences("miniic_prefs", MODE_PRIVATE).edit()
+                .putBoolean(KEY_TA_SEEN_REAL, taSanity.hasSeenRealValue)
+                .putStringSet(KEY_TA_ZERO_CELLS, taSanity.zeroOnlyCellKeys)
+                .apply()
+        } catch (_: Exception) {}
+    }
+
     private fun getCurrentLocation(): Location? {
         return try {
             if (ContextCompat.checkSelfPermission(
@@ -1633,7 +1672,7 @@ class MiniICService : Service() {
 
             verificationCache.remove(cacheKey)
             appendLog("[GPS]", "GPS estabilizado — relanzando verificación")
-            verifyCell(currentCell, _cellFlow.value.filter { !it.isRegistered })
+            verifyCell(currentCell)
         }
     }
 
@@ -1735,7 +1774,7 @@ class MiniICService : Service() {
             it.isNotBlank() && it != "N/A" && it.toLongOrNull() != null
         }
 
-    private fun verifyCell(cell: CellData, neighbors: List<CellData>) {
+    private fun verifyCell(cell: CellData) {
         // No se pregunta por una celda cuya identidad no es una identidad.
         //
         // El guard anterior miraba CID, MNC y MCC, pero dejaba pasar el área: con el TAC a "N/A" la
@@ -2096,7 +2135,7 @@ class MiniICService : Service() {
      * lo que de verdad alimenta los baselines (H13, huella RSRQ/SINR, reputación). Coste real:
      *  - Batería: desde v2.4 el stream GPS permanece activo 24/7 por decisión de producto. Si aun
      *    así no existe un fix fresco, se conserva el refuerzo puntual y acotado de 20 s.
-     *  - Disco: ~150 filas/día, unas 9.000 en los 60 días de retención. Trivial para SQLite.
+     *  - Disco: ~150 filas/día, unas 18.000 en los 120 días de retención. Trivial para SQLite.
      *
      * La cadencia es más lenta con la pantalla apagada, coherente con el diseño de bajo consumo.
      */
@@ -2534,7 +2573,7 @@ class MiniICService : Service() {
         // sin decir cuál es cuál son un registro forense inservible.
         auditedCellKey = cell.identityKey
         auditedVerified = cell.verified
-        appendLog("[AUDIT]", "--- CICLO DE AUDITORÍA (15 REGLAS) · Celda ${cell.cellId} (${cell.mcc}-${cell.mnc}-${cell.tac}) ---")
+        appendLog("[AUDIT]", "--- CICLO DE AUDITORÍA (16 REGLAS) · Celda ${cell.cellId} (${cell.mcc}-${cell.mnc}-${cell.tac}) ---")
         val report = cell.heuristicReport
         val results = mapOf(
             "1. Celda Aislada" to report.isolatedCell,
@@ -2647,6 +2686,10 @@ class MiniICService : Service() {
         // Persistencia de la referencia de plausibilidad GPS entre reinicios (cierra el hueco
         // de arranque de isPlausibleFix, donde el primer fix se aceptaba sin comparar).
         private const val KEY_LAST_LOC = "last_accepted_loc"
+        // v2.5 — Evidencia del diagnóstico de Timing Advance, superviviente a reinicios del
+        // servicio. Ver TimingAdvanceSanity: se guarda la evidencia, nunca el veredicto.
+        private const val KEY_TA_SEEN_REAL = "ta_seen_real_value"
+        private const val KEY_TA_ZERO_CELLS = "ta_zero_only_cells"
         private const val KEY_WIGLE_RATE_LIMITED_UNTIL = "wigle_rate_limited_until"
         private const val KEY_LAST_SUCCESSFUL_WRITE = "last_successful_write_ms"
         /** Tiempo que la notificación sigue recordando que hubo un hueco en la recolección. */

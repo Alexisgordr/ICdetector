@@ -21,21 +21,6 @@ import com.alexisgordr.icdetector.models.HeuristicDiagnostic
 import com.alexisgordr.icdetector.models.TransitionCoherenceResult
 
 @Composable
-fun DataBox(modifier: Modifier, label: String, value: String, highlight: Boolean = false) {
-    Column(modifier = modifier) {
-        Text(label, color = Color(0xFF555555), fontFamily = FontFamily.Monospace, fontSize = 10.sp, fontWeight = FontWeight.Bold)
-        Spacer(Modifier.height(4.dp))
-        Text(
-            text = value, 
-            color = if (highlight) Color(0xFFE0E0E0) else Color.White, 
-            fontFamily = FontFamily.Monospace, 
-            fontSize = 14.sp, 
-            fontWeight = FontWeight.SemiBold,
-        )
-    }
-}
-
-@Composable
 fun AuthorSignature() {
     Column(
         modifier = Modifier

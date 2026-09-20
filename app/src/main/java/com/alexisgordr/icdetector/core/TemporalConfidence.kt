@@ -31,9 +31,6 @@ class TemporalConfidence(
     private var lastObservationToken: Long? = null
     private var lastAcceptedAtMs: Long? = null
 
-    /** Racha actual de la celda (para diagnóstico y tests). */
-    fun streakOf(cell: CellData): Int = anomalyStreaks[keyOf(cell)] ?: 0
-
     /** Olvida todas las rachas. Útil al reiniciar el servicio o entre escenarios de test. */
     fun reset() {
         anomalyStreaks.clear()

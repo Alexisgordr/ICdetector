@@ -271,6 +271,52 @@ class CellDbHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME, 
         return out
     }
 
+    /**
+     * Igual que [getCellLocationSamples] pero para TODAS las celdas en una sola pasada, indexado
+     * por identidad (`MCC-MNC-TAC-CID-RADIO`).
+     *
+     * Existe por una razón de coste, no de comodidad: la pestaña de geometría necesita el perfil
+     * de varias decenas de celdas a la vez, y hacerlo con [getCellLocationSamples] serían tantas
+     * consultas como celdas. Aquí se recorre el historial una vez, en orden descendente, y se
+     * queda con las [perCell] muestras más recientes de cada identidad — mismo criterio, mismo
+     * saneamiento de coordenadas y misma ventana de 30 días que la consulta por celda, para que
+     * los números que se dibujan sean exactamente los que usa H16.
+     *
+     * Es de solo lectura y no toca ni el baseline ni la detección.
+     */
+    fun getAllCellLocationSamples(
+        perCell: Int = 40,
+        days: Int = 30
+    ): Map<String, List<CellLocationSample>> {
+        val cutoff = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.ROOT).format(
+            Date(System.currentTimeMillis() - days.toLong() * 24 * 60 * 60 * 1000)
+        )
+        val out = LinkedHashMap<String, MutableList<CellLocationSample>>()
+        readableDatabase.rawQuery(
+            "SELECT $COLUMN_MCC,$COLUMN_MNC,$COLUMN_TAC,$COLUMN_CID,$COLUMN_RADIO," +
+                "$COLUMN_LAT,$COLUMN_LON FROM $TABLE_HISTORY " +
+                "WHERE $COLUMN_LAT IS NOT NULL AND $COLUMN_LON IS NOT NULL " +
+                "AND $COLUMN_TIMESTAMP>=? ORDER BY $COLUMN_ID DESC",
+            arrayOf(cutoff)
+        ).use { cursor ->
+            while (cursor.moveToNext()) {
+                val cid = cursor.getString(3) ?: continue
+                if (cid == "N/A") continue
+                val radio = cursor.getString(4) ?: continue
+                if (radio == RadioTech.UNKNOWN.name) continue
+                val lat = cursor.getDouble(5)
+                val lon = cursor.getDouble(6)
+                if (lat !in -90.0..90.0 || lon !in -180.0..180.0) continue
+                if (lat == 0.0 && lon == 0.0) continue
+                val identity = "${cursor.getString(0)}-${cursor.getString(1)}-" +
+                    "${cursor.getString(2)}-$cid-$radio"
+                val bucket = out.getOrPut(identity) { mutableListOf() }
+                if (bucket.size < perCell) bucket += CellLocationSample(lat, lon)
+            }
+        }
+        return out
+    }
+
     fun getTrustedTransitionCount(fromIdentity: String, toIdentity: String): Int =
         readableDatabase.rawQuery(
             "SELECT trusted_observations FROM $TABLE_CELL_TRANSITIONS " +
