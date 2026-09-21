@@ -25,3 +25,7 @@ with open(src, newline="", encoding="utf-8") as f, open(dst, "w", newline="", en
 print("escrito", dst)
 PY
 ```
+
+## Compatibilidad actual
+
+La interfaz de geometría y ANTENAS de v2.7.1 no cambia el esquema ni el CSV. Los historiales compatibles con el esquema 15 continúan reproduciéndose con el mismo motor de detección.

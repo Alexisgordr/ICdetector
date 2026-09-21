@@ -4,6 +4,9 @@
 *.iws
 out/
 .gradle/
+.gradle-user/
+.android-user-build/
+.tmp/
 build/
 app/build/
 captures/

@@ -16,6 +16,9 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.Share
+import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -47,6 +50,8 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.delay
+import java.text.DateFormat
+import java.util.Date
 
 private const val HISTORY_UI_RECORD_LIMIT = 2_000
 
@@ -158,6 +163,18 @@ fun HistoryPanel(dbHelper: CellDbHelper, onBack: () -> Unit) {
     }
 
     var expandedCids by remember { mutableStateOf(setOf<String>()) }
+    var antennaQuery by remember { mutableStateOf("") }
+    var openDetailSection by remember { mutableStateOf<Map<String, AntennaSection>>(emptyMap()) }
+    val filteredGroups = remember(groupedItems, antennaQuery) {
+        val terms = antennaQuery.trim().lowercase().split(Regex("\\s+")).filter(String::isNotBlank)
+        if (terms.isEmpty()) groupedItems else groupedItems.filter { (_, records) ->
+            val searchable = records.flatMap { record ->
+                listOf(record.cid, record.mcc, record.mnc, record.tac, record.pci?.toString(),
+                    record.arfcn?.toString(), record.radio.name, record.netType)
+            }.filterNotNull().joinToString(" ").lowercase()
+            terms.all(searchable::contains)
+        }
+    }
 
     Column(modifier = Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Row(
@@ -189,11 +206,15 @@ fun HistoryPanel(dbHelper: CellDbHelper, onBack: () -> Unit) {
         }
 
         if (showForensics) {
-            ForensicCaseList(dbHelper, forensicCases, Modifier.fillMaxWidth().weight(1f))
+            ForensicCaseList(dbHelper, forensicCases, Modifier.fillMaxWidth().weight(1f)) { deletedId ->
+                forensicCases = forensicCases.filterNot { it.id == deletedId }
+            }
             return@Column
         }
         if (showIncidents) {
-            IncidentList(incidents = incidents, modifier = Modifier.fillMaxWidth().weight(1f))
+            IncidentList(dbHelper, incidents, Modifier.fillMaxWidth().weight(1f)) { deletedId ->
+                incidents = incidents.filterNot { it.id == deletedId }
+            }
             return@Column
         }
         if (showTopology) {
@@ -221,7 +242,7 @@ fun HistoryPanel(dbHelper: CellDbHelper, onBack: () -> Unit) {
                     fontSize = 11.sp
                 )
             }
-            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+            Column(modifier = Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 val context = LocalContext.current
                 val exportLauncher = rememberLauncherForActivityResult(
                     contract = ActivityResultContracts.CreateDocument("text/csv")
@@ -254,6 +275,18 @@ fun HistoryPanel(dbHelper: CellDbHelper, onBack: () -> Unit) {
                     }
                 }
 
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                OutlinedTextField(
+                    value = antennaQuery,
+                    onValueChange = { antennaQuery = it },
+                    modifier = Modifier.weight(1f),
+                    singleLine = true,
+                    placeholder = { Text(stringResource(R.string.antenna_search_hint), fontSize = 10.sp) },
+                    leadingIcon = { Icon(Icons.Default.Search, null, Modifier.size(18.dp)) },
+                    trailingIcon = if (antennaQuery.isNotEmpty()) {{ IconButton(onClick = { antennaQuery = "" }) { Icon(Icons.Default.Close, stringResource(R.string.clear_search), Modifier.size(18.dp)) } }} else null,
+                    textStyle = LocalTextStyle.current.copy(fontFamily = FontFamily.Monospace, fontSize = 11.sp),
+                    shape = RoundedCornerShape(8.dp)
+                )
                 TextButton(
                     onClick = {
                         val fileName = "icdetector_history_${System.currentTimeMillis()}.csv"
@@ -265,9 +298,22 @@ fun HistoryPanel(dbHelper: CellDbHelper, onBack: () -> Unit) {
                     Spacer(Modifier.width(4.dp))
                     Text(stringResource(R.string.export_csv), fontFamily = FontFamily.Monospace, fontSize = 11.sp)
                 }
+                }
+                if (antennaQuery.isNotBlank()) {
+                    val suggestions = filteredGroups.take(5).map { (_, records) -> records.first() }
+                    Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        suggestions.forEach { record ->
+                            SuggestionChip(
+                                onClick = { antennaQuery = record.cid },
+                                label = { Text("CID ${record.cid} · ${record.radio.name}", fontFamily = FontFamily.Monospace, fontSize = 9.sp) }
+                            )
+                        }
+                        if (suggestions.isEmpty()) Text(stringResource(R.string.antenna_search_empty), color = Color(0xFF888888), fontSize = 10.sp)
+                    }
+                }
             }
             LazyColumn(modifier = Modifier.fillMaxWidth().weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                items(groupedItems, key = { it.first }) { (identity, records) ->
+                items(filteredGroups, key = { it.first }) { (identity, records) ->
                     val isExpanded = expandedCids.contains(identity)
                     val first = records.first()
                     
@@ -319,66 +365,9 @@ fun HistoryPanel(dbHelper: CellDbHelper, onBack: () -> Unit) {
                             if (isExpanded) {
                                 Spacer(Modifier.height(12.dp))
                                 HorizontalDivider(color = Color(0xFF222222))
-                                records.forEach { record ->
-                                    Column(modifier = Modifier.padding(vertical = 8.dp)) {
-                                        // Fila 1: Timestamp y dBm
-                                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                                            Text(record.timestamp, color = Color(0xFF666666), fontSize = 11.sp, fontFamily = FontFamily.Monospace)
-                                            Text("${record.dbm} dBm (${record.netType})", color = Color.White, fontSize = 11.sp, fontFamily = FontFamily.Monospace)
-                                        }
-                                        
-                                        // Fila 2: identidad de red (MCC/MNC/TAC) y Score
-                                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                                            Text(
-                                                "MCC/MNC: ${record.mcc}/${record.mnc} | TAC: ${record.tac}",
-                                                color = Color(0xFF888888),
-                                                fontSize = 10.sp,
-                                                fontFamily = FontFamily.Monospace,
-                                                maxLines = 1
-                                            )
-                                            // Mismo criterio que el monitor: el historial no puede
-                                            // pintar de otro color el mismo score.
-                                            val scoreColor = securityScoreColor(record.score)
-                                            Text("🛡️ ${record.score}%", color = scoreColor, fontSize = 12.sp, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Bold)
-                                        }
-                                        
-                                        // NUEVO: Fila 3 - Coordenadas y botón de mapa (si existen)
-                                        if (record.lat != null && record.lon != null) {
-                                            Row(
-                                                modifier = Modifier.fillMaxWidth(),
-                                                horizontalArrangement = Arrangement.SpaceBetween,
-                                                verticalAlignment = Alignment.CenterVertically
-                                            ) {
-                                                Text(
-                                                    "📍 ${String.format(java.util.Locale.ROOT, "%.4f", record.lat)}, ${String.format(java.util.Locale.ROOT, "%.4f", record.lon)}",
-                                                    color = Color(0xFF666666),
-                                                    fontSize = 9.sp,
-                                                    fontFamily = FontFamily.Monospace
-                                                )
-                                                LocationButton(record.lat, record.lon, record.cid)
-                                            }
-                                        }
-                                        
-                                        // Fallos de heurísticas (si los hay). v2.1: las
-                                        // observaciones sub-umbral (heurísticas que fallaron sin
-                                        // llegar a alarma) se registran desde esta versión y se
-                                        // muestran en gris, claramente separadas de una alarma
-                                        // real en rojo. Antes no se guardaban: la fila decía "OK".
-                                        if ((record.failedHeuristics.isNotBlank()) && (record.failedHeuristics != "OK")) {
-                                            Spacer(Modifier.height(4.dp))
-                                            val isSubThreshold = record.failedHeuristics.startsWith(SUBTHRESHOLD_PREFIX)
-                                            Text(
-                                                if (isSubThreshold) "· ${record.failedHeuristics.removePrefix(SUBTHRESHOLD_PREFIX).trim()}"
-                                                else "⚠️ Fallo: ${record.failedHeuristics}",
-                                                color = if (isSubThreshold) Color(0xFF777777) else Color(0xFFCF6679),
-                                                fontSize = 10.sp,
-                                                fontFamily = FontFamily.Monospace
-                                            )
-                                        }
-                                    }
-                                    if (record != records.last()) {
-                                        HorizontalDivider(color = Color(0xFF1A1A1A), thickness = 0.5.dp)
-                                    }
+                                AntennaDetailAccordions(identity, records, transitions, openDetailSection[identity]) { section ->
+                                    openDetailSection = if (openDetailSection[identity] == section) openDetailSection - identity
+                                    else openDetailSection + (identity to section)
                                 }
                             }
                         }
@@ -402,6 +391,60 @@ fun HistoryPanel(dbHelper: CellDbHelper, onBack: () -> Unit) {
             AuthorSignature()
         }
     }
+}
+
+private enum class AntennaSection { GPS, HANDOVERS, TECHNICAL }
+
+@Composable
+private fun AntennaDetailAccordions(
+    identity: String,
+    records: List<HistoryRecord>,
+    transitions: List<CellTransitionSummary>,
+    open: AntennaSection?,
+    onSelect: (AntennaSection) -> Unit
+) {
+    val routes = remember(identity, transitions) { transitions.filter { it.fromIdentity == identity || it.toIdentity == identity } }
+    AntennaAccordionHeader(stringResource(R.string.antenna_gps), records.count { it.lat != null && it.lon != null }, open == AntennaSection.GPS) { onSelect(AntennaSection.GPS) }
+    if (open == AntennaSection.GPS) {
+        records.filter { it.lat != null && it.lon != null }.forEach { record ->
+            Row(Modifier.fillMaxWidth().padding(vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f)) {
+                    Text(record.timestamp, color = Color(0xFFAAAAAA), fontSize = 10.sp, fontFamily = FontFamily.Monospace)
+                    Text("${record.verified.name} · ${"%.5f".format(java.util.Locale.ROOT, record.lat)}, ${"%.5f".format(java.util.Locale.ROOT, record.lon)}", color = Color(0xFF777777), fontSize = 9.sp, fontFamily = FontFamily.Monospace)
+                }
+                LocationButton(record.lat!!, record.lon!!, record.cid)
+            }
+        }
+        if (records.none { it.lat != null && it.lon != null }) DetailText(stringResource(R.string.antenna_no_gps))
+    }
+    AntennaAccordionHeader(stringResource(R.string.antenna_handovers), routes.size, open == AntennaSection.HANDOVERS) { onSelect(AntennaSection.HANDOVERS) }
+    if (open == AntennaSection.HANDOVERS) {
+        routes.forEach { route ->
+            val direction = if (route.fromIdentity == identity) "→ ${route.toIdentity}" else "← ${route.fromIdentity}"
+            DetailText("$direction\n${route.observations}× · confianza ${(route.trustRatio * 100).toInt()}% · ${route.lastStatus.name} · ${DateFormat.getDateTimeInstance(DateFormat.SHORT, DateFormat.SHORT).format(Date(route.lastSeenMs))}")
+        }
+        if (routes.isEmpty()) DetailText(stringResource(R.string.antenna_no_handovers))
+    }
+    AntennaAccordionHeader(stringResource(R.string.antenna_technical), records.size, open == AntennaSection.TECHNICAL) { onSelect(AntennaSection.TECHNICAL) }
+    if (open == AntennaSection.TECHNICAL) {
+        val latest = records.first()
+        val oldest = records.last()
+        DetailText("CID ${latest.cid} · MCC/MNC ${latest.mcc}/${latest.mnc} · TAC ${latest.tac}\n${latest.radio.name} · PCI ${latest.pci ?: "N/A"} · ARFCN ${latest.arfcn ?: "N/A"}\n${latest.dbm} dBm · RSRQ ${latest.rsrq ?: "N/A"} · SINR ${latest.sinr ?: "N/A"} · TA ${latest.timingAdvance ?: "N/A"} ${latest.timingAdvanceUnit.name}\n${latest.verified.name} · score ${latest.score}% · anomalía ${"%.1f".format(java.util.Locale.ROOT, latest.anomalyConfidence)}%\n${records.size} muestras · ${oldest.timestamp} — ${latest.timestamp}")
+    }
+}
+
+@Composable
+private fun AntennaAccordionHeader(title: String, count: Int, expanded: Boolean, onClick: () -> Unit) {
+    TextButton(onClick = onClick, modifier = Modifier.fillMaxWidth()) {
+        Text(title, Modifier.weight(1f), color = Color.White, fontFamily = FontFamily.Monospace, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+        Text(count.toString(), color = Color(0xFF777777), fontFamily = FontFamily.Monospace)
+        Icon(if (expanded) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown, null, tint = Color(0xFF777777))
+    }
+}
+
+@Composable
+private fun DetailText(text: String) {
+    Text(text, Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 6.dp), color = Color(0xFF999999), fontFamily = FontFamily.Monospace, fontSize = 9.sp, lineHeight = 13.sp)
 }
 
 @Composable
@@ -578,12 +621,53 @@ private fun topologyIdentityLabel(identity: String): String {
 }
 
 @Composable
-private fun ForensicCaseList(dbHelper: CellDbHelper, cases: List<ForensicCase>, modifier: Modifier = Modifier) {
+private fun TypedDeleteDialog(
+    title: String,
+    description: String,
+    onDismiss: () -> Unit,
+    onConfirm: () -> Unit
+) {
+    var confirmation by remember { mutableStateOf("") }
+    val armed = confirmation == "BORRAR"
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(title, fontFamily = FontFamily.Monospace) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Text(description, color = Color(0xFFAAAAAA), fontFamily = FontFamily.Monospace, fontSize = 11.sp)
+                Text(stringResource(R.string.delete_type_prompt), color = Color(0xFFCF6679), fontFamily = FontFamily.Monospace, fontSize = 10.sp)
+                OutlinedTextField(
+                    value = confirmation,
+                    onValueChange = { confirmation = it },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                    textStyle = LocalTextStyle.current.copy(fontFamily = FontFamily.Monospace)
+                )
+            }
+        },
+        confirmButton = {
+            TextButton(enabled = armed, onClick = onConfirm) {
+                Text(stringResource(R.string.delete), color = if (armed) Color(0xFFCF6679) else Color(0xFF555555))
+            }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.cancel)) } },
+        containerColor = Color(0xFF111111)
+    )
+}
+
+@Composable
+private fun ForensicCaseList(
+    dbHelper: CellDbHelper,
+    cases: List<ForensicCase>,
+    modifier: Modifier = Modifier,
+    onDeleted: (Long) -> Unit
+) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     var selectedForExport by remember { mutableStateOf<ForensicCase?>(null) }
     var confirmExport by remember { mutableStateOf(false) }
     var exportMessage by remember { mutableStateOf<String?>(null) }
+    var selectedForDelete by remember { mutableStateOf<ForensicCase?>(null) }
     val launcher = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/zip")) { uri ->
         val selected = selectedForExport
         if (uri != null && selected != null) scope.launch {
@@ -602,6 +686,20 @@ private fun ForensicCaseList(dbHelper: CellDbHelper, cases: List<ForensicCase>, 
         }) { Text(stringResource(R.string.export)) } },
         dismissButton = { TextButton(onClick = { confirmExport = false }) { Text(stringResource(R.string.cancel)) } }
     )
+    selectedForDelete?.let { selected ->
+        TypedDeleteDialog(
+            title = stringResource(R.string.delete_forensic_title),
+            description = stringResource(R.string.delete_forensic_description, selected.caseCode),
+            onDismiss = { selectedForDelete = null },
+            onConfirm = {
+                scope.launch {
+                    val deleted = withContext(Dispatchers.IO) { dbHelper.deleteForensicCase(selected.id) }
+                    if (deleted) onDeleted(selected.id)
+                    selectedForDelete = null
+                }
+            }
+        )
+    }
     Column(modifier) {
         Text(
             "Ventana automática: 60 s antes · episodio completo · 60 s después",
@@ -637,6 +735,16 @@ private fun ForensicCaseList(dbHelper: CellDbHelper, cases: List<ForensicCase>, 
                                 Icon(Icons.Default.Share, null, Modifier.size(14.dp)); Spacer(Modifier.width(6.dp))
                                 Text(stringResource(R.string.export_forensic_case), fontFamily = FontFamily.Monospace, fontSize = 9.sp)
                             }
+                            OutlinedButton(
+                                onClick = { selectedForDelete = fc },
+                                modifier = Modifier.fillMaxWidth(),
+                                colors = ButtonDefaults.outlinedButtonColors(contentColor = Color(0xFFCF6679)),
+                                border = BorderStroke(1.dp, Color(0xFFCF6679).copy(alpha = .45f)),
+                                shape = RoundedCornerShape(4.dp)
+                            ) {
+                                Icon(Icons.Default.Delete, null, Modifier.size(14.dp)); Spacer(Modifier.width(6.dp))
+                                Text(stringResource(R.string.delete_forensic_case), fontFamily = FontFamily.Monospace, fontSize = 9.sp)
+                            }
                         } else Text(stringResource(R.string.automatic_capture_running), color = color, fontFamily = FontFamily.Monospace, fontSize = 9.sp)
                     }
                 }
@@ -646,7 +754,28 @@ private fun ForensicCaseList(dbHelper: CellDbHelper, cases: List<ForensicCase>, 
 }
 
 @Composable
-private fun IncidentList(incidents: List<IncidentRecord>, modifier: Modifier = Modifier) {
+private fun IncidentList(
+    dbHelper: CellDbHelper,
+    incidents: List<IncidentRecord>,
+    modifier: Modifier = Modifier,
+    onDeleted: (Long) -> Unit
+) {
+    val scope = rememberCoroutineScope()
+    var selectedForDelete by remember { mutableStateOf<IncidentRecord?>(null) }
+    selectedForDelete?.let { selected ->
+        TypedDeleteDialog(
+            title = stringResource(R.string.delete_incident_title),
+            description = stringResource(R.string.delete_incident_description, selected.cid),
+            onDismiss = { selectedForDelete = null },
+            onConfirm = {
+                scope.launch {
+                    val deleted = withContext(Dispatchers.IO) { dbHelper.deleteIncident(selected.id) }
+                    if (deleted) onDeleted(selected.id)
+                    selectedForDelete = null
+                }
+            }
+        )
+    }
     if (incidents.isEmpty()) {
         Box(modifier = modifier, contentAlignment = Alignment.Center) {
             Text(stringResource(R.string.no_incidents), color = Color(0xFF555555), fontFamily = FontFamily.Monospace, fontSize = 11.sp)
@@ -685,6 +814,18 @@ private fun IncidentList(incidents: List<IncidentRecord>, modifier: Modifier = M
                         HorizontalDivider(color = Color(0xFF222222))
                         Text(incident.reason, color = Color(0xFFCCCCCC), fontFamily = FontFamily.Monospace, fontSize = 9.sp)
                         Text(incident.heuristicSnapshot, color = Color(0xFF777777), fontFamily = FontFamily.Monospace, fontSize = 8.sp)
+                        if (incident.endedAt != null) {
+                            OutlinedButton(
+                                onClick = { selectedForDelete = incident },
+                                modifier = Modifier.fillMaxWidth(),
+                                colors = ButtonDefaults.outlinedButtonColors(contentColor = Color(0xFFCF6679)),
+                                border = BorderStroke(1.dp, Color(0xFFCF6679).copy(alpha = .45f)),
+                                shape = RoundedCornerShape(4.dp)
+                            ) {
+                                Icon(Icons.Default.Delete, null, Modifier.size(14.dp)); Spacer(Modifier.width(6.dp))
+                                Text(stringResource(R.string.delete_incident), fontFamily = FontFamily.Monospace, fontSize = 9.sp)
+                            }
+                        }
                     }
                 }
             }

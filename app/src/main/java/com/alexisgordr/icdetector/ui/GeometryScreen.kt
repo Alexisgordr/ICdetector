@@ -2,16 +2,22 @@ package com.alexisgordr.icdetector.ui
 
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.gestures.detectTransformGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.CenterFocusStrong
+import androidx.compose.material.icons.filled.ZoomIn
+import androidx.compose.material.icons.filled.ZoomOut
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
@@ -31,6 +37,28 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlin.math.hypot
 import kotlin.math.roundToInt
+
+private const val MIN_GRAPH_SCALE = 1f
+private const val MAX_GRAPH_SCALE = 20f
+
+/**
+ * Mantiene el lienzo dentro de su área visible. A escala 1 el grafo está completamente encajado;
+ * al ampliar permite recorrerlo, pero nunca arrastrarlo hasta perder todos los datos fuera de la
+ * pantalla.
+ */
+private fun constrainedGraphPan(pan: Offset, scale: Float, size: IntSize, margin: Float): Offset {
+    if (scale <= MIN_GRAPH_SCALE || size == IntSize.Zero) return Offset.Zero
+    val contentWidth = (size.width - margin * 2f).coerceAtLeast(0f)
+    val contentHeight = (size.height - margin * 2f).coerceAtLeast(0f)
+    val maxX = contentWidth * (scale - 1f) / 2f
+    val maxY = contentHeight * (scale - 1f) / 2f
+    return Offset(pan.x.coerceIn(-maxX, maxX), pan.y.coerceIn(-maxY, maxY))
+}
+
+private fun transformedGraphPoint(point: Offset, size: IntSize, scale: Float, pan: Offset): Offset {
+    val centre = Offset(size.width / 2f, size.height / 2f)
+    return centre + (point - centre) * scale + pan
+}
 
 /**
  * Pestaña GEOMETRÍA — el grafo de handovers dibujado sobre las posiciones que ESTE teléfono
@@ -68,6 +96,8 @@ fun GeometryScreen(dbHelper: CellDbHelper, modifier: Modifier = Modifier) {
     var snapshot by remember { mutableStateOf<Snapshot?>(null) }
     var selected by remember { mutableStateOf<String?>(null) }
     var canvasSize by remember { mutableStateOf(IntSize.Zero) }
+    var graphScale by remember { mutableFloatStateOf(MIN_GRAPH_SCALE) }
+    var graphPan by remember { mutableStateOf(Offset.Zero) }
 
     LaunchedEffect(Unit) {
         snapshot = withContext(Dispatchers.IO) {
@@ -124,7 +154,7 @@ fun GeometryScreen(dbHelper: CellDbHelper, modifier: Modifier = Modifier) {
     // Posiciones en pantalla. Se calculan una sola vez por (datos, tamaño) y las usan tanto el
     // dibujo como la detección de toques, para que nunca puedan discrepar.
     val margin = with(density) { 22.dp.toPx() }
-    val layout: Map<String, Offset> = remember(snap.nodes, canvasSize) {
+    val fittedLayout: Map<String, Offset> = remember(snap.nodes, canvasSize) {
         if (canvasSize.width == 0 || canvasSize.height == 0) emptyMap()
         else {
             val w = canvasSize.width - margin * 2
@@ -136,6 +166,27 @@ fun GeometryScreen(dbHelper: CellDbHelper, modifier: Modifier = Modifier) {
                 )
             }
         }
+    }
+    val layout: Map<String, Offset> = remember(fittedLayout, canvasSize, graphScale, graphPan) {
+        fittedLayout.mapValues { (_, point) ->
+            transformedGraphPoint(point, canvasSize, graphScale, graphPan)
+        }
+    }
+
+    fun resetViewport() {
+        graphScale = MIN_GRAPH_SCALE
+        graphPan = Offset.Zero
+    }
+
+    fun changeScale(target: Float, focalPoint: Offset = Offset(canvasSize.width / 2f, canvasSize.height / 2f)) {
+        val oldScale = graphScale
+        val newScale = target.coerceIn(MIN_GRAPH_SCALE, MAX_GRAPH_SCALE)
+        if (canvasSize == IntSize.Zero || oldScale == newScale) return
+        val centre = Offset(canvasSize.width / 2f, canvasSize.height / 2f)
+        val ratio = newScale / oldScale
+        val anchoredPan = graphPan * ratio + (focalPoint - centre) * (1f - ratio)
+        graphScale = newScale
+        graphPan = constrainedGraphPan(anchoredPan, newScale, canvasSize, margin)
     }
 
     // Píxeles por metro, para que el círculo del radio P90 signifique algo y no sea decorativo.
@@ -165,28 +216,64 @@ fun GeometryScreen(dbHelper: CellDbHelper, modifier: Modifier = Modifier) {
         }
         Spacer(Modifier.height(8.dp))
 
-        Surface(color = Color(0xFF0B0B0B), shape = RoundedCornerShape(4.dp)) {
-            Canvas(
-                Modifier
-                    .fillMaxWidth()
-                    .height(260.dp)
-                    .onSizeChanged { canvasSize = it }
-                    .pointerInput(layout) {
-                        detectTapGestures { tap ->
-                            selected = layout.minByOrNull { (_, o) -> hypot(o.x - tap.x, o.y - tap.y) }
-                                ?.takeIf { hypot(it.value.x - tap.x, it.value.y - tap.y) < 60f }
-                                ?.key
+        Surface(color = Color(0xFF0B0B0B), shape = RoundedCornerShape(8.dp)) {
+            Box(Modifier.fillMaxWidth().height(300.dp)) {
+                Canvas(
+                    Modifier
+                        .matchParentSize()
+                        .onSizeChanged {
+                            canvasSize = it
+                            graphPan = constrainedGraphPan(graphPan, graphScale, it, margin)
                         }
+                        .pointerInput(canvasSize, margin) {
+                            detectTransformGestures { centroid, pan, zoom, _ ->
+                                val oldScale = graphScale
+                                val newScale = (oldScale * zoom).coerceIn(MIN_GRAPH_SCALE, MAX_GRAPH_SCALE)
+                                val centre = Offset(canvasSize.width / 2f, canvasSize.height / 2f)
+                                val ratio = newScale / oldScale
+                                // Mantiene bajo los dedos el mismo punto del grafo mientras se
+                                // amplía, que es lo que hace que el pellizco resulte natural.
+                                val anchoredPan = graphPan * ratio +
+                                    (centroid - centre) * (1f - ratio) + pan
+                                graphScale = newScale
+                                graphPan = constrainedGraphPan(anchoredPan, newScale, canvasSize, margin)
+                            }
+                        }
+                        .pointerInput(layout, graphScale) {
+                            detectTapGestures(
+                                onDoubleTap = { tap ->
+                                    if (graphScale > 1.05f) resetViewport()
+                                    else changeScale(2.5f, tap)
+                                },
+                                onTap = { tap ->
+                                    // Radio en dp, no en píxeles físicos: seleccionar un nodo debe
+                                    // ser igual de fácil en pantallas de densidad distinta.
+                                    val hitRadius = 30.dp.toPx()
+                                    selected = layout.minByOrNull { (_, o) -> hypot(o.x - tap.x, o.y - tap.y) }
+                                        ?.takeIf { hypot(it.value.x - tap.x, it.value.y - tap.y) <= hitRadius }
+                                        ?.key
+                                }
+                            )
+                        }
+                ) {
+                    // Retícula discreta: da referencia visual al navegar sin fingir que es un mapa.
+                    val gridColor = Color(0xFF1A2423)
+                    repeat(3) { index ->
+                        val fraction = (index + 1) / 4f
+                        drawLine(gridColor, Offset(size.width * fraction, 0f), Offset(size.width * fraction, size.height))
+                        drawLine(gridColor, Offset(0f, size.height * fraction), Offset(size.width, size.height * fraction))
                     }
-            ) {
                 // Aristas primero, para que los nodos queden por encima.
                 snap.routeChecks.forEach { route ->
                     val a = layout[route.fromIdentity] ?: return@forEach
                     val b = layout[route.toIdentity] ?: return@forEach
                     val trustRatio =
                         if (route.observations > 0) route.trustedObservations.toFloat() / route.observations else 0f
+                    val connectedToSelection = selected != null &&
+                        (route.fromIdentity == selected || route.toIdentity == selected)
                     val color = when {
                         !route.coherent -> Color(0xFFCF6679)
+                        connectedToSelection -> Color(0xFFFFB300)
                         trustRatio > 0f -> Color(0xFF4CAF50).copy(alpha = 0.35f + 0.5f * trustRatio)
                         else -> Color(0xFF4A4A4A)
                     }
@@ -194,7 +281,8 @@ fun GeometryScreen(dbHelper: CellDbHelper, modifier: Modifier = Modifier) {
                         color = color,
                         start = a,
                         end = b,
-                        strokeWidth = (1f + route.observations.coerceAtMost(20) * 0.25f)
+                        strokeWidth = (if (connectedToSelection) 2.5f else 1f) +
+                            route.observations.coerceAtMost(20) * 0.25f
                     )
                     // Punta de flecha: un punto grueso junto al destino marca el sentido sin
                     // tener que calcular un triángulo rotado.
@@ -211,7 +299,7 @@ fun GeometryScreen(dbHelper: CellDbHelper, modifier: Modifier = Modifier) {
                     val isSelected = node.identity == selected
                     // El círculo exterior ES el radio P90 a escala real; el mínimo solo evita que
                     // una celda muy concentrada quede invisible.
-                    val radiusPx = (node.profile.radiusP90 * pxPerMeter).toFloat().coerceIn(6f, 140f)
+                    val radiusPx = (node.profile.radiusP90 * pxPerMeter * graphScale).toFloat().coerceIn(6f, 180f)
                     drawCircle(
                         color = Color(0xFF80CBC4).copy(alpha = 0.10f),
                         radius = radiusPx, center = center
@@ -222,7 +310,47 @@ fun GeometryScreen(dbHelper: CellDbHelper, modifier: Modifier = Modifier) {
                     )
                     drawCircle(
                         color = if (isSelected) Color(0xFFFFA000) else Color(0xFF4CAF50),
-                        radius = if (isSelected) 7f else 4.5f, center = center
+                        radius = if (isSelected) 8f else 5f, center = center
+                    )
+                    if (isSelected) {
+                        drawCircle(Color(0xFFFFD54F), radius = 13f, center = center, style = Stroke(width = 2f))
+                    }
+                }
+                }
+
+                Surface(
+                    modifier = Modifier.align(Alignment.TopStart).padding(8.dp),
+                    color = Color(0xDD151515),
+                    shape = RoundedCornerShape(6.dp)
+                ) {
+                    Text(
+                        stringResource(R.string.geometry_zoom_format, (graphScale * 100).roundToInt()),
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 5.dp),
+                        color = Color(0xFFB0BEC5), fontFamily = FontFamily.Monospace, fontSize = 9.sp
+                    )
+                }
+
+                Row(
+                    modifier = Modifier.align(Alignment.TopEnd).padding(6.dp),
+                    horizontalArrangement = Arrangement.spacedBy(2.dp)
+                ) {
+                    GraphControlButton(
+                        icon = Icons.Default.ZoomOut,
+                        description = stringResource(R.string.geometry_zoom_out),
+                        enabled = graphScale > MIN_GRAPH_SCALE,
+                        onClick = { changeScale(graphScale / 1.5f) }
+                    )
+                    GraphControlButton(
+                        icon = Icons.Default.CenterFocusStrong,
+                        description = stringResource(R.string.geometry_fit_all),
+                        enabled = graphScale > MIN_GRAPH_SCALE || graphPan != Offset.Zero,
+                        onClick = { resetViewport() }
+                    )
+                    GraphControlButton(
+                        icon = Icons.Default.ZoomIn,
+                        description = stringResource(R.string.geometry_zoom_in),
+                        enabled = graphScale < MAX_GRAPH_SCALE,
+                        onClick = { changeScale(graphScale * 1.5f) }
                     )
                 }
             }
@@ -230,7 +358,7 @@ fun GeometryScreen(dbHelper: CellDbHelper, modifier: Modifier = Modifier) {
 
         Spacer(Modifier.height(4.dp))
         Text(
-            stringResource(R.string.geometry_legend),
+            stringResource(R.string.geometry_legend_interactive),
             color = Color(0xFF555555), fontFamily = FontFamily.Monospace, fontSize = 8.sp,
             lineHeight = 11.sp
         )
@@ -284,6 +412,28 @@ fun GeometryScreen(dbHelper: CellDbHelper, modifier: Modifier = Modifier) {
 
             item { Spacer(Modifier.height(24.dp)) }
         }
+    }
+}
+
+@Composable
+private fun GraphControlButton(
+    icon: ImageVector,
+    description: String,
+    enabled: Boolean,
+    onClick: () -> Unit
+) {
+    FilledTonalIconButton(
+        onClick = onClick,
+        enabled = enabled,
+        modifier = Modifier.size(36.dp),
+        colors = IconButtonDefaults.filledTonalIconButtonColors(
+            containerColor = Color(0xDD263230),
+            contentColor = Color(0xFFB2DFDB),
+            disabledContainerColor = Color(0x88202020),
+            disabledContentColor = Color(0xFF555555)
+        )
+    ) {
+        Icon(icon, contentDescription = description, modifier = Modifier.size(19.dp))
     }
 }
 

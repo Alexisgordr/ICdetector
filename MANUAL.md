@@ -76,6 +76,12 @@ If required by your threat model, configure the supported proxy and a compatible
 
 Start the monitoring service from the main screen. While active, the app repeatedly reads the data Android exposes and reevaluates the current cellular environment.
 
+When ICdetection is visible, it requests fresh radio telemetry once per second so the RSRP, RSRQ
+and geometry graphs move responsively. With another app in front it returns to the normal
+three-second screen-on cadence; with the screen off it uses the ten-second low-power cadence.
+Handovers are event-driven by Android and do not wait for those intervals. The phone or modem may
+still coalesce measurements, so repeated points can legitimately have the same value.
+
 Displayed states are dynamic. A rule may move from `N/A` to `PASS` after GPS, neighbour-cell data, latency, or an API result becomes available. It can later change to `FAIL` if a new measurement becomes inconsistent.
 
 If the service stops or the device restarts while an incident or forensic capture is open, the record is closed as `INTERRUPTED`. The app must not describe an unobserved period as continuous monitoring.
@@ -304,6 +310,11 @@ The app separates three types of information:
 - **Incident history:** Security-relevant episodes and their progression.
 - **Forensic cases:** Detailed evidence captured around qualifying incidents.
 
+Closed incidents and completed or interrupted forensic cases can be deleted individually. Expand
+the relevant item, select its delete action, and type exactly `BORRAR` in the confirmation dialog.
+Active incidents and captures cannot be deleted. Deleting a forensic case also permanently removes
+all samples belonging to it, so export it first if it may be useful later.
+
 Routine history may be pruned according to the configured retention policy to prevent unlimited database growth. Export important information before clearing application data or uninstalling the app.
 
 Retention and the forensic-sample cap are enforced when monitoring starts and then approximately
@@ -381,6 +392,14 @@ The checksum proves only that the checked files match their recorded digests. It
 ---
 
 ## 12. Exporting antenna history
+
+Use the search field beside **EXPORT CSV** to filter cells immediately by CID, MCC, MNC, TAC, PCI, ARFCN or radio technology. Suggestions open matching cell identities quickly.
+
+Expand a cell and open one detail section at a time:
+
+- **GPS locations:** observation date, verification state, coordinates and map access.
+- **Handovers:** incoming and outgoing routes, observation frequency, confidence, state and last observation.
+- **Technical information:** complete identity, radio parameters, latest signal metrics, Timing Advance, verification, scores, sample count and observation range.
 
 Use **EXPORT CSV** for long-term observations rather than one incident:
 

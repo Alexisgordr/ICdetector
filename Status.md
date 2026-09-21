@@ -1,5 +1,31 @@
 # ICdetection Status
 
+## v2.7.1 — interactive geometry and searchable antenna explorer (development)
+
+**Release:** local development / not published
+**Version code:** 22
+**Database schema:** 15 (unchanged)
+**Detection baseline:** unchanged from v2.7.0
+
+While the activity is visible, explicit radio refresh now runs once per second so the main RSRP,
+RSRQ and geometry traces respond continuously. Leaving the app restores the existing 3-second
+screen-on cadence, and turning the screen off retains the 10-second low-power cadence. Event-driven
+telephony callbacks continue to report handovers without waiting for any polling interval.
+
+This development patch turns the local cell-geometry canvas into a bounded interactive explorer.
+The complete learned route remains fitted on entry, while pinch zoom, one-finger panning,
+double-tap navigation and explicit zoom/reset controls make dense or long-distance graphs
+inspectable. Selection highlights a cell and its connected routes without changing any detection,
+learning, persistence or export behavior. Existing history remains compatible and no reset is
+needed.
+
+The ANTENNAS view now supports immediate search across cellular identity and radio fields. Each cell exposes one detail section at a time: GPS observations with map access, directional handover summaries, or consolidated technical telemetry. This is a read-only presentation change and does not alter detection or stored data.
+
+Incident and forensic history now supports deliberate per-item cleanup. Only closed incidents and
+completed or interrupted forensic cases can be deleted, confirmation requires the exact word
+`BORRAR`, and forensic samples are removed in the same database transaction as their case. Active
+captures remain protected. Users should export evidence they want to preserve before deletion.
+
 ## v2.7.0 — detection hardening and revocable local confidence
 
 **Release:** stable / field validation continues

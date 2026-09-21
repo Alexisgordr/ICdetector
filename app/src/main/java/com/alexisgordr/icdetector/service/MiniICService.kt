@@ -97,6 +97,7 @@ class MiniICService : Service() {
     private var toneGenerator: ToneGenerator? = null
     private var screenReceiver: BroadcastReceiver? = null
     private var isScreenOn = true
+    @Volatile private var isUiVisible = false
     private var collectionPausedForCriticalBattery = false
     private var isServiceRunning = false
     
@@ -196,6 +197,13 @@ class MiniICService : Service() {
     fun forceRefresh() {
         _cellFlow.value = emptyList()
         requestFreshCellInfo()
+    }
+
+    /** Selects the faster visual refresh only while the activity is in the foreground. */
+    fun setUiVisible(visible: Boolean) {
+        val becameVisible = visible && !isUiVisible
+        isUiVisible = visible
+        if (becameVisible && ::telephonyController.isInitialized) requestFreshCellInfo()
     }
 
     override fun onCreate() {
@@ -359,7 +367,11 @@ class MiniICService : Service() {
             var wasAirplaneModeOn = false
             while (isActive && isServiceRunning) {
                 val intensive = SystemClock.elapsedRealtime() < intensiveMonitoringUntilMs
-                val delayTime = if (isScreenOn || intensive) 3000L else 10000L
+                val delayTime = when {
+                    isUiVisible -> UI_VISIBLE_SCAN_INTERVAL_MS
+                    isScreenOn || intensive -> SCREEN_ON_SCAN_INTERVAL_MS
+                    else -> SCREEN_OFF_SCAN_INTERVAL_MS
+                }
 
                 try {
                     val batteryCritical = isBatteryCritical()
@@ -1358,5 +1370,8 @@ class MiniICService : Service() {
         private const val CONFIRMATION_CYCLES = 3
         private const val INTENSIVE_MONITORING_TAIL_MS = 60_000L
         private const val MAX_INTENSIVE_MONITORING_MS = 5L * 60L * 1000L
+        private const val UI_VISIBLE_SCAN_INTERVAL_MS = 1_000L
+        private const val SCREEN_ON_SCAN_INTERVAL_MS = 3_000L
+        private const val SCREEN_OFF_SCAN_INTERVAL_MS = 10_000L
     }
 }

@@ -2,6 +2,42 @@
 
 ## Unreleased
 
+## 2.7.1
+
+### Live foreground telemetry
+
+- The visible monitoring screen now requests fresh radio telemetry every second, making the RSRP,
+  RSRQ and geometry traces visibly continuous while the app is being watched.
+- The existing 3-second screen-on and 10-second screen-off cadences remain unchanged outside the
+  foreground app. Modem callbacks continue to deliver handovers immediately.
+
+### Protected evidence deletion
+
+- Added per-item deletion for closed incidents and completed or interrupted forensic cases.
+- Permanent deletion requires typing exactly `BORRAR`; active incidents and captures cannot be
+  deleted, and deleting a forensic case also removes its captured samples atomically.
+- The confirmation reminds users to export forensic evidence before removing it.
+
+### Searchable antenna explorer
+
+- Added immediate search beside CSV export across CID, MCC, MNC, TAC, PCI, ARFCN and radio technology, with matching-cell suggestions.
+- Replaced the long expanded observation list with three exclusive accordions: GPS locations, incoming/outgoing handovers and consolidated technical information.
+- GPS entries retain timestamp, verification, precise coordinates and map access; handovers expose direction, frequency, confidence, status and recency.
+- Added complete Spanish and English labels. Detection, database schema and CSV export remain unchanged.
+### Interactive geometry explorer
+
+- Reworked the local handover graph into a bounded interactive viewer without changing detection,
+  learning, database schema or exported topology data.
+- Added focal pinch zoom up to 20×, one-finger panning, double-tap zoom/reset and dedicated zoom,
+  zoom-out and fit-all controls.
+- The initial view still fits the complete learned route, while bounded navigation prevents the
+  graph from being lost outside the canvas after zooming.
+- Improved dense-graph inspection with a larger canvas, stable touch targets, a subtle reference
+  grid, visible zoom level and clear highlighting of a selected cell and its connected routes.
+- Added complete English and Spanish accessibility labels and interaction guidance.
+- Updated development metadata to `versionName 2.7.1` and `versionCode 22`. Database schema 15 and
+  all existing history remain compatible; no reset is required.
+
 ## 2.7.0
 
 ### Revocable local cell confidence

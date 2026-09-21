@@ -1,0 +1,1 @@
+Adds 1-second live telemetry while the app is visible, keeping existing background rates. Geometry gains 20× zoom, bounded pan and route highlighting. ANTENNAS adds identity/radio search and GPS, handover and technical details. Closed incidents and finished forensic cases can be deleted after typing BORRAR; active evidence stays protected. Detection and schema are unchanged.

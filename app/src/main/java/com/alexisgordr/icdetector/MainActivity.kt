@@ -28,6 +28,7 @@ class MainActivity : ComponentActivity() {
     private var service by mutableStateOf<MiniICService?>(null)
     private var isBound = false
     private var isBinding = false
+    private var isActivityVisible = false
     private lateinit var dbHelper: CellDbHelper
 
     private val connection = object : ServiceConnection {
@@ -36,6 +37,7 @@ class MainActivity : ComponentActivity() {
             service = b.getService()
             isBound = true
             isBinding = false
+            service?.setUiVisible(isActivityVisible)
             service?.forceRefresh()
         }
         override fun onServiceDisconnected(name: ComponentName?) {
@@ -96,6 +98,18 @@ class MainActivity : ComponentActivity() {
             stopService(intent)
             android.util.Log.e("MainActivity", "No se pudo iniciar/enlazar el servicio: ${e.message}", e)
         }
+    }
+
+    override fun onStart() {
+        super.onStart()
+        isActivityVisible = true
+        service?.setUiVisible(true)
+    }
+
+    override fun onStop() {
+        service?.setUiVisible(false)
+        isActivityVisible = false
+        super.onStop()
     }
 
     override fun onDestroy() {

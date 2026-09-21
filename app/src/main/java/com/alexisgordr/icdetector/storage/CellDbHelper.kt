@@ -519,6 +519,22 @@ class CellDbHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME, 
         return out
     }
 
+    /** Deletes one closed forensic package and all of its samples atomically. */
+    fun deleteForensicCase(caseId: Long): Boolean {
+        val db = writableDatabase
+        db.beginTransaction()
+        return try {
+            db.delete(TABLE_FORENSIC_SAMPLES, "case_id=?", arrayOf(caseId.toString()))
+            val deleted = db.delete(TABLE_FORENSIC_CASES, "id=? AND state NOT IN (?,?)", arrayOf(
+                caseId.toString(), ForensicCaseState.CAPTURING.name, ForensicCaseState.POST_CAPTURE.name
+            )) > 0
+            if (deleted) db.setTransactionSuccessful()
+            deleted
+        } finally {
+            db.endTransaction()
+        }
+    }
+
     fun getForensicSamples(caseId: Long): List<ForensicSample> {
         val out = mutableListOf<ForensicSample>()
         readableDatabase.rawQuery("SELECT * FROM $TABLE_FORENSIC_SAMPLES WHERE case_id=? ORDER BY id", arrayOf(caseId.toString())).use { c ->
@@ -623,6 +639,13 @@ class CellDbHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME, 
         }
         return result
     }
+
+    /** Deletes one incident only after it has left the active observing states. */
+    fun deleteIncident(incidentId: Long): Boolean = writableDatabase.delete(
+        TABLE_INCIDENTS,
+        "id=? AND ended_at IS NOT NULL",
+        arrayOf(incidentId.toString())
+    ) > 0
 
     /**
      * Crea los índices de la tabla de histórico. Usa CREATE INDEX IF NOT EXISTS, así que es

@@ -83,6 +83,11 @@
     <string name="geometry_disclaimer">CENTRO DE OBSERVACIÓN · NO ES LA POSICIÓN DE LA ANTENA · NO MODIFICA EL SCORE</string>
     <string name="profiled">PERFILADAS</string><string name="sites">SITIOS</string><string name="routes">RUTAS</string><string name="review">REVISAR</string>
     <string name="geometry_legend">Círculo = radio P90 de tus observaciones, a escala. Flecha = handover; grosor por observaciones, verde por coherencia aprendida. Toca un nodo para ver su ficha.</string>
+    <string name="geometry_legend_interactive">Pellizca para ampliar · arrastra para explorar · doble toque para ampliar/reencuadrar · toca un nodo para ver su ficha. El ámbar resalta la celda seleccionada y sus rutas.</string>
+    <string name="geometry_zoom_format">%1$d%%</string>
+    <string name="geometry_zoom_out">Alejar</string>
+    <string name="geometry_zoom_in">Ampliar</string>
+    <string name="geometry_fit_all">Encajar el grafo completo</string>
     <string name="site_coherence">COHERENCIA DE EMPLAZAMIENTO</string>
     <string name="site_coherence_help">En LTE el Cell ID agrupa sectores por eNodeB (CID/256). Una separación grande merece revisión, aunque un eNodeB lógico puede usar cabezas de radio remotas y no siempre equivale a una torre física.</string>
     <string name="route_coherence">COHERENCIA DE RUTA</string>
@@ -127,4 +132,20 @@
     <string name="trust_desc_established">Coincide con un patrón local observado repetidamente. Es confianza, no prueba de autenticidad.</string>
     <string name="trust_desc_changed">El patrón actual de RF, geometría o handover contradice el perfil local consolidado: %1$s.</string>
     <string name="trust_desc_quarantined">Esta observación no puede entrenar el perfil porque una o más reglas de anomalía han fallado.</string>
+    <string name="antenna_search_hint">Buscar CID, MCC, MNC, TAC, PCI, ARFCN o tecnología</string>
+    <string name="clear_search">Borrar búsqueda</string>
+    <string name="antenna_search_empty">No hay celdas coincidentes</string>
+    <string name="antenna_gps">Ubicaciones GPS</string>
+    <string name="antenna_handovers">Handovers</string>
+    <string name="antenna_technical">Información técnica</string>
+    <string name="antenna_no_gps">No hay ubicaciones GPS registradas</string>
+    <string name="antenna_no_handovers">No hay handovers registrados</string>
+    <string name="delete">ELIMINAR</string>
+    <string name="delete_type_prompt">Escribe exactamente BORRAR para confirmar la eliminación permanente.</string>
+    <string name="delete_forensic_title">¿Eliminar caso forense?</string>
+    <string name="delete_forensic_description">Esto elimina permanentemente %1$s y todas sus muestras capturadas. Expórtalo antes si quieres conservarlo.</string>
+    <string name="delete_forensic_case">ELIMINAR CASO FORENSE</string>
+    <string name="delete_incident_title">¿Eliminar incidente?</string>
+    <string name="delete_incident_description">Esto elimina permanentemente el incidente cerrado de la celda CID %1$s.</string>
+    <string name="delete_incident">ELIMINAR INCIDENTE</string>
 </resources>

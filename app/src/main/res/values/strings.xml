@@ -83,6 +83,11 @@
     <string name="geometry_disclaimer">OBSERVATION CENTRE · NOT THE ANTENNA POSITION · DOES NOT CHANGE THE SCORE</string>
     <string name="profiled">PROFILED</string><string name="sites">SITES</string><string name="routes">ROUTES</string><string name="review">REVIEW</string>
     <string name="geometry_legend">Circle = P90 radius of your observations, to scale. Arrow = handover; thickness by observations, green by learned coherence. Tap a node for details.</string>
+    <string name="geometry_legend_interactive">Pinch to zoom · drag to explore · double tap to zoom/reset · tap a node for details. Amber highlights the selected cell and its routes.</string>
+    <string name="geometry_zoom_format">%1$d%%</string>
+    <string name="geometry_zoom_out">Zoom out</string>
+    <string name="geometry_zoom_in">Zoom in</string>
+    <string name="geometry_fit_all">Fit the entire graph</string>
     <string name="site_coherence">SITE COHERENCE</string>
     <string name="site_coherence_help">On LTE, the Cell ID groups sectors by eNodeB (CID/256). A large separation deserves review, although a logical eNodeB may use remote radio heads and is not always one physical tower.</string>
     <string name="route_coherence">ROUTE COHERENCE</string>
@@ -127,4 +132,20 @@
     <string name="trust_desc_established">Matches a repeatedly observed local pattern. This is confidence, not proof of authenticity.</string>
     <string name="trust_desc_changed">The current RF, geometry or handover pattern contradicts the established local profile: %1$s.</string>
     <string name="trust_desc_quarantined">This observation cannot train the profile because one or more anomaly rules failed.</string>
+    <string name="antenna_search_hint">Search CID, MCC, MNC, TAC, PCI, ARFCN or technology</string>
+    <string name="clear_search">Clear search</string>
+    <string name="antenna_search_empty">No matching cells</string>
+    <string name="antenna_gps">GPS locations</string>
+    <string name="antenna_handovers">Handovers</string>
+    <string name="antenna_technical">Technical information</string>
+    <string name="antenna_no_gps">No GPS locations recorded</string>
+    <string name="antenna_no_handovers">No handovers recorded</string>
+    <string name="delete">DELETE</string>
+    <string name="delete_type_prompt">Type BORRAR exactly to confirm permanent deletion.</string>
+    <string name="delete_forensic_title">Delete forensic case?</string>
+    <string name="delete_forensic_description">This permanently deletes %1$s and all of its captured samples. Export it first if you want to preserve it.</string>
+    <string name="delete_forensic_case">DELETE FORENSIC CASE</string>
+    <string name="delete_incident_title">Delete incident?</string>
+    <string name="delete_incident_description">This permanently deletes the closed incident for CID %1$s.</string>
+    <string name="delete_incident">DELETE INCIDENT</string>
 </resources>
