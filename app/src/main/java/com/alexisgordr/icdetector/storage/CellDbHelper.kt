@@ -19,6 +19,10 @@ import com.alexisgordr.icdetector.models.IncidentRecord
 import com.alexisgordr.icdetector.models.IncidentState
 import com.alexisgordr.icdetector.models.ForensicCase
 import com.alexisgordr.icdetector.models.ForensicCaseState
+import com.alexisgordr.icdetector.models.ForensicCaseOrigin
+import com.alexisgordr.icdetector.models.ForensicPruneResult
+import com.alexisgordr.icdetector.core.ForensicRetentionPolicy
+import com.alexisgordr.icdetector.forensics.ForensicStore
 import com.alexisgordr.icdetector.models.ForensicSample
 import com.alexisgordr.icdetector.models.identityKey
 import com.alexisgordr.icdetector.models.CellLocationSample
@@ -33,7 +37,7 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 
-class CellDbHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME, null, DATABASE_VERSION) {
+class CellDbHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME, null, DATABASE_VERSION), ForensicStore {
     companion object {
         private const val DATABASE_NAME = "icdetector_history.db"
         private const val DATABASE_VERSION = 15
@@ -141,6 +145,46 @@ class CellDbHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME, 
          * devolvía una búsqueda mal formulada.
          */
         const val MAX_PLAUSIBLE_ANTENNA_DISTANCE_M = 50_000f
+    }
+
+    /**
+     * Activa las claves ajenas — v2.8.0.
+     *
+     * `forensic_samples` declara `FOREIGN KEY(case_id) REFERENCES forensic_cases(id) ON DELETE
+     * CASCADE` desde el esquema 14, pero SQLite ignora esa cláusula salvo que se active por
+     * conexión: `PRAGMA foreign_keys` vale OFF por defecto. O sea que la garantía estaba escrita
+     * en la tabla y no se aplicaba, y una muestra podía sobrevivir a su caso.
+     *
+     * [onConfigure] es el único sitio donde se puede activar: corre antes de `onCreate`/`onUpgrade`
+     * y fuera de toda transacción (`setForeignKeyConstraintsEnabled` lanza si hay una abierta).
+     *
+     * El barrido de huérfanos va después, y en su propio try/catch: en la primera instalación las
+     * tablas todavía no existen —`onCreate` corre a continuación— y la sentencia falla sin que eso
+     * sea un error. Activar las claves ajenas NO valida las filas ya escritas, solo las futuras;
+     * por eso hay que barrer a mano lo que el esquema anterior pudo dejar suelto.
+     */
+    override fun onConfigure(db: SQLiteDatabase) {
+        super.onConfigure(db)
+        db.setForeignKeyConstraintsEnabled(true)
+        try {
+            // La comprobación previa evita abrir una transacción de escritura en cada arranque
+            // solo para borrar cero filas, que es el caso normal.
+            val hasOrphans = db.rawQuery(
+                "SELECT 1 FROM $TABLE_FORENSIC_SAMPLES WHERE case_id NOT IN " +
+                    "(SELECT id FROM $TABLE_FORENSIC_CASES) LIMIT 1",
+                null
+            ).use { it.moveToFirst() }
+            if (hasOrphans) {
+                db.execSQL(
+                    "DELETE FROM $TABLE_FORENSIC_SAMPLES WHERE case_id NOT IN " +
+                        "(SELECT id FROM $TABLE_FORENSIC_CASES)"
+                )
+            }
+        } catch (_: Exception) {
+            // Primera instalación (las tablas aún no existen) o base en un estado del que no se
+            // puede barrer. En ninguno de los dos casos hay nada que salvar, y fallar aquí
+            // impediría abrir la base entera.
+        }
     }
 
     override fun onCreate(db: SQLiteDatabase) {
@@ -448,7 +492,7 @@ class CellDbHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME, 
         db.execSQL("CREATE INDEX IF NOT EXISTS idx_forensic_samples_case ON $TABLE_FORENSIC_SAMPLES (case_id, id)")
     }
 
-    fun createForensicCase(cell: CellData): Long {
+    override fun createForensicCase(cell: CellData, origin: ForensicCaseOrigin): Long {
         val db = writableDatabase
         val now = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.ROOT).format(Date())
         val provisional = ContentValues().apply {
@@ -460,19 +504,56 @@ class CellDbHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME, 
         val id = db.insertOrThrow(TABLE_FORENSIC_CASES, null, provisional)
         val date = SimpleDateFormat("yyyy-MM-dd", Locale.ROOT).format(Date())
         db.update(TABLE_FORENSIC_CASES, ContentValues().apply {
-            put("case_code", "ICD-$date-${id.toString().padStart(4, '0')}")
+            val prefix = if (origin == ForensicCaseOrigin.TRUST_CONTRADICTION) "ICD-OBS" else "ICD"
+            put("case_code", "$prefix-$date-${id.toString().padStart(4, '0')}")
         }, "id=?", arrayOf(id.toString()))
         return id
     }
 
-    fun insertForensicSample(caseId: Long, wall: Long, elapsed: Long, event: String, json: String) {
-        writableDatabase.insert(TABLE_FORENSIC_SAMPLES, null, ContentValues().apply {
-            put("case_id", caseId); put("wall_time_ms", wall); put("elapsed_time_ms", elapsed)
-            put("event", event); put("payload_json", json)
-        })
+    /**
+     * v2.8.0 — Devuelve el rowId, o -1 si la escritura falló. `insert()` captura el disco lleno,
+     * el bloqueo y la violación de clave ajena y devuelve -1 sin lanzar: descartar ese valor era
+     * perder el único aviso de que la captura forense no está guardando nada.
+     */
+    override fun insertForensicSample(caseId: Long, wall: Long, elapsed: Long, event: String, json: String): Long {
+        return try {
+            writableDatabase.insert(TABLE_FORENSIC_SAMPLES, null, ContentValues().apply {
+                put("case_id", caseId); put("wall_time_ms", wall); put("elapsed_time_ms", elapsed)
+                put("event", event); put("payload_json", json)
+            })
+        } catch (_: Exception) {
+            -1L
+        }
     }
 
-    fun updateForensicCaseProgress(caseId: Long, cell: CellData) {
+    /**
+     * v2.8.0 — ¿Hay ya un caso forense de esta identidad creado a partir de [sinceWallMs]?
+     *
+     * Deduplicación persistente de las capturas abiertas al arrancar con la celda ya contradicha.
+     * Compara sobre `created_at`, que se guarda como texto `yyyy-MM-dd HH:mm:ss`: con formato fijo
+     * y ancho fijo, el orden lexicográfico y el cronológico coinciden.
+     *
+     * Cuenta cualquier origen a propósito, pero exige al menos una muestra real. Un caso cuya
+     * creación tuvo éxito justo antes de quedarse el disco sin espacio no constituye evidencia y
+     * no puede bloquear una nueva captura durante 24 horas.
+     */
+    override fun hasRecentForensicCaseFor(identity: String, sinceWallMs: Long): Boolean {
+        return try {
+            val threshold = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.ROOT).format(Date(sinceWallMs))
+            readableDatabase.rawQuery(
+                "SELECT 1 FROM $TABLE_FORENSIC_CASES c " +
+                    "WHERE c.cell_identity=? AND c.created_at>=? " +
+                    "AND EXISTS (SELECT 1 FROM $TABLE_FORENSIC_SAMPLES s WHERE s.case_id=c.id) " +
+                    "LIMIT 1",
+                arrayOf(identity, threshold)
+            ).use { it.moveToFirst() }
+        } catch (_: Exception) {
+            // Ante la duda, no bloquear la captura: perder una muestra es peor que duplicar un caso.
+            false
+        }
+    }
+
+    override fun updateForensicCaseProgress(caseId: Long, cell: CellData) {
         val now = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.ROOT).format(Date())
         writableDatabase.execSQL(
             "UPDATE $TABLE_FORENSIC_CASES SET updated_at=?, highest_phase=MAX(highest_phase, ?), " +
@@ -481,15 +562,22 @@ class CellDbHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME, 
         )
     }
 
-    fun setForensicCaseState(caseId: Long, state: ForensicCaseState) {
+    override fun setForensicCaseState(caseId: Long, state: ForensicCaseState) {
         writableDatabase.update(TABLE_FORENSIC_CASES, ContentValues().apply { put("state", state.name) }, "id=?", arrayOf(caseId.toString()))
     }
 
-    fun finishForensicCase(caseId: Long, state: ForensicCaseState) {
+    override fun finishForensicCase(caseId: Long, state: ForensicCaseState) {
         val now = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.ROOT).format(Date())
         writableDatabase.update(TABLE_FORENSIC_CASES, ContentValues().apply {
             put("state", state.name); put("updated_at", now); put("closed_at", now)
         }, "id=?", arrayOf(caseId.toString()))
+    }
+
+    override fun promoteForensicCase(caseId: Long) {
+        writableDatabase.execSQL(
+            "UPDATE $TABLE_FORENSIC_CASES SET case_code=REPLACE(case_code, 'ICD-OBS-', 'ICD-') WHERE id=?",
+            arrayOf(caseId)
+        )
     }
 
     fun interruptOpenForensicCases() {
@@ -511,6 +599,7 @@ class CellDbHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME, 
                 c.getLong(c.getColumnIndexOrThrow("id")), s("case_code"), s("created_at"), s("updated_at"),
                 if (c.isNull(closed)) null else c.getString(closed),
                 runCatching { ForensicCaseState.valueOf(s("state")) }.getOrDefault(ForensicCaseState.INTERRUPTED),
+                if (s("case_code").startsWith("ICD-OBS-")) ForensicCaseOrigin.TRUST_CONTRADICTION else ForensicCaseOrigin.ALARM,
                 s("cell_identity"), c.getInt(c.getColumnIndexOrThrow("highest_phase")),
                 c.getInt(c.getColumnIndexOrThrow("confirmed")) != 0,
                 c.getInt(c.getColumnIndexOrThrow("sample_count"))
@@ -1016,21 +1105,70 @@ class CellDbHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME, 
     }
 
     /**
-     * Recorta las muestras forenses más antiguas por encima de [maxSamples].
+     * Aplica el tope de muestras forenses borrando CASOS CERRADOS ENTEROS — v2.8.0.
      *
-     * La poda por antigüedad no basta: lo que llena el disco es el número de muestras, no su
-     * edad. Se conservan siempre las más recientes. Devuelve cuántas se borraron.
+     * La poda por antigüedad no basta: lo que llena el disco es el número de muestras, no su edad.
+     * Pero la versión anterior recortaba por `id` sobre la tabla de muestras, sin mirar a qué caso
+     * pertenecía cada una, y eso destruía la propiedad que hace útil a un paquete forense: que sea
+     * completo. Un caso al que le faltan el prebúfer y los primeros minutos sigue listándose con su
+     * código `ICD-…` y su recuento de muestras, se exporta y se analiza como si estuviera íntegro.
+     * Un paquete que miente sobre su propia integridad es peor que no tener el paquete.
+     *
+     * Ahora se borra el caso cerrado más antiguo, y el siguiente, hasta caber bajo [maxSamples].
+     * Los casos en CAPTURING o POST_CAPTURE no se tocan nunca: son la captura en curso, y borrarle
+     * el suelo a la grabación mientras graba es exactamente lo que no debe pasar. Si con todos los
+     * cerrados fuera el total sigue por encima del tope, se informa mediante
+     * [ForensicPruneResult.overCapacity] en lugar de romper el caso abierto.
      */
-    fun enforceForensicSampleCap(maxSamples: Int = MAX_FORENSIC_SAMPLES): Int {
+    fun enforceForensicSampleCap(maxSamples: Int = MAX_FORENSIC_SAMPLES): ForensicPruneResult {
         return try {
             val db = this.writableDatabase
-            db.delete(
-                TABLE_FORENSIC_SAMPLES,
-                "id NOT IN (SELECT id FROM $TABLE_FORENSIC_SAMPLES ORDER BY id DESC LIMIT ?)",
-                arrayOf(maxSamples.toString())
+            val total = db.rawQuery("SELECT COUNT(*) FROM $TABLE_FORENSIC_SAMPLES", null).use { c ->
+                if (c.moveToFirst()) c.getInt(0) else 0
+            }
+            if (total <= maxSamples) return ForensicPruneResult(remainingSamples = total)
+
+            // Candidatos: SOLO casos cerrados, del más antiguo al más reciente (id AUTOINCREMENT).
+            // Este filtro es la garantía de que una captura en curso (CAPTURING / POST_CAPTURE)
+            // no se puede mutilar: la política de abajo solo borra lo que esta consulta devuelve.
+            val candidates = db.rawQuery(
+                "SELECT c.id, (SELECT COUNT(*) FROM $TABLE_FORENSIC_SAMPLES s WHERE s.case_id=c.id) n " +
+                    "FROM $TABLE_FORENSIC_CASES c WHERE c.state IN (?,?) ORDER BY c.id ASC",
+                arrayOf(ForensicCaseState.READY.name, ForensicCaseState.INTERRUPTED.name)
+            ).use { c ->
+                buildList {
+                    while (c.moveToNext()) {
+                        add(ForensicRetentionPolicy.Candidate(c.getLong(0), c.getInt(1)))
+                    }
+                }
+            }
+
+            val doomed = ForensicRetentionPolicy.casesToDelete(total, maxSamples, candidates)
+            db.beginTransaction()
+            try {
+                doomed.forEach { candidate ->
+                    // El borrado explícito de las muestras no sobra aunque ON DELETE CASCADE esté
+                    // activo: deja el recuento a la vista y no depende del pragma de la conexión.
+                    db.delete(TABLE_FORENSIC_SAMPLES, "case_id=?", arrayOf(candidate.caseId.toString()))
+                    db.delete(TABLE_FORENSIC_CASES, "id=?", arrayOf(candidate.caseId.toString()))
+                }
+                db.setTransactionSuccessful()
+            } finally {
+                db.endTransaction()
+            }
+            // Releer el total real tras la transacción. Así el diagnóstico no depende de una
+            // resta estimada si otra ruta de mantenimiento cambia la BD en el futuro.
+            val remaining = db.rawQuery("SELECT COUNT(*) FROM $TABLE_FORENSIC_SAMPLES", null).use { c ->
+                if (c.moveToFirst()) c.getInt(0) else 0
+            }
+            ForensicPruneResult(
+                casesDeleted = doomed.size,
+                samplesDeleted = doomed.sumOf { it.sampleCount },
+                remainingSamples = remaining,
+                overCapacity = remaining > maxSamples
             )
         } catch (_: Exception) {
-            0
+            ForensicPruneResult()
         }
     }
 

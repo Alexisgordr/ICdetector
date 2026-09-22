@@ -38,6 +38,44 @@ class TerminalLocalizationTest {
         assertFalse(result.contains("Episodio"))
     }
 
+    // v2.8.0 — Los mensajes nuevos del mantenimiento forense y de la salud de la escritura.
+    @Test
+    fun `terminal translates whole-case forensic pruning`() {
+        val source = "Poda forense: 2 caso(s) cerrado(s) eliminados enteros (1400 muestras) " +
+            "para respetar el tope de 20000. Restantes: 19600."
+        val result = localizeTerminalLine(source)
+
+        assertTrue(result.contains("Forensic pruning"))
+        assertTrue(result.contains("closed case(s) deleted in full"))
+        assertTrue(result.contains("1400"))
+        assertTrue(result.contains("19600"))
+        assertFalse(result.contains("Poda"))
+        assertFalse(result.contains("muestras"))
+    }
+
+    @Test
+    fun `terminal translates the forensic cap notice without trimming a live capture`() {
+        val source = "⚠️ Tope forense superado (25000 muestras) con solo casos abiertos. " +
+            "No se recortan: una captura en curso no se mutila."
+        val result = localizeTerminalLine(source)
+
+        assertTrue(result.contains("Forensic cap exceeded"))
+        assertTrue(result.contains("only open cases"))
+        assertTrue(result.contains("25000"))
+        assertFalse(result.contains("captura"))
+    }
+
+    @Test
+    fun `terminal translates degraded and restored forensic capture`() {
+        val degraded = localizeTerminalLine("⚠ Captura forense degradada — las muestras no se están guardando.")
+        assertTrue(degraded.contains("Forensic capture degraded"))
+        assertFalse(degraded.contains("Captura"))
+
+        val restored = localizeTerminalLine("Captura forense restablecida.")
+        assertTrue(restored.contains("Forensic capture restored"))
+        assertFalse(restored.contains("Captura"))
+    }
+
     @Test
     fun `terminal translates established local identity change`() {
         val source = "Cambio en identidad celular consolidada (PCI+HANDOVER)"

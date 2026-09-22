@@ -27,6 +27,11 @@ While monitoring, it can:
 
 Available observations vary by phone, modem, Android version, operator, radio conditions, and power-saving restrictions.
 
+From v2.8.0, the physical interpretation used by channel sanity (H8), geographic distance (H11)
+and LTE band downgrade (H14) follows the radio technology of the actual `CellInfo` observation.
+The 4G/5G label shown by Android remains useful presentation context, but an NSA icon cannot make
+its LTE anchor behave like a physical NR cell in those checks.
+
 ---
 
 ## 2. Initial setup
@@ -324,6 +329,20 @@ rows to keep memory use bounded, but **EXPORT CSV** still streams the complete r
 ---
 
 ## 10. Forensic capture
+
+### Silent trust-contradiction observation cases
+
+If the same complete cell identity was previously observed as `ESTABLISHED` and then transitions
+to `CHANGED` with one or more concrete trust contradictions, ICdetection opens a neutral observation
+case. Its identifier begins with `ICD-OBS-`, and the history screen labels it **Contradiction in
+established cell · observation case**. This is evidence preservation, not an alarm or a claim that
+an IMSI catcher was detected.
+
+The case contains the normal pre-event buffer, the exact transition observation and the existing
+post-capture window. Remaining in `CHANGED` does not create repeated cases. Returning to
+`ESTABLISHED` and later changing again is a new transition. If normal temporal detection begins
+while the observation case is still active, that case is promoted and continued so the earlier
+evidence is retained without a duplicate.
 
 When an episode reaches `1/3`, ICdetection opens a forensic case. It preserves context rather than only the final alert.
 

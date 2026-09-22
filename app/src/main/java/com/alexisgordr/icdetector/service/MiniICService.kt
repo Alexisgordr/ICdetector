@@ -22,6 +22,7 @@ import com.alexisgordr.icdetector.models.*
 import com.alexisgordr.icdetector.storage.CellDbHelper
 import com.alexisgordr.icdetector.telephony.CellParser
 import com.alexisgordr.icdetector.forensics.ForensicRecorder
+import com.alexisgordr.icdetector.forensics.TrustContradictionTransitionTracker
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -78,6 +79,8 @@ class MiniICService : Service() {
 
     private lateinit var dbHelper: CellDbHelper
     private lateinit var forensicRecorder: ForensicRecorder
+    private val trustContradictionTransitions = TrustContradictionTransitionTracker()
+    private val forensicDispatcher = Dispatchers.IO.limitedParallelism(1)
     private lateinit var notificationController: ServiceNotificationController
     private lateinit var databaseMaintenance: DatabaseMaintenance
     private lateinit var latencyMonitor: NetworkLatencyMonitor
@@ -210,7 +213,16 @@ class MiniICService : Service() {
         super.onCreate()
         isServiceRunning = true
         dbHelper = CellDbHelper(this)
-        forensicRecorder = ForensicRecorder(dbHelper)
+        // v2.8.0 — La escritura forense avisa cuando se rompe. Tres inserts fallidos seguidos
+        // (disco lleno, base bloqueada) y la captura deja de guardar sin decir nada: el mismo
+        // fallo silencioso que CollectionHealth arregló para el historial.
+        forensicRecorder = ForensicRecorder(dbHelper) { failing ->
+            if (failing) {
+                appendLog("[SYS]", "⚠ Captura forense degradada — las muestras no se están guardando.")
+            } else {
+                appendLog("[SYS]", "Captura forense restablecida.")
+            }
+        }
         notificationController = ServiceNotificationController(this, MiniICService::class.java)
         databaseMaintenance = DatabaseMaintenance(dbHelper) { appendLog("[SYS]", it) }
         latencyMonitor = NetworkLatencyMonitor(
@@ -904,6 +916,9 @@ class MiniICService : Service() {
 
                     val active = sorted.firstOrNull { it.isRegistered }
                     if (active != null) {
+                        // Observe the trust result immediately after LocalCellTrustEngine. This is
+                        // a one-way evidence signal and cannot alter the detector input below.
+                        val trustContradictionTransition = trustContradictionTransitions.observe(active)
                         // 1. Obtener estado conocido (Caché o DB) para no mostrar PENDING si ya existe
                         val cacheKey = active.identityKey
                         val knownStatus = verificationCache[cacheKey] ?: VerificationStatus.PENDING
@@ -956,12 +971,11 @@ class MiniICService : Service() {
                             ),
                             baselineMaturity = com.alexisgordr.icdetector.core.DiagnosticEngine.maturity(diagnosticInputs)
                         )
-
                         // Caja negra: se actualiza fuera del hilo de UI. Registra desde 1/3 y
                         // cierra el episodio al recuperarse o al cambiar de identidad.
                         val previousIncidentIdentity = lastIncidentIdentity
                         lastIncidentIdentity = if (confirmedActive.temporalProgress.active) cacheKey else null
-                        scope.launch(Dispatchers.IO) {
+                        scope.launch(forensicDispatcher) {
                             if (previousIncidentIdentity != null && previousIncidentIdentity != cacheKey) {
                                 dbHelper.closeOpenIncidents(previousIncidentIdentity, interrupted = true)
                             }
@@ -974,13 +988,20 @@ class MiniICService : Service() {
 
                         // Captura forense pasiva. Recibe una copia del ciclo ya resuelto, jamás
                         // devuelve datos al detector y por tanto no puede alterar su veredicto.
-                        scope.launch(Dispatchers.IO) {
+                        //
+                        // v2.8.0 — Va por [forensicDispatcher], igual que los incidentes. Con
+                        // Dispatchers.IO (64 hilos) dos ciclos seguidos podían entrar a la vez: el
+                        // mutex interno del grabador los ordena, pero no garantiza EN QUÉ orden, y
+                        // un caso cuyo prebúfer se vuelca detrás de la muestra que lo disparó deja
+                        // de ser una línea de tiempo. Un solo hilo serializa la escritura de verdad.
+                        scope.launch(forensicDispatcher) {
                             forensicRecorder.observe(
                                 active = confirmedActive.copy(verified = knownStatus),
                                 neighbors = neighbors,
                                 location = currentLocation,
                                 latencyState = networkLatencyState.value,
-                                logs = liveLogs.value
+                                logs = liveLogs.value,
+                                trustContradictionTransition = trustContradictionTransition
                             )
                         }
 
@@ -1000,7 +1021,7 @@ class MiniICService : Service() {
 
                         // Actualizar estado de banda para la heurística 14 (tras el análisis,
                         // de modo que el PRÓXIMO ciclo compare contra estos valores).
-                        val isLteActive = active.networkType.contains("4G") || active.networkType.contains("LTE")
+                        val isLteActive = active.radioTech == RadioTech.LTE
                         prevBand = if (isLteActive) {
                             active.band ?: active.arfcn?.let { com.alexisgordr.icdetector.core.BandPlan.earfcnToBandLte(it) }
                         } else null

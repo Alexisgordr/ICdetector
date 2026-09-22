@@ -22,6 +22,7 @@ object ForensicExporter {
         files["case.json"] = JSONObject().apply {
             put("schemaVersion", 1); put("caseId", forensicCase.caseCode)
             put("state", forensicCase.state.name); put("createdAt", forensicCase.createdAt)
+            put("captureOrigin", forensicCase.origin.name)
             put("updatedAt", forensicCase.updatedAt); put("closedAt", forensicCase.closedAt ?: JSONObject.NULL)
             put("cellIdentity", forensicCase.cellIdentity); put("highestPhase", forensicCase.highestPhase)
             put("confirmed", forensicCase.confirmed); put("sampleCount", samples.size)
