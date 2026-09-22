@@ -1,0 +1,4 @@
+Corrección urgente del movimiento de Stable-Site. La evidencia solo avanza con posiciones GPS
+realmente nuevas, un fix aislado con mala precisión ya no borra la ventana buena y una pérdida GPS
+prolongada sigue reiniciándola. El muestreo en reposo usa actualizaciones de 15 segundos sin exigir
+distancia. Las reglas de detección, la puntuación, el esquema y el modo sombra no cambian.

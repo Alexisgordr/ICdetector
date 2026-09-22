@@ -1,6 +1,22 @@
 # ICdetection Status
 
+<<<<<<< HEAD
 ## v2.9.0 — Stable-Site context and conservative novelty hold 
+=======
+## v2.9.1 — emergency motion-sampling correction (local release candidate)
+
+**Version code:** 27  
+**Database schema:** 16 (unchanged)  
+**Enforcement:** disabled / shadow only
+
+Motion classification now consumes each new GPS timestamp once and is independent from cellular
+polling. One inaccurate fix abstains without erasing recent reliable evidence; after 60 seconds
+without a reliable fix the window is invalidated. Continuous updates remain limited to a 15-second
+interval and no longer require 20 m of movement. H1-H16, LocalCellTrust, scoring, neighbours,
+site maturity, schema and migrations are unchanged.
+
+## v2.9.0 — Stable-Site context and conservative novelty hold (development)
+>>>>>>> eb77400 (Fix Stable-Site motion sampling)
 
 **Release:** 
 **Version code:** 26

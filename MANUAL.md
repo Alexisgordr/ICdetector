@@ -45,7 +45,10 @@ when updating: accumulated days are reused and no migration or reset is required
 
 ### Stable-site protection
 
-Version 2.9.0 learns coarse local sites independently. A site identifier represents an
+Version 2.9.1 learns coarse local sites independently. Motion evidence advances only when Android
+delivers a genuinely new GPS fix. A poor fix temporarily reports `UNKNOWN` but preserves the good
+window for up to 60 seconds; longer gaps reset it. The 15-second GPS subscription has no movement
+distance gate so a stationary phone can demonstrate two minutes of coherent fixes. A site identifier represents an
 approximately 500 m grid bucket and is stored as a derived hash; the new site tables do not retain
 exact coordinates. Reliable fixes first classify motion. Two minutes of precise, coherent fixes
 are required for `STATIC_CONFIRMED`; missing or inaccurate GPS yields `UNKNOWN`.

@@ -8,14 +8,58 @@ class StableSiteTest {
     @Test fun `first fix and bad accuracy are unknown`() {
         assertEquals(MotionState.UNKNOWN, MotionClassifier().observe(fix(0)).state)
         assertEquals(MotionState.UNKNOWN, MotionClassifier().observe(fix(0, accuracy = 80f)).state)
-        assertEquals(MotionState.UNKNOWN, MotionClassifier().observe(null).state)
     }
 
     @Test fun `precise stable fixes become confirmed after two minutes`() {
         val c = MotionClassifier()
         assertEquals(MotionState.UNKNOWN, c.observe(fix(0)).state)
+        assertEquals(MotionState.UNKNOWN, c.observe(fix(30_000, lat = 42.80001)).state)
         assertEquals(MotionState.UNKNOWN, c.observe(fix(60_000, lat = 42.80002)).state)
+        assertEquals(MotionState.UNKNOWN, c.observe(fix(90_000, lat = 42.80002)).state)
         assertEquals(MotionState.STATIC_CONFIRMED, c.observe(fix(120_000, lat = 42.80003)).state)
+    }
+
+    @Test fun `isolated poor fix abstains without erasing good static window`() {
+        val c = MotionClassifier()
+        c.observe(fix(0)); c.observe(fix(30_000))
+        val poor = c.observe(fix(60_000, accuracy = 70f))
+        assertEquals(MotionState.UNKNOWN, poor.state)
+        assertEquals(MotionReason.ACCURACY_POOR, poor.reason)
+        c.observe(fix(90_000))
+        assertEquals(MotionState.STATIC_CONFIRMED, c.observe(fix(120_000)).state)
+    }
+
+    @Test fun `long gap invalidates static window`() {
+        val c = MotionClassifier()
+        c.observe(fix(0)); c.observe(fix(30_000))
+        assertEquals(MotionState.UNKNOWN, c.current(120_001).state)
+        assertEquals(MotionReason.NO_RECENT_FIX, c.current(120_001).reason)
+        assertEquals(MotionState.UNKNOWN, c.observe(fix(150_000)).state)
+        assertEquals(MotionReason.FIRST_FIX, c.current(150_001).reason)
+    }
+
+    @Test fun `repeated and out of order fixes do not inflate duration`() {
+        val c = MotionClassifier()
+        val one = fix(0)
+        repeat(20) { assertEquals(MotionState.UNKNOWN, c.observe(one).state) }
+        assertEquals(0L, c.current(one.timeMs).durationSeconds)
+        c.observe(fix(30_000))
+        val before = c.current(30_001)
+        c.observe(fix(10_000))
+        assertEquals(before, c.current(30_001))
+    }
+
+    @Test fun `real movement wins after an isolated poor fix`() {
+        val c = MotionClassifier()
+        c.observe(fix(0)); c.observe(fix(30_000, accuracy = 70f))
+        assertEquals(MotionState.MOVING, c.observe(fix(60_000, lat = 42.802, speed = 8f)).state)
+    }
+
+    @Test fun `poor fixes never become static`() {
+        val c = MotionClassifier()
+        listOf(0L, 30_000L, 60_000L, 90_000L, 120_000L).forEach {
+            assertEquals(MotionState.UNKNOWN, c.observe(fix(it, accuracy = 70f)).state)
+        }
     }
 
     @Test fun `real movement is moving and jitter is not`() {

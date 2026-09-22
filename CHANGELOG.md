@@ -2,6 +2,21 @@
 
 ## Released
 
+## 2.9.1
+
+### Emergency motion-sampling fix
+
+- Motion classification is now driven by distinct GPS callbacks instead of cellular polling and
+  repeated `lastKnownLocation` snapshots.
+- A single inaccurate fix now yields `UNKNOWN` without immediately deleting the preceding good
+  window. Four expected 15-second intervals (60 seconds) form the grace period; a longer gap
+  invalidates the window and requires fresh evidence.
+- Continuous GPS updates keep the 15-second time interval but use zero minimum distance so a truly
+  stationary device can still collect the temporal evidence required for `STATIC_CONFIRMED`.
+- Duplicate and out-of-order timestamps cannot add samples or duration. The 50 m positive-evidence
+  accuracy limit, movement precedence, schema 16 and shadow-only enforcement remain unchanged.
+- Stable-Site Terminal diagnostics now include the reason for an `UNKNOWN` motion result.
+
 ## 2.9.0
 
 ### Stable-Site Novelty Hold

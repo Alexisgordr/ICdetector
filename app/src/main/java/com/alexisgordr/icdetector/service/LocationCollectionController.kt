@@ -25,7 +25,7 @@ internal class LocationCollectionController(
     private val context: Context,
     private val scope: CoroutineScope,
     private val log: (String) -> Unit,
-    private val onStreamFixAvailable: () -> Unit,
+    private val onStreamFixAvailable: (Location) -> Unit,
     private val onPreciseFixAccepted: (Location) -> Unit
 ) {
     private val manager = context.getSystemService(LocationManager::class.java)
@@ -43,7 +43,7 @@ internal class LocationCollectionController(
     private var lastScreenOffRetry = 0L
 
     private val streamListener = LocationListener { location ->
-        if (location.accuracy < MAX_ACCURACY_METERS) onStreamFixAvailable()
+        onStreamFixAvailable(Location(location))
     }
 
     init {
@@ -221,7 +221,9 @@ internal class LocationCollectionController(
         const val PREFS_NAME = "miniic_prefs"
         const val KEY_LAST_LOCATION = "last_accepted_loc"
         const val STREAM_INTERVAL_MS = 15_000L
-        const val STREAM_MIN_DISTANCE_METERS = 20f
+        // Stable motion needs periodic fixes while the device is stationary. A distance gate
+        // would suppress precisely those samples; the 15 s time gate remains the power bound.
+        const val STREAM_MIN_DISTANCE_METERS = 0f
         const val MAX_FIX_AGE_MS = 120_000L
         const val MAX_ACCURACY_METERS = 100f
         const val FORCED_FIX_DEBOUNCE_MS = 30_000L

@@ -1,0 +1,4 @@
+Emergency Stable-Site motion fix. Motion evidence now advances only on genuinely new GPS fixes,
+brief poor-accuracy fixes no longer erase the good window, and prolonged GPS loss still resets it.
+Stationary sampling now uses periodic 15-second updates without a distance gate. Detection rules,
+scoring, database schema and shadow-only enforcement are unchanged.

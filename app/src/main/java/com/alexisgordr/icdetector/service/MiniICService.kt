@@ -82,6 +82,10 @@ class MiniICService : Service() {
     private lateinit var forensicRecorder: ForensicRecorder
     private val trustContradictionTransitions = TrustContradictionTransitionTracker()
     private val stableSiteMotion = com.alexisgordr.icdetector.core.MotionClassifier()
+    @Volatile private var latestMotionEvidence = com.alexisgordr.icdetector.core.MotionEvidence(
+        com.alexisgordr.icdetector.core.MotionState.UNKNOWN,
+        reason = com.alexisgordr.icdetector.core.MotionReason.NO_RECENT_FIX
+    )
     private var stableSitePreviousIdentity: String? = null
     private var lastStableSiteLog: String? = null
     private var stableSiteIntensiveActive = false
@@ -248,8 +252,14 @@ class MiniICService : Service() {
             context = this,
             scope = scope,
             log = { appendLog("[GPS]", it) },
-            onStreamFixAvailable = { onGpsAvailable() },
-            onPreciseFixAccepted = { location -> persistPreciseLocation(location) }
+            onStreamFixAvailable = { location ->
+                observeMotionFix(location)
+                if (location.accuracy < 100f) onGpsAvailable()
+            },
+            onPreciseFixAccepted = { location ->
+                observeMotionFix(location)
+                persistPreciseLocation(location)
+            }
         )
         apiCoordinateValidator = ApiCoordinateValidator(
             db = dbHelper,
@@ -732,12 +742,11 @@ class MiniICService : Service() {
                 cellProcessingMutex.withLock {
                 if (processingSequence < enqueuedCellProcessing.get()) return@withLock
                 val currentLocation = getCurrentLocation()
-                val motionEvidence = stableSiteMotion.observe(currentLocation?.let {
-                    com.alexisgordr.icdetector.core.MotionFix(
-                        it.latitude, it.longitude, it.time, it.accuracy,
-                        if (it.hasSpeed()) it.speed else null
-                    )
-                })
+                // Cellular polling only reads motion. New evidence enters from real Location
+                // callbacks, so a repeated lastKnownLocation cannot manufacture static time.
+                val motionEvidence = stableSiteMotion.current(System.currentTimeMillis()).also {
+                    latestMotionEvidence = it
+                }
                 val siteKeys = currentLocation?.takeIf { it.accuracy <= 50f }?.let {
                     com.alexisgordr.icdetector.core.StableSiteKey.candidates(it.latitude, it.longitude)
                 }.orEmpty()
@@ -958,13 +967,13 @@ class MiniICService : Service() {
                         }
                         stableSitePreviousIdentity = active.identityKey
                         val siteEvidence = stableSiteDecision.evidence
-                        val siteLog = "${stableSiteDecision.featureState}|${motionEvidence.state}|${siteEvidence?.siteNeighbourDays}|${stableSiteDecision.wouldTrigger}|${stableSiteDecision.enforced}"
+                        val siteLog = "${stableSiteDecision.featureState}|${motionEvidence.state}|${motionEvidence.reason}|${siteEvidence?.siteNeighbourDays}|${stableSiteDecision.wouldTrigger}|${stableSiteDecision.enforced}"
                         if (siteLog != lastStableSiteLog) {
                             lastStableSiteLog = siteLog
                             appendLog(
                                 "[SITE]",
                                 "Protección=${stableSiteDecision.featureState}, sitio=${if (siteKey != null) "detectado" else "no disponible"}, " +
-                                    "movimiento=${motionEvidence.state}, vecinos=${siteEvidence?.siteNeighbourDays ?: 0} días, " +
+                                    "movimiento=${motionEvidence.state} (${motionEvidence.reason}), vecinos=${siteEvidence?.siteNeighbourDays ?: 0} días, " +
                                     "aplicación=${when { stableSiteDecision.enforced -> "SITE_UNVERIFIED"; stableSiteDecision.wouldTrigger -> "SOMBRA: aplicaría SITE_UNVERIFIED"; else -> "NO ACTIVA" }}"
                             )
                         }
@@ -1137,6 +1146,18 @@ class MiniICService : Service() {
 
     private fun getCurrentLocation(): Location? {
         return locationController.currentLocation()
+    }
+
+    private fun observeMotionFix(location: Location) {
+        latestMotionEvidence = stableSiteMotion.observe(
+            com.alexisgordr.icdetector.core.MotionFix(
+                location.latitude,
+                location.longitude,
+                location.time,
+                location.accuracy,
+                if (location.hasSpeed()) location.speed else null
+            )
+        )
     }
 
     /**

@@ -3,20 +3,43 @@ package com.alexisgordr.icdetector.core
 import kotlin.math.*
 
 enum class MotionState { UNKNOWN, STATIC_CONFIRMED, MOVING }
+enum class MotionReason { FIRST_FIX, INSUFFICIENT_DURATION, ACCURACY_POOR, NO_RECENT_FIX, STATIC, MOVEMENT }
 enum class StableSiteFeatureState { UNAVAILABLE, BOOTSTRAP, LEARNING, SHADOW_READY, ACTIVE }
 enum class StableSiteNovelty { KNOWN_AT_SITE, SITE_NOVEL, GLOBALLY_NOVEL }
 
-// Field rollout switch. v2.9.0 records wouldTrigger but does not freeze trust learning.
+// Field rollout switch. v2.9.1 records wouldTrigger but does not freeze trust learning.
 const val STABLE_SITE_ENFORCEMENT_ENABLED = false
 
 data class MotionFix(val latitude: Double, val longitude: Double, val timeMs: Long, val accuracyM: Float, val speedMps: Float?)
-data class MotionEvidence(val state: MotionState, val durationSeconds: Long = 0, val accuracyM: Float? = null, val displacementM: Float? = null)
+data class MotionEvidence(
+    val state: MotionState,
+    val durationSeconds: Long = 0,
+    val accuracyM: Float? = null,
+    val displacementM: Float? = null,
+    val reason: MotionReason? = null
+)
 
-/** Conservative rolling motion classifier. Missing or inaccurate GNSS always abstains. */
-class MotionClassifier(private val requiredStaticMs: Long = 120_000L) {
+/** Conservative rolling classifier driven only by distinct GNSS fixes. */
+class MotionClassifier(
+    private val requiredStaticMs: Long = 120_000L,
+    private val expectedFixIntervalMs: Long = 15_000L
+) {
     private val fixes = ArrayDeque<MotionFix>()
-    fun observe(fix: MotionFix?): MotionEvidence {
-        if (fix == null || fix.accuracyM > 50f || fix.timeMs <= 0) { fixes.clear(); return MotionEvidence(MotionState.UNKNOWN) }
+    private val gracePeriodMs = expectedFixIntervalMs * 4
+    private var lastAcceptedFixTime = Long.MIN_VALUE
+    private var latest = MotionEvidence(MotionState.UNKNOWN, reason = MotionReason.NO_RECENT_FIX)
+
+    @Synchronized fun observe(fix: MotionFix): MotionEvidence {
+        // A Location can arrive through both the continuous and one-shot listeners. It is
+        // evidence only once, and an older callback must not rewind or inflate the window.
+        if (fix.timeMs <= lastAcceptedFixTime) return latest
+        if (fix.timeMs <= 0 || fix.accuracyM > MAX_ACCURACY_M || !fix.accuracyM.isFinite()) {
+            if (lastAcceptedFixTime == Long.MIN_VALUE || fix.timeMs - lastAcceptedFixTime > gracePeriodMs) fixes.clear()
+            latest = MotionEvidence(MotionState.UNKNOWN, accuracyM = fix.accuracyM, reason = MotionReason.ACCURACY_POOR)
+            return latest
+        }
+        if (lastAcceptedFixTime != Long.MIN_VALUE && fix.timeMs - lastAcceptedFixTime > gracePeriodMs) fixes.clear()
+        lastAcceptedFixTime = fix.timeMs
         fixes.addLast(fix)
         while (fixes.isNotEmpty() && fix.timeMs - fixes.first().timeMs > requiredStaticMs + 60_000L) fixes.removeFirst()
         val first = fixes.first()
@@ -26,14 +49,29 @@ class MotionClassifier(private val requiredStaticMs: Long = 120_000L) {
         val movementThreshold = max(40f, first.accuracyM + fix.accuracyM)
         if ((reliableSpeed != null && reliableSpeed >= 2.5f) || distance > movementThreshold) {
             fixes.clear(); fixes.addLast(fix)
-            return MotionEvidence(MotionState.MOVING, duration, fix.accuracyM, distance)
+            latest = MotionEvidence(MotionState.MOVING, duration, fix.accuracyM, distance, MotionReason.MOVEMENT)
+            return latest
         }
         val envelope = max(25f, fixes.maxOf { it.accuracyM } * 1.5f)
         val maxDistance = fixes.maxOf { distanceMeters(first.latitude, first.longitude, it.latitude, it.longitude) }
         val static = duration * 1_000L >= requiredStaticMs && maxDistance <= envelope && fixes.none { (it.speedMps ?: 0f) > 1.5f }
-        return MotionEvidence(if (static) MotionState.STATIC_CONFIRMED else MotionState.UNKNOWN, duration, fix.accuracyM, maxDistance)
+        latest = MotionEvidence(
+            if (static) MotionState.STATIC_CONFIRMED else MotionState.UNKNOWN,
+            duration, fix.accuracyM, maxDistance,
+            if (static) MotionReason.STATIC else if (fixes.size == 1) MotionReason.FIRST_FIX else MotionReason.INSUFFICIENT_DURATION
+        )
+        return latest
+    }
+
+    @Synchronized fun current(nowMs: Long): MotionEvidence {
+        if (lastAcceptedFixTime == Long.MIN_VALUE || nowMs - lastAcceptedFixTime > gracePeriodMs) {
+            fixes.clear()
+            latest = MotionEvidence(MotionState.UNKNOWN, reason = MotionReason.NO_RECENT_FIX)
+        }
+        return latest
     }
     companion object {
+        private const val MAX_ACCURACY_M = 50f
         fun distanceMeters(aLat: Double, aLon: Double, bLat: Double, bLon: Double): Float {
             val r = 6_371_000.0; val p1 = Math.toRadians(aLat); val p2 = Math.toRadians(bLat)
             val dp = p2 - p1; val dl = Math.toRadians(bLon - aLon)
