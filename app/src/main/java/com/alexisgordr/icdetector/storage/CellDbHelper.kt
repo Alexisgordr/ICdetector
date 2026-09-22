@@ -1524,33 +1524,28 @@ class CellDbHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME, 
             cell.cellId, cell.mnc, cell.tac, cell.mcc, cell.radioTech.name,
             TRUSTED_BASELINE_MIN_SCORE.toString(), threshold
         )
-        val dayCounts = LinkedHashMap<String, Int>()
         val pciCounts = HashMap<Int, Int>()
         val arfcnCounts = HashMap<Int, Int>()
         val pciByArfcn = HashMap<Int, HashMap<Int, Int>>()
         val recentCleanPcisByArfcn = HashMap<Int, MutableSet<Int>>()
-        var clean = 0
+        var detailedClean = 0
         var located = 0
         var rf = 0
-        var firstMs: Long? = null
-        var lastMs: Long? = null
         val format = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.ROOT)
+        val cleanWhere = "$COLUMN_CID=? AND $COLUMN_MNC=? AND $COLUMN_TAC=? AND $COLUMN_MCC=? " +
+            "AND $COLUMN_RADIO=? AND $COLUMN_SCORE>=? " +
+            "AND ($COLUMN_FAILED_H IS NULL OR TRIM($COLUMN_FAILED_H)='' OR $COLUMN_FAILED_H='OK') " +
+            "AND $COLUMN_TIMESTAMP>=? AND length($COLUMN_TIMESTAMP)>=10"
+        val temporalSummary = getDailyEvidenceSummary(cleanWhere, args, format)
         val recentThreshold = format.format(Date(System.currentTimeMillis() - 48L * 60 * 60 * 1000))
         readableDatabase.rawQuery(
             "SELECT $COLUMN_TIMESTAMP,$COLUMN_LAT,$COLUMN_LON,$COLUMN_PCI,$COLUMN_ARFCN " +
-                "FROM $TABLE_HISTORY WHERE $COLUMN_CID=? AND $COLUMN_MNC=? AND $COLUMN_TAC=? " +
-                "AND $COLUMN_MCC=? AND $COLUMN_RADIO=? AND $COLUMN_SCORE>=? " +
-                "AND ($COLUMN_FAILED_H IS NULL OR TRIM($COLUMN_FAILED_H)='' OR $COLUMN_FAILED_H='OK') " +
-                "AND $COLUMN_TIMESTAMP>=? ORDER BY $COLUMN_ID DESC LIMIT 500",
+                "FROM $TABLE_HISTORY WHERE $cleanWhere ORDER BY $COLUMN_ID DESC LIMIT 500",
             args
         ).use { c ->
             while (c.moveToNext()) {
                 val ts = c.getString(0).orEmpty()
-                clean++
-                if (ts.length >= 10) dayCounts[ts.substring(0, 10)] = (dayCounts[ts.substring(0, 10)] ?: 0) + 1
-                runCatching { format.parse(ts)?.time }.getOrNull()?.let { time ->
-                    firstMs = minOf(firstMs ?: time, time); lastMs = maxOf(lastMs ?: time, time)
-                }
+                detailedClean++
                 if (!c.isNull(1) && !c.isNull(2)) located++
                 val pci = if (!c.isNull(3)) c.getInt(3).takeIf { it in 0..1007 } else null
                 val arfcn = if (!c.isNull(4)) c.getInt(4).takeIf { it > 0 } else null
@@ -1563,9 +1558,8 @@ class CellDbHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME, 
                 }
             }
         }
-        fun establishedValues(counts: Map<Int, Int>): Set<Int> = counts
-            .filterValues { count -> count >= 2 && (clean == 0 || count.toDouble() / clean >= 0.15) }
-            .keys
+        fun establishedValues(counts: Map<Int, Int>): Set<Int> =
+            com.alexisgordr.icdetector.core.DetailedRfEvidence.establishedValues(counts, detailedClean)
         val knownPcisByArfcn = pciByArfcn.mapNotNull { (carrier, counts) ->
             val carrierTotal = counts.values.sum()
             val established = counts.filterValues { count ->
@@ -1582,49 +1576,40 @@ class CellDbHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME, 
         ).use { c -> while (c.moveToNext()) { trustedTransitions += c.getInt(0); trustedRoutes++ } }
         val candidate = if (cell.pci != null && cell.arfcn != null &&
             cell.pci !in knownPcisByArfcn[cell.arfcn].orEmpty()) {
-            val candidateDays = LinkedHashMap<String, Int>()
             var candidateLocated = 0
-            var candidateFirstMs: Long? = null
-            var candidateLastMs: Long? = null
+            val candidateArgs = arrayOf(
+                cell.cellId, cell.mnc, cell.tac, cell.mcc, cell.radioTech.name,
+                cell.pci.toString(), cell.arfcn.toString(),
+                LOCAL_TRUST_RECONFIGURATION_HISTORY_LIKE, threshold
+            )
+            val candidateWhere = "$COLUMN_CID=? AND $COLUMN_MNC=? AND $COLUMN_TAC=? AND $COLUMN_MCC=? " +
+                "AND $COLUMN_RADIO=? AND $COLUMN_PCI=? AND $COLUMN_ARFCN=? AND $COLUMN_SCORE>=100 " +
+                "AND $COLUMN_FAILED_H LIKE ? AND $COLUMN_TIMESTAMP>=? AND length($COLUMN_TIMESTAMP)>=10"
+            val candidateTemporal = getDailyEvidenceSummary(candidateWhere, candidateArgs, format)
             readableDatabase.rawQuery(
-                "SELECT $COLUMN_TIMESTAMP,$COLUMN_LAT,$COLUMN_LON FROM $TABLE_HISTORY " +
-                    "WHERE $COLUMN_CID=? AND $COLUMN_MNC=? AND $COLUMN_TAC=? AND $COLUMN_MCC=? " +
-                    "AND $COLUMN_RADIO=? AND $COLUMN_PCI=? AND $COLUMN_ARFCN=? AND $COLUMN_SCORE>=100 " +
-                    "AND $COLUMN_FAILED_H LIKE ? AND $COLUMN_TIMESTAMP>=? ORDER BY $COLUMN_ID DESC LIMIT 500",
-                arrayOf(
-                    cell.cellId, cell.mnc, cell.tac, cell.mcc, cell.radioTech.name,
-                    cell.pci.toString(), cell.arfcn.toString(),
-                    LOCAL_TRUST_RECONFIGURATION_HISTORY_LIKE, threshold
-                )
+                "SELECT $COLUMN_LAT,$COLUMN_LON FROM $TABLE_HISTORY WHERE $candidateWhere " +
+                    "ORDER BY $COLUMN_ID DESC LIMIT 500",
+                candidateArgs
             ).use { c ->
                 while (c.moveToNext()) {
-                    val ts = c.getString(0).orEmpty()
-                    if (ts.length >= 10) candidateDays[ts.substring(0, 10)] =
-                        (candidateDays[ts.substring(0, 10)] ?: 0) + 1
-                    runCatching { format.parse(ts)?.time }.getOrNull()?.let { time ->
-                        candidateFirstMs = minOf(candidateFirstMs ?: time, time)
-                        candidateLastMs = maxOf(candidateLastMs ?: time, time)
-                    }
-                    if (!c.isNull(1) && !c.isNull(2)) candidateLocated++
+                    if (!c.isNull(0) && !c.isNull(1)) candidateLocated++
                 }
             }
             LocalRfReconfiguration(
                 pci = cell.pci,
                 arfcn = cell.arfcn,
-                distinctDays = candidateDays.size,
-                cappedObservations = candidateDays.values.sumOf { minOf(it, 3) },
+                distinctDays = candidateTemporal.distinctDays,
+                cappedObservations = candidateTemporal.cappedObservations,
                 locatedObservations = candidateLocated,
-                ageHours = if (candidateFirstMs != null && candidateLastMs != null)
-                    ((candidateLastMs!! - candidateFirstMs!!) / 3_600_000L).coerceAtLeast(0) else 0,
+                ageHours = candidateTemporal.ageHours,
                 oldPairSeenRecently = recentCleanPcisByArfcn[cell.arfcn].orEmpty().any { it != cell.pci }
             )
         } else null
-        val ageHours = if (firstMs != null && lastMs != null) ((lastMs!! - firstMs!!) / 3_600_000L).coerceAtLeast(0) else 0
         return LocalCellTrustEvidence(
-            cleanObservations = clean,
-            cappedCleanObservations = dayCounts.values.sumOf { minOf(it, 3) },
-            distinctDays = dayCounts.size,
-            ageHours = ageHours,
+            cleanObservations = temporalSummary.observations,
+            cappedCleanObservations = temporalSummary.cappedObservations,
+            distinctDays = temporalSummary.distinctDays,
+            ageHours = temporalSummary.ageHours,
             locatedObservations = located,
             knownPcis = establishedValues(pciCounts),
             knownArfcns = establishedValues(arfcnCounts),
@@ -1634,6 +1619,28 @@ class CellDbHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME, 
             trustedTransitions = trustedTransitions,
             trustedRoutes = trustedRoutes
         )
+    }
+
+    private fun getDailyEvidenceSummary(
+        whereClause: String,
+        args: Array<String>,
+        format: SimpleDateFormat
+    ): com.alexisgordr.icdetector.core.DailyEvidenceSummary {
+        val buckets = mutableListOf<com.alexisgordr.icdetector.core.DailyEvidenceBucket>()
+        readableDatabase.rawQuery(
+            "SELECT substr($COLUMN_TIMESTAMP,1,10),COUNT(*),MIN($COLUMN_TIMESTAMP),MAX($COLUMN_TIMESTAMP) " +
+                "FROM $TABLE_HISTORY WHERE $whereClause GROUP BY substr($COLUMN_TIMESTAMP,1,10)",
+            args
+        ).use { c ->
+            while (c.moveToNext()) {
+                buckets += com.alexisgordr.icdetector.core.DailyEvidenceBucket(
+                    observations = c.getInt(1),
+                    firstTimestampMs = runCatching { format.parse(c.getString(2))?.time }.getOrNull(),
+                    lastTimestampMs = runCatching { format.parse(c.getString(3))?.time }.getOrNull()
+                )
+            }
+        }
+        return com.alexisgordr.icdetector.core.DailyEvidenceSummary.from(buckets)
     }
 
     /**

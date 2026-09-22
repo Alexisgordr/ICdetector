@@ -2,6 +2,23 @@
 
 ## Unreleased
 
+## 2.8.1
+
+### Frequent cells can complete their local trust history
+
+- Removed a permanent 500-row ceiling from the temporal evidence used by local cell confidence.
+  Distinct days, age, total clean observations and the three-per-day capped count now cover the
+  complete 90-day learning window. A frequently observed cell can therefore reach the existing
+  fourteen-day floor instead of remaining in `LEARNING` forever.
+- Applied the same correction to quarantined PCI/ARFCN reconfiguration evidence. Existing safety
+  gates remain mandatory, and a new pair cannot be accepted while the former pair remains visible.
+- The detailed PCI, ARFCN and location scan remains bounded to the latest 500 clean rows. This
+  preserves predictable runtime without imposing a time ceiling on trust. The existing eligibility
+  gates for located and RF observations therefore still describe those 500 recent detailed rows.
+- No database migration or reset is required. Schema 15, H1-H16, scoring, alert thresholds,
+  Mobility Consistency and forensic rules are unchanged; existing history must be retained.
+- Release metadata updated to `versionName 2.8.1` and `versionCode 25`.
+
 ## 2.8.0
 
 ### Evidence capture when the service starts on an already contradicted cell

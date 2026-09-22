@@ -93,7 +93,7 @@ class LocalCellTrustEngineTest {
         assertNull(out.suspiciousReason)
     }
 
-    @Test fun `alternating old pci keeps reconfiguration quarantined`() {
+    @Test fun `sudden clone pci stays changed while old pair remains visible`() {
         val candidate = LocalRfReconfiguration(
             pci = 311, arfcn = 2850, distinctDays = 14, cappedObservations = 30,
             locatedObservations = 20, ageHours = 13L * 24L, oldPairSeenRecently = true
@@ -102,6 +102,7 @@ class LocalCellTrustEngineTest {
             cell(pci = 311), mature().copy(reconfigurationCandidate = candidate)
         )
         assertEquals(LocalCellTrustState.CHANGED, out.localCellTrust.state)
+        assertEquals(setOf("PCI"), out.localCellTrust.contradictions)
         assertNotNull(out.suspiciousReason)
     }
 }

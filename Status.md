@@ -1,5 +1,22 @@
 # ICdetection Status
 
+## v2.8.1 — complete temporal evidence for frequent cells
+
+**Release:** local release candidate
+**Version code:** 25
+**Database schema:** 15 (unchanged)
+**Detection baseline:** unchanged; historical admission is corrected
+
+Local confidence and RF reconfiguration quarantine now calculate days, age and capped clean
+observations across the complete 90-day window. The latest-500 limit remains only on detailed
+PCI/ARFCN and location analysis. This removes the permanent ceiling affecting cells observed more
+than roughly 36 times per day while retaining every existing reconfiguration safeguard, including
+the veto while the previous RF pair remains visible. The location and RF eligibility minimums
+continue to use that bounded set of 500 recent detailed observations.
+
+Installation must preserve the existing database: there is no migration and no reset is needed.
+H1-H16, scoring, confirmation, alarms, Mobility Consistency and forensic capture are unchanged.
+
 ## v2.8.0 — forensic integrity and physical radio decisions
 
 **Release:** stable

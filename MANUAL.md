@@ -32,6 +32,13 @@ and LTE band downgrade (H14) follows the radio technology of the actual `CellInf
 The 4G/5G label shown by Android remains useful presentation context, but an NSA icon cannot make
 its LTE anchor behave like a physical NR cell in those checks.
 
+From v2.8.1, the fourteen-day local-confidence requirement uses the complete 90-day clean-history
+window even for cells sampled very frequently. The app still bounds detailed radio and coordinate
+analysis to the latest 500 clean rows for predictable performance. The minimums of eight located
+and ten RF observations are evaluated within that recent detailed window, so a long indoor period
+without usable GPS can delay eligibility despite older located history. Keep the existing database
+when updating: accumulated days are reused and no migration or reset is required.
+
 ---
 
 ## 2. Initial setup
