@@ -1,8 +1,8 @@
 # ICdetection Status
 
-## v2.9.0 — Stable-Site context and conservative novelty hold (development)
+## v2.9.0 — Stable-Site context and conservative novelty hold 
 
-**Release:** local development / not published
+**Release:** 
 **Version code:** 26
 **Database schema:** 16 (additive)
 **Detection baseline:** H1-H16 and scoring unchanged
