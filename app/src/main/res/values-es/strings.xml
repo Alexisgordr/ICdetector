@@ -148,4 +148,5 @@
     <string name="delete_incident_title">¿Eliminar incidente?</string>
     <string name="delete_incident_description">Esto elimina permanentemente el incidente cerrado de la celda CID %1$s.</string>
     <string name="delete_incident">ELIMINAR INCIDENTE</string>
+    <string name="forensic_trust_contradiction">CONTRADICCIÓN EN CELDA ESTABLECIDA · CASO DE OBSERVACIÓN</string>
 </resources>

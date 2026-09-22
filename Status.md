@@ -1,8 +1,41 @@
 # ICdetection Status
 
-## v2.7.1 — interactive geometry and searchable antenna explorer (development)
+## v2.8.0 — forensic integrity and physical radio decisions
+
+**Release:** stable
+**Version code:** 24
+**Database schema:** 15 (unchanged)
+**Detection baseline:** changed; record installation as a dataset cut
+
+Forensic capture now survives an already-contradicted first observation without producing one
+duplicate per restart. Deduplication requires a real stored sample, failed writes become visible,
+retention removes whole closed cases, active captures remain protected, and SQLite foreign keys
+are enforced. H8, H11 and H14 now derive physical decisions from `radioTech`; an LTE anchor whose
+display label says 5G NSA is therefore treated consistently as LTE. H6 remains unchanged.
+
+This is the final planned candidate before definitive field collection. Once validated, the
+project enters a freeze of at least one month except for defects that threaten data integrity,
+collection continuity, security or export.
+
+## v2.7.2 — silent established-cell contradiction capture (development)
 
 **Release:** local development / not published
+**Version code:** 23
+**Database schema:** 15 (unchanged)
+**Detection baseline:** unchanged from v2.7.1
+
+An actual `ESTABLISHED → CHANGED` transition with a non-empty trust-contradiction set now opens a
+neutral forensic observation case. The trigger is scoped to the existing complete cell identity,
+fires only on the transition, and reuses the production prebuffer and post-capture window. A later
+normal anomaly promotes the active case rather than duplicating it. The observer does not feed into
+scoring, temporal confirmation, episode tracking, learning, alerts or notifications.
+
+The origin is encoded compatibly in the existing case code (`ICD-OBS-…`) and sample payload, so
+schema 15 and all existing databases remain valid.
+
+## v2.7.1 — interactive geometry and searchable antenna explorer
+
+**Release:** stable
 **Version code:** 22
 **Database schema:** 15 (unchanged)
 **Detection baseline:** unchanged from v2.7.0

@@ -2,6 +2,88 @@
 
 ## Unreleased
 
+## 2.8.0
+
+### Evidence capture when the service starts on an already contradicted cell
+
+- The trust-contradiction observer now reports a typed signal instead of a boolean:
+  `TRANSITION` for an `ESTABLISHED → CHANGED` edge seen live, and `ON_START` for the first
+  observation of an identity that is already `CHANGED` with real contradictions.
+- `ON_START` closes a blind spot: the observer's state map lives in memory, so a service restart
+  (device reboot, OTA, process death) emptied it and no case could ever be opened for a cell that
+  was already contradicted when monitoring resumed — the situation where evidence matters most.
+- `ON_START` cases are deduplicated against the database, not in memory: at most one case per
+  complete cell identity per 24 hours, counting cases of any origin. A suppressed trigger still
+  stays in the 60-second prebuffer, so a later real anomaly carries it into its own case.
+- A live `TRANSITION` never consults the dedup window, and never opened duplicate cases to
+  begin with. An `ON_START` that coincides with a real anomaly keeps the `ALARM` origin.
+
+### Forensic writes fail loudly
+
+- `insertForensicSample` now returns the inserted rowId, or `-1`. `SQLiteDatabase.insert()`
+  swallows a full disk, a locked database and a foreign-key violation and returns `-1` without
+  throwing, so discarding that value meant a capture could store nothing at all in silence.
+- Three consecutive failed writes mark forensic storage as degraded and write one line to the
+  terminal; a successful write clears the streak and reports the recovery. Same `CollectionHealth`
+  logic already used for history writes, so an isolated lock does not raise a false alarm.
+- The forensic recorder now runs on the same single-threaded dispatcher as incident writing.
+  On `Dispatchers.IO` two cycles could enter concurrently: the recorder's mutex ordered them but
+  did not guarantee *which* order, and a prebuffer flushed after its own trigger is not a timeline.
+
+### The sample cap deletes whole cases instead of mutilating them
+
+- `enforceForensicSampleCap` now deletes complete closed cases, oldest first, until the total fits
+  under `MAX_FORENSIC_SAMPLES`. The previous version trimmed individual samples by rowid, which
+  kept the cap and destroyed the property that makes a forensic package usable: a case missing its
+  prebuffer and first minutes still listed its `ICD-…` code and sample count, and exported as if
+  it were intact.
+- Cases in `CAPTURING` or `POST_CAPTURE` are never candidates. If closed cases alone cannot bring
+  the total under the cap, the maintenance log says so instead of cutting into a live capture.
+- The decision lives in `core/ForensicRetentionPolicy`, without SQLite or Android, so it is tested
+  directly; the SQL query is what guarantees only closed cases are ever offered to it.
+
+### Foreign keys are actually enforced
+
+- `forensic_samples` has declared `FOREIGN KEY(case_id) REFERENCES forensic_cases(id) ON DELETE
+  CASCADE` since schema 14, but SQLite ignores that clause unless enabled per connection:
+  `PRAGMA foreign_keys` defaults to OFF. The guarantee was written in the table and never applied.
+- `onConfigure` now enables it, and sweeps orphan samples left by the previous behaviour first
+  (guarded: on a first install the tables do not exist yet, and that is not an error).
+- No schema migration: the database stays at version 15 and no row is rewritten.
+
+### Physical heuristics use the observed radio technology
+
+- H8 channel-range validation, H11's sparse-area distance threshold and H14 LTE band downgrade
+  now use `radioTech` from the concrete `CellInfo` class instead of Android's display label.
+- The same LTE anchor therefore produces the same decision whether the status bar says `4G LTE`
+  or `5G NR (NSA)`. H6 and all heuristic weights remain unchanged.
+- Added label-independence regressions for H8/H11/H14 and a production-chain regression covering
+  analysis, local trust, episode correlation and temporal confirmation.
+
+### Compatibility
+
+- Heuristic weights, Bayesian scoring, temporal confirmation, episode tracking, baselines and
+  learning are unchanged. H8/H11/H14 can change a verdict where the display label disagreed with
+  the physical radio technology; record v2.8.0 installation as a dataset cut.
+- Release metadata updated to `versionName 2.8.0` and `versionCode 24`; database schema remains 15.
+
+## 2.7.2
+
+### Silent evidence capture for established-cell contradictions
+
+- Added a passive `ESTABLISHED → CHANGED` transition observer keyed by the existing complete cell
+  identity. A transition with real trust contradictions opens one neutral observation case; a
+  persistent `CHANGED` state cannot open another case every polling cycle.
+- Reused the existing 60-second prebuffer and post-capture window. The triggering observation now
+  records the trust state and contradiction set alongside the unchanged score and heuristics.
+- Observation cases use the compatible `ICD-OBS-…` case-code prefix and a neutral bilingual label.
+  No database migration is required.
+- If normal temporal detection starts while the observation case is active, that same case is
+  promoted and continued instead of creating duplicate evidence.
+- Detection rules H1–H16, weights, thresholds, Bayesian scoring, temporal confirmation, episode
+  tracking, baselines, learning, alarms and ordinary forensic cases remain unchanged.
+- Updated release metadata to `versionName 2.7.2` and `versionCode 23`; database schema remains 15.
+
 ## 2.7.1
 
 ### Live foreground telemetry

@@ -24,9 +24,21 @@ internal class DatabaseMaintenance(
             if (deleted > 0) {
                 log("Poda de histórico: $deleted registros de más de ${CellDbHelper.DEFAULT_RETENTION_DAYS} días eliminados.")
             }
-            val trimmed = db.enforceForensicSampleCap()
-            if (trimmed > 0) {
-                log("Muestras forenses recortadas al tope de ${CellDbHelper.MAX_FORENSIC_SAMPLES}: $trimmed eliminadas.")
+            // v2.8.0 — El tope forense se aplica por casos completos, no por muestras sueltas: un
+            // paquete mutilado se exporta como si estuviera íntegro. Ver enforceForensicSampleCap.
+            val pruned = db.enforceForensicSampleCap()
+            if (pruned.casesDeleted > 0) {
+                log(
+                    "Poda forense: ${pruned.casesDeleted} caso(s) cerrado(s) eliminados enteros " +
+                        "(${pruned.samplesDeleted} muestras) para respetar el tope de " +
+                        "${CellDbHelper.MAX_FORENSIC_SAMPLES}. Restantes: ${pruned.remainingSamples}."
+                )
+            }
+            if (pruned.overCapacity) {
+                log(
+                    "⚠️ Tope forense superado (${pruned.remainingSamples} muestras) con solo casos " +
+                        "abiertos. No se recortan: una captura en curso no se mutila."
+                )
             }
         } catch (e: Exception) {
             log("⚠️ Mantenimiento de base de datos fallido: ${e.message}")

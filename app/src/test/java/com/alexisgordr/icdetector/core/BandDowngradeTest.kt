@@ -1,6 +1,7 @@
 package com.alexisgordr.icdetector.core
 
 import com.alexisgordr.icdetector.models.CellData
+import com.alexisgordr.icdetector.models.RadioTech
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -26,6 +27,7 @@ class BandDowngradeTest {
         tac = "100",
         dbm = -75,
         mcc = "214",
+        radioTech = RadioTech.LTE,
         arfcn = 6300   // B20 (banda baja sub-GHz)
     )
 

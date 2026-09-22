@@ -3,6 +3,7 @@ package com.alexisgordr.icdetector.core
 import com.alexisgordr.icdetector.models.CellData
 import com.alexisgordr.icdetector.models.HeuristicStatus
 import com.alexisgordr.icdetector.models.VerificationStatus
+import com.alexisgordr.icdetector.models.RadioTech
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
@@ -28,6 +29,7 @@ class HeuristicsTest {
     private fun active(
         dbm: Int = -90,
         networkType: String = "4G LTE",
+        radioTech: RadioTech = RadioTech.LTE,
         mnc: String = "01",
         tac: String = "100",
         mcc: String = "214",
@@ -43,6 +45,7 @@ class HeuristicsTest {
     ) = CellData(
         isRegistered = true,
         networkType = networkType,
+        radioTech = radioTech,
         cellId = "1000",
         mnc = mnc,
         tac = tac,
@@ -301,7 +304,7 @@ class HeuristicsTest {
         assertTrue(analyze(active(networkType = "4G LTE", arfcn = 0)).arfcnSanityPassed)
     }
     @Test fun `H8 dispara con NR-ARFCN 0 en 5G (no valido)`() {
-        assertFalse(analyze(active(networkType = "5G", arfcn = 0)).arfcnSanityPassed)
+        assertFalse(analyze(active(networkType = "5G", radioTech = RadioTech.NR, arfcn = 0)).arfcnSanityPassed)
     }
     @Test fun `H8 no dispara con EARFCN valido`() {
         assertTrue(analyze(active(networkType = "4G LTE", arfcn = 1500)).arfcnSanityPassed)

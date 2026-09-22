@@ -148,4 +148,5 @@
     <string name="delete_incident_title">Delete incident?</string>
     <string name="delete_incident_description">This permanently deletes the closed incident for CID %1$s.</string>
     <string name="delete_incident">DELETE INCIDENT</string>
+    <string name="forensic_trust_contradiction">CONTRADICTION IN ESTABLISHED CELL · OBSERVATION CASE</string>
 </resources>

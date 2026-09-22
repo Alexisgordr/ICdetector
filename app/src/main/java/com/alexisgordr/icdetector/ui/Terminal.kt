@@ -141,6 +141,18 @@ internal fun localizeTerminalLine(line: String): String {
         "registros de más de" to "records older than",
         "días eliminados" to "days deleted",
         "Muestras forenses recortadas" to "Forensic samples trimmed",
+        // v2.8.0 — Poda forense por casos completos y salud de la escritura de muestras.
+        "Poda forense" to "Forensic pruning",
+        "caso(s) cerrado(s) eliminados enteros" to "closed case(s) deleted in full",
+        "muestras) para respetar el tope de" to "samples) to respect the cap of",
+        "Restantes" to "Remaining",
+        "Tope forense superado" to "Forensic cap exceeded",
+        "muestras) con solo casos abiertos" to "samples) with only open cases left",
+        "No se recortan: una captura en curso no se mutila." to
+            "Not trimmed: a capture in progress is never mutilated.",
+        "Captura forense degradada — las muestras no se están guardando." to
+            "Forensic capture degraded — samples are not being saved.",
+        "Captura forense restablecida." to "Forensic capture restored.",
         "Mantenimiento de base de datos fallido" to "Database maintenance failed",
         "No se pudo registrar" to "Could not register",
         "Red 2G/3G detectada" to "2G/3G network detected",

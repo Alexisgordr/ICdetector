@@ -38,6 +38,7 @@ import com.alexisgordr.icdetector.models.IncidentRecord
 import com.alexisgordr.icdetector.models.IncidentState
 import com.alexisgordr.icdetector.models.ForensicCase
 import com.alexisgordr.icdetector.models.ForensicCaseState
+import com.alexisgordr.icdetector.models.ForensicCaseOrigin
 import com.alexisgordr.icdetector.forensics.ForensicExporter
 import com.alexisgordr.icdetector.forensics.TopologyExporter
 import com.alexisgordr.icdetector.models.SUBTHRESHOLD_PREFIX
@@ -726,6 +727,15 @@ private fun ForensicCaseList(
                             Text(fc.state.name, color = color, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Bold, fontSize = 9.sp)
                         }
                         Text(stringResource(R.string.forensic_phase_format, fc.highestPhase, fc.sampleCount), color = Color(0xFFAAAAAA), fontFamily = FontFamily.Monospace, fontSize = 9.sp)
+                        if (fc.origin == ForensicCaseOrigin.TRUST_CONTRADICTION) {
+                            Text(
+                                stringResource(R.string.forensic_trust_contradiction),
+                                color = Color(0xFF42A5F5),
+                                fontFamily = FontFamily.Monospace,
+                                fontSize = 9.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
                         Text("${fc.createdAt} → ${fc.closedAt ?: stringResource(R.string.in_progress)}", color = Color(0xFF777777), fontFamily = FontFamily.Monospace, fontSize = 9.sp)
                         if (fc.state == ForensicCaseState.READY || fc.state == ForensicCaseState.INTERRUPTED) {
                             OutlinedButton(onClick = {

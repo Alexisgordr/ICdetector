@@ -1,0 +1,1 @@
+La captura forense admite una primera observación ya contradicha, avisa de escrituras fallidas y conserva casos cerrados completos al podar. Los casos vacíos ya no bloquean evidencia posterior y se aplican las claves ajenas SQLite. H8, H11 y H14 usan la tecnología física: un ancla LTE se evalúa igual con etiquetas 4G LTE y 5G NSA. H6, los pesos y el esquema 15 no cambian.

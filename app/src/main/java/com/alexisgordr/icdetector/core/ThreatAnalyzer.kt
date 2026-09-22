@@ -11,6 +11,7 @@ import com.alexisgordr.icdetector.models.CellRfStability
 import com.alexisgordr.icdetector.models.CellReputation
 import com.alexisgordr.icdetector.models.CellRfFingerprint
 import com.alexisgordr.icdetector.models.VerificationStatus
+import com.alexisgordr.icdetector.models.RadioTech
 
 object ThreatAnalyzer {
 
@@ -36,16 +37,16 @@ object ThreatAnalyzer {
      * Calcula el umbral dinámico según el contexto de densidad de celdas (vecinos)
      * Optimizamos para reducir falsos positivos en zonas rurales.
      */
-    private fun getDynamicLocationThreshold(
+    internal fun getDynamicLocationThreshold(
         neighbors: List<CellData>,
-        networkType: String
+        radioTech: RadioTech
     ): Double {
         val count = neighbors.size
         return when {
             count >= 12 -> 2000.0
             count >= 6  -> 4000.0
             count >= 3  -> 8000.0
-            networkType.contains("5G") -> 5000.0
+            radioTech == RadioTech.NR -> 5000.0
             count == 0  -> 25000.0  // Sin vecinas = zona muy rural o macrocelda
             else        -> 15000.0
         }
@@ -63,7 +64,7 @@ object ThreatAnalyzer {
 
         if (history.isEmpty()) return Triple(true, 0, null)
 
-        val threshold = getDynamicLocationThreshold(neighbors, active.networkType)
+        val threshold = getDynamicLocationThreshold(neighbors, active.radioTech)
 
         val validRecords = history.filter { it.lat != null && it.lon != null }
         if (validRecords.isEmpty()) return Triple(true, 0, null)
@@ -299,14 +300,14 @@ object ThreatAnalyzer {
         // Fix: máximo teórico LTE es 262143, no 70645
         // 70645 es válido para Band 252/255 (CBRS)
         active.arfcn?.let { arfcn ->
-            if (active.networkType.contains("5G")) {
+            if (active.radioTech == RadioTech.NR) {
                 eArfcn = true
                 if (arfcn > 3279165 || arfcn == 0) {
                     hArfcn = false
                     reasons.add("Frecuencia (ARFCN) 5G sospechosa")
                     score -= 15
                 }
-            } else if (active.networkType.contains("4G") || active.networkType.contains("LTE")) {
+            } else if (active.radioTech == RadioTech.LTE) {
                 eArfcn = true
                 if (arfcn > 262143) {  // EARFCN 0 es válido (Banda 1, 2110 MHz); el "no disponible" llega como > 262143
                     hArfcn = false
@@ -428,7 +429,7 @@ object ThreatAnalyzer {
         // a un garaje/sótano), el salto a banda baja es legítimo y NO se penaliza.
         // Usa BandPlan para mapear EARFCN->banda (el EARFCN NO es monótono con la frecuencia).
         run {
-            val isLte = active.networkType.contains("4G") || active.networkType.contains("LTE")
+            val isLte = active.radioTech == RadioTech.LTE
             val curBand = active.band ?: active.arfcn?.let { BandPlan.earfcnToBandLte(it) }
             eBandDowngrade = isLte && curBand != null && previousBand != null && previousDbm != null
             if (isLte && curBand != null && previousBand != null
