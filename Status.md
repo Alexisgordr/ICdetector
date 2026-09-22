@@ -1,8 +1,5 @@
 # ICdetection Status
 
-<<<<<<< HEAD
-## v2.9.0 — Stable-Site context and conservative novelty hold 
-=======
 ## v2.9.1 — emergency motion-sampling correction (local release candidate)
 
 **Version code:** 27  
