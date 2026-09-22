@@ -301,6 +301,7 @@ fun MainScreenContent(dbHelper: CellDbHelper, service: MiniICService?) {
                                         LocalCellTrustState.ESTABLISHED -> R.string.trust_state_established
                                         LocalCellTrustState.CHANGED -> R.string.trust_state_changed
                                         LocalCellTrustState.QUARANTINED -> R.string.trust_state_quarantined
+                                        LocalCellTrustState.SITE_UNVERIFIED -> R.string.trust_state_site_unverified
                                     })
                                     val trustDescription = when (trust.state) {
                                         LocalCellTrustState.NEW -> stringResource(R.string.trust_desc_new)
@@ -311,11 +312,12 @@ fun MainScreenContent(dbHelper: CellDbHelper, service: MiniICService?) {
                                             trust.contradictions.joinToString(" + ")
                                         )
                                         LocalCellTrustState.QUARANTINED -> stringResource(R.string.trust_desc_quarantined)
+                                        LocalCellTrustState.SITE_UNVERIFIED -> stringResource(R.string.trust_desc_site_unverified)
                                     }
                                     Spacer(Modifier.height(10.dp))
                                     Text(stringResource(R.string.local_trust_title), color = Color(0xFF666666), fontFamily = FontFamily.Monospace, fontSize = 9.sp)
                                     Text(stringResource(R.string.local_trust_format, trustLabel, trust.confidencePercent), color = when (trust.state) {
-                                        LocalCellTrustState.CHANGED, LocalCellTrustState.QUARANTINED -> Color(0xFFFFA000)
+                                        LocalCellTrustState.CHANGED, LocalCellTrustState.QUARANTINED, LocalCellTrustState.SITE_UNVERIFIED -> Color(0xFFFFA000)
                                         LocalCellTrustState.ESTABLISHED -> Color(0xFF4CAF50)
                                         else -> Color(0xFF90A4AE)
                                     }, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Bold, fontSize = 12.sp)

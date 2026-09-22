@@ -66,7 +66,8 @@ data class CellData(
     /** Resultado detallado del último handover; alimenta H16 y su tarjeta visible. */
     val transitionCoherence: TransitionCoherenceResult = TransitionCoherenceResult(),
     /** Revocable confidence learned only from this device's clean local history. */
-    val localCellTrust: LocalCellTrust = LocalCellTrust()
+    val localCellTrust: LocalCellTrust = LocalCellTrust(),
+    val stableSiteDecision: com.alexisgordr.icdetector.core.StableSiteDecision = com.alexisgordr.icdetector.core.StableSiteDecision()
 )
 
 /**

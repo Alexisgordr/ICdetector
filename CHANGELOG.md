@@ -2,6 +2,51 @@
 
 ## Unreleased
 
+## 2.9.0
+
+### Stable-Site Novelty Hold
+
+- Added an additive schema-16 site-context layer. Existing history, RF baselines, transitions,
+  local trust and forensic cases are retained unchanged; legacy rows are never assigned invented
+  accuracy, motion or neighbour evidence.
+- Precise successive GNSS fixes now derive `UNKNOWN`, `MOVING` or `STATIC_CONFIRMED`. Static state
+  requires two minutes of coherent fixes; missing or worse-than-50 m accuracy always abstains.
+- Sites are persisted only as a SHA-256-derived identifier of an approximately 500 m Web-Mercator
+  grid cell. Four overlapping grids prevent ordinary GNSS jitter at a bucket edge from splitting
+  every view of one physical site. Exact site coordinates are not added to the new tables.
+- Serving and neighbour identities are aggregated per site with idempotent event keys and
+  primary-keyed day rows. Volume from one day cannot manufacture multi-day maturity.
+- Maturity is site-specific. Active shadow evaluation requires at least seven serving days, three static days,
+  three neighbour-baseline days and thirty serving observations collected by schema 16.
+- Earlier measurement starts in `SHADOW_READY` after at least five serving days and two static
+  days; it remains non-enforcing. `ACTIVE` is the stricter 7/3/3/30 state described above.
+- Overlapping grid candidates are evaluated read-only; only the selected candidate may persist one
+  shadow trigger or change a hold, preventing fourfold telemetry inflation.
+- Canonical-grid selection uses maturity first (`ACTIVE` > `SHADOW_READY` > `LEARNING` >
+  `BOOTSTRAP`), followed by temporal/static/neighbour evidence and observations. `wouldTrigger`
+  never influences which grid wins.
+- At an active mature site, the engine records when a serving identity would enter
+  `SITE_UNVERIFIED`, including after a restart by recovering the last established serving identity
+  from site evidence. v2.9.0 keeps this decision in shadow mode: it does not freeze learning, open a
+  case or change H1-H16, scores, temporal confirmation or normal alarm behaviour.
+- Novelty is tracked as a persistent serving episode. A temporarily bad GPS fix, unknown motion or
+  process restart cannot erase the established previous identity; a long dwell updates one episode
+  instead of creating one row per polling cycle.
+- One serving observation is not enough to become known: direct serving needs three distinct days,
+  while two neighbour days provide an independent corroboration route. Shadow triggers are stored
+  once per logical episode so their field false-positive rate can be measured after export.
+- Added a dedicated Stable-Site ZIP export with aggregate sites, per-site serving/neighbour
+  evidence, privacy-banded motion and shadow episodes. Exact coordinates are not exported.
+- Schema tables are created only by `onCreate`/`onUpgrade`; `onOpen` no longer silently repairs a
+  broken migration.
+- The RF contradiction tracker remains active even when contextual novelty is present, so a real
+  PCI/ARFCN contradiction always has priority over a future contextual hold.
+- Site events and weak stale aggregates are pruned deterministically. A debug-only database method
+  can reset site learning without touching any pre-existing evidence.
+- Bootstrap poisoning remains unresolved by design: a transmitter present from first installation
+  can influence the initial baseline. Multi-day, motion and neighbour gates reduce this risk but
+  cannot establish an external ground truth.
+
 ## 2.8.1
 
 ### Frequent cells can complete their local trust history

@@ -22,7 +22,7 @@ object LocalCellTrustEngine {
             evidence.trustedTransitions >= 3 && !candidate.oldPairSeenRecently
     }
 
-    fun apply(cell: CellData, evidence: LocalCellTrustEvidence): CellData {
+    fun apply(cell: CellData, evidence: LocalCellTrustEvidence, stableSite: StableSiteDecision = StableSiteDecision()): CellData {
         val confidence = confidence(cell, evidence)
         val rfIdentityReady = when (cell.radioTech) {
             RadioTech.LTE -> evidence.knownPcisByArfcn.isNotEmpty()
@@ -64,6 +64,7 @@ object LocalCellTrustEngine {
         val state = when {
             contradictions.isNotEmpty() -> LocalCellTrustState.CHANGED
             hasFailures -> LocalCellTrustState.QUARANTINED
+            stableSite.enforced -> LocalCellTrustState.SITE_UNVERIFIED
             eligible -> LocalCellTrustState.ESTABLISHED
             evidence.cleanObservations == 0 -> LocalCellTrustState.NEW
             else -> LocalCellTrustState.LEARNING
@@ -84,14 +85,20 @@ object LocalCellTrustEngine {
             localCellTrust = trust,
             // TemporalConfidence marks this as sub-threshold before persistence. Keeping a reason
             // is what freezes CHANGED observations out of every trusted-learning query.
-            suspiciousReason = if (contradictions.isNotEmpty()) reason else cell.suspiciousReason
+            suspiciousReason = when {
+                contradictions.isNotEmpty() -> reason
+                stableSite.enforced -> "[site-unverified] ${stableSite.reason}"
+                else -> cell.suspiciousReason
+            },
+            stableSiteDecision = stableSite
         )
 
         return cell.copy(
             localCellTrust = trust,
             isSuspicious = true,
             securityScore = minOf(cell.securityScore, 69),
-            suspiciousReason = listOfNotNull(cell.suspiciousReason, reason).joinToString(" | ")
+            suspiciousReason = listOfNotNull(cell.suspiciousReason, reason).joinToString(" | "),
+            stableSiteDecision = stableSite
         )
     }
 

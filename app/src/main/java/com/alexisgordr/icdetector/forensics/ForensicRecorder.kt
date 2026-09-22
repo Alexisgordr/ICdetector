@@ -95,6 +95,7 @@ class ForensicRecorder(
         val contradictionEvent = when (trustContradictionTransition) {
             TrustContradictionSignal.TRANSITION -> "TRUST_CONTRADICTION"
             TrustContradictionSignal.ON_START -> "TRUST_CONTRADICTION_ON_START"
+            TrustContradictionSignal.SITE_NOVELTY -> "STABLE_SITE_NEW_SERVING"
             TrustContradictionSignal.NONE -> null
         }
         val event = when {
@@ -127,6 +128,8 @@ class ForensicRecorder(
             when (trustContradictionTransition) {
                 TrustContradictionSignal.TRANSITION -> true
                 TrustContradictionSignal.ON_START ->
+                    !db.hasRecentForensicCaseFor(active.identityKey, wall - ON_START_DEDUP_MS)
+                TrustContradictionSignal.SITE_NOVELTY ->
                     !db.hasRecentForensicCaseFor(active.identityKey, wall - ON_START_DEDUP_MS)
                 TrustContradictionSignal.NONE -> false
             }
@@ -216,6 +219,16 @@ class ForensicRecorder(
                 put("state", active.localCellTrust.state.name)
                 put("confidencePercent", active.localCellTrust.confidencePercent)
                 put("contradictions", JSONArray(active.localCellTrust.contradictions.toList()))
+            })
+            put("stableSite", JSONObject().apply {
+                val s = active.stableSiteDecision
+                put("siteKey", s.siteKey ?: JSONObject.NULL); put("featureState", s.featureState.name)
+                put("novelty", s.novelty.name); put("wouldTrigger", s.wouldTrigger)
+                put("enforced", s.enforced); put("reason", s.reason)
+                put("staticDurationSeconds", s.evidence?.motion?.durationSeconds ?: 0)
+                put("locationAccuracyM", s.evidence?.motion?.accuracyM ?: JSONObject.NULL)
+                put("servingDays", s.evidence?.currentServingDays ?: 0)
+                put("neighbourDays", s.evidence?.currentNeighbourDays ?: 0)
             })
             put("heuristics", active.heuristicReport.snapshot())
             put("diagnostics", JSONArray().apply { active.heuristicDiagnostics.forEach { d ->

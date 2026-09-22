@@ -54,6 +54,7 @@
     <string name="filter_learned">APRENDIDAS</string>
     <string name="filter_review">REVISAR</string>
     <string name="export_topology">EXPORTAR TOPOLOGÍA</string>
+    <string name="export_stable_site">EXPORTAR STABLE-SITE</string>
     <string name="no_routes_filter">SIN RUTAS PARA ESTE FILTRO</string>
     <string name="handover_route">RUTA DE HANDOVER</string>
     <string name="export_forensic_title">Exportar caso forense</string>
@@ -126,12 +127,13 @@
     <string name="local_trust_format">%1$s · %2$d%%</string>
     <string name="local_trust_progress">%1$d/%2$d días · %3$d/%4$d muestras limpias · %5$d h observadas</string>
     <string name="local_trust_ceiling">Evidencia local revocable · techo epistémico 98%%</string>
-    <string name="trust_state_new">NUEVA</string><string name="trust_state_learning">APRENDIENDO</string><string name="trust_state_established">CONSOLIDADA</string><string name="trust_state_changed">CAMBIADA</string><string name="trust_state_quarantined">EN CUARENTENA</string>
+    <string name="trust_state_new">NUEVA</string><string name="trust_state_learning">APRENDIENDO</string><string name="trust_state_established">CONSOLIDADA</string><string name="trust_state_changed">CAMBIADA</string><string name="trust_state_quarantined">EN CUARENTENA</string><string name="trust_state_site_unverified">SITIO SIN VERIFICAR</string>
     <string name="trust_desc_new">Aún no hay historial limpio suficiente; no se afirma legitimidad.</string>
     <string name="trust_desc_learning">Construyendo un perfil local durante días independientes con identidad RF, GPS y handovers fiables.</string>
     <string name="trust_desc_established">Coincide con un patrón local observado repetidamente. Es confianza, no prueba de autenticidad.</string>
     <string name="trust_desc_changed">El patrón actual de RF, geometría o handover contradice el perfil local consolidado: %1$s.</string>
     <string name="trust_desc_quarantined">Esta observación no puede entrenar el perfil porque una o más reglas de anomalía han fallado.</string>
+    <string name="trust_desc_site_unverified">Esta celda es nueva en un sitio estable ya maduro. Se registra sin alarma normal y no puede entrenar confianza hasta corroborarse de forma independiente durante varios días.</string>
     <string name="antenna_search_hint">Buscar CID, MCC, MNC, TAC, PCI, ARFCN o tecnología</string>
     <string name="clear_search">Borrar búsqueda</string>
     <string name="antenna_search_empty">No hay celdas coincidentes</string>

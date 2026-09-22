@@ -1,5 +1,23 @@
 # ICdetection Status
 
+## v2.9.0 — Stable-Site context and conservative novelty hold (development)
+
+**Release:** local development / not published
+**Version code:** 26
+**Database schema:** 16 (additive)
+**Detection baseline:** H1-H16 and scoring unchanged
+
+Schema 16 starts collecting privacy-reduced site, motion, serving and neighbour evidence. Clean
+installs and upgrades both begin site learning from zero; upgrades retain every schema-15 record
+for existing features. Each site matures independently. v2.9.0 measures `SITE_UNVERIFIED`
+conditions in shadow mode; it reports `wouldTrigger` in the Terminal but does not alter trust or
+forensics. Enforcement remains disabled until field data establishes its false-positive rate.
+`SHADOW_READY` begins measurement at five serving days and two static days. `ACTIVE` remains the
+stricter state requiring 7 serving days, 3 static days, 3 neighbour days and 30 observations.
+The four overlapping grids are ranked only by maturity and evidence. Continuous novelty is stored
+as one persistent episode, and the dedicated ZIP export exposes sites, neighbours, motion and
+shadow outcomes for field validation. Enforcement remains disabled.
+
 ## v2.8.1 — complete temporal evidence for frequent cells
 
 **Release:** local release candidate

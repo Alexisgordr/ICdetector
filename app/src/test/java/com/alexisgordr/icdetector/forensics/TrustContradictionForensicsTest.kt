@@ -194,6 +194,20 @@ class TrustContradictionForensicsTest {
         assertEquals(4, store.samples.size)
     }
 
+    @Test fun `stable site novelty opens one silent observational case and honors persistent dedup`() = runBlocking {
+        val store = FakeStore()
+        val recorder = ForensicRecorder(store, { 10_000L }, { 10_000L })
+        recorder.observe(cell(LocalCellTrustState.SITE_UNVERIFIED), emptyList(), null, "N/A", emptyList(), TrustContradictionSignal.SITE_NOVELTY)
+        assertEquals(ForensicCaseOrigin.TRUST_CONTRADICTION, store.created.single().second)
+        assertEquals("STABLE_SITE_NEW_SERVING", store.samples.single().event)
+
+        val afterRestart = FakeStore().apply { recentCaseIdentities += "214-07-31601-100-LTE" }
+        ForensicRecorder(afterRestart, { 11_000L }, { 11_000L }).observe(
+            cell(LocalCellTrustState.SITE_UNVERIFIED), emptyList(), null, "N/A", emptyList(), TrustContradictionSignal.SITE_NOVELTY
+        )
+        assertTrue(afterRestart.created.isEmpty())
+    }
+
     @Test fun `silent case preserves samples immediately before transition`() = runBlocking {
         val store = FakeStore()
         var time = 1_000L

@@ -23,6 +23,7 @@ import com.alexisgordr.icdetector.storage.CellDbHelper
 import com.alexisgordr.icdetector.telephony.CellParser
 import com.alexisgordr.icdetector.forensics.ForensicRecorder
 import com.alexisgordr.icdetector.forensics.TrustContradictionTransitionTracker
+import com.alexisgordr.icdetector.forensics.TrustContradictionSignal
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -80,6 +81,10 @@ class MiniICService : Service() {
     private lateinit var dbHelper: CellDbHelper
     private lateinit var forensicRecorder: ForensicRecorder
     private val trustContradictionTransitions = TrustContradictionTransitionTracker()
+    private val stableSiteMotion = com.alexisgordr.icdetector.core.MotionClassifier()
+    private var stableSitePreviousIdentity: String? = null
+    private var lastStableSiteLog: String? = null
+    private var stableSiteIntensiveActive = false
     private val forensicDispatcher = Dispatchers.IO.limitedParallelism(1)
     private lateinit var notificationController: ServiceNotificationController
     private lateinit var databaseMaintenance: DatabaseMaintenance
@@ -727,6 +732,27 @@ class MiniICService : Service() {
                 cellProcessingMutex.withLock {
                 if (processingSequence < enqueuedCellProcessing.get()) return@withLock
                 val currentLocation = getCurrentLocation()
+                val motionEvidence = stableSiteMotion.observe(currentLocation?.let {
+                    com.alexisgordr.icdetector.core.MotionFix(
+                        it.latitude, it.longitude, it.time, it.accuracy,
+                        if (it.hasSpeed()) it.speed else null
+                    )
+                })
+                val siteKeys = currentLocation?.takeIf { it.accuracy <= 50f }?.let {
+                    com.alexisgordr.icdetector.core.StableSiteKey.candidates(it.latitude, it.longitude)
+                }.orEmpty()
+                if (activeRaw != null && activeRaw.cellId != "N/A") {
+                    dbHelper.observeStableSiteEpisode(activeRaw.identityKey, stableSitePreviousIdentity)
+                }
+                val stableSiteCandidate = if (activeRaw != null && activeRaw.cellId != "N/A" && siteKeys.isNotEmpty()) {
+                    com.alexisgordr.icdetector.core.StableSiteCandidateSelector.select(
+                        siteKeys.map { key -> dbHelper.evaluateStableSiteCandidate(key, activeRaw, stableSitePreviousIdentity, motionEvidence) }
+                    )!!
+                } else com.alexisgordr.icdetector.core.StableSiteDecision(reason = "NO_SERVING_CELL")
+                val stableSiteDecision = if (activeRaw != null && activeRaw.cellId != "N/A") {
+                    dbHelper.applyStableSiteDecision(stableSiteCandidate, activeRaw, siteKeys)
+                } else stableSiteCandidate
+                val siteKey = stableSiteDecision.siteKey
 
                 // H16 se prepara antes de analizar la celda: aquí todavía conservamos la última
                 // servidora. El resultado se retiene 20 s para que los tres ciclos temporales
@@ -900,7 +926,8 @@ class MiniICService : Service() {
                         ).copy(distanceToTowerMeters = towerDistance)
                         com.alexisgordr.icdetector.core.LocalCellTrustEngine.apply(
                             analyzed,
-                            localTrustEvidence
+                            localTrustEvidence,
+                            stableSiteDecision
                         )
                     } else {
                         // Las vecinas no se evalúan como amenaza; se mantienen como contexto.
@@ -916,9 +943,39 @@ class MiniICService : Service() {
 
                     val active = sorted.firstOrNull { it.isRegistered }
                     if (active != null) {
+                        val stableSiteStartedWatching = stableSiteDecision.enforced && !stableSiteIntensiveActive
+                        stableSiteIntensiveActive = stableSiteDecision.enforced
+                        siteKeys.forEach { key ->
+                            dbHelper.recordStableSiteContext(
+                                // One aggregate contribution per identity and minute. The PK also
+                                // makes retries/restarts idempotent without retaining raw snapshots.
+                                eventKey = "${System.currentTimeMillis() / 60_000L}:$key",
+                                siteKey = key,
+                                serving = activeRaw ?: active,
+                                neighbours = neighbors,
+                                motion = motionEvidence
+                            )
+                        }
+                        stableSitePreviousIdentity = active.identityKey
+                        val siteEvidence = stableSiteDecision.evidence
+                        val siteLog = "${stableSiteDecision.featureState}|${motionEvidence.state}|${siteEvidence?.siteNeighbourDays}|${stableSiteDecision.wouldTrigger}|${stableSiteDecision.enforced}"
+                        if (siteLog != lastStableSiteLog) {
+                            lastStableSiteLog = siteLog
+                            appendLog(
+                                "[SITE]",
+                                "Protección=${stableSiteDecision.featureState}, sitio=${if (siteKey != null) "detectado" else "no disponible"}, " +
+                                    "movimiento=${motionEvidence.state}, vecinos=${siteEvidence?.siteNeighbourDays ?: 0} días, " +
+                                    "aplicación=${when { stableSiteDecision.enforced -> "SITE_UNVERIFIED"; stableSiteDecision.wouldTrigger -> "SOMBRA: aplicaría SITE_UNVERIFIED"; else -> "NO ACTIVA" }}"
+                            )
+                        }
                         // Observe the trust result immediately after LocalCellTrustEngine. This is
                         // a one-way evidence signal and cannot alter the detector input below.
-                        val trustContradictionTransition = trustContradictionTransitions.observe(active)
+                        // Always feed the RF contradiction tracker. A real contradiction has
+                        // priority over contextual novelty and must not go blind during a hold.
+                        val liveTrustContradiction = trustContradictionTransitions.observe(active)
+                        val trustContradictionTransition = if (
+                            stableSiteDecision.enforced && liveTrustContradiction == TrustContradictionSignal.NONE
+                        ) TrustContradictionSignal.SITE_NOVELTY else liveTrustContradiction
                         // 1. Obtener estado conocido (Caché o DB) para no mostrar PENDING si ya existe
                         val cacheKey = active.identityKey
                         val knownStatus = verificationCache[cacheKey] ?: VerificationStatus.PENDING
@@ -947,8 +1004,8 @@ class MiniICService : Service() {
                             isFreshDelivery = isFreshDelivery
                         )
                         updateIntensiveMonitoring(
-                            watching = episode.watching,
-                            startedWatching = episode.startedWatching,
+                            watching = episode.watching || stableSiteDecision.enforced,
+                            startedWatching = episode.startedWatching || stableSiteStartedWatching,
                             confirmed = temporalActive.isSuspicious
                         )
                         val diagnosticInputs = com.alexisgordr.icdetector.core.DiagnosticEngine.Inputs(
@@ -1031,6 +1088,7 @@ class MiniICService : Service() {
                             while (recentRegisteredDbmTrend.size > 6) recentRegisteredDbmTrend.removeAt(0)
                         }
                     } else {
+                        stableSiteIntensiveActive = false
                         _cellFlow.value = emptyList()
                         updateNotificationText(getString(R.string.searching_network))
                     }

@@ -6,7 +6,7 @@ const val LOCAL_TRUST_RECONFIGURATION_HISTORY_LIKE =
     "$SUBTHRESHOLD_PREFIX $LOCAL_TRUST_RECONFIGURATION_REASON (%)"
 
 /** Revocable local confidence; never claims cryptographic or operator-backed authenticity. */
-enum class LocalCellTrustState { NEW, LEARNING, ESTABLISHED, CHANGED, QUARANTINED }
+enum class LocalCellTrustState { NEW, LEARNING, ESTABLISHED, CHANGED, QUARANTINED, SITE_UNVERIFIED }
 
 data class LocalCellTrustEvidence(
     val cleanObservations: Int = 0,

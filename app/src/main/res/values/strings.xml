@@ -54,6 +54,7 @@
     <string name="filter_learned">LEARNED</string>
     <string name="filter_review">REVIEW</string>
     <string name="export_topology">EXPORT TOPOLOGY</string>
+    <string name="export_stable_site">EXPORT STABLE-SITE</string>
     <string name="no_routes_filter">NO ROUTES FOR THIS FILTER</string>
     <string name="handover_route">HANDOVER ROUTE</string>
     <string name="export_forensic_title">Export forensic case</string>
@@ -126,12 +127,13 @@
     <string name="local_trust_format">%1$s · %2$d%%</string>
     <string name="local_trust_progress">%1$d/%2$d days · %3$d/%4$d clean samples · %5$d h observed</string>
     <string name="local_trust_ceiling">Revocable local evidence · epistemic ceiling 98%%</string>
-    <string name="trust_state_new">NEW</string><string name="trust_state_learning">LEARNING</string><string name="trust_state_established">ESTABLISHED</string><string name="trust_state_changed">CHANGED</string><string name="trust_state_quarantined">QUARANTINED</string>
+    <string name="trust_state_new">NEW</string><string name="trust_state_learning">LEARNING</string><string name="trust_state_established">ESTABLISHED</string><string name="trust_state_changed">CHANGED</string><string name="trust_state_quarantined">QUARANTINED</string><string name="trust_state_site_unverified">SITE UNVERIFIED</string>
     <string name="trust_desc_new">Not enough clean history yet; no legitimacy claim is made.</string>
     <string name="trust_desc_learning">Building a local profile across independent days, RF identity, GPS and trusted handovers.</string>
     <string name="trust_desc_established">Matches a repeatedly observed local pattern. This is confidence, not proof of authenticity.</string>
     <string name="trust_desc_changed">The current RF, geometry or handover pattern contradicts the established local profile: %1$s.</string>
     <string name="trust_desc_quarantined">This observation cannot train the profile because one or more anomaly rules failed.</string>
+    <string name="trust_desc_site_unverified">This cell is new at a mature stable site. It is being recorded without raising a normal alarm and cannot train trust until independently corroborated across days.</string>
     <string name="antenna_search_hint">Search CID, MCC, MNC, TAC, PCI, ARFCN or technology</string>
     <string name="clear_search">Clear search</string>
     <string name="antenna_search_empty">No matching cells</string>

@@ -32,6 +32,7 @@ import com.alexisgordr.icdetector.models.CellTransitionSummary
 import com.alexisgordr.icdetector.models.LocalCellTrustEvidence
 import com.alexisgordr.icdetector.models.LocalRfReconfiguration
 import com.alexisgordr.icdetector.models.LOCAL_TRUST_RECONFIGURATION_HISTORY_LIKE
+import com.alexisgordr.icdetector.core.*
 import kotlin.math.sqrt
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -40,7 +41,7 @@ import java.util.Locale
 class CellDbHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME, null, DATABASE_VERSION), ForensicStore {
     companion object {
         private const val DATABASE_NAME = "icdetector_history.db"
-        private const val DATABASE_VERSION = 15
+        private const val DATABASE_VERSION = 16
         const val TABLE_HISTORY = "history"
         const val COLUMN_ID = "id"
         const val COLUMN_TIMESTAMP = "timestamp"
@@ -86,6 +87,12 @@ class CellDbHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME, 
         const val TABLE_FORENSIC_CASES = "forensic_cases"
         const val TABLE_FORENSIC_SAMPLES = "forensic_samples"
         const val TABLE_CELL_TRANSITIONS = "cell_transitions"
+        const val TABLE_SITE_CELLS = "site_cell_evidence"
+        const val TABLE_SITE_DAYS = "site_cell_days"
+        const val TABLE_SITE_EVENTS = "site_cell_events"
+        const val TABLE_SITE_MOTION_DAYS = "site_motion_days"
+        const val TABLE_SITE_HOLDS = "site_holds"
+        const val TABLE_SITE_SHADOW_TRIGGERS = "site_shadow_triggers"
 
         /**
          * Cuánto vale una verificación antes de volver a preguntar — v2.1.
@@ -218,6 +225,7 @@ class CellDbHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME, 
         createIncidentTable(db)
         createForensicTables(db)
         createTransitionTable(db)
+        createStableSiteTables(db)
     }
 
     override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {
@@ -286,6 +294,18 @@ class CellDbHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME, 
         if (oldVersion < 13) createIncidentTable(db)
         if (oldVersion < 14) createForensicTables(db)
         if (oldVersion < 15) createTransitionTable(db)
+        if (oldVersion < 16) createStableSiteTables(db)
+    }
+
+    private fun createStableSiteTables(db: SQLiteDatabase) {
+        db.execSQL("CREATE TABLE IF NOT EXISTS $TABLE_SITE_CELLS (site_key TEXT NOT NULL, cell_identity TEXT NOT NULL, role TEXT NOT NULL, first_seen_ms INTEGER NOT NULL, last_seen_ms INTEGER NOT NULL, observations INTEGER NOT NULL DEFAULT 0, PRIMARY KEY(site_key,cell_identity,role))")
+        db.execSQL("CREATE TABLE IF NOT EXISTS $TABLE_SITE_DAYS (site_key TEXT NOT NULL, cell_identity TEXT NOT NULL, role TEXT NOT NULL, day TEXT NOT NULL, PRIMARY KEY(site_key,cell_identity,role,day))")
+        db.execSQL("CREATE TABLE IF NOT EXISTS $TABLE_SITE_EVENTS (event_key TEXT NOT NULL, site_key TEXT NOT NULL, cell_identity TEXT NOT NULL, role TEXT NOT NULL, seen_ms INTEGER NOT NULL, PRIMARY KEY(event_key,cell_identity,role))")
+        db.execSQL("CREATE TABLE IF NOT EXISTS $TABLE_SITE_MOTION_DAYS (site_key TEXT NOT NULL, day TEXT NOT NULL, state TEXT NOT NULL, accuracy_band_m INTEGER, duration_s INTEGER NOT NULL, displacement_band_m INTEGER, PRIMARY KEY(site_key,day,state))")
+        db.execSQL("CREATE TABLE IF NOT EXISTS $TABLE_SITE_HOLDS (episode_id TEXT PRIMARY KEY NOT NULL, site_key TEXT NOT NULL, cell_identity TEXT NOT NULL, first_seen_ms INTEGER NOT NULL, last_seen_ms INTEGER NOT NULL, active INTEGER NOT NULL DEFAULT 1, forensic_opened_ms INTEGER)")
+        db.execSQL("CREATE TABLE IF NOT EXISTS $TABLE_SITE_SHADOW_TRIGGERS (episode_id TEXT PRIMARY KEY NOT NULL, site_key TEXT, previous_identity TEXT, candidate_identity TEXT NOT NULL, first_seen_ms INTEGER NOT NULL, last_seen_ms INTEGER NOT NULL, evaluated_ms INTEGER, closed_ms INTEGER, shadow_recorded INTEGER NOT NULL DEFAULT 0, reason TEXT, motion_state TEXT, feature_state TEXT, globally_known INTEGER, known_at_site INTEGER, seen_as_neighbour INTEGER, serving_days INTEGER, neighbour_days INTEGER, corroborated INTEGER NOT NULL DEFAULT 0)")
+        db.execSQL("CREATE INDEX IF NOT EXISTS idx_site_events_seen ON $TABLE_SITE_EVENTS(seen_ms)")
+        db.execSQL("CREATE INDEX IF NOT EXISTS idx_site_cells_seen ON $TABLE_SITE_CELLS(last_seen_ms)")
     }
 
     private fun createTransitionTable(db: SQLiteDatabase) {
@@ -473,6 +493,183 @@ class CellDbHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME, 
         } finally {
             db.endTransaction()
         }
+    }
+
+    /** Schema 16 evidence. The event key makes retries and duplicate modem callbacks idempotent. */
+    fun recordStableSiteContext(
+        eventKey: String,
+        siteKey: String,
+        serving: CellData,
+        neighbours: List<CellData>,
+        motion: MotionEvidence,
+        wallMs: Long = System.currentTimeMillis()
+    ) {
+        val day = SimpleDateFormat("yyyy-MM-dd", Locale.ROOT).format(Date(wallMs))
+        val observations = buildList { add(serving.identityKey to "SERVING"); neighbours.forEach { if (it.cellId != "N/A") add(it.identityKey to "NEIGHBOUR") } }.distinct()
+        val db = writableDatabase
+        db.beginTransaction()
+        try {
+            observations.forEach { (identity, role) ->
+                val inserted = db.insertWithOnConflict(TABLE_SITE_EVENTS, null, ContentValues().apply {
+                    put("event_key", eventKey); put("site_key", siteKey); put("cell_identity", identity); put("role", role); put("seen_ms", wallMs)
+                }, SQLiteDatabase.CONFLICT_IGNORE) != -1L
+                if (inserted) {
+                    val updated = db.update(TABLE_SITE_CELLS, ContentValues().apply { put("last_seen_ms", wallMs) }, "site_key=? AND cell_identity=? AND role=?", arrayOf(siteKey, identity, role))
+                    if (updated == 0) db.insertOrThrow(TABLE_SITE_CELLS, null, ContentValues().apply {
+                        put("site_key", siteKey); put("cell_identity", identity); put("role", role); put("first_seen_ms", wallMs); put("last_seen_ms", wallMs); put("observations", 0)
+                    })
+                    db.execSQL("UPDATE $TABLE_SITE_CELLS SET observations=observations+1,last_seen_ms=MAX(last_seen_ms,?) WHERE site_key=? AND cell_identity=? AND role=?", arrayOf<Any>(wallMs, siteKey, identity, role))
+                    db.insertWithOnConflict(TABLE_SITE_DAYS, null, ContentValues().apply { put("site_key", siteKey); put("cell_identity", identity); put("role", role); put("day", day) }, SQLiteDatabase.CONFLICT_IGNORE)
+                }
+            }
+            if (motion.state != MotionState.UNKNOWN) db.insertWithOnConflict(TABLE_SITE_MOTION_DAYS, null, ContentValues().apply {
+                put("site_key", siteKey); put("day", day); put("state", motion.state.name)
+                motion.accuracyM?.let { put("accuracy_band_m", (it / 10).toInt() * 10) }
+                put("duration_s", motion.durationSeconds)
+                motion.displacementM?.let { put("displacement_band_m", (it / 10).toInt() * 10) }
+            }, SQLiteDatabase.CONFLICT_REPLACE)
+            db.setTransactionSuccessful()
+        } finally { db.endTransaction() }
+    }
+
+    /** Read-only candidate evaluation. Safe to call for every overlapping grid. */
+    fun evaluateStableSiteCandidate(siteKey: String?, current: CellData, previousIdentity: String?, motion: MotionEvidence): StableSiteDecision {
+        if (siteKey == null) return StableSiteDecision(reason = "NO_RELIABLE_LOCATION")
+        val db = readableDatabase
+        fun scalar(sql: String, args: Array<String>): Int = db.rawQuery(sql, args).use { if (it.moveToFirst()) it.getInt(0) else 0 }
+        fun roleDays(identity: String, role: String) = scalar("SELECT COUNT(*) FROM $TABLE_SITE_DAYS WHERE site_key=? AND cell_identity=? AND role=?", arrayOf(siteKey, identity, role))
+        val servingDays = scalar("SELECT COUNT(DISTINCT day) FROM $TABLE_SITE_DAYS WHERE site_key=? AND role='SERVING'", arrayOf(siteKey))
+        val staticDays = scalar("SELECT COUNT(*) FROM $TABLE_SITE_MOTION_DAYS WHERE site_key=? AND state='STATIC_CONFIRMED'", arrayOf(siteKey))
+        val neighbourDays = scalar("SELECT COUNT(DISTINCT day) FROM $TABLE_SITE_DAYS WHERE site_key=? AND role='NEIGHBOUR'", arrayOf(siteKey))
+        val servingObs = scalar("SELECT COALESCE(SUM(observations),0) FROM $TABLE_SITE_CELLS WHERE site_key=? AND role='SERVING'", arrayOf(siteKey))
+        val state = when {
+            servingDays == 0 -> StableSiteFeatureState.BOOTSTRAP
+            servingDays < 5 || staticDays < 2 -> StableSiteFeatureState.LEARNING
+            servingDays < 7 || staticDays < 3 || neighbourDays < 3 || servingObs < 30 -> StableSiteFeatureState.SHADOW_READY
+            else -> StableSiteFeatureState.ACTIVE
+        }
+        val currentServingDays = roleDays(current.identityKey, "SERVING")
+        val currentNeighbourDays = roleDays(current.identityKey, "NEIGHBOUR")
+        val globallyKnown = scalar("SELECT COUNT(*) FROM $TABLE_HISTORY WHERE $COLUMN_CID=? AND $COLUMN_MNC=? AND $COLUMN_TAC=? AND $COLUMN_MCC=? AND $COLUMN_RADIO=? LIMIT 1", arrayOf(current.cellId,current.mnc,current.tac,current.mcc,current.radioTech.name)) > 0
+        // After a process/device restart the in-memory previous identity is absent. Recover the
+        // most recently observed established serving identity at this site, excluding the current
+        // one. This preserves the startup novelty signal without treating a fresh site as mature.
+        val inMemoryEstablished = previousIdentity?.takeIf { it != current.identityKey && roleDays(it, "SERVING") >= 3 }
+        val effectivePreviousIdentity = inMemoryEstablished ?: db.rawQuery(
+            "SELECT cell_identity FROM $TABLE_SITE_DAYS WHERE site_key=? AND role='SERVING' AND cell_identity<>? " +
+                "GROUP BY cell_identity HAVING COUNT(*)>=3 ORDER BY MAX(day) DESC LIMIT 1",
+            arrayOf(siteKey, current.identityKey)
+        ).use { cursor -> if (cursor.moveToFirst()) cursor.getString(0) else null }
+        val previousDays = effectivePreviousIdentity?.let { roleDays(it, "SERVING") } ?: 0
+        val evidence = StableSiteEvidence(siteKey, state, servingDays, staticDays, neighbourDays, currentServingDays, currentNeighbourDays, globallyKnown, previousDays, motion, servingObs, effectivePreviousIdentity)
+        // v2.9.0 initially measures wouldTrigger in shadow mode. Activation is deliberately
+        // deferred until field telemetry demonstrates an acceptable false-positive rate.
+        return StableSiteEvaluator.evaluate(evidence)
+    }
+
+    /** Tracks one logical serving episode independently of GPS/motion availability. */
+    fun observeStableSiteEpisode(currentIdentity: String, previousIdentity: String?, now: Long = System.currentTimeMillis()): String? {
+        val db = writableDatabase
+        db.rawQuery("SELECT episode_id FROM $TABLE_SITE_SHADOW_TRIGGERS WHERE candidate_identity=? AND closed_ms IS NULL LIMIT 1", arrayOf(currentIdentity)).use {
+            if (it.moveToFirst()) {
+                val id=it.getString(0); db.update(TABLE_SITE_SHADOW_TRIGGERS,ContentValues().apply{put("last_seen_ms",now)},"episode_id=?",arrayOf(id)); return id
+            }
+        }
+        db.update(TABLE_SITE_SHADOW_TRIGGERS,ContentValues().apply{put("closed_ms",now);put("last_seen_ms",now)},"closed_ms IS NULL",null)
+        if (previousIdentity == null || previousIdentity == currentIdentity) return null
+        val id=java.util.UUID.randomUUID().toString()
+        db.insertOrThrow(TABLE_SITE_SHADOW_TRIGGERS,null,ContentValues().apply {
+            put("episode_id",id);put("previous_identity",previousIdentity);put("candidate_identity",currentIdentity)
+            put("first_seen_ms",now);put("last_seen_ms",now);put("shadow_recorded",0);put("corroborated",0)
+        })
+        return id
+    }
+
+    /** Applies persistence/hold side effects once, after the service selects one candidate. */
+    fun applyStableSiteDecision(
+        candidate: StableSiteDecision,
+        current: CellData,
+        candidateSiteKeys: List<String> = listOfNotNull(candidate.siteKey),
+        enforcementEnabled: Boolean = STABLE_SITE_ENFORCEMENT_ENABLED
+    ): StableSiteDecision {
+        val siteKey = candidate.siteKey ?: return candidate
+        var decision = candidate
+        val currentServingDays = candidate.evidence?.currentServingDays ?: 0
+        val currentNeighbourDays = candidate.evidence?.currentNeighbourDays ?: 0
+        var episodeId = openStableSiteEpisodeId(current.identityKey)
+        if (episodeId == null && decision.wouldTrigger) {
+            episodeId = observeStableSiteEpisode(current.identityKey, candidate.evidence?.previousIdentity)
+        }
+        episodeId?.let { updateStableSiteEpisode(it, decision, current.identityKey) }
+        val existingHold = findActiveStableSiteHold(current.identityKey, candidateSiteKeys)
+        val corroborated = currentServingDays >= 3 || currentNeighbourDays >= 2
+        if (corroborated && existingHold != null) releaseStableSiteHold(existingHold)
+        // Shadow releases/ignores holds produced by development builds; no learning is frozen.
+        if (!enforcementEnabled && existingHold != null) releaseStableSiteHold(existingHold)
+        val mature = decision.featureState == StableSiteFeatureState.ACTIVE
+        if ((enforcementEnabled && decision.wouldTrigger && mature) || (enforcementEnabled && existingHold != null && !corroborated)) {
+            val holdEpisode = episodeId ?: existingHold ?: return decision
+            activateStableSiteHold(holdEpisode, siteKey, current.identityKey)
+            decision = decision.copy(enforced = true, wouldTrigger = true, reason = "STABLE_SITE_NOVELTY_HOLD")
+        }
+        return decision
+    }
+
+    private fun openStableSiteEpisodeId(identity:String) = readableDatabase.rawQuery("SELECT episode_id FROM $TABLE_SITE_SHADOW_TRIGGERS WHERE candidate_identity=? AND closed_ms IS NULL LIMIT 1",arrayOf(identity)).use{if(it.moveToFirst())it.getString(0) else null}
+    private fun updateStableSiteEpisode(id:String, decision:StableSiteDecision, identity:String) {
+        val e=decision.evidence
+        val now=System.currentTimeMillis()
+        writableDatabase.update(TABLE_SITE_SHADOW_TRIGGERS,ContentValues().apply{
+            put("site_key",decision.siteKey)
+            put("last_seen_ms",now)
+            put("evaluated_ms",now)
+            if(decision.wouldTrigger) put("shadow_recorded",1)
+            put("reason",decision.reason)
+            put("motion_state",e?.motion?.state?.name);put("feature_state",decision.featureState.name)
+            put("globally_known",if(e?.currentSeenGlobally==true)1 else 0);put("known_at_site",if((e?.currentServingDays?:0)>=3)1 else 0)
+            put("seen_as_neighbour",if((e?.currentNeighbourDays?:0)>0)1 else 0);put("serving_days",e?.currentServingDays?:0);put("neighbour_days",e?.currentNeighbourDays?:0)
+            put("corroborated",if((e?.currentServingDays?:0)>=3||(e?.currentNeighbourDays?:0)>=2)1 else 0)
+        },"episode_id=? AND candidate_identity=?",arrayOf(id,identity))
+    }
+    private fun findActiveStableSiteHold(identity:String, candidateSites:List<String>):String? {
+        val placeholders=candidateSites.joinToString(","){"?"}
+        val where=if(candidateSites.isEmpty())"cell_identity=? AND active=1" else "cell_identity=? AND active=1 AND (site_key IN ($placeholders) OR episode_id IN (SELECT episode_id FROM $TABLE_SITE_SHADOW_TRIGGERS WHERE candidate_identity=? AND closed_ms IS NULL))"
+        val args=if(candidateSites.isEmpty()) arrayOf(identity) else (listOf(identity)+candidateSites+identity).toTypedArray()
+        return readableDatabase.rawQuery("SELECT episode_id FROM $TABLE_SITE_HOLDS WHERE $where LIMIT 1",args).use{if(it.moveToFirst())it.getString(0) else null}
+    }
+    private fun activateStableSiteHold(episodeId:String, site: String, identity: String) {
+        val now=System.currentTimeMillis(); val db=writableDatabase
+        if (db.update(TABLE_SITE_HOLDS, ContentValues().apply { put("site_key",site);put("last_seen_ms",now);put("active",1) }, "episode_id=?", arrayOf(episodeId))==0)
+            db.insert(TABLE_SITE_HOLDS,null,ContentValues().apply{put("episode_id",episodeId);put("site_key",site);put("cell_identity",identity);put("first_seen_ms",now);put("last_seen_ms",now);put("active",1)})
+    }
+    private fun releaseStableSiteHold(episodeId:String) { writableDatabase.update(TABLE_SITE_HOLDS,ContentValues().apply{put("active",0)},"episode_id=?",arrayOf(episodeId)) }
+
+    fun resetStableSiteLearning() { val db=writableDatabase; db.beginTransaction(); try { listOf(TABLE_SITE_EVENTS,TABLE_SITE_DAYS,TABLE_SITE_CELLS,TABLE_SITE_MOTION_DAYS,TABLE_SITE_HOLDS,TABLE_SITE_SHADOW_TRIGGERS).forEach { db.delete(it,null,null) }; db.setTransactionSuccessful() } finally { db.endTransaction() } }
+
+    /** Privacy-reduced field export: hashed sites, aggregate cells, motion bands and episodes. */
+    fun getStableSiteExportFiles(): LinkedHashMap<String,String> {
+        fun csv(v:Any?):String { val s=v?.toString().orEmpty(); return if(s.any{it==','||it=='"'||it=='\n'||it=='\r'}) "\"${s.replace("\"","\"\"")}\"" else s }
+        fun query(name:String, header:String, sql:String):Pair<String,String> = name to buildString {
+            appendLine(header)
+            readableDatabase.rawQuery(sql,null).use { c -> while(c.moveToNext()) appendLine((0 until c.columnCount).joinToString(","){csv(if(c.isNull(it)) null else c.getString(it))}) }
+        }
+        val files=linkedMapOf<String,String>()
+        val siteStats="SELECT s.site_key AS site_key,SUM(CASE WHEN s.role='SERVING' THEN s.observations ELSE 0 END) AS serving_observations,"+
+                "(SELECT COUNT(DISTINCT d.day) FROM $TABLE_SITE_DAYS d WHERE d.site_key=s.site_key AND d.role='SERVING') AS serving_days,"+
+                "(SELECT COUNT(DISTINCT m.day) FROM $TABLE_SITE_MOTION_DAYS m WHERE m.site_key=s.site_key AND m.state='STATIC_CONFIRMED') AS static_days,"+
+                "(SELECT COUNT(DISTINCT d.day) FROM $TABLE_SITE_DAYS d WHERE d.site_key=s.site_key AND d.role='NEIGHBOUR') AS neighbour_days,MIN(s.first_seen_ms) AS first_seen,MAX(s.last_seen_ms) AS last_seen FROM $TABLE_SITE_CELLS s GROUP BY s.site_key"
+        files += query("sites.csv","site_key,feature_state,serving_observations,serving_distinct_days,static_distinct_days,neighbour_distinct_days,first_seen_ms,last_seen_ms",
+            "SELECT site_key,CASE WHEN serving_days=0 THEN 'BOOTSTRAP' WHEN serving_days<5 OR static_days<2 THEN 'LEARNING' WHEN serving_days<7 OR static_days<3 OR neighbour_days<3 OR serving_observations<30 THEN 'SHADOW_READY' ELSE 'ACTIVE' END,"+
+                "serving_observations,serving_days,static_days,neighbour_days,first_seen,last_seen FROM ($siteStats)")
+        files += query("site_cells.csv","site_key,cell_identity,serving_observations,serving_distinct_days,neighbour_observations,neighbour_distinct_days,first_serving_ms,last_serving_ms,first_neighbour_ms,last_neighbour_ms",
+            "SELECT s.site_key,s.cell_identity,SUM(CASE WHEN s.role='SERVING' THEN s.observations ELSE 0 END),"+
+                "(SELECT COUNT(*) FROM $TABLE_SITE_DAYS d WHERE d.site_key=s.site_key AND d.cell_identity=s.cell_identity AND d.role='SERVING'),"+
+                "SUM(CASE WHEN s.role='NEIGHBOUR' THEN s.observations ELSE 0 END),(SELECT COUNT(*) FROM $TABLE_SITE_DAYS d WHERE d.site_key=s.site_key AND d.cell_identity=s.cell_identity AND d.role='NEIGHBOUR'),"+
+                "MIN(CASE WHEN s.role='SERVING' THEN s.first_seen_ms END),MAX(CASE WHEN s.role='SERVING' THEN s.last_seen_ms END),MIN(CASE WHEN s.role='NEIGHBOUR' THEN s.first_seen_ms END),MAX(CASE WHEN s.role='NEIGHBOUR' THEN s.last_seen_ms END) FROM $TABLE_SITE_CELLS s GROUP BY s.site_key,s.cell_identity")
+        files += query("motion.csv","site_key,day,state,accuracy_band_m,duration_s,displacement_band_m","SELECT site_key,day,state,accuracy_band_m,duration_s,displacement_band_m FROM $TABLE_SITE_MOTION_DAYS ORDER BY day,site_key")
+        files += query("shadow_episodes.csv","episode_id,site_key,previous_identity,candidate_identity,first_seen_ms,last_seen_ms,duration_ms,evaluated_ms,closed_ms,shadow_recorded,reason,motion_state,feature_state,globally_known,known_at_site,seen_as_neighbour,serving_days,neighbour_days,corroborated",
+            "SELECT episode_id,site_key,previous_identity,candidate_identity,first_seen_ms,last_seen_ms,(last_seen_ms-first_seen_ms),evaluated_ms,closed_ms,shadow_recorded,reason,motion_state,feature_state,globally_known,known_at_site,seen_as_neighbour,serving_days,neighbour_days,corroborated FROM $TABLE_SITE_SHADOW_TRIGGERS ORDER BY first_seen_ms")
+        return files
     }
 
     private fun createForensicTables(db: SQLiteDatabase) {
@@ -1074,6 +1271,7 @@ class CellDbHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME, 
         db.execSQL("DELETE FROM $TABLE_FORENSIC_SAMPLES")
         db.execSQL("DELETE FROM $TABLE_FORENSIC_CASES")
         db.execSQL("DELETE FROM $TABLE_CELL_TRANSITIONS")
+        resetStableSiteLearning()
     }
 
     /**
@@ -1098,6 +1296,16 @@ class CellDbHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME, 
             oldCases.forEach { id -> db.delete(TABLE_FORENSIC_SAMPLES, "case_id=?", arrayOf(id.toString())) }
             db.delete(TABLE_FORENSIC_CASES, "updated_at < ?", arrayOf(threshold))
             db.delete(TABLE_CELL_TRANSITIONS, "last_seen_ms < ?", arrayOf(cutoff.toString()))
+            val siteCutoff = System.currentTimeMillis() - 120L * 24 * 60 * 60 * 1000
+            val eventCutoff = System.currentTimeMillis() - 14L * 24 * 60 * 60 * 1000
+            val hardSiteCutoff = System.currentTimeMillis() - 365L * 24 * 60 * 60 * 1000
+            db.delete(TABLE_SITE_EVENTS, "seen_ms < ?", arrayOf(eventCutoff.toString()))
+            db.delete(TABLE_SITE_CELLS, "last_seen_ms < ? AND observations < 3", arrayOf(siteCutoff.toString()))
+            db.delete(TABLE_SITE_CELLS, "last_seen_ms < ?", arrayOf(hardSiteCutoff.toString()))
+            db.delete(TABLE_SITE_DAYS, "day < ?", arrayOf(SimpleDateFormat("yyyy-MM-dd", Locale.ROOT).format(Date(siteCutoff))))
+            db.delete(TABLE_SITE_MOTION_DAYS, "day < ?", arrayOf(SimpleDateFormat("yyyy-MM-dd", Locale.ROOT).format(Date(siteCutoff))))
+            db.delete(TABLE_SITE_HOLDS, "last_seen_ms < ? AND active=0", arrayOf(siteCutoff.toString()))
+            db.delete(TABLE_SITE_SHADOW_TRIGGERS, "last_seen_ms < ? AND closed_ms IS NOT NULL", arrayOf(siteCutoff.toString()))
             historyDeleted
         } catch (_: Exception) {
             0

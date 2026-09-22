@@ -43,6 +43,40 @@ when updating: accumulated days are reused and no migration or reset is required
 
 ## 2. Initial setup
 
+### Stable-site protection
+
+Version 2.9.0 learns coarse local sites independently. A site identifier represents an
+approximately 500 m grid bucket and is stored as a derived hash; the new site tables do not retain
+exact coordinates. Reliable fixes first classify motion. Two minutes of precise, coherent fixes
+are required for `STATIC_CONFIRMED`; missing or inaccurate GPS yields `UNKNOWN`.
+
+A clean install and an upgrade from v2.8.1 both begin site-context learning from zero. Existing
+history remains fully available to all older detector features, but it cannot supply accuracy,
+motion or neighbour facts that were never recorded. A site becomes active only after seven serving
+days, three static days, three neighbour-baseline days and thirty serving observations. New sites,
+movement, unreliable GPS and unavailable neighbours cannot activate a hold.
+
+At an active site, a serving identity new to that site may satisfy the proposed
+`SITE_UNVERIFIED` conditions. Version 2.9.0 runs this in shadow mode: the Terminal says that it
+would apply the hold, but trust learning, forensics and normal alarms remain unchanged. This allows
+the false-positive rate, including legitimate sibling sectors, to be measured before enforcement.
+Shadow triggers are retained as privacy-reduced technical telemetry. A single serving sighting does
+not make an identity known: corroboration requires three serving days or two neighbour days. Four
+overlapping 500 m grids reduce false site changes caused by GNSS jitter near a grid boundary.
+The canonical grid is chosen by maturity and evidence before its verdict is considered. Novelty is
+stored as one episode, so temporary GPS loss, unknown motion and service restarts do not turn one
+continuous serving period into repeated triggers.
+
+Use **History → Topology → Export Stable-Site** after field collection. The ZIP contains
+`sites.csv`, `site_cells.csv`, `motion.csv` and `shadow_episodes.csv`. It includes hashed site keys,
+serving and neighbour days/observations, motion bands and logical episode timing; it contains no
+exact site coordinates.
+The cell and episode CSV files do contain complete cellular identities, just like the topology
+export. Treat the ZIP as potentially sensitive movement/context data and review it before sharing.
+Restart recovery uses established site evidence rather than relying only on process memory. A
+transmitter present throughout bootstrap can influence the first baseline; ICdetection cannot
+establish external truth from local history.
+
 ### Permissions
 
 Grant the permissions requested by the app. Location permission is important because Android protects cellular identifiers as location-sensitive data. GPS also enables geographic consistency checks and comparisons with tower-database coordinates.

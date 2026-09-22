@@ -1,7 +1,7 @@
 ![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)
 ![Platform](https://img.shields.io/badge/Platform-Android%2010%2B-green.svg)
 ![Root Required](https://img.shields.io/badge/Root-Not%20Required-brightgreen.svg)
-![Status](https://img.shields.io/badge/Status-Stable%20v2.8.1-success.svg)
+![Status](https://img.shields.io/badge/Status-v2.9.0%20development-orange.svg)
 [![Featured in Awesome Telco](https://img.shields.io/badge/Featured%20in-Awesome%20Telco-6f42c1.svg)](https://github.com/ravens/awesome-telco#imsi-catcher-detection)
 
 
@@ -48,7 +48,16 @@ The application operates from Android userland without requiring root or direct 
 
 **Important:** ICdetection is not an IMSI-catcher proof tool. It is a local-first cellular anomaly auditor. Alerts should be interpreted as signals that the cellular environment deserves closer attention, not as definitive proof of surveillance or interception.
 
-Version 2.8.1 lets high-frequency cells accumulate temporal trust evidence across the complete
+Version 2.9.0 adds privacy-reduced stable-site learning. It derives conservative motion state from
+successive accurate fixes, aggregates serving and neighbour identities by a hashed approximately
+500 m site bucket, and requires multi-day site-specific maturity. A new serving identity while
+confirmed static at an active site is evaluated as a potential `SITE_UNVERIFIED` event. Version
+2.9.0 reports this in shadow mode without freezing trust, opening forensics or changing H1-H16,
+anomaly scores or normal alarms. Schema 16 is additive; existing databases are preserved and site learning starts
+from zero because legacy rows lack accuracy, motion and neighbour context. A dedicated Stable-Site
+ZIP exports hashed sites, serving/neighbour evidence, motion bands and logical shadow episodes for
+field calibration without exact coordinates. `site_cells.csv` and `shadow_episodes.csv` contain
+complete cellular identities, like the topology ZIP, so review them before sharing. Version 2.8.1 lets high-frequency cells accumulate temporal trust evidence across the complete
 90-day window. The previous 500-row scan could permanently hide the fourteen-day history of cells
 seen more than roughly 36 times per day. Detailed radio and location analysis remains bounded, and
 its location/RF eligibility minimums use those 500 recent detailed rows. All existing safety gates
@@ -57,7 +66,7 @@ schema-15 databases are reused and must not be cleared. Version 2.8.0 hardens fo
 sample writes, preserves whole cases during retention, and enables the declared SQLite foreign
 keys. Physical decisions in H8, H11 and H14 now use the modem observation's `radioTech` rather
 than the user-facing 4G/5G icon label. This deliberately changes the detection baseline and must
-be recorded as a dataset cut. Database schema 15 and existing history remain compatible.
+be recorded as a dataset cut. Schema 16 is additive and existing history remains compatible.
 The v2.7.0 release also displays a revocable local confidence profile for the serving
 cell. It learns only from clean observations spread across independent days and never exceeds 98%.
 `ESTABLISHED` means “consistent with this device's historical local pattern”, not “operator-
@@ -69,7 +78,7 @@ authenticated” or “guaranteed safe”.
 
 > **⚠️ Upgrading from a version older than v2.1.1:** uninstall the previous version first. Android refuses an in-place update when the APK is not signed with the same keystore, and a clean database is required because records written before v2.1.1 may hold an antenna coordinate where the device GPS position belongs. Export your CSV first if you want to keep the old history. v2.1.2 and later releases signed with the same keystore update in place normally. See `Status.md`.
 
-ICdetection v2.8.1 is the current stable release. The v2.7 line materially hardened detection by
+ICdetection v2.9.0 is the current development release. The v2.7 line materially hardened detection by
 correlating independent anomaly families across short episodes, protecting learned baselines from
 suspicious observations, adding hysteresis to noisy neighbour readings, and introducing revocable
 local cell confidence. RF identity is learned per carrier, while possible legitimate operator
@@ -699,7 +708,7 @@ Derivative works must remain open-source under GPL-compatible licensing.
 
 Thank you to everyone who has followed the project through its many iterations.
 
-ICdetection v2.8.1 is the current stable release within the boundaries of what Android userland
+ICdetection v2.9.0 is the current development release within the boundaries of what Android userland
 allows without root or direct baseband access.
 
 Future updates will focus on bug fixes, field validation, false-positive analysis, and minor improvements discovered through real-world usage.

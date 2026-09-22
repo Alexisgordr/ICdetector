@@ -1,0 +1,1 @@
+Añade aprendizaje de sitios con privacidad reducida en modo sombra. Los episodios persistentes sobreviven a pérdidas temporales de GPS y evitan duplicados por ciclo/grid. Un ZIP exporta sitios anonimizados, serving/vecinas, movimiento y resultados shadow. Confianza, H1-H16, puntuación y alarmas no cambian; el esquema 16 conserva los datos.

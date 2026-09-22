@@ -5,7 +5,9 @@
 out/
 .gradle/
 .gradle-user/
+.kotlin/
 .android-user-build/
+.android-*/
 .tmp/
 build/
 app/build/
@@ -37,6 +39,7 @@ app/release/
 app/debug/
 *.dm
 output-metadata.json
+outputs/
 
 # Benchmarking
 *.hprof

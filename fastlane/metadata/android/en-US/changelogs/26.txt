@@ -1,0 +1,1 @@
+Adds privacy-reduced stable-site learning in shadow mode. Persistent episodes survive temporary GPS loss and avoid poll/grid duplicates. A dedicated ZIP exports hashed sites, serving/neighbour evidence, motion bands and shadow outcomes. Trust, H1-H16, scores and alarms remain unchanged; schema 16 preserves existing data.

@@ -27,7 +27,10 @@ enum class TrustContradictionSignal {
     TRANSITION,
 
     /** Primera observación de la identidad en este proceso, ya en CHANGED y con contradicciones. */
-    ON_START
+    ON_START,
+
+    /** Silent stable-site novelty hold; observational and score-neutral. */
+    SITE_NOVELTY
 }
 
 /**

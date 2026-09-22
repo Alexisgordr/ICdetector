@@ -41,6 +41,7 @@ import com.alexisgordr.icdetector.models.ForensicCaseState
 import com.alexisgordr.icdetector.models.ForensicCaseOrigin
 import com.alexisgordr.icdetector.forensics.ForensicExporter
 import com.alexisgordr.icdetector.forensics.TopologyExporter
+import com.alexisgordr.icdetector.forensics.StableSiteExporter
 import com.alexisgordr.icdetector.models.SUBTHRESHOLD_PREFIX
 import com.alexisgordr.icdetector.models.identityKey
 import com.alexisgordr.icdetector.models.CellTransitionSummary
@@ -219,7 +220,7 @@ fun HistoryPanel(dbHelper: CellDbHelper, onBack: () -> Unit) {
             return@Column
         }
         if (showTopology) {
-            TopologyPanel(transitions, Modifier.fillMaxWidth().weight(1f))
+            TopologyPanel(dbHelper, transitions, Modifier.fillMaxWidth().weight(1f))
             return@Column
         }
         if (showGeometry) {
@@ -450,6 +451,7 @@ private fun DetailText(text: String) {
 
 @Composable
 private fun TopologyPanel(
+    dbHelper: CellDbHelper,
     transitions: List<CellTransitionSummary>,
     modifier: Modifier = Modifier
 ) {
@@ -467,6 +469,13 @@ private fun TopologyPanel(
             }
             exportMessage = if (result.isSuccess) "Topología exportada correctamente" else
                 "Error: ${result.exceptionOrNull()?.message}"
+        }
+    }
+    val stableSiteExportLauncher = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/zip")) { uri ->
+        if(uri!=null) scope.launch {
+            exportMessage="Exportando Stable-Site…"
+            val result=withContext(Dispatchers.IO){runCatching{StableSiteExporter.export(context,dbHelper,uri)}}
+            exportMessage=if(result.isSuccess)"Stable-Site exportado correctamente" else "Error: ${result.exceptionOrNull()?.message}"
         }
     }
     if (confirmExport) AlertDialog(
@@ -529,6 +538,14 @@ private fun TopologyPanel(
                 Icon(Icons.Default.Share, contentDescription = null, modifier = Modifier.size(14.dp))
                 Spacer(Modifier.width(4.dp))
                 Text(stringResource(R.string.export_topology), fontFamily = FontFamily.Monospace, fontSize = 9.sp)
+            }
+            TextButton(
+                onClick = { stableSiteExportLauncher.launch("ICD-stable-site-${System.currentTimeMillis()}.zip") },
+                colors = ButtonDefaults.textButtonColors(contentColor = Color(0xFF80CBC4))
+            ) {
+                Icon(Icons.Default.Share, contentDescription = null, modifier = Modifier.size(14.dp))
+                Spacer(Modifier.width(4.dp))
+                Text(stringResource(R.string.export_stable_site), fontFamily = FontFamily.Monospace, fontSize = 9.sp)
             }
         }
         exportMessage?.let {
