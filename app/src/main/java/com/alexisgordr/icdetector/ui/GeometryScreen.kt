@@ -8,6 +8,7 @@ import androidx.compose.foundation.gestures.detectTransformGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
 import androidx.compose.material.icons.Icons
@@ -232,232 +233,261 @@ fun GeometryScreen(dbHelper: CellDbHelper, modifier: Modifier = Modifier) {
         }
     }
 
-    Column(modifier) {
-        Text(
-            stringResource(R.string.geometry_disclaimer),
-            color = Color(0xFF777777), fontFamily = FontFamily.Monospace, fontSize = 8.sp,
-            lineHeight = 11.sp
-        )
-        Spacer(Modifier.height(8.dp))
-        MobilityPanel(snap.mobility, onExport = { confirmExport = true })
-        exportMessage?.let { Text(it, color = Color(0xFF80CBC4), fontFamily = FontFamily.Monospace, fontSize = 8.sp) }
-        Spacer(Modifier.height(8.dp))
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-            GeometryMetric(stringResource(R.string.profiled), snap.nodes.size.toString(), Modifier.weight(1f))
-            GeometryMetric(stringResource(R.string.sites), snap.sites.size.toString(), Modifier.weight(1f))
-            GeometryMetric(stringResource(R.string.routes), snap.routeChecks.size.toString(), Modifier.weight(1f))
-            GeometryMetric(
-                stringResource(R.string.review), (incoherentSites + incoherentRoutes).toString(), Modifier.weight(1f),
-                value = if (incoherentSites + incoherentRoutes > 0) Color(0xFFCF6679) else Color(0xFF4CAF50)
-            )
-        }
-        Spacer(Modifier.height(8.dp))
+    val listState = rememberLazyListState()
 
-        Surface(color = Color(0xFF0B0B0B), shape = RoundedCornerShape(8.dp)) {
-            Box(Modifier.fillMaxWidth().height(300.dp)) {
-                Canvas(
-                    Modifier
-                        .matchParentSize()
-                        .onSizeChanged {
-                            canvasSize = it
-                            graphPan = constrainedGraphPan(graphPan, graphScale, it, margin)
-                        }
-                        .pointerInput(canvasSize, margin) {
-                            detectTransformGestures { centroid, pan, zoom, _ ->
-                                val oldScale = graphScale
-                                val newScale = (oldScale * zoom).coerceIn(MIN_GRAPH_SCALE, MAX_GRAPH_SCALE)
-                                val centre = Offset(canvasSize.width / 2f, canvasSize.height / 2f)
-                                val ratio = newScale / oldScale
-                                // Mantiene bajo los dedos el mismo punto del grafo mientras se
-                                // amplía, que es lo que hace que el pellizco resulte natural.
-                                val anchoredPan = graphPan * ratio +
-                                    (centroid - centre) * (1f - ratio) + pan
-                                graphScale = newScale
-                                graphPan = constrainedGraphPan(anchoredPan, newScale, canvasSize, margin)
-                            }
-                        }
-                        .pointerInput(layout, graphScale) {
-                            detectTapGestures(
-                                onDoubleTap = { tap ->
-                                    if (graphScale > 1.05f) resetViewport()
-                                    else changeScale(2.5f, tap)
-                                },
-                                onTap = { tap ->
-                                    // Radio en dp, no en píxeles físicos: seleccionar un nodo debe
-                                    // ser igual de fácil en pantallas de densidad distinta.
-                                    val hitRadius = 30.dp.toPx()
-                                    selected = layout.minByOrNull { (_, o) -> hypot(o.x - tap.x, o.y - tap.y) }
-                                        ?.takeIf { hypot(it.value.x - tap.x, it.value.y - tap.y) <= hitRadius }
-                                        ?.key
-                                }
-                            )
-                        }
-                ) {
-                    // Retícula discreta: da referencia visual al navegar sin fingir que es un mapa.
-                    val gridColor = Color(0xFF1A2423)
-                    repeat(3) { index ->
-                        val fraction = (index + 1) / 4f
-                        drawLine(gridColor, Offset(size.width * fraction, 0f), Offset(size.width * fraction, size.height))
-                        drawLine(gridColor, Offset(0f, size.height * fraction), Offset(size.width, size.height * fraction))
-                    }
-                // Aristas primero, para que los nodos queden por encima.
-                snap.routeChecks.forEach { route ->
-                    val a = layout[route.fromIdentity] ?: return@forEach
-                    val b = layout[route.toIdentity] ?: return@forEach
-                    val trustRatio =
-                        if (route.observations > 0) route.trustedObservations.toFloat() / route.observations else 0f
-                    val connectedToSelection = selected != null &&
-                        (route.fromIdentity == selected || route.toIdentity == selected)
-                    val color = when {
-                        !route.coherent -> Color(0xFFCF6679)
-                        connectedToSelection -> Color(0xFFFFB300)
-                        trustRatio > 0f -> Color(0xFF4CAF50).copy(alpha = 0.35f + 0.5f * trustRatio)
-                        else -> Color(0xFF4A4A4A)
-                    }
-                    drawLine(
-                        color = color,
-                        start = a,
-                        end = b,
-                        strokeWidth = (if (connectedToSelection) 2.5f else 1f) +
-                            route.observations.coerceAtMost(20) * 0.25f
-                    )
-                    // Punta de flecha: un punto grueso junto al destino marca el sentido sin
-                    // tener que calcular un triángulo rotado.
-                    val dx = b.x - a.x
-                    val dy = b.y - a.y
-                    val len = hypot(dx, dy)
-                    if (len > 1f) {
-                        drawCircle(color, radius = 3.5f, center = Offset(b.x - dx / len * 12f, b.y - dy / len * 12f))
-                    }
-                }
-
-                snap.nodes.forEach { node ->
-                    val center = layout[node.identity] ?: return@forEach
-                    val isSelected = node.identity == selected
-                    // El círculo exterior ES el radio P90 a escala real; el mínimo solo evita que
-                    // una celda muy concentrada quede invisible.
-                    val radiusPx = (node.profile.radiusP90 * pxPerMeter * graphScale).toFloat().coerceIn(6f, 180f)
-                    drawCircle(
-                        color = Color(0xFF80CBC4).copy(alpha = 0.10f),
-                        radius = radiusPx, center = center
-                    )
-                    drawCircle(
-                        color = Color(0xFF80CBC4).copy(alpha = 0.30f),
-                        radius = radiusPx, center = center, style = Stroke(width = 1f)
-                    )
-                    val mobilityColor = when (mobilityById[node.identity]?.familiarity?.name) {
-                        "KNOWN_ON_ROUTE" -> Color(0xFF29B6F6)
-                        "OBSERVED_ON_ROUTE" -> Color(0xFFAB47BC)
-                        else -> Color(0xFF78909C)
-                    }
-                    drawCircle(
-                        color = if (isSelected) Color(0xFFFFA000) else mobilityColor,
-                        radius = if (isSelected) 8f else 5f, center = center
-                    )
-                    if (isSelected) {
-                        drawCircle(Color(0xFFFFD54F), radius = 13f, center = center, style = Stroke(width = 2f))
-                    }
-                }
-                }
-
-                Surface(
-                    modifier = Modifier.align(Alignment.TopStart).padding(8.dp),
-                    color = Color(0xDD151515),
-                    shape = RoundedCornerShape(6.dp)
-                ) {
-                    Text(
-                        stringResource(R.string.geometry_zoom_format, (graphScale * 100).roundToInt()),
-                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 5.dp),
-                        color = Color(0xFFB0BEC5), fontFamily = FontFamily.Monospace, fontSize = 9.sp
-                    )
-                }
-
-                Row(
-                    modifier = Modifier.align(Alignment.TopEnd).padding(6.dp),
-                    horizontalArrangement = Arrangement.spacedBy(2.dp)
-                ) {
-                    GraphControlButton(
-                        icon = Icons.Default.ZoomOut,
-                        description = stringResource(R.string.geometry_zoom_out),
-                        enabled = graphScale > MIN_GRAPH_SCALE,
-                        onClick = { changeScale(graphScale / 1.5f) }
-                    )
-                    GraphControlButton(
-                        icon = Icons.Default.CenterFocusStrong,
-                        description = stringResource(R.string.geometry_fit_all),
-                        enabled = graphScale > MIN_GRAPH_SCALE || graphPan != Offset.Zero,
-                        onClick = { resetViewport() }
-                    )
-                    GraphControlButton(
-                        icon = Icons.Default.ZoomIn,
-                        description = stringResource(R.string.geometry_zoom_in),
-                        enabled = graphScale < MAX_GRAPH_SCALE,
-                        onClick = { changeScale(graphScale * 1.5f) }
-                    )
-                }
-            }
-        }
-
-        Spacer(Modifier.height(4.dp))
-        Text(
-            stringResource(R.string.geometry_legend_interactive),
-            color = Color(0xFF555555), fontFamily = FontFamily.Monospace, fontSize = 8.sp,
-            lineHeight = 11.sp
-        )
-        Spacer(Modifier.height(8.dp))
-
-        LazyColumn(Modifier.fillMaxSize()) {
-            selected?.let { id ->
-                val node = snap.nodes.firstOrNull { it.identity == id }
-                if (node != null) {
-                    item {
-                        NodeCard(
-                            identity = node.identity,
-                            sampleCount = node.profile.sampleCount,
-                            radiusP90 = node.profile.radiusP90,
-                            enodeb = node.enodeb,
-                            sector = node.sector,
-                            incoming = snap.routes.count { it.toIdentity == id },
-                            outgoing = snap.routes.count { it.fromIdentity == id },
-                            mobility = mobilityById[id],
-                            onClose = { selected = null }
-                        )
-                    }
-                }
-            }
-
-            if (snap.sites.isNotEmpty()) {
-                item { SectionHeader(stringResource(R.string.site_coherence)) }
-                item {
-                    Text(
-                        stringResource(R.string.site_coherence_help),
-                        color = Color(0xFF555555), fontFamily = FontFamily.Monospace,
-                        fontSize = 8.sp, lineHeight = 11.sp,
-                        modifier = Modifier.padding(bottom = 6.dp)
-                    )
-                }
-                items(snap.sites) { site -> SiteCard(site) }
-            }
-
-            val worstRoutes = snap.routeChecks.take(12)
-            if (worstRoutes.isNotEmpty()) {
-                item { SectionHeader(stringResource(R.string.route_coherence)) }
-                item {
-                    Text(
-                        stringResource(R.string.route_coherence_help),
-                        color = Color(0xFF555555), fontFamily = FontFamily.Monospace,
-                        fontSize = 8.sp, lineHeight = 11.sp,
-                        modifier = Modifier.padding(bottom = 6.dp)
-                    )
-                }
-                items(worstRoutes) { route ->
-                    RouteGeometryCard(route, snap.routes.firstOrNull { it.fromIdentity==route.fromIdentity && it.toIdentity==route.toIdentity })
-                }
-            }
-
-            item { Spacer(Modifier.height(24.dp)) }
+    // Toda la pantalla comparte un único scroll. Antes, el bloque fijo (panel Mobility + métricas
+    // + grafo de 300 dp) podía consumir toda la altura disponible y dejar la LazyColumn inferior
+    // con 0 px; NodeCard se creaba correctamente al tocar un nodo, pero quedaba fuera de la zona
+    // visible. Mantener un solo LazyColumn evita esa regresión en pantallas pequeñas.
+    LaunchedEffect(selected) {
+        if (selected != null) {
+            // El item 0 contiene cabecera + panel + métricas + grafo + leyenda. Cuando existe una
+            // selección, NodeCard es siempre el item 1: llevarlo a pantalla hace que el toque tenga
+            // una respuesta visible inmediata sin cambiar ningún dato ni lógica de Geometry.
+            listState.animateScrollToItem(1)
         }
     }
+
+    LazyColumn(
+        modifier = modifier.fillMaxSize(),
+        state = listState
+    ) {
+        item(key = "geometry_header") {
+            Column {
+                Text(
+                    stringResource(R.string.geometry_disclaimer),
+                    color = Color(0xFF777777), fontFamily = FontFamily.Monospace, fontSize = 8.sp,
+                    lineHeight = 11.sp
+                )
+                Spacer(Modifier.height(8.dp))
+                MobilityPanel(snap.mobility, onExport = { confirmExport = true })
+                exportMessage?.let {
+                    Text(it, color = Color(0xFF80CBC4), fontFamily = FontFamily.Monospace, fontSize = 8.sp)
+                }
+                Spacer(Modifier.height(8.dp))
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    GeometryMetric(stringResource(R.string.profiled), snap.nodes.size.toString(), Modifier.weight(1f))
+                    GeometryMetric(stringResource(R.string.sites), snap.sites.size.toString(), Modifier.weight(1f))
+                    GeometryMetric(stringResource(R.string.routes), snap.routeChecks.size.toString(), Modifier.weight(1f))
+                    GeometryMetric(
+                        stringResource(R.string.review), (incoherentSites + incoherentRoutes).toString(), Modifier.weight(1f),
+                        value = if (incoherentSites + incoherentRoutes > 0) Color(0xFFCF6679) else Color(0xFF4CAF50)
+                    )
+                }
+                Spacer(Modifier.height(8.dp))
+
+                Surface(color = Color(0xFF0B0B0B), shape = RoundedCornerShape(8.dp)) {
+                    Box(Modifier.fillMaxWidth().height(300.dp)) {
+                        Canvas(
+                            Modifier
+                                .matchParentSize()
+                                .onSizeChanged {
+                                    canvasSize = it
+                                    graphPan = constrainedGraphPan(graphPan, graphScale, it, margin)
+                                }
+                                .pointerInput(canvasSize, margin) {
+                                    detectTransformGestures { centroid, pan, zoom, _ ->
+                                        val oldScale = graphScale
+                                        val newScale = (oldScale * zoom).coerceIn(MIN_GRAPH_SCALE, MAX_GRAPH_SCALE)
+                                        val centre = Offset(canvasSize.width / 2f, canvasSize.height / 2f)
+                                        val ratio = newScale / oldScale
+                                        // Mantiene bajo los dedos el mismo punto del grafo mientras se
+                                        // amplía, que es lo que hace que el pellizco resulte natural.
+                                        val anchoredPan = graphPan * ratio +
+                                            (centroid - centre) * (1f - ratio) + pan
+                                        graphScale = newScale
+                                        graphPan = constrainedGraphPan(anchoredPan, newScale, canvasSize, margin)
+                                    }
+                                }
+                                .pointerInput(layout, graphScale) {
+                                    detectTapGestures(
+                                        onDoubleTap = { tap ->
+                                            if (graphScale > 1.05f) resetViewport()
+                                            else changeScale(2.5f, tap)
+                                        },
+                                        onTap = { tap ->
+                                            // Radio en dp, no en píxeles físicos: seleccionar un nodo debe
+                                            // ser igual de fácil en pantallas de densidad distinta.
+                                            val hitRadius = 30.dp.toPx()
+                                            selected = layout.minByOrNull { (_, o) -> hypot(o.x - tap.x, o.y - tap.y) }
+                                                ?.takeIf { hypot(it.value.x - tap.x, it.value.y - tap.y) <= hitRadius }
+                                                ?.key
+                                        }
+                                    )
+                                }
+                        ) {
+                            // Retícula discreta: da referencia visual al navegar sin fingir que es un mapa.
+                            val gridColor = Color(0xFF1A2423)
+                            repeat(3) { index ->
+                                val fraction = (index + 1) / 4f
+                                drawLine(gridColor, Offset(size.width * fraction, 0f), Offset(size.width * fraction, size.height))
+                                drawLine(gridColor, Offset(0f, size.height * fraction), Offset(size.width, size.height * fraction))
+                            }
+                            // Aristas primero, para que los nodos queden por encima.
+                            snap.routeChecks.forEach { route ->
+                                val a = layout[route.fromIdentity] ?: return@forEach
+                                val b = layout[route.toIdentity] ?: return@forEach
+                                val trustRatio =
+                                    if (route.observations > 0) route.trustedObservations.toFloat() / route.observations else 0f
+                                val connectedToSelection = selected != null &&
+                                    (route.fromIdentity == selected || route.toIdentity == selected)
+                                val color = when {
+                                    !route.coherent -> Color(0xFFCF6679)
+                                    connectedToSelection -> Color(0xFFFFB300)
+                                    trustRatio > 0f -> Color(0xFF4CAF50).copy(alpha = 0.35f + 0.5f * trustRatio)
+                                    else -> Color(0xFF4A4A4A)
+                                }
+                                drawLine(
+                                    color = color,
+                                    start = a,
+                                    end = b,
+                                    strokeWidth = (if (connectedToSelection) 2.5f else 1f) +
+                                        route.observations.coerceAtMost(20) * 0.25f
+                                )
+                                // Punta de flecha: un punto grueso junto al destino marca el sentido sin
+                                // tener que calcular un triángulo rotado.
+                                val dx = b.x - a.x
+                                val dy = b.y - a.y
+                                val len = hypot(dx, dy)
+                                if (len > 1f) {
+                                    drawCircle(color, radius = 3.5f, center = Offset(b.x - dx / len * 12f, b.y - dy / len * 12f))
+                                }
+                            }
+
+                            snap.nodes.forEach { node ->
+                                val center = layout[node.identity] ?: return@forEach
+                                val isSelected = node.identity == selected
+                                // El círculo exterior ES el radio P90 a escala real; el mínimo solo evita que
+                                // una celda muy concentrada quede invisible.
+                                val radiusPx = (node.profile.radiusP90 * pxPerMeter * graphScale).toFloat().coerceIn(6f, 180f)
+                                drawCircle(
+                                    color = Color(0xFF80CBC4).copy(alpha = 0.10f),
+                                    radius = radiusPx, center = center
+                                )
+                                drawCircle(
+                                    color = Color(0xFF80CBC4).copy(alpha = 0.30f),
+                                    radius = radiusPx, center = center, style = Stroke(width = 1f)
+                                )
+                                val mobilityColor = when (mobilityById[node.identity]?.familiarity?.name) {
+                                    "KNOWN_ON_ROUTE" -> Color(0xFF29B6F6)
+                                    "OBSERVED_ON_ROUTE" -> Color(0xFFAB47BC)
+                                    else -> Color(0xFF78909C)
+                                }
+                                drawCircle(
+                                    color = if (isSelected) Color(0xFFFFA000) else mobilityColor,
+                                    radius = if (isSelected) 8f else 5f, center = center
+                                )
+                                if (isSelected) {
+                                    drawCircle(Color(0xFFFFD54F), radius = 13f, center = center, style = Stroke(width = 2f))
+                                }
+                            }
+                        }
+
+                        Surface(
+                            modifier = Modifier.align(Alignment.TopStart).padding(8.dp),
+                            color = Color(0xDD151515),
+                            shape = RoundedCornerShape(6.dp)
+                        ) {
+                            Text(
+                                stringResource(R.string.geometry_zoom_format, (graphScale * 100).roundToInt()),
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 5.dp),
+                                color = Color(0xFFB0BEC5), fontFamily = FontFamily.Monospace, fontSize = 9.sp
+                            )
+                        }
+
+                        Row(
+                            modifier = Modifier.align(Alignment.TopEnd).padding(6.dp),
+                            horizontalArrangement = Arrangement.spacedBy(2.dp)
+                        ) {
+                            GraphControlButton(
+                                icon = Icons.Default.ZoomOut,
+                                description = stringResource(R.string.geometry_zoom_out),
+                                enabled = graphScale > MIN_GRAPH_SCALE,
+                                onClick = { changeScale(graphScale / 1.5f) }
+                            )
+                            GraphControlButton(
+                                icon = Icons.Default.CenterFocusStrong,
+                                description = stringResource(R.string.geometry_fit_all),
+                                enabled = graphScale > MIN_GRAPH_SCALE || graphPan != Offset.Zero,
+                                onClick = { resetViewport() }
+                            )
+                            GraphControlButton(
+                                icon = Icons.Default.ZoomIn,
+                                description = stringResource(R.string.geometry_zoom_in),
+                                enabled = graphScale < MAX_GRAPH_SCALE,
+                                onClick = { changeScale(graphScale * 1.5f) }
+                            )
+                        }
+                    }
+                }
+
+                Spacer(Modifier.height(4.dp))
+                Text(
+                    stringResource(R.string.geometry_legend_interactive),
+                    color = Color(0xFF555555), fontFamily = FontFamily.Monospace, fontSize = 8.sp,
+                    lineHeight = 11.sp
+                )
+                Spacer(Modifier.height(8.dp))
+            }
+        }
+
+        selected?.let { id ->
+            val node = snap.nodes.firstOrNull { it.identity == id }
+            if (node != null) {
+                item(key = "selected_node_$id") {
+                    NodeCard(
+                        identity = node.identity,
+                        sampleCount = node.profile.sampleCount,
+                        radiusP90 = node.profile.radiusP90,
+                        enodeb = node.enodeb,
+                        sector = node.sector,
+                        incoming = snap.routes.count { it.toIdentity == id },
+                        outgoing = snap.routes.count { it.fromIdentity == id },
+                        mobility = mobilityById[id],
+                        onClose = {
+                            selected = null
+                            scope.launch { listState.animateScrollToItem(0) }
+                        }
+                    )
+                }
+            }
+        }
+
+        if (snap.sites.isNotEmpty()) {
+            item { SectionHeader(stringResource(R.string.site_coherence)) }
+            item {
+                Text(
+                    stringResource(R.string.site_coherence_help),
+                    color = Color(0xFF555555), fontFamily = FontFamily.Monospace,
+                    fontSize = 8.sp, lineHeight = 11.sp,
+                    modifier = Modifier.padding(bottom = 6.dp)
+                )
+            }
+            items(snap.sites) { site -> SiteCard(site) }
+        }
+
+        val worstRoutes = snap.routeChecks.take(12)
+        if (worstRoutes.isNotEmpty()) {
+            item { SectionHeader(stringResource(R.string.route_coherence)) }
+            item {
+                Text(
+                    stringResource(R.string.route_coherence_help),
+                    color = Color(0xFF555555), fontFamily = FontFamily.Monospace,
+                    fontSize = 8.sp, lineHeight = 11.sp,
+                    modifier = Modifier.padding(bottom = 6.dp)
+                )
+            }
+            items(worstRoutes) { route ->
+                RouteGeometryCard(
+                    route,
+                    snap.routes.firstOrNull { it.fromIdentity == route.fromIdentity && it.toIdentity == route.toIdentity }
+                )
+            }
+        }
+
+        item { Spacer(Modifier.height(24.dp)) }
+    }
+
 }
 
 @Composable
