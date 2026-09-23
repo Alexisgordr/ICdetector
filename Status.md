@@ -12,10 +12,9 @@ without a reliable fix the window is invalidated. Continuous updates remain limi
 interval and no longer require 20 m of movement. H1-H16, LocalCellTrust, scoring, neighbours,
 site maturity, schema and migrations are unchanged.
 
-## v2.9.0 — Stable-Site context and conservative novelty hold (development)
->>>>>>> eb77400 (Fix Stable-Site motion sampling)
+## v2.9.0 — Stable-Site context and conservative novelty hold
 
-**Release:** 
+**Release:** published
 **Version code:** 26
 **Database schema:** 16 (additive)
 **Detection baseline:** H1-H16 and scoring unchanged
