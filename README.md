@@ -2,6 +2,7 @@
 ![Platform](https://img.shields.io/badge/Platform-Android%2010%2B-green.svg)
 ![Root Required](https://img.shields.io/badge/Root-Not%20Required-brightgreen.svg)
 ![Status](https://img.shields.io/badge/Status-v2.9.1%20stable-brightgreen.svg)
+![Status](https://img.shields.io/badge/Status-v2.10.0%20release%20candidate-orange.svg)
 [![Featured in Awesome Telco](https://img.shields.io/badge/Featured%20in-Awesome%20Telco-6f42c1.svg)](https://github.com/ravens/awesome-telco#imsi-catcher-detection)
 
 
@@ -48,7 +49,7 @@ The application operates from Android userland without requiring root or direct 
 
 **Important:** ICdetection is not an IMSI-catcher proof tool. It is a local-first cellular anomaly auditor. Alerts should be interpreted as signals that the cellular environment deserves closer attention, not as definitive proof of surveillance or interception.
 
-The unreleased Mobility Familiarity Phase A adds descriptive route memory backed by schema 17.
+Version 2.10.0 adds descriptive route memory backed by schema 17.
 `KNOWN_ON_ROUTE` only means that serving-cell transitions occurred in earlier independent trips; it
 does not alter trust, anomaly scores, heuristics, alerts, Stable-Site or forensic decisions. Trips
 belong to the background service and continue independently of the Geometry screen.
@@ -87,7 +88,7 @@ authenticated” or “guaranteed safe”.
 
 > **⚠️ Upgrading from a version older than v2.1.1:** uninstall the previous version first. Android refuses an in-place update when the APK is not signed with the same keystore, and a clean database is required because records written before v2.1.1 may hold an antenna coordinate where the device GPS position belongs. Export your CSV first if you want to keep the old history. v2.1.2 and later releases signed with the same keystore update in place normally. See `Status.md`.
 
-ICdetection v2.9.1 is the current development release. The v2.7 line materially hardened detection by
+ICdetection v2.10.0 is the current release candidate. The v2.7 line materially hardened detection by
 correlating independent anomaly families across short episodes, protecting learned baselines from
 suspicious observations, adding hysteresis to noisy neighbour readings, and introducing revocable
 local cell confidence. RF identity is learned per carrier, while possible legitimate operator

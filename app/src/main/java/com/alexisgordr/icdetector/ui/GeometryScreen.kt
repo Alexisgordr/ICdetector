@@ -1,5 +1,7 @@
 package com.alexisgordr.icdetector.ui
 
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.detectTransformGestures
@@ -12,6 +14,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CenterFocusStrong
 import androidx.compose.material.icons.filled.ZoomIn
 import androidx.compose.material.icons.filled.ZoomOut
+import androidx.compose.material.icons.filled.Share
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -22,6 +25,7 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
@@ -32,8 +36,12 @@ import androidx.compose.ui.unit.sp
 import com.alexisgordr.icdetector.core.CellGeometry
 import com.alexisgordr.icdetector.R
 import com.alexisgordr.icdetector.models.CellTransitionSummary
+import com.alexisgordr.icdetector.models.MobilityCellPresentation
+import com.alexisgordr.icdetector.models.MobilityGeometrySnapshot
+import com.alexisgordr.icdetector.forensics.GeometryExporter
 import com.alexisgordr.icdetector.storage.CellDbHelper
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlin.math.hypot
 import kotlin.math.roundToInt
@@ -90,7 +98,8 @@ fun GeometryScreen(dbHelper: CellDbHelper, modifier: Modifier = Modifier) {
         val sites: List<CellGeometry.SiteCheck>,
         val routeChecks: List<CellGeometry.RouteCheck>,
         val bounds: CellGeometry.Bounds?,
-        val cellsSeen: Int
+        val cellsSeen: Int,
+        val mobility: MobilityGeometrySnapshot
     )
 
     var snapshot by remember { mutableStateOf<Snapshot?>(null) }
@@ -98,6 +107,28 @@ fun GeometryScreen(dbHelper: CellDbHelper, modifier: Modifier = Modifier) {
     var canvasSize by remember { mutableStateOf(IntSize.Zero) }
     var graphScale by remember { mutableFloatStateOf(MIN_GRAPH_SCALE) }
     var graphPan by remember { mutableStateOf(Offset.Zero) }
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    var confirmExport by remember { mutableStateOf(false) }
+    var exportMessage by remember { mutableStateOf<String?>(null) }
+    val exportLauncher = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/zip")) { uri ->
+        if (uri != null) scope.launch {
+            exportMessage = "Exportando geometría…"
+            val result = withContext(Dispatchers.IO) { runCatching { GeometryExporter.export(context, dbHelper, uri) } }
+            exportMessage = if (result.isSuccess) "Geometría exportada correctamente" else "Error: ${result.exceptionOrNull()?.message}"
+        }
+    }
+
+    if (confirmExport) AlertDialog(
+        onDismissRequest = { confirmExport = false },
+        title = { Text("EXPORTAR GEOMETRÍA") },
+        text = { Text("El ZIP contiene identidades celulares y patrones asociados a lugares o rutas frecuentados. No incluye coordenadas GPS precisas. Revísalo antes de compartirlo públicamente.") },
+        confirmButton = { TextButton(onClick = {
+            confirmExport = false
+            exportLauncher.launch("ICD-geometry-${System.currentTimeMillis()}.zip")
+        }) { Text("EXPORTAR") } },
+        dismissButton = { TextButton(onClick = { confirmExport = false }) { Text("CANCELAR") } }
+    )
 
     LaunchedEffect(Unit) {
         snapshot = withContext(Dispatchers.IO) {
@@ -105,7 +136,8 @@ fun GeometryScreen(dbHelper: CellDbHelper, modifier: Modifier = Modifier) {
             val profiles = samples.mapNotNull { (identity, list) ->
                 CellGeometry.profileOrNull(list)?.let { identity to it }
             }.toMap()
-            val routes = dbHelper.getCellTransitions(limit = 400)
+            val mobility = dbHelper.getMobilityGeometrySnapshot(limit = 400)
+            val routes = mobility.transitions
             Snapshot(
                 nodes = profiles.map { (identity, p) ->
                     Node(identity, p, CellGeometry.enodebOf(identity), CellGeometry.sectorOf(identity))
@@ -119,7 +151,8 @@ fun GeometryScreen(dbHelper: CellDbHelper, modifier: Modifier = Modifier) {
                     profiles
                 ),
                 bounds = CellGeometry.boundsOf(profiles.values),
-                cellsSeen = samples.size
+                cellsSeen = samples.size,
+                mobility = mobility
             )
         }
     }
@@ -147,6 +180,7 @@ fun GeometryScreen(dbHelper: CellDbHelper, modifier: Modifier = Modifier) {
     }
 
     val bounds = snap.bounds ?: return
+    val mobilityById = snap.mobility.cells.associateBy { it.identity }
     val incoherentSites = snap.sites.count { !it.coherent }
     val incoherentRoutes = snap.routeChecks.count { !it.coherent }
     val density = LocalDensity.current
@@ -204,6 +238,9 @@ fun GeometryScreen(dbHelper: CellDbHelper, modifier: Modifier = Modifier) {
             color = Color(0xFF777777), fontFamily = FontFamily.Monospace, fontSize = 8.sp,
             lineHeight = 11.sp
         )
+        Spacer(Modifier.height(8.dp))
+        MobilityPanel(snap.mobility, onExport = { confirmExport = true })
+        exportMessage?.let { Text(it, color = Color(0xFF80CBC4), fontFamily = FontFamily.Monospace, fontSize = 8.sp) }
         Spacer(Modifier.height(8.dp))
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
             GeometryMetric(stringResource(R.string.profiled), snap.nodes.size.toString(), Modifier.weight(1f))
@@ -308,8 +345,13 @@ fun GeometryScreen(dbHelper: CellDbHelper, modifier: Modifier = Modifier) {
                         color = Color(0xFF80CBC4).copy(alpha = 0.30f),
                         radius = radiusPx, center = center, style = Stroke(width = 1f)
                     )
+                    val mobilityColor = when (mobilityById[node.identity]?.familiarity?.name) {
+                        "KNOWN_ON_ROUTE" -> Color(0xFF29B6F6)
+                        "OBSERVED_ON_ROUTE" -> Color(0xFFAB47BC)
+                        else -> Color(0xFF78909C)
+                    }
                     drawCircle(
-                        color = if (isSelected) Color(0xFFFFA000) else Color(0xFF4CAF50),
+                        color = if (isSelected) Color(0xFFFFA000) else mobilityColor,
                         radius = if (isSelected) 8f else 5f, center = center
                     )
                     if (isSelected) {
@@ -377,6 +419,7 @@ fun GeometryScreen(dbHelper: CellDbHelper, modifier: Modifier = Modifier) {
                             sector = node.sector,
                             incoming = snap.routes.count { it.toIdentity == id },
                             outgoing = snap.routes.count { it.fromIdentity == id },
+                            mobility = mobilityById[id],
                             onClose = { selected = null }
                         )
                     }
@@ -407,7 +450,9 @@ fun GeometryScreen(dbHelper: CellDbHelper, modifier: Modifier = Modifier) {
                         modifier = Modifier.padding(bottom = 6.dp)
                     )
                 }
-                items(worstRoutes) { route -> RouteGeometryCard(route) }
+                items(worstRoutes) { route ->
+                    RouteGeometryCard(route, snap.routes.firstOrNull { it.fromIdentity==route.fromIdentity && it.toIdentity==route.toIdentity })
+                }
             }
 
             item { Spacer(Modifier.height(24.dp)) }
@@ -456,6 +501,34 @@ private fun GeometryMetric(
 }
 
 @Composable
+private fun MobilityPanel(snapshot: MobilityGeometrySnapshot, onExport: () -> Unit) {
+    val trip = snapshot.openTrip
+    val current = snapshot.cells.firstOrNull { it.identity == trip?.lastServing }
+    val transitionTotal = snapshot.transitions.sumOf { it.observations }
+    val historicalTrips = snapshot.transitions.maxOfOrNull { it.tripCount } ?: 0
+    Surface(color = Color(0xFF111A1D), shape = RoundedCornerShape(6.dp)) {
+        Column(Modifier.fillMaxWidth().padding(9.dp), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                Text("MOVILIDAD · MEMORIA CONTEXTUAL", color=Color(0xFF80CBC4),fontFamily=FontFamily.Monospace,fontSize=10.sp,fontWeight=FontWeight.Bold)
+                TextButton(onClick=onExport, contentPadding=PaddingValues(horizontal=5.dp,vertical=0.dp)) {
+                    Icon(Icons.Default.Share,null,Modifier.size(13.dp));Spacer(Modifier.width(3.dp));Text("EXPORTAR GEOMETRÍA",fontSize=8.sp)
+                }
+            }
+            GeometryLine("Viaje", if(trip==null)"INACTIVO" else "ACTIVO · ${trip.tripId.take(8)}")
+            GeometryLine("Movimiento", if(trip?.hadMoving==true)"MOVING OBSERVADO" else "SIN EVIDENCIA")
+            GeometryLine("Celdas / edges distintos", "${trip?.distinctCells ?: 0} / ${trip?.edgeCount ?: 0}")
+            GeometryLine("Celda actual", current?.familiarity?.name ?: "UNKNOWN_ON_ROUTE")
+            GeometryLine("Good edges previos", "${current?.goodEdges ?: 0}/2 · K=3")
+            GeometryLine("Transiciones observadas acumuladas", transitionTotal.toString())
+            GeometryLine("Máx. viajes históricos por arista", historicalTrips.toString())
+            if(trip!=null && snapshot.pendingEdges.isNotEmpty()) {
+                Text("Las ${snapshot.pendingEdges.size} aristas abiertas aún NO cuentan en trip_count. Si el viaje cierra válido: n → n+1.",color=Color(0xFFFFB300),fontFamily=FontFamily.Monospace,fontSize=8.sp,lineHeight=11.sp)
+            }
+        }
+    }
+}
+
+@Composable
 private fun SectionHeader(text: String) {
     Text(
         text,
@@ -474,6 +547,7 @@ private fun NodeCard(
     sector: Int?,
     incoming: Int,
     outgoing: Int,
+    mobility: MobilityCellPresentation?,
     onClose: () -> Unit
 ) {
     Card(
@@ -500,6 +574,12 @@ private fun NodeCard(
                 if (enodeb != null) stringResource(R.string.sector_format, enodeb.toString(), sector.toString()) else stringResource(R.string.not_deducible_lte)
             )
             GeometryLine(stringResource(R.string.incoming_outgoing), "$incoming / $outgoing")
+            GeometryLine("LocalCellTrust", mobility?.localTrustState ?: "NO DISPONIBLE")
+            GeometryLine("Mobility", mobility?.familiarity?.name ?: "UNKNOWN_ON_ROUTE")
+            GeometryLine("Good edges", "${mobility?.goodEdges ?: 0}/2")
+            GeometryLine("Viajes relevantes", (mobility?.relevantTripCount ?: 0).toString())
+            GeometryLine("Transiciones entrada/salida", "${mobility?.incomingTransitions ?: 0} / ${mobility?.outgoingTransitions ?: 0}")
+            GeometryLine("Trusted entrada/salida", "${mobility?.trustedIncoming ?: 0} / ${mobility?.trustedOutgoing ?: 0}")
         }
     }
 }
@@ -539,7 +619,7 @@ private fun SiteCard(site: CellGeometry.SiteCheck) {
 }
 
 @Composable
-private fun RouteGeometryCard(route: CellGeometry.RouteCheck) {
+private fun RouteGeometryCard(route: CellGeometry.RouteCheck, summary: CellTransitionSummary?) {
     val color = if (route.coherent) Color(0xFF4CAF50) else Color(0xFFCF6679)
     Card(
         Modifier.fillMaxWidth().padding(vertical = 3.dp),
@@ -558,7 +638,7 @@ private fun RouteGeometryCard(route: CellGeometry.RouteCheck) {
                     color = Color(0xFF888888), fontFamily = FontFamily.Monospace, fontSize = 9.sp
                 )
                 Text(
-                    "${route.trustedObservations}/${route.observations}",
+                    "Transiciones ${route.observations} · Viajes ${summary?.tripCount ?: 0}",
                     color = color, fontFamily = FontFamily.Monospace, fontSize = 9.sp
                 )
             }

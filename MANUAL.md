@@ -43,7 +43,7 @@ when updating: accumulated days are reused and no migration or reset is required
 
 ## 2. Initial setup
 
-### Mobility Familiarity (Phase A, experimental)
+### Mobility Familiarity and Geometry export (experimental)
 
 Mobility Familiarity remembers serving-cell transitions found in independent journeys. It describes
 route history as `UNKNOWN_ON_ROUTE`, `OBSERVED_ON_ROUTE` or `KNOWN_ON_ROUTE`; it does not call a cell
@@ -61,6 +61,9 @@ Closed trip detail is retained for 90 days. Pruning it does not reduce the O(1) 
 `trip_count`. The initial experimental rule requires two incident edges that each appeared in at
 least three earlier trips. Geometry reads route data only; opening or closing it has no effect on a
 trip.
+
+Geometry shows accumulated transitions and confirmed historical trips separately. During an open valid trip,
+an optional `n -> n+1` preview never changes the confirmed count until the background service closes and commits the trip. `EXPORT GEOMETRY` creates CSV, GraphML and metadata files in one ZIP. It includes complete cellular identities and route relationships but no GPS coordinates; review it before sharing.
 
 ### Stable-site protection
 

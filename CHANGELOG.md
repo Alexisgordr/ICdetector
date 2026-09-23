@@ -1,8 +1,8 @@
 # Changelog
 
-## Unreleased
+## 2.10.0
 
-### Mobility Familiarity Phase A
+### Mobility Familiarity and Geometry export
 
 - Added schema 17 and the experimental `UNKNOWN_ON_ROUTE`, `OBSERVED_ON_ROUTE` and
   `KNOWN_ON_ROUTE` contextual memory. These states never change detection, scoring, LocalCellTrust,
@@ -14,6 +14,9 @@
 - Open trip identity, cells and edges survive service/process restart. Geometry only reads route
   data and cannot open, close or mutate a trip.
 - Detail for closed trips is retained for 90 days; aggregate `trip_count` is not reduced by pruning.
+- Geometry presents route familiarity separately from LocalCellTrust and keeps accumulated transitions, confirmed historical trips and the pending trip contribution distinct.
+- EXPORT GEOMETRY creates a ZIP with cell/edge CSV, retained trip summaries, GraphML and metadata. It contains cellular identities and route relationships but no GPS coordinates.
+- Schema-16 databases migrate additively to schema 17 without deleting existing history.
 
 ## Released
 

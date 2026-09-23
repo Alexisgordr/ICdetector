@@ -32,6 +32,9 @@ import com.alexisgordr.icdetector.models.CellTransitionSummary
 import com.alexisgordr.icdetector.models.LocalCellTrustEvidence
 import com.alexisgordr.icdetector.models.LocalRfReconfiguration
 import com.alexisgordr.icdetector.models.LOCAL_TRUST_RECONFIGURATION_HISTORY_LIKE
+import com.alexisgordr.icdetector.models.MobilityGeometrySnapshot
+import com.alexisgordr.icdetector.models.MobilityTripSummary
+import com.alexisgordr.icdetector.models.MobilityGeometryProjection
 import com.alexisgordr.icdetector.core.*
 import kotlin.math.sqrt
 import java.text.SimpleDateFormat
@@ -475,7 +478,8 @@ class CellDbHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME, 
     fun getCellTransitions(limit: Int = 250): List<CellTransitionSummary> {
         val out = mutableListOf<CellTransitionSummary>()
         readableDatabase.rawQuery(
-            "SELECT from_identity,to_identity,observations,trusted_observations,last_status,last_seen_ms " +
+            "SELECT from_identity,to_identity,observations,trusted_observations,last_status,last_seen_ms," +
+                "trip_count,last_trip_id,mobility_first_seen_ms,mobility_last_seen_ms " +
                 "FROM $TABLE_CELL_TRANSITIONS ORDER BY last_seen_ms DESC LIMIT ?",
             arrayOf(limit.coerceIn(1, 1_000).toString())
         ).use { cursor ->
@@ -487,11 +491,35 @@ class CellDbHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME, 
                     trustedObservations = cursor.getInt(3),
                     lastStatus = runCatching { HeuristicStatus.valueOf(cursor.getString(4)) }
                         .getOrDefault(HeuristicStatus.NOT_EVALUATED),
-                    lastSeenMs = cursor.getLong(5)
+                    lastSeenMs = cursor.getLong(5),
+                    tripCount = cursor.getInt(6), lastTripId = if (cursor.isNull(7)) null else cursor.getString(7),
+                    mobilityFirstSeenMs = if (cursor.isNull(8)) null else cursor.getLong(8),
+                    mobilityLastSeenMs = if (cursor.isNull(9)) null else cursor.getLong(9)
                 )
             }
         }
         return out
+    }
+
+    /** One bounded, read-only snapshot for Geometry/export. It never mutates an open trip. */
+    fun getMobilityGeometrySnapshot(limit: Int = 1_000): MobilityGeometrySnapshot {
+        val transitions = getCellTransitions(limit)
+        val trips = mutableListOf<MobilityTripSummary>()
+        readableDatabase.rawQuery(
+            "SELECT t.trip_id,t.started_at_ms,t.closed_at_ms,t.state,t.close_reason,t.has_moving," +
+                "COUNT(DISTINCT c.cell_identity),COUNT(DISTINCT e.from_identity||char(0)||e.to_identity),t.last_serving " +
+                "FROM $TABLE_MOBILITY_TRIPS t LEFT JOIN $TABLE_MOBILITY_TRIP_CELLS c ON c.trip_id=t.trip_id " +
+                "LEFT JOIN $TABLE_MOBILITY_TRIP_EDGES e ON e.trip_id=t.trip_id GROUP BY t.trip_id " +
+                "ORDER BY t.started_at_ms DESC LIMIT ?",
+            arrayOf(limit.coerceIn(1, 5_000).toString())
+        ).use { c -> while (c.moveToNext()) trips += MobilityTripSummary(
+            c.getString(0), c.getLong(1), if(c.isNull(2))null else c.getLong(2), c.getString(3),
+            if(c.isNull(4))null else c.getString(4), c.getInt(5)!=0, c.getInt(6), c.getInt(7),
+            if(c.isNull(8))null else c.getString(8)
+        ) }
+        val openId = trips.firstOrNull { it.state == "OPEN" }?.tripId
+        val pending = if (openId == null) emptySet() else tripEdges(openId)
+        return MobilityGeometryProjection.build(transitions, trips, pending)
     }
 
     /** PASSED incrementa el baseline fiable; FAILED/N/A solo quedan auditados como observación. */
