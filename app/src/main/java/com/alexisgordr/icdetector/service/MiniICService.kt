@@ -79,6 +79,8 @@ class MiniICService : Service() {
     }
 
     private lateinit var dbHelper: CellDbHelper
+    private lateinit var mobilityFamiliarity: com.alexisgordr.icdetector.core.MobilityFamiliarityEngine
+    private var lastMobilityLog: String? = null
     private lateinit var forensicRecorder: ForensicRecorder
     private val trustContradictionTransitions = TrustContradictionTransitionTracker()
     private val stableSiteMotion = com.alexisgordr.icdetector.core.MotionClassifier()
@@ -222,6 +224,11 @@ class MiniICService : Service() {
         super.onCreate()
         isServiceRunning = true
         dbHelper = CellDbHelper(this)
+        mobilityFamiliarity = com.alexisgordr.icdetector.core.MobilityFamiliarityEngine(dbHelper)
+        scope.launch(Dispatchers.IO) {
+            val recovery = mobilityFamiliarity.recover(System.currentTimeMillis())
+            recovery.event?.let { appendLog("[MOBILITY]", "$it id=${recovery.tripId}") }
+        }
         // v2.8.0 — La escritura forense avisa cuando se rompe. Tres inserts fallidos seguidos
         // (disco lleno, base bloqueada) y la captura deja de guardar sin decir nada: el mismo
         // fallo silencioso que CollectionHealth arregló para el historial.
@@ -746,6 +753,23 @@ class MiniICService : Service() {
                 // callbacks, so a repeated lastKnownLocation cannot manufacture static time.
                 val motionEvidence = stableSiteMotion.current(System.currentTimeMillis()).also {
                     latestMotionEvidence = it
+                }
+                // Mobility is contextual metadata only. Its result is deliberately not passed to
+                // ThreatAnalyzer, LocalCellTrust, Stable-Site, alerts or forensics.
+                val mobility = if (activeRaw != null && activeRaw.cellId != "N/A") {
+                    mobilityFamiliarity.observe(activeRaw.identityKey, motionEvidence, System.currentTimeMillis())
+                } else com.alexisgordr.icdetector.core.MobilityObservation(
+                    com.alexisgordr.icdetector.core.MobilityFamiliarity.UNKNOWN_ON_ROUTE
+                )
+                val mobilityLog = "${mobility.tripId}|${mobility.familiarity}|${mobility.goodEdges}|${mobility.event}"
+                if (mobilityLog != lastMobilityLog) {
+                    lastMobilityLog = mobilityLog
+                    appendLog(
+                        "[MOBILITY]",
+                        "familiarity=${mobility.familiarity} trip=${mobility.tripId ?: "none"} " +
+                            "priorTrips=${mobility.priorTrips} goodEdges=${mobility.goodEdges}" +
+                            (mobility.event?.let { " event=$it" } ?: "")
+                    )
                 }
                 val siteKeys = currentLocation?.takeIf { it.accuracy <= 50f }?.let {
                     com.alexisgordr.icdetector.core.StableSiteKey.candidates(it.latitude, it.longitude)

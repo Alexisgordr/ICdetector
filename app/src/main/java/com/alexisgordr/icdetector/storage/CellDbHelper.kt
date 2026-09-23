@@ -38,10 +38,10 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 
-class CellDbHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME, null, DATABASE_VERSION), ForensicStore {
+class CellDbHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME, null, DATABASE_VERSION), ForensicStore, MobilityFamiliarityStore {
     companion object {
         private const val DATABASE_NAME = "icdetector_history.db"
-        private const val DATABASE_VERSION = 16
+        private const val DATABASE_VERSION = 17
         const val TABLE_HISTORY = "history"
         const val COLUMN_ID = "id"
         const val COLUMN_TIMESTAMP = "timestamp"
@@ -93,6 +93,9 @@ class CellDbHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME, 
         const val TABLE_SITE_MOTION_DAYS = "site_motion_days"
         const val TABLE_SITE_HOLDS = "site_holds"
         const val TABLE_SITE_SHADOW_TRIGGERS = "site_shadow_triggers"
+        const val TABLE_MOBILITY_TRIPS = "mobility_trips"
+        const val TABLE_MOBILITY_TRIP_CELLS = "mobility_trip_cells"
+        const val TABLE_MOBILITY_TRIP_EDGES = "mobility_trip_edges"
 
         /**
          * Cuánto vale una verificación antes de volver a preguntar — v2.1.
@@ -226,6 +229,7 @@ class CellDbHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME, 
         createForensicTables(db)
         createTransitionTable(db)
         createStableSiteTables(db)
+        createMobilityTables(db)
     }
 
     override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {
@@ -295,6 +299,13 @@ class CellDbHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME, 
         if (oldVersion < 14) createForensicTables(db)
         if (oldVersion < 15) createTransitionTable(db)
         if (oldVersion < 16) createStableSiteTables(db)
+        if (oldVersion < 17) {
+            try { db.execSQL("ALTER TABLE $TABLE_CELL_TRANSITIONS ADD COLUMN trip_count INTEGER NOT NULL DEFAULT 0") } catch (_: Exception) {}
+            try { db.execSQL("ALTER TABLE $TABLE_CELL_TRANSITIONS ADD COLUMN last_trip_id TEXT") } catch (_: Exception) {}
+            try { db.execSQL("ALTER TABLE $TABLE_CELL_TRANSITIONS ADD COLUMN mobility_first_seen_ms INTEGER") } catch (_: Exception) {}
+            try { db.execSQL("ALTER TABLE $TABLE_CELL_TRANSITIONS ADD COLUMN mobility_last_seen_ms INTEGER") } catch (_: Exception) {}
+            createMobilityTables(db)
+        }
     }
 
     private fun createStableSiteTables(db: SQLiteDatabase) {
@@ -314,12 +325,38 @@ class CellDbHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME, 
                 "from_identity TEXT NOT NULL, to_identity TEXT NOT NULL, " +
                 "observations INTEGER NOT NULL DEFAULT 0, trusted_observations INTEGER NOT NULL DEFAULT 0, " +
                 "last_status TEXT NOT NULL, last_seen_ms INTEGER NOT NULL, " +
+                "trip_count INTEGER NOT NULL DEFAULT 0, last_trip_id TEXT, " +
+                "mobility_first_seen_ms INTEGER, mobility_last_seen_ms INTEGER, " +
                 "PRIMARY KEY(from_identity, to_identity))"
         )
         db.execSQL(
             "CREATE INDEX IF NOT EXISTS idx_cell_transitions_seen ON " +
                 "$TABLE_CELL_TRANSITIONS(last_seen_ms)"
         )
+    }
+
+    private fun createMobilityTables(db: SQLiteDatabase) {
+        db.execSQL(
+            "CREATE TABLE IF NOT EXISTS $TABLE_MOBILITY_TRIPS (" +
+                "trip_id TEXT PRIMARY KEY NOT NULL, started_at_ms INTEGER NOT NULL, " +
+                "last_seen_ms INTEGER NOT NULL, has_moving INTEGER NOT NULL DEFAULT 0, " +
+                "last_serving TEXT, same_serving_since_ms INTEGER NOT NULL, static_since_ms INTEGER, " +
+                "state TEXT NOT NULL, close_reason TEXT, closed_at_ms INTEGER)"
+        )
+        db.execSQL(
+            "CREATE TABLE IF NOT EXISTS $TABLE_MOBILITY_TRIP_CELLS (" +
+                "trip_id TEXT NOT NULL, cell_identity TEXT NOT NULL, " +
+                "PRIMARY KEY(trip_id,cell_identity), FOREIGN KEY(trip_id) REFERENCES " +
+                "$TABLE_MOBILITY_TRIPS(trip_id) ON DELETE CASCADE)"
+        )
+        db.execSQL(
+            "CREATE TABLE IF NOT EXISTS $TABLE_MOBILITY_TRIP_EDGES (" +
+                "trip_id TEXT NOT NULL, from_identity TEXT NOT NULL, to_identity TEXT NOT NULL, " +
+                "PRIMARY KEY(trip_id,from_identity,to_identity), FOREIGN KEY(trip_id) REFERENCES " +
+                "$TABLE_MOBILITY_TRIPS(trip_id) ON DELETE CASCADE)"
+        )
+        db.execSQL("CREATE UNIQUE INDEX IF NOT EXISTS idx_one_open_mobility_trip ON $TABLE_MOBILITY_TRIPS(state) WHERE state='OPEN'")
+        db.execSQL("CREATE INDEX IF NOT EXISTS idx_mobility_trips_closed ON $TABLE_MOBILITY_TRIPS(state,closed_at_ms)")
     }
 
     /** Últimas posiciones GPS válidas donde este dispositivo observó la identidad indicada. */
@@ -493,6 +530,119 @@ class CellDbHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME, 
         } finally {
             db.endTransaction()
         }
+    }
+
+    override fun openTrip(): MobilityTrip? = readableDatabase.rawQuery(
+        "SELECT trip_id,started_at_ms,last_seen_ms,has_moving,last_serving," +
+            "same_serving_since_ms,static_since_ms FROM $TABLE_MOBILITY_TRIPS " +
+            "WHERE state='OPEN' LIMIT 1", null
+    ).use { c ->
+        if (!c.moveToFirst()) null else MobilityTrip(
+            id = c.getString(0), startedAtMs = c.getLong(1), lastSeenMs = c.getLong(2),
+            hasMoving = c.getInt(3) != 0, lastServing = c.getString(4),
+            sameServingSinceMs = c.getLong(5), staticSinceMs = if (c.isNull(6)) null else c.getLong(6)
+        )
+    }
+
+    override fun createTrip(trip: MobilityTrip, firstCell: String) {
+        val db = writableDatabase
+        db.beginTransaction()
+        try {
+            db.insertOrThrow(TABLE_MOBILITY_TRIPS, null, ContentValues().apply {
+                put("trip_id", trip.id); put("started_at_ms", trip.startedAtMs); put("last_seen_ms", trip.lastSeenMs)
+                put("has_moving", if (trip.hasMoving) 1 else 0); put("last_serving", trip.lastServing)
+                put("same_serving_since_ms", trip.sameServingSinceMs); putNull("static_since_ms"); put("state", "OPEN")
+            })
+            db.insertOrThrow(TABLE_MOBILITY_TRIP_CELLS, null, ContentValues().apply {
+                put("trip_id", trip.id); put("cell_identity", firstCell)
+            })
+            db.setTransactionSuccessful()
+        } finally { db.endTransaction() }
+    }
+
+    override fun updateTrip(trip: MobilityTrip) {
+        writableDatabase.update(TABLE_MOBILITY_TRIPS, ContentValues().apply {
+            put("last_seen_ms", trip.lastSeenMs); put("has_moving", if (trip.hasMoving) 1 else 0)
+            put("last_serving", trip.lastServing); put("same_serving_since_ms", trip.sameServingSinceMs)
+            if (trip.staticSinceMs == null) putNull("static_since_ms") else put("static_since_ms", trip.staticSinceMs)
+        }, "trip_id=? AND state='OPEN'", arrayOf(trip.id))
+    }
+
+    override fun addTripCell(tripId: String, identity: String) {
+        writableDatabase.insertWithOnConflict(TABLE_MOBILITY_TRIP_CELLS, null, ContentValues().apply {
+            put("trip_id", tripId); put("cell_identity", identity)
+        }, SQLiteDatabase.CONFLICT_IGNORE)
+    }
+
+    override fun addTripEdge(tripId: String, edge: MobilityEdge) {
+        writableDatabase.insertWithOnConflict(TABLE_MOBILITY_TRIP_EDGES, null, ContentValues().apply {
+            put("trip_id", tripId); put("from_identity", edge.from); put("to_identity", edge.to)
+        }, SQLiteDatabase.CONFLICT_IGNORE)
+    }
+
+    override fun tripCells(tripId: String): Set<String> = buildSet {
+        readableDatabase.rawQuery(
+            "SELECT cell_identity FROM $TABLE_MOBILITY_TRIP_CELLS WHERE trip_id=?", arrayOf(tripId)
+        ).use { c -> while (c.moveToNext()) add(c.getString(0)) }
+    }
+
+    override fun tripEdges(tripId: String): Set<MobilityEdge> = buildSet {
+        readableDatabase.rawQuery(
+            "SELECT from_identity,to_identity FROM $TABLE_MOBILITY_TRIP_EDGES WHERE trip_id=?", arrayOf(tripId)
+        ).use { c -> while (c.moveToNext()) add(MobilityEdge(c.getString(0), c.getString(1))) }
+    }
+
+    override fun priorTripCounts(edges: Set<MobilityEdge>): Map<MobilityEdge, Int> = buildMap {
+        edges.forEach { edge ->
+            val count = readableDatabase.rawQuery(
+                "SELECT trip_count FROM $TABLE_CELL_TRANSITIONS WHERE from_identity=? AND to_identity=?",
+                arrayOf(edge.from, edge.to)
+            ).use { c -> if (c.moveToFirst()) c.getInt(0) else 0 }
+            put(edge, count)
+        }
+    }
+
+    override fun commitMobilityTrip(tripId: String, reason: MobilityTripCloseReason, closedAtMs: Long) {
+        val db = writableDatabase
+        db.beginTransaction()
+        try {
+            val isOpen = db.rawQuery(
+                "SELECT 1 FROM $TABLE_MOBILITY_TRIPS WHERE trip_id=? AND state='OPEN'", arrayOf(tripId)
+            ).use { it.moveToFirst() }
+            if (!isOpen) { db.setTransactionSuccessful(); return }
+            tripEdges(tripId).forEach { edge ->
+                db.insertWithOnConflict(TABLE_CELL_TRANSITIONS, null, ContentValues().apply {
+                    put("from_identity", edge.from); put("to_identity", edge.to)
+                    put("observations", 0); put("trusted_observations", 0)
+                    put("last_status", HeuristicStatus.NOT_EVALUATED.name); put("last_seen_ms", closedAtMs)
+                }, SQLiteDatabase.CONFLICT_IGNORE)
+                db.execSQL(
+                    "UPDATE $TABLE_CELL_TRANSITIONS SET trip_count=trip_count+1,last_trip_id=?," +
+                        "mobility_first_seen_ms=COALESCE(mobility_first_seen_ms,?),mobility_last_seen_ms=? " +
+                        "WHERE from_identity=? AND to_identity=? AND (last_trip_id IS NULL OR last_trip_id<>?)",
+                    arrayOf<Any>(tripId, closedAtMs, closedAtMs, edge.from, edge.to, tripId)
+                )
+            }
+            closeTripRow(db, tripId, reason, closedAtMs)
+            db.setTransactionSuccessful()
+        } finally { db.endTransaction() }
+    }
+
+    override fun discardMobilityTrip(tripId: String, reason: MobilityTripCloseReason, closedAtMs: Long) {
+        closeTripRow(writableDatabase, tripId, reason, closedAtMs)
+    }
+
+    private fun closeTripRow(db: SQLiteDatabase, tripId: String, reason: MobilityTripCloseReason, closedAtMs: Long) {
+        db.update(TABLE_MOBILITY_TRIPS, ContentValues().apply {
+            put("state", "CLOSED"); put("close_reason", reason.name); put("closed_at_ms", closedAtMs)
+        }, "trip_id=? AND state='OPEN'", arrayOf(tripId))
+    }
+
+    override fun pruneMobilityTripDetails(beforeMs: Long) {
+        writableDatabase.delete(
+            TABLE_MOBILITY_TRIPS, "state='CLOSED' AND closed_at_ms IS NOT NULL AND closed_at_ms<?",
+            arrayOf(beforeMs.toString())
+        )
     }
 
     /** Schema 16 evidence. The event key makes retries and duplicate modem callbacks idempotent. */

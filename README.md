@@ -48,6 +48,11 @@ The application operates from Android userland without requiring root or direct 
 
 **Important:** ICdetection is not an IMSI-catcher proof tool. It is a local-first cellular anomaly auditor. Alerts should be interpreted as signals that the cellular environment deserves closer attention, not as definitive proof of surveillance or interception.
 
+The unreleased Mobility Familiarity Phase A adds descriptive route memory backed by schema 17.
+`KNOWN_ON_ROUTE` only means that serving-cell transitions occurred in earlier independent trips; it
+does not alter trust, anomaly scores, heuristics, alerts, Stable-Site or forensic decisions. Trips
+belong to the background service and continue independently of the Geometry screen.
+
 Version 2.9.1 fixes Stable-Site motion sampling so only new GPS callbacks contribute evidence.
 Brief inaccurate fixes abstain without destroying the complete good window, while a 60-second gap
 invalidates it. Periodic stationary fixes are requested every 15 seconds with no distance gate;

@@ -61,7 +61,7 @@ class StableSiteStorageTest {
         assertEquals(1,count(upgraded,"SELECT COUNT(*) FROM forensic_cases"))
         assertEquals(0,count(upgraded,"SELECT COUNT(*) FROM site_cell_evidence"))
         assertEquals(0,count(upgraded,"SELECT COUNT(*) FROM site_motion_days"))
-        assertEquals(16,upgraded.version)
+        assertEquals(17,upgraded.version)
     }
 
     @Test fun twentyPollsRemainOneEpisodeAndSurviveHelperRestart(){
@@ -106,10 +106,68 @@ class StableSiteStorageTest {
         assertTrue(files.getValue("shadow_episodes.csv").contains(serving.identityKey))
     }
 
-    @Test fun onOpenDoesNotSilentlyRepairBrokenSchema16(){
+    @Test fun schema16To17MigrationPreservesExistingSubsystems(){
+        db.close();context.deleteDatabase(NAME)
+        val legacy=context.openOrCreateDatabase(NAME,Context.MODE_PRIVATE,null)
+        legacy.execSQL("CREATE TABLE history(id INTEGER PRIMARY KEY,cid TEXT)")
+        legacy.execSQL("INSERT INTO history VALUES(1,'history-kept')")
+        legacy.execSQL("CREATE TABLE forensic_cases(id INTEGER PRIMARY KEY)")
+        legacy.execSQL("INSERT INTO forensic_cases VALUES(2)")
+        legacy.execSQL("CREATE TABLE forensic_samples(id INTEGER PRIMARY KEY,case_id INTEGER)")
+        legacy.execSQL("INSERT INTO forensic_samples VALUES(3,2)")
+        legacy.execSQL("CREATE TABLE site_cell_evidence(site_key TEXT,cell_identity TEXT,role TEXT,first_seen_ms INTEGER,last_seen_ms INTEGER,observations INTEGER)")
+        legacy.execSQL("INSERT INTO site_cell_evidence VALUES('site','cell','SERVING',1,2,3)")
+        legacy.execSQL("CREATE TABLE cell_transitions(from_identity TEXT NOT NULL,to_identity TEXT NOT NULL,observations INTEGER NOT NULL,trusted_observations INTEGER NOT NULL,last_status TEXT NOT NULL,last_seen_ms INTEGER NOT NULL,PRIMARY KEY(from_identity,to_identity))")
+        legacy.execSQL("INSERT INTO cell_transitions VALUES('A','B',9,4,'PASSED',123)")
+        legacy.version=16;legacy.close()
+        db=CellDbHelper(context);val upgraded=db.writableDatabase
+        assertEquals(17,upgraded.version)
+        assertEquals(1,count(upgraded,"SELECT COUNT(*) FROM history WHERE cid='history-kept'"))
+        assertEquals(1,count(upgraded,"SELECT COUNT(*) FROM forensic_cases WHERE id=2"))
+        assertEquals(1,count(upgraded,"SELECT COUNT(*) FROM forensic_samples WHERE id=3 AND case_id=2"))
+        assertEquals(1,count(upgraded,"SELECT COUNT(*) FROM site_cell_evidence WHERE site_key='site'"))
+        assertEquals(9,count(upgraded,"SELECT observations FROM cell_transitions WHERE from_identity='A' AND to_identity='B'"))
+        assertEquals(4,count(upgraded,"SELECT trusted_observations FROM cell_transitions WHERE from_identity='A' AND to_identity='B'"))
+        assertEquals(0,count(upgraded,"SELECT trip_count FROM cell_transitions WHERE from_identity='A' AND to_identity='B'"))
+        assertEquals(1,count(upgraded,"SELECT COUNT(*) FROM cell_transitions WHERE last_trip_id IS NULL"))
+        assertEquals(1,count(upgraded,"SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='mobility_trips'"))
+    }
+
+    @Test fun mobilityCommitWritesEachPendingEdgeOnce(){
+        val engine=MobilityFamiliarityEngine(db,MobilityFamiliarityConfig(3,2,3,20,30,1_000,100,10_000),true){"trip"}
+        engine.observe("A",MotionEvidence(MotionState.MOVING),0)
+        repeat(20){engine.observe(if(it%2==0)"B" else "A",MotionEvidence(MotionState.MOVING),(it+1).toLong())}
+        engine.observe("C",MotionEvidence(MotionState.MOVING),30)
+        engine.observe("C",MotionEvidence(MotionState.STATIC_CONFIRMED),31)
+        engine.observe("C",MotionEvidence(MotionState.STATIC_CONFIRMED),52)
+        assertEquals(1,count(db.readableDatabase,"SELECT trip_count FROM cell_transitions WHERE from_identity='A' AND to_identity='B'"))
+        assertEquals(1,count(db.readableDatabase,"SELECT trip_count FROM cell_transitions WHERE from_identity='B' AND to_identity='A'"))
+        assertEquals(0,count(db.readableDatabase,"SELECT COUNT(*) FROM mobility_trips WHERE state='OPEN'"))
+    }
+
+    @Test fun tripResumesAfterHelperRestartAndGeometryReadsDoNotOwnLifecycle(){
+        val config=MobilityFamiliarityConfig(3,2,3,20,30,1_000,100,10_000)
+        val first=MobilityFamiliarityEngine(db,config,true){"persistent-trip"}
+        first.observe("A",MotionEvidence(MotionState.MOVING),0)
+        first.observe("B",MotionEvidence(MotionState.MOVING),1)
+        // Geometry reads the same route table, but opening/closing that UI has no write path to
+        // mobility trips. This reproduces its complete storage interaction.
+        db.getCellTransitions()
+        assertEquals(1,count(db.readableDatabase,"SELECT COUNT(*) FROM mobility_trips WHERE state='OPEN' AND trip_id='persistent-trip'"))
+        db.close();db=CellDbHelper(context);db.writableDatabase
+        val resumed=MobilityFamiliarityEngine(db,config,true){"must-not-be-created"}
+        assertEquals("persistent-trip",resumed.recover(2).tripId)
+        resumed.observe("C",MotionEvidence(MotionState.MOVING),3)
+        resumed.observe("C",MotionEvidence(MotionState.STATIC_CONFIRMED),4)
+        resumed.observe("C",MotionEvidence(MotionState.STATIC_CONFIRMED),25)
+        assertEquals(1,count(db.readableDatabase,"SELECT trip_count FROM cell_transitions WHERE from_identity='A' AND to_identity='B'"))
+        assertEquals(1,count(db.readableDatabase,"SELECT trip_count FROM cell_transitions WHERE from_identity='B' AND to_identity='C'"))
+    }
+
+    @Test fun onOpenDoesNotSilentlyRepairBrokenSchema17(){
         db.close();context.deleteDatabase(NAME)
         val broken=context.openOrCreateDatabase(NAME,Context.MODE_PRIVATE,null)
-        broken.execSQL("CREATE TABLE history(id INTEGER PRIMARY KEY)");broken.version=16;broken.close()
+        broken.execSQL("CREATE TABLE history(id INTEGER PRIMARY KEY)");broken.version=17;broken.close()
         db=CellDbHelper(context);val opened=db.writableDatabase
         assertEquals(0,count(opened,"SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='site_cell_evidence'"))
     }

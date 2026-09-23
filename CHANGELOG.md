@@ -1,5 +1,20 @@
 # Changelog
 
+## Unreleased
+
+### Mobility Familiarity Phase A
+
+- Added schema 17 and the experimental `UNKNOWN_ON_ROUTE`, `OBSERVED_ON_ROUTE` and
+  `KNOWN_ON_ROUTE` contextual memory. These states never change detection, scoring, LocalCellTrust,
+  Stable-Site, alerts or forensic capture.
+- Trips open only from `MOVING`. Pending serving-cell edges remain isolated from aggregate
+  `trip_count` until a trip with movement and at least three distinct cells closes successfully.
+- Evaluation always reads committed prior-trip counters before the current trip is committed, so a
+  route cannot validate itself. Repeated edges count once per independent valid trip.
+- Open trip identity, cells and edges survive service/process restart. Geometry only reads route
+  data and cannot open, close or mutate a trip.
+- Detail for closed trips is retained for 90 days; aggregate `trip_count` is not reduced by pruning.
+
 ## Released
 
 ## 2.9.1

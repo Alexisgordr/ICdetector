@@ -1,5 +1,16 @@
 # ICdetection Status
 
+## Unreleased — Mobility Familiarity Phase A
+
+**Database schema:** 17 (additive migration from 16)  
+**Security effect:** none  
+**Feature flag:** `MOBILITY_FAMILIARITY_ENABLED = true`
+
+The background service now owns a persistent mobility-trip engine. Route familiarity is descriptive
+memory only and is physically excluded from ThreatAnalyzer, LocalCellTrust, Stable-Site, alerts and
+forensics. Geometry remains read-only and has no trip lifecycle reference. Phase B visual/export
+work has not started.
+
 ## v2.9.1 — emergency motion-sampling correction (local release candidate)
 
 **Version code:** 27  

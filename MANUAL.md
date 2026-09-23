@@ -43,6 +43,25 @@ when updating: accumulated days are reused and no migration or reset is required
 
 ## 2. Initial setup
 
+### Mobility Familiarity (Phase A, experimental)
+
+Mobility Familiarity remembers serving-cell transitions found in independent journeys. It describes
+route history as `UNKNOWN_ON_ROUTE`, `OBSERVED_ON_ROUTE` or `KNOWN_ON_ROUTE`; it does not call a cell
+trusted, verified or legitimate and cannot change any security decision.
+
+A trip opens only after confirmed `MOVING`. Its cells and directed edges are persisted, including
+across service/process restart. The current trip is evaluated only against aggregate counts from
+earlier committed trips. Its pending edges are committed once only after the trip has movement and
+at least three distinct serving identities. Closure currently uses provisional field parameters:
+three minutes of sustained static state, ten minutes on the same serving cell without conclusive
+motion, or a six-hour maximum duration. An open trip can be resumed for fifteen minutes; older open
+trips are closed as `ABANDONED` and committed only if already valid.
+
+Closed trip detail is retained for 90 days. Pruning it does not reduce the O(1) aggregate
+`trip_count`. The initial experimental rule requires two incident edges that each appeared in at
+least three earlier trips. Geometry reads route data only; opening or closing it has no effect on a
+trip.
+
 ### Stable-site protection
 
 Version 2.9.1 learns coarse local sites independently. Motion evidence advances only when Android
