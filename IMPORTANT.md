@@ -10,6 +10,12 @@ For users who want to participate in long-term testing or maintain a clean resea
 
 This reset is **recommended for dataset consistency, not required for normal app operation**.
 
+> **How to reset: uninstall the app and install v2.10.4 again.**
+>
+> Do **not** rely on the in-app *Delete history* button for this reset. In v2.10.4 it does not yet clear everything: the route-familiarity trip tables (`mobility_trips`, `mobility_trip_cells`, `mobility_trip_edges`) survive it, and an open trip can carry pre-reset routes back into the new dataset when it closes. This will be corrected in a later release. Until then, uninstalling and reinstalling (or *Settings → Apps → ICdetection → Storage → Clear data*) is the only complete reset.
+>
+> Uninstalling also removes app settings, including OpenCellID/WiGLE API keys, so you will need to enter them again after reinstalling.
+
 The reason is methodological rather than a database corruption issue.
 
 Previous releases collected useful and valid information, but several important corrections were introduced during development that changed how some observations should be interpreted. In particular, earlier versions did not always distinguish Android's `PRIMARY_SERVING` and `SECONDARY_SERVING` cells during carrier aggregation. On devices that expose multiple registered cells at the same time, a secondary carrier could sometimes be treated as the active serving cell.
@@ -32,7 +38,7 @@ However, for a controlled three-month research dataset, starting from a clean da
 
 For that reason, I am personally treating v2.10.4 as the start of a new definitive collection period.
 
-Before resetting, export anything you want to preserve. Old exports remain useful for development history, regression analysis and understanding how the detector evolved.
+Before uninstalling, export anything you want to preserve. Old exports remain useful for development history, regression analysis and understanding how the detector evolved.
 
 ## Why v2.10.4 is the new baseline
 
