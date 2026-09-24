@@ -36,6 +36,11 @@ import com.alexisgordr.icdetector.models.SUBTHRESHOLD_PREFIX
 import com.alexisgordr.icdetector.models.MobilityGeometrySnapshot
 import com.alexisgordr.icdetector.models.MobilityTripSummary
 import com.alexisgordr.icdetector.models.MobilityGeometryProjection
+import com.alexisgordr.icdetector.models.CellConnectionState
+import com.alexisgordr.icdetector.models.CsgInfo
+import com.alexisgordr.icdetector.models.ServiceRegistrationState
+import com.alexisgordr.icdetector.models.ServiceStateSnapshot
+import com.alexisgordr.icdetector.models.ServiceStateSource
 import com.alexisgordr.icdetector.core.*
 import kotlin.math.sqrt
 import java.text.SimpleDateFormat
@@ -45,7 +50,7 @@ import java.util.Locale
 class CellDbHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME, null, DATABASE_VERSION), ForensicStore, MobilityFamiliarityStore {
     companion object {
         private const val DATABASE_NAME = "icdetector_history.db"
-        private const val DATABASE_VERSION = 18
+        private const val DATABASE_VERSION = 19
         const val TABLE_HISTORY = "history"
         const val COLUMN_ID = "id"
         const val COLUMN_TIMESTAMP = "timestamp"
@@ -87,6 +92,38 @@ class CellDbHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME, 
         // de estado y en el historial de campo hay 54 celdas que alternan entre "4G" y "5G" sin
         // cambiar de identidad. Para analizar los datos hace falta el dato firme, no la etiqueta.
         const val COLUMN_RADIO = "radio"
+        // v2.10.4 — Contexto de radio (schema 19). Solo recolección: ninguna consulta de
+        // detección lee estas columnas. NULL en filas anteriores = "no se recogía", no "no había".
+        const val COLUMN_CONN_STATUS = "conn_status"
+        const val COLUMN_BANDWIDTH_KHZ = "bandwidth_khz"
+        const val COLUMN_BANDS = "bands"
+        const val COLUMN_ADDITIONAL_PLMNS = "additional_plmns"
+        const val COLUMN_CSG_INDICATOR = "csg_indicator"
+        const val COLUMN_CSG_IDENTITY = "csg_identity"
+        const val COLUMN_CSG_NAME = "csg_name"
+        const val COLUMN_SECONDARY_CARRIERS = "secondary_carriers"
+        const val COLUMN_SERVICE_STATE = "service_state"
+        const val COLUMN_NETWORK_OPERATOR = "network_operator"
+        const val COLUMN_SIM_OPERATOR = "sim_operator"
+        const val COLUMN_NETWORK_ROAMING = "network_roaming"
+        /** Columnas añadidas en schema 19, con su tipo SQLite. Una sola lista para crear y migrar. */
+        val RADIO_CONTEXT_COLUMNS = listOf(
+            COLUMN_CONN_STATUS to "TEXT",
+            COLUMN_BANDWIDTH_KHZ to "INTEGER",
+            COLUMN_BANDS to "TEXT",
+            COLUMN_ADDITIONAL_PLMNS to "TEXT",
+            COLUMN_CSG_INDICATOR to "INTEGER",
+            COLUMN_CSG_IDENTITY to "INTEGER",
+            COLUMN_CSG_NAME to "TEXT",
+            COLUMN_SECONDARY_CARRIERS to "TEXT",
+            COLUMN_SERVICE_STATE to "TEXT",
+            COLUMN_NETWORK_OPERATOR to "TEXT",
+            COLUMN_SIM_OPERATOR to "TEXT",
+            COLUMN_NETWORK_ROAMING to "INTEGER"
+        )
+        const val TABLE_SERVICE_STATE_EVENTS = "service_state_events"
+        /** Tope de eventos de servicio conservados, además de la poda por antigüedad. */
+        const val MAX_SERVICE_STATE_EVENTS = 5000
         const val TABLE_INCIDENTS = "incidents"
         const val TABLE_FORENSIC_CASES = "forensic_cases"
         const val TABLE_FORENSIC_SAMPLES = "forensic_samples"
@@ -251,7 +288,8 @@ class CellDbHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME, 
                     "$COLUMN_API_LON REAL, " +
                     "$COLUMN_TA INTEGER, " +
                     "$COLUMN_TA_UNIT TEXT, " +
-                    "$COLUMN_RADIO TEXT)",
+                    "$COLUMN_RADIO TEXT, " +
+                    RADIO_CONTEXT_COLUMNS.joinToString(", ") { (name, type) -> "$name $type" } + ")",
         )
         createIndexes(db)
         createIncidentTable(db)
@@ -259,6 +297,7 @@ class CellDbHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME, 
         createTransitionTable(db)
         createStableSiteTables(db)
         createMobilityTables(db)
+        createServiceStateTable(db)
     }
 
     override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {
@@ -336,6 +375,98 @@ class CellDbHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME, 
             createMobilityTables(db)
         }
         if (oldVersion < 18) createStableSiteRfNeighbourTables(db)
+        if (oldVersion < 19) {
+            // Migración a esquema 19, aditiva y NO destructiva: columnas de contexto de radio en
+            // el historial y una tabla de eventos de servicio. Las filas existentes quedan con
+            // NULL. Cada ALTER en su propio try/catch por si una columna ya existiera.
+            RADIO_CONTEXT_COLUMNS.forEach { (name, type) ->
+                try { db.execSQL("ALTER TABLE $TABLE_HISTORY ADD COLUMN $name $type") } catch (_: Exception) {}
+            }
+            createServiceStateTable(db)
+        }
+    }
+
+    /** v2.10.4 — Cambios de estado de servicio (ServiceState). Solo recolección. */
+    private fun createServiceStateTable(db: SQLiteDatabase) {
+        db.execSQL(
+            "CREATE TABLE IF NOT EXISTS $TABLE_SERVICE_STATE_EVENTS (" +
+                "id INTEGER PRIMARY KEY AUTOINCREMENT, ts_ms INTEGER NOT NULL, state TEXT NOT NULL, " +
+                "data_registered INTEGER, voice_registered INTEGER, searching INTEGER, " +
+                "roaming INTEGER NOT NULL DEFAULT 0, operator_numeric TEXT, operator_alpha TEXT, " +
+                "sim_operator TEXT, manual_selection INTEGER NOT NULL DEFAULT 0, channel_number INTEGER, " +
+                "cell_bandwidths TEXT, data_network TEXT, voice_network TEXT, source TEXT NOT NULL)"
+        )
+        db.execSQL("CREATE INDEX IF NOT EXISTS idx_service_state_ts ON $TABLE_SERVICE_STATE_EVENTS(ts_ms)")
+    }
+
+    /** Guarda un cambio de estado de servicio. Devuelve el rowId, o -1 si falló. */
+    fun insertServiceStateEvent(snapshot: ServiceStateSnapshot): Long = try {
+        writableDatabase.insert(TABLE_SERVICE_STATE_EVENTS, null, ContentValues().apply {
+            put("ts_ms", snapshot.timestampMs)
+            put("state", snapshot.state.name)
+            snapshot.dataRegistered?.let { put("data_registered", if (it) 1 else 0) }
+            snapshot.voiceRegistered?.let { put("voice_registered", if (it) 1 else 0) }
+            snapshot.searching?.let { put("searching", if (it) 1 else 0) }
+            put("roaming", if (snapshot.roaming) 1 else 0)
+            snapshot.operatorNumeric?.let { put("operator_numeric", it) }
+            snapshot.operatorAlphaLong?.let { put("operator_alpha", it) }
+            snapshot.simOperator?.let { put("sim_operator", it) }
+            put("manual_selection", if (snapshot.manualSelection) 1 else 0)
+            snapshot.channelNumber?.let { put("channel_number", it) }
+            if (snapshot.cellBandwidthsKhz.isNotEmpty()) put("cell_bandwidths", snapshot.cellBandwidthsKhz.joinToString(";"))
+            snapshot.dataNetworkType?.let { put("data_network", it) }
+            snapshot.voiceNetworkType?.let { put("voice_network", it) }
+            put("source", snapshot.source.name)
+        })
+    } catch (_: Exception) {
+        -1L
+    }
+
+    /** Eventos de servicio, del más reciente al más antiguo. [limit] nulo = todos. */
+    fun getServiceStateEvents(limit: Int? = null): List<ServiceStateSnapshot> {
+        val events = mutableListOf<ServiceStateSnapshot>()
+        try {
+            val sql = "SELECT * FROM $TABLE_SERVICE_STATE_EVENTS ORDER BY ts_ms DESC, id DESC" +
+                (limit?.coerceAtLeast(1)?.let { " LIMIT $it" } ?: "")
+            readableDatabase.rawQuery(sql, null).use { c ->
+                fun int(name: String): Int? = c.getColumnIndex(name).takeIf { it >= 0 && !c.isNull(it) }?.let(c::getInt)
+                fun str(name: String): String? = c.getColumnIndex(name).takeIf { it >= 0 && !c.isNull(it) }?.let(c::getString)
+                fun bool(name: String): Boolean? = int(name)?.let { it != 0 }
+                while (c.moveToNext()) {
+                    events += ServiceStateSnapshot(
+                        timestampMs = c.getLong(c.getColumnIndexOrThrow("ts_ms")),
+                        state = runCatching { ServiceRegistrationState.valueOf(str("state") ?: "") }
+                            .getOrDefault(ServiceRegistrationState.UNKNOWN),
+                        dataRegistered = bool("data_registered"),
+                        voiceRegistered = bool("voice_registered"),
+                        searching = bool("searching"),
+                        roaming = bool("roaming") ?: false,
+                        operatorNumeric = str("operator_numeric"),
+                        operatorAlphaLong = str("operator_alpha"),
+                        simOperator = str("sim_operator"),
+                        manualSelection = bool("manual_selection") ?: false,
+                        channelNumber = int("channel_number"),
+                        cellBandwidthsKhz = str("cell_bandwidths")?.split(";")?.mapNotNull { it.toIntOrNull() }.orEmpty(),
+                        dataNetworkType = str("data_network"),
+                        voiceNetworkType = str("voice_network"),
+                        source = runCatching { ServiceStateSource.valueOf(str("source") ?: "") }
+                            .getOrDefault(ServiceStateSource.POLL)
+                    )
+                }
+            }
+        } catch (_: Exception) {
+            // Lectura best-effort para la UI y el export: una tabla ausente devuelve lista vacía.
+        }
+        return events
+    }
+
+    /** Número de eventos de servicio guardados. */
+    fun countServiceStateEvents(): Int = try {
+        readableDatabase.rawQuery("SELECT COUNT(*) FROM $TABLE_SERVICE_STATE_EVENTS", null).use {
+            if (it.moveToFirst()) it.getInt(0) else 0
+        }
+    } catch (_: Exception) {
+        0
     }
 
     private fun createStableSiteTables(db: SQLiteDatabase) {
@@ -1235,7 +1366,18 @@ class CellDbHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME, 
         anomalyConfidence: Float = 0f,
         timingAdvance: Int? = null,
         timingAdvanceUnit: TimingAdvanceUnit = TimingAdvanceUnit.UNKNOWN,
-        radio: RadioTech = RadioTech.UNKNOWN
+        radio: RadioTech = RadioTech.UNKNOWN,
+        // v2.10.4 — Contexto de radio. Todo opcional: una llamada antigua sigue siendo válida.
+        connectionState: CellConnectionState = CellConnectionState.UNKNOWN,
+        bandwidthKhz: Int? = null,
+        bands: String? = null,
+        additionalPlmns: String? = null,
+        csg: CsgInfo? = null,
+        secondaryCarriers: String? = null,
+        serviceState: ServiceRegistrationState? = null,
+        networkOperator: String? = null,
+        simOperator: String? = null,
+        networkRoaming: Boolean? = null
     ): Long {
         val db = this.writableDatabase
         val values = ContentValues().apply {
@@ -1266,6 +1408,20 @@ class CellDbHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME, 
             }
             // api_lat / api_lon NO se escriben aquí: son un dato de verificación, no de la
             // observación. Los rellena updateVerificationStatus cuando la API responde.
+            put(COLUMN_CONN_STATUS, connectionState.name)
+            if (bandwidthKhz != null) put(COLUMN_BANDWIDTH_KHZ, bandwidthKhz)
+            if (bands != null) put(COLUMN_BANDS, bands)
+            if (additionalPlmns != null) put(COLUMN_ADDITIONAL_PLMNS, additionalPlmns)
+            if (csg != null) {
+                put(COLUMN_CSG_INDICATOR, if (csg.indicator) 1 else 0)
+                csg.identity?.let { put(COLUMN_CSG_IDENTITY, it) }
+                csg.homeNodebName?.let { put(COLUMN_CSG_NAME, it) }
+            }
+            if (secondaryCarriers != null) put(COLUMN_SECONDARY_CARRIERS, secondaryCarriers)
+            if (serviceState != null) put(COLUMN_SERVICE_STATE, serviceState.name)
+            if (networkOperator != null) put(COLUMN_NETWORK_OPERATOR, networkOperator)
+            if (simOperator != null) put(COLUMN_SIM_OPERATOR, simOperator)
+            if (networkRoaming != null) put(COLUMN_NETWORK_ROAMING, if (networkRoaming) 1 else 0)
         }
         return db.insert(TABLE_HISTORY, null, values)
     }
@@ -1479,9 +1635,29 @@ class CellDbHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME, 
             apiLon = apiLon,
             timingAdvance = ta,
             timingAdvanceUnit = taUnit,
-            radio = radio
+            radio = radio,
+            connectionState = optString(cursor, COLUMN_CONN_STATUS)
+                ?.let { runCatching { CellConnectionState.valueOf(it) }.getOrNull() },
+            bandwidthKhz = optInt(cursor, COLUMN_BANDWIDTH_KHZ),
+            bands = optString(cursor, COLUMN_BANDS),
+            additionalPlmns = optString(cursor, COLUMN_ADDITIONAL_PLMNS),
+            csgIndicator = optInt(cursor, COLUMN_CSG_INDICATOR)?.let { it != 0 },
+            csgIdentity = optInt(cursor, COLUMN_CSG_IDENTITY),
+            csgName = optString(cursor, COLUMN_CSG_NAME),
+            secondaryCarriers = optString(cursor, COLUMN_SECONDARY_CARRIERS),
+            serviceState = optString(cursor, COLUMN_SERVICE_STATE),
+            networkOperator = optString(cursor, COLUMN_NETWORK_OPERATOR),
+            simOperator = optString(cursor, COLUMN_SIM_OPERATOR),
+            networkRoaming = optInt(cursor, COLUMN_NETWORK_ROAMING)?.let { it != 0 }
         )
     }
+
+    // Lectores tolerantes para columnas opcionales: -1 (columna ausente) o NULL -> null.
+    private fun optString(cursor: Cursor, column: String): String? =
+        cursor.getColumnIndex(column).takeIf { it >= 0 && !cursor.isNull(it) }?.let(cursor::getString)
+
+    private fun optInt(cursor: Cursor, column: String): Int? =
+        cursor.getColumnIndex(column).takeIf { it >= 0 && !cursor.isNull(it) }?.let(cursor::getInt)
 
     fun getRecords(limit: Int? = null): List<HistoryRecord> {
         val list = mutableListOf<HistoryRecord>()
@@ -1522,6 +1698,7 @@ class CellDbHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME, 
         db.execSQL("DELETE FROM $TABLE_FORENSIC_SAMPLES")
         db.execSQL("DELETE FROM $TABLE_FORENSIC_CASES")
         db.execSQL("DELETE FROM $TABLE_CELL_TRANSITIONS")
+        try { db.execSQL("DELETE FROM $TABLE_SERVICE_STATE_EVENTS") } catch (_: Exception) {}
         resetStableSiteLearning()
     }
 
@@ -1547,6 +1724,15 @@ class CellDbHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME, 
             oldCases.forEach { id -> db.delete(TABLE_FORENSIC_SAMPLES, "case_id=?", arrayOf(id.toString())) }
             db.delete(TABLE_FORENSIC_CASES, "updated_at < ?", arrayOf(threshold))
             db.delete(TABLE_CELL_TRANSITIONS, "last_seen_ms < ?", arrayOf(cutoff.toString()))
+            // v2.10.4 — Eventos de servicio: misma antigüedad que el historial y un tope de filas,
+            // por si un módem inestable genera cambios continuos.
+            try {
+                db.delete(TABLE_SERVICE_STATE_EVENTS, "ts_ms < ?", arrayOf(cutoff.toString()))
+                db.execSQL(
+                    "DELETE FROM $TABLE_SERVICE_STATE_EVENTS WHERE id NOT IN " +
+                        "(SELECT id FROM $TABLE_SERVICE_STATE_EVENTS ORDER BY ts_ms DESC, id DESC LIMIT $MAX_SERVICE_STATE_EVENTS)"
+                )
+            } catch (_: Exception) {}
             val siteCutoff = System.currentTimeMillis() - 120L * 24 * 60 * 60 * 1000
             val eventCutoff = System.currentTimeMillis() - 14L * 24 * 60 * 60 * 1000
             val hardSiteCutoff = System.currentTimeMillis() - 365L * 24 * 60 * 60 * 1000

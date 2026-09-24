@@ -1,0 +1,1 @@
+Contexto de radio. PRIMARY_SERVING es autoritativa: si no es utilizable, el ciclo se abstiene en vez de promover una secundaria. Radio muestra contexto en vivo y eventos de servicio ordenados y persistidos antes del refresco. Incluye conexión, portadoras secundarias, ancho de banda, bandas, CSG y CSV. Solo recolección: score intacto. Schema 19 aditivo.

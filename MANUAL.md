@@ -14,6 +14,31 @@ Stable-Site RF-only neighbour evidence now has deterministic retention matching 
 ## Version 2.10.3
 
 H15 detects repeated PCI alternation within one ARFCN. Consecutive observations during a single handover count as one episode; the PCI must return after another PCI to establish an independent episode. A stable one-way replacement is handled as historical reconfiguration. H15-only failures remain in H15's own baseline, preventing self-latching. This changes the H15 dataset baseline while preserving schema 18 and the existing database.
+
+## Version 2.10.4
+
+The serving cell is chosen by the modem's `PRIMARY_SERVING` connection status and only that cell is
+analysed. If a declared primary has unusable signal telemetry, that cycle abstains; the first usable
+registered entry is used only when no primary was declared. Secondary carriers from carrier aggregation or
+the NR leg of 5G NSA are listed, not judged against another cell's history.
+
+The new **RADIO** tab (History → RADIO) and the **RADIO CONTEXT** card on the main screen show:
+
+- the serving cell's connection state (PRIMARY / SECONDARY / NONE / UNKNOWN), bandwidth, declared
+  bands, additional PLMNs and closed subscriber group (CSG, a possible femtocell);
+- the secondary carriers the modem reports;
+- the service state: IN SERVICE, EMERGENCY ONLY, OUT OF SERVICE or RADIO OFF, data/voice
+  registration, roaming, network PLMN and SIM PLMN;
+- every visible cell with its connection state, and the recent service-state changes, exportable
+  to CSV.
+
+Everything on this tab is collection only: it never changes the score or triggers an alert. The
+terminal logs `[RADIO]` when the serving cell or its carriers change and `[SERVICIO]` when the
+service state changes. "Not reported" means the modem or Android did not provide the field.
+Service-state changes are displayed only after their database insert succeeds, so an immediate
+RADIO event refresh reads the same event that caused it. Live channel and bandwidth fields still
+follow every current reading. A deduplicated `[RADIO]` line records cycles skipped because a
+declared primary had no usable signal telemetry.
 ---
 
 ## 1. What ICdetection does

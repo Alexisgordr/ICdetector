@@ -59,7 +59,12 @@ private const val HISTORY_UI_RECORD_LIMIT = 2_000
 
 @Composable
 @SuppressLint("LocalContextGetResourceValueCall")
-fun HistoryPanel(dbHelper: CellDbHelper, onBack: () -> Unit) {
+fun HistoryPanel(
+    dbHelper: CellDbHelper,
+    // v2.10.4 — Opcional: la pestaña RADIO muestra datos en vivo del servicio si está conectado.
+    service: com.alexisgordr.icdetector.service.MiniICService? = null,
+    onBack: () -> Unit
+) {
     var items by remember { mutableStateOf<List<HistoryRecord>>(emptyList()) }
     var totalRecordCount by remember { mutableIntStateOf(0) }
     var incidents by remember { mutableStateOf<List<IncidentRecord>>(emptyList()) }
@@ -69,6 +74,8 @@ fun HistoryPanel(dbHelper: CellDbHelper, onBack: () -> Unit) {
     // v2.5 — Pestaña de geometría: grafo de handovers sobre las posiciones observadas por este
     // propio teléfono, sin mapas ni bases externas. Ver GeometryScreen.
     var showGeometry by remember { mutableStateOf(false) }
+    // v2.10.4 — Pestaña de contexto de radio. Ver RadioScreen.
+    var showRadio by remember { mutableStateOf(false) }
     var forensicCases by remember { mutableStateOf<List<ForensicCase>>(emptyList()) }
     var transitions by remember { mutableStateOf<List<CellTransitionSummary>>(emptyList()) }
     val showDeleteConfirm = remember { mutableStateOf(false) }
@@ -191,6 +198,7 @@ fun HistoryPanel(dbHelper: CellDbHelper, onBack: () -> Unit) {
                 showForensics -> "LABORATORIO FORENSE"
                 showTopology -> "TOPOLOGÍA DE HANDOVERS"
                 showGeometry -> "GEOMETRÍA DE CELDAS"
+                showRadio -> stringResource(R.string.radio_title)
                 showIncidents -> "CAJA NEGRA DE INCIDENTES"
                 else -> "HISTORIAL DE ANTENAS"
             }, color = Color(0xFF666666), fontFamily = FontFamily.Monospace, fontSize = 12.sp)
@@ -200,11 +208,21 @@ fun HistoryPanel(dbHelper: CellDbHelper, onBack: () -> Unit) {
             Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
             horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            FilterChip(selected = !showIncidents && !showForensics && !showTopology && !showGeometry, onClick = { showIncidents = false; showForensics = false; showTopology = false; showGeometry = false }, label = { Text(stringResource(R.string.tab_antennas)) })
-            FilterChip(selected = showIncidents, onClick = { showIncidents = true; showForensics = false; showTopology = false; showGeometry = false }, label = { Text(stringResource(R.string.tab_incidents)) })
-            FilterChip(selected = showForensics, onClick = { showIncidents = false; showForensics = true; showTopology = false; showGeometry = false }, label = { Text(stringResource(R.string.tab_forensics)) })
-            FilterChip(selected = showTopology, onClick = { showIncidents = false; showForensics = false; showTopology = true; showGeometry = false }, label = { Text(stringResource(R.string.tab_topology)) })
-            FilterChip(selected = showGeometry, onClick = { showIncidents = false; showForensics = false; showTopology = false; showGeometry = true }, label = { Text(stringResource(R.string.tab_geometry)) })
+            // v2.10.4 — Una sola función fija qué pestaña está activa: al añadir RADIO había que
+            // tocar las cinco lambdas a mano, y una olvidada deja dos pestañas activas a la vez.
+            fun select(tab: String) {
+                showIncidents = tab == "incidents"
+                showForensics = tab == "forensics"
+                showTopology = tab == "topology"
+                showGeometry = tab == "geometry"
+                showRadio = tab == "radio"
+            }
+            FilterChip(selected = !showIncidents && !showForensics && !showTopology && !showGeometry && !showRadio, onClick = { select("antennas") }, label = { Text(stringResource(R.string.tab_antennas)) })
+            FilterChip(selected = showIncidents, onClick = { select("incidents") }, label = { Text(stringResource(R.string.tab_incidents)) })
+            FilterChip(selected = showForensics, onClick = { select("forensics") }, label = { Text(stringResource(R.string.tab_forensics)) })
+            FilterChip(selected = showTopology, onClick = { select("topology") }, label = { Text(stringResource(R.string.tab_topology)) })
+            FilterChip(selected = showGeometry, onClick = { select("geometry") }, label = { Text(stringResource(R.string.tab_geometry)) })
+            FilterChip(selected = showRadio, onClick = { select("radio") }, label = { Text(stringResource(R.string.tab_radio)) })
         }
 
         if (showForensics) {
@@ -225,6 +243,10 @@ fun HistoryPanel(dbHelper: CellDbHelper, onBack: () -> Unit) {
         }
         if (showGeometry) {
             GeometryScreen(dbHelper, Modifier.fillMaxWidth().weight(1f))
+            return@Column
+        }
+        if (showRadio) {
+            RadioPanel(dbHelper, service, Modifier.fillMaxWidth().weight(1f))
             return@Column
         }
 

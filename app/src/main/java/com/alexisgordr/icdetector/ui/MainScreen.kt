@@ -174,11 +174,16 @@ fun MainScreenContent(dbHelper: CellDbHelper, service: MiniICService?) {
     val dbmFlow = remember(service) { service?.dbmHistory ?: MutableStateFlow<List<Int>>(emptyList()) }
     val rsrqFlow = remember(service) { service?.rsrqHistory ?: MutableStateFlow<List<Int>>(emptyList()) }
     val geoFlow = remember(service) { service?.geoHistory ?: MutableStateFlow<List<Float>>(emptyList()) }
+    // v2.10.4 — Estado de servicio para la tarjeta de contexto de radio.
+    val serviceStateFlow = remember(service) {
+        service?.serviceState ?: MutableStateFlow<com.alexisgordr.icdetector.models.ServiceStateSnapshot?>(null)
+    }
 
     val cellList by cellFlow.collectAsStateWithLifecycle()
     val dbmHistory by dbmFlow.collectAsStateWithLifecycle()
     val rsrqHistory by rsrqFlow.collectAsStateWithLifecycle()
     val geoHistory by geoFlow.collectAsStateWithLifecycle()
+    val serviceState by serviceStateFlow.collectAsStateWithLifecycle()
     
     var refreshing by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
@@ -236,7 +241,7 @@ fun MainScreenContent(dbHelper: CellDbHelper, service: MiniICService?) {
         if (showSettings) {
             SettingsPanel(service) { showSettings = false }
         } else if (showHistory) {
-            HistoryPanel(dbHelper = dbHelper) { showHistory = false }
+            HistoryPanel(dbHelper = dbHelper, service = service) { showHistory = false }
         } else {
             Box(modifier = Modifier.fillMaxSize().pullRefresh(pullRefreshState)) {
                 Column(modifier = Modifier.fillMaxSize()) {
@@ -575,6 +580,12 @@ fun MainScreenContent(dbHelper: CellDbHelper, service: MiniICService?) {
 
                         if (active != null) {
                             SignalVisualizer(active, cellList.filter { !it.isRegistered })
+                        }
+
+                        // v2.10.4 — Contexto de radio: servidora según el módem, portadoras
+                        // secundarias y estado de servicio. Solo recolección, no puntúa.
+                        if (active != null) {
+                            RadioContextCard(active, serviceState)
                         }
 
                         if (service != null) {

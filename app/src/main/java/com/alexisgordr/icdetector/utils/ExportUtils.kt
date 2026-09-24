@@ -3,13 +3,23 @@ package com.alexisgordr.icdetector.utils
 import android.content.Context
 import android.net.Uri
 import com.alexisgordr.icdetector.models.HistoryRecord
+import com.alexisgordr.icdetector.models.ServiceStateSnapshot
 import java.io.OutputStreamWriter
 import java.nio.charset.StandardCharsets
 
 object ExportUtils {
 
     /** Cabecera del CSV. Pura y expuesta para que las pruebas fijen el orden de las columnas. */
-    const val CSV_HEADER = "Timestamp,NetType,CID,MNC,TAC,MCC,DBM,Verified,SecurityScore,FailedHeuristics,Lat,Lon,PCI,ARFCN,RSRQ,SINR,AnomalyConfidence,ApiLat,ApiLon,TA,TAUnit,TAMeters,Radio"
+    const val CSV_HEADER = "Timestamp,NetType,CID,MNC,TAC,MCC,DBM,Verified,SecurityScore,FailedHeuristics,Lat,Lon,PCI,ARFCN,RSRQ,SINR,AnomalyConfidence,ApiLat,ApiLon,TA,TAUnit,TAMeters,Radio," +
+        // v2.10.4 — Contexto de radio. Van al final para que cualquier análisis que lea las
+        // columnas por nombre (o las 23 primeras por posición) siga funcionando igual.
+        "ServingConnection,BandwidthKHz,Bands,AdditionalPlmns,CsgIndicator,CsgIdentity,CsgName," +
+        "SecondaryCarriers,ServiceState,NetworkOperator,SimOperator,NetworkRoaming"
+
+    /** Cabecera del CSV de eventos de servicio (pestaña Radio). */
+    const val SERVICE_STATE_CSV_HEADER = "TimestampUtc,State,DataRegistered,VoiceRegistered,Searching," +
+        "Roaming,NetworkOperator,NetworkName,SimOperator,ManualSelection,ChannelNumber," +
+        "CellBandwidthsKHz,DataNetwork,VoiceNetwork,Source"
 
     /**
      * Comprueba que se escribieron exactamente las filas que la base de datos dijo tener.
@@ -83,8 +93,53 @@ object ExportUtils {
         item.timingAdvance ?: "",
         if (item.timingAdvance != null) item.timingAdvanceUnit.name else "",
         item.timingAdvance?.let { item.timingAdvanceUnit.toMeters(it) } ?: "",
-        item.radio.name
+        item.radio.name,
+        item.connectionState?.name ?: "",
+        item.bandwidthKhz ?: "",
+        item.bands ?: "",
+        item.additionalPlmns ?: "",
+        item.csgIndicator?.let { if (it) 1 else 0 } ?: "",
+        item.csgIdentity ?: "",
+        item.csgName ?: "",
+        item.secondaryCarriers ?: "",
+        item.serviceState ?: "",
+        item.networkOperator ?: "",
+        item.simOperator ?: "",
+        item.networkRoaming?.let { if (it) 1 else 0 } ?: ""
     ).joinToString(",") { csvEscape(it) }
+
+    /** Una fila del CSV de eventos de servicio. Pura: se puede probar sin Android. */
+    fun serviceStateCsvRow(item: ServiceStateSnapshot): String = listOf(
+        java.time.Instant.ofEpochMilli(item.timestampMs).toString(),
+        item.state.name,
+        item.dataRegistered?.let { if (it) 1 else 0 } ?: "",
+        item.voiceRegistered?.let { if (it) 1 else 0 } ?: "",
+        item.searching?.let { if (it) 1 else 0 } ?: "",
+        if (item.roaming) 1 else 0,
+        item.operatorNumeric ?: "",
+        item.operatorAlphaLong ?: "",
+        item.simOperator ?: "",
+        if (item.manualSelection) 1 else 0,
+        item.channelNumber ?: "",
+        item.cellBandwidthsKhz.joinToString(";"),
+        item.dataNetworkType ?: "",
+        item.voiceNetworkType ?: "",
+        item.source.name
+    ).joinToString(",") { csvEscape(it) }
+
+    /** Exporta los eventos de servicio (del más antiguo al más reciente) a [uri]. */
+    fun exportServiceStateCsv(context: Context, uri: Uri, events: List<ServiceStateSnapshot>): Result<Int> =
+        runCatching {
+            context.contentResolver.openOutputStream(uri).use { outputStream ->
+                requireNotNull(outputStream) { "El destino no permitió abrir el archivo" }
+                OutputStreamWriter(outputStream, StandardCharsets.UTF_8).use { writer ->
+                    writer.append(SERVICE_STATE_CSV_HEADER).append("\n")
+                    events.sortedBy { it.timestampMs }.forEach { writer.append(serviceStateCsvRow(it)).append("\n") }
+                    writer.flush()
+                    events.size
+                }
+            }
+        }
 
     /**
      * Escapa un campo para CSV según RFC 4180: si contiene coma, comillas dobles o saltos de

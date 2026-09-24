@@ -1,5 +1,37 @@
 # Changelog
 
+## 2.10.4
+
+### Radio context collection
+
+- The serving cell is now selected by `CellInfo.getCellConnectionStatus()`: a registered entry that
+  declares `PRIMARY_SERVING` wins; if that primary sample has no usable signal telemetry, the cycle
+  abstains instead of promoting a secondary. Only when no primary is declared is the first usable
+  registered entry used as before. Selection is never based on signal strength.
+- Fixed: with carrier aggregation or duplicated NSA entries, every registered entry was analysed with
+  the first entry's history and the strongest one was kept. A secondary carrier could therefore be
+  scored and stored as the serving cell. Now only the serving cell is analysed; the others are
+  recorded as secondary carriers. This is a dataset cut for devices that publish several registered
+  entries.
+- New collection-only fields per observation: connection state, bandwidth, declared bands,
+  additional PLMNs, closed subscriber group (CSG / possible femtocell), secondary carriers, service
+  state, network PLMN, SIM PLMN and roaming. None of them feeds a heuristic or the score.
+- `ServiceState` is collected by callback (Android 12+) and polling, deduplicated, logged to the
+  terminal as `[SERVICIO]` and stored as change events (same retention as history, capped at 5000).
+- Service-state changes are persisted successfully before RADIO is notified. Failed inserts remain
+  invisible and retryable, removing the refresh race without duplicate events.
+- Service readings are processed on a single ordered dispatcher and stale timestamps are rejected.
+  Live fields such as channel and bandwidth still update on every reading, while the event list
+  reloads only after a confirmed insert.
+- An unusable declared primary is filtered from the visible list and produces one deduplicated
+  `[RADIO]` abstention line for diagnosis.
+- New RADIO tab (history screen) and radio context card (main screen), in English and Spanish.
+  The RADIO tab exports service-state changes to CSV.
+- History CSV gains 12 columns at the end; forensic `cells.csv` gains `connection_state` and
+  `bandwidth_khz`. `check_export.py` summarises the new context and validates its values.
+- Schema 19 is an additive migration: existing history keeps NULL in the new columns.
+- H1-H16, weights, thresholds, Temporal Confidence, Stable-Site and LocalCellTrust are unchanged.
+
 ## 2.10.3
 
 - H15 no longer freezes its own RF baseline: observations whose sole failure is H15 remain eligible for H15 history, while rows that also failed another heuristic remain excluded.

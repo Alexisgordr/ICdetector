@@ -203,6 +203,16 @@ class ForensicRecorder(
             put("band", c.band ?: JSONObject.NULL); put("rsrq", c.rsrq ?: JSONObject.NULL)
             put("sinr", c.sinr ?: JSONObject.NULL); put("ta", c.timingAdvance ?: JSONObject.NULL)
             put("taUnit", c.timingAdvanceUnit.name)
+            // v2.10.4 — Contexto de radio (solo recolección).
+            put("connectionState", c.connectionState.name)
+            put("bandwidthKhz", c.bandwidthKhz ?: JSONObject.NULL)
+            put("bands", JSONArray().apply { c.bands.forEach { put(it) } })
+            put("csgIndicator", c.csg?.indicator ?: JSONObject.NULL)
+            if (c.secondaryCarriers.isNotEmpty()) {
+                put("secondaryCarriers", JSONArray().apply {
+                    c.secondaryCarriers.forEach { carrier -> put(carrier.compact) }
+                })
+            }
         }
         return JSONObject().apply {
             put("schemaVersion", 1); put("device", "${Build.MANUFACTURER} ${Build.MODEL}")

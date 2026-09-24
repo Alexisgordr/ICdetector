@@ -2,7 +2,10 @@ package com.alexisgordr.icdetector.telephony
 
 import android.os.Build
 import android.telephony.*
+import androidx.annotation.RequiresApi
+import com.alexisgordr.icdetector.models.CellConnectionState
 import com.alexisgordr.icdetector.models.CellData
+import com.alexisgordr.icdetector.models.CsgInfo
 import com.alexisgordr.icdetector.models.RadioTech
 import com.alexisgordr.icdetector.models.TimingAdvanceUnit
 import com.alexisgordr.icdetector.core.BandPlan
@@ -62,6 +65,7 @@ object CellParser {
                     } catch (_: Exception) {}
                 }
                 CellData(reg, networkTypeString, id.ci.valOrNa(), cellMnc, id.tac.valOrNa(), dbm, cellMcc, timingAdvance = ta, timingAdvanceUnit = TimingAdvanceUnit.LTE_INDEX, radioTech = radioTechOf(info), arfcn = id.earfcn, pci = id.pci, rsrq = rsrq, sinr = sinr, band = BandPlan.earfcnToBandLte(id.earfcn))
+                    .withRadioContext(connectionOf(info), validBandwidth(id.bandwidth), extrasLte(id))
             }
             is CellInfoNr -> {
                 val id = info.cellIdentity as CellIdentityNr
@@ -110,6 +114,7 @@ object CellParser {
                 val sinr = strength.ssSinr
                     .let { if (it == Int.MAX_VALUE) null else it }
                 CellData(reg, networkTypeString, id.nci.valOrNa(), cellMnc, id.tac.valOrNa(), dbm, cellMcc, timingAdvance = ta, timingAdvanceUnit = taUnit, radioTech = radioTechOf(info), arfcn = id.nrarfcn, pci = id.pci, rsrq = rsrq, sinr = sinr)
+                    .withRadioContext(connectionOf(info), null, extrasNr(id))
             }
             is CellInfoWcdma -> {
                 val id = info.cellIdentity
@@ -118,6 +123,7 @@ object CellParser {
                 val cellMnc = id.mncString ?: mnc
                 // Sin Timing Advance: CellSignalStrengthWcdma no lo expone en la API pública.
                 CellData(reg, networkTypeString, id.cid.valOrNa(), cellMnc, id.lac.valOrNa(), dbm, cellMcc, radioTech = radioTechOf(info), arfcn = id.uarfcn, pci = id.psc)
+                    .withRadioContext(connectionOf(info), null, extrasWcdma(id))
             }
             is CellInfoGsm -> {
                 val id = info.cellIdentity
@@ -126,6 +132,7 @@ object CellParser {
                 val cellMnc = id.mncString ?: mnc
                 val ta = info.cellSignalStrength.timingAdvance.let { if (it == Int.MAX_VALUE) null else it }
                 CellData(reg, networkTypeString, id.cid.valOrNa(), cellMnc, id.lac.valOrNa(), dbm, cellMcc, timingAdvance = ta, timingAdvanceUnit = TimingAdvanceUnit.GSM_INDEX, radioTech = radioTechOf(info), arfcn = id.arfcn)
+                    .withRadioContext(connectionOf(info), null, extrasGsm(id))
             }
             else -> null
         }
@@ -135,6 +142,82 @@ object CellParser {
     // veces por segundo en zonas de transición).
     private val TA_REGEX = Regex("ta=([0-9]+)")
     private val TA_LONG_REGEX = Regex("timingAdvance=([0-9]+)")
+
+    // ── v2.10.4 — Contexto de radio (solo recolección) ─────────────────────────────────────
+    //
+    // Todo lo que sigue se lee de la API pública sin root. Los getters de API 30 van detrás de
+    // una comprobación de versión: en Android 10 esos campos quedan vacíos, que es lo honesto.
+    // Cualquier excepción de un fabricante deja el campo vacío en vez de perder la celda entera.
+
+    /** Campos opcionales de identidad que solo existen desde Android 11 (API 30). */
+    private data class IdentityExtras(
+        val bands: List<Int> = emptyList(),
+        val additionalPlmns: List<String> = emptyList(),
+        val csg: CsgInfo? = null
+    )
+
+    private fun CellData.withRadioContext(
+        connection: CellConnectionState,
+        bandwidthKhz: Int?,
+        extras: IdentityExtras
+    ): CellData = copy(
+        connectionState = connection,
+        bandwidthKhz = bandwidthKhz,
+        bands = extras.bands,
+        additionalPlmns = extras.additionalPlmns,
+        csg = extras.csg
+    )
+
+    private fun connectionOf(info: CellInfo): CellConnectionState = try {
+        CellConnectionState.fromAndroid(info.cellConnectionStatus)
+    } catch (_: Exception) {
+        CellConnectionState.UNKNOWN
+    }
+
+    /** Ancho de banda en kHz; `CellInfo.UNAVAILABLE` (Int.MAX_VALUE) y valores no positivos son nulos. */
+    internal fun validBandwidth(value: Int): Int? = value.takeIf { it in 1 until Int.MAX_VALUE }
+
+    private fun extrasLte(id: CellIdentityLte): IdentityExtras =
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            try {
+                IdentityExtras(
+                    bands = id.bands.toList(),
+                    additionalPlmns = id.additionalPlmns.sorted(),
+                    csg = id.closedSubscriberGroupInfo?.let { csgOf(it) }
+                )
+            } catch (_: Exception) { IdentityExtras() }
+        } else IdentityExtras()
+
+    private fun extrasNr(id: CellIdentityNr): IdentityExtras =
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            try {
+                IdentityExtras(bands = id.bands.toList(), additionalPlmns = id.additionalPlmns.sorted())
+            } catch (_: Exception) { IdentityExtras() }
+        } else IdentityExtras()
+
+    private fun extrasWcdma(id: CellIdentityWcdma): IdentityExtras =
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            try {
+                IdentityExtras(
+                    additionalPlmns = id.additionalPlmns.sorted(),
+                    csg = id.closedSubscriberGroupInfo?.let { csgOf(it) }
+                )
+            } catch (_: Exception) { IdentityExtras() }
+        } else IdentityExtras()
+
+    private fun extrasGsm(id: CellIdentityGsm): IdentityExtras =
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            try {
+                IdentityExtras(additionalPlmns = id.additionalPlmns.sorted())
+            } catch (_: Exception) { IdentityExtras() }
+        } else IdentityExtras()
+
+    @RequiresApi(Build.VERSION_CODES.R)
+    private fun csgOf(info: ClosedSubscriberGroupInfo): CsgInfo = CsgInfo(
+        indicator = info.csgIndicator,
+        identity = info.csgIdentity.takeIf { it in 0 until Int.MAX_VALUE },
+        homeNodebName = info.homeNodebName.takeIf { it.isNotBlank() }
+    )
 
     private fun Int.valOrNa() = if (this == Int.MAX_VALUE || this == -1) "N/A" else this.toString()
     private fun Long.valOrNa() = if (this == Long.MAX_VALUE || this == -1L) "N/A" else this.toString()

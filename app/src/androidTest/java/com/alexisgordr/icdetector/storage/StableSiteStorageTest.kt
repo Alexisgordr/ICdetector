@@ -61,7 +61,7 @@ class StableSiteStorageTest {
         assertEquals(1,count(upgraded,"SELECT COUNT(*) FROM forensic_cases"))
         assertEquals(0,count(upgraded,"SELECT COUNT(*) FROM site_cell_evidence"))
         assertEquals(0,count(upgraded,"SELECT COUNT(*) FROM site_motion_days"))
-        assertEquals(18,upgraded.version)
+        assertEquals(19,upgraded.version)
     }
 
     @Test fun twentyPollsRemainOneEpisodeAndSurviveHelperRestart(){
@@ -156,7 +156,7 @@ class StableSiteStorageTest {
         legacy.execSQL("INSERT INTO site_cell_evidence VALUES('site','cell','SERVING',1,2,3)")
         legacy.version=17;legacy.close()
         db=CellDbHelper(context);val upgraded=db.writableDatabase
-        assertEquals(18,upgraded.version)
+        assertEquals(19,upgraded.version)
         assertEquals(1,count(upgraded,"SELECT COUNT(*) FROM history WHERE cid='kept'"))
         assertEquals(1,count(upgraded,"SELECT COUNT(*) FROM site_cell_evidence"))
         assertEquals(0,count(upgraded,"SELECT COUNT(*) FROM site_rf_neighbours"))
@@ -177,7 +177,7 @@ class StableSiteStorageTest {
         legacy.execSQL("INSERT INTO cell_transitions VALUES('A','B',9,4,'PASSED',123)")
         legacy.version=16;legacy.close()
         db=CellDbHelper(context);val upgraded=db.writableDatabase
-        assertEquals(18,upgraded.version)
+        assertEquals(19,upgraded.version)
         assertEquals(1,count(upgraded,"SELECT COUNT(*) FROM history WHERE cid='history-kept'"))
         assertEquals(1,count(upgraded,"SELECT COUNT(*) FROM forensic_cases WHERE id=2"))
         assertEquals(1,count(upgraded,"SELECT COUNT(*) FROM forensic_samples WHERE id=3 AND case_id=2"))
@@ -273,6 +273,67 @@ class StableSiteStorageTest {
         assertEquals(2,count(r,"SELECT COUNT(*) FROM site_rf_neighbour_days"))
         assertEquals(1,count(r,"SELECT COUNT(*) FROM site_rf_neighbour_days WHERE fingerprint='RFCTX:v1:LTE:2850:1'"))
         assertEquals(1,count(r,"SELECT COUNT(*) FROM site_rf_neighbour_days WHERE fingerprint='RFCTX:v1:LTE:2850:2' AND day='${day(100)}'"))
+    }
+
+    // ── v2.10.4 — Contexto de radio y eventos de servicio (schema 19) ──────────────────────
+
+    @Test fun schema18To19PreservesHistoryAndAddsRadioContext(){
+        db.close();context.deleteDatabase(NAME)
+        val legacy=context.openOrCreateDatabase(NAME,Context.MODE_PRIVATE,null)
+        legacy.execSQL("CREATE TABLE history(id INTEGER PRIMARY KEY,cid TEXT)")
+        legacy.execSQL("INSERT INTO history VALUES(1,'kept')")
+        legacy.version=18;legacy.close()
+        db=CellDbHelper(context);val upgraded=db.writableDatabase
+        assertEquals(19,upgraded.version)
+        assertEquals(1,count(upgraded,"SELECT COUNT(*) FROM history WHERE cid='kept'"))
+        val columns=upgraded.rawQuery("PRAGMA table_info(history)",null).use{c->buildSet{while(c.moveToNext())add(c.getString(1))}}
+        assertTrue(columns.containsAll(CellDbHelper.RADIO_CONTEXT_COLUMNS.map{it.first}))
+        assertEquals(0,count(upgraded,"SELECT COUNT(*) FROM service_state_events"))
+        assertEquals(1,count(upgraded,"SELECT COUNT(*) FROM history WHERE conn_status IS NULL"))
+    }
+
+    @Test fun radioContextRoundTripsThroughHistory(){
+        db.logConnection(netType="4G LTE",cid="100",mnc="07",tac="31601",mcc="214",dbm=-90,radio=RadioTech.LTE,
+            connectionState=CellConnectionState.PRIMARY_SERVING,bandwidthKhz=20_000,bands="3",additionalPlmns="21401",
+            csg=CsgInfo(indicator=true,identity=42,homeNodebName="Casa"),secondaryCarriers="LTE:6400:200",
+            serviceState=ServiceRegistrationState.IN_SERVICE,networkOperator="21407",simOperator="21407",networkRoaming=false)
+        val record=db.getRecords(1).single()
+        assertEquals(CellConnectionState.PRIMARY_SERVING,record.connectionState)
+        assertEquals(20_000,record.bandwidthKhz)
+        assertEquals("3",record.bands)
+        assertEquals("21401",record.additionalPlmns)
+        assertEquals(true,record.csgIndicator)
+        assertEquals(42,record.csgIdentity)
+        assertEquals("Casa",record.csgName)
+        assertEquals("LTE:6400:200",record.secondaryCarriers)
+        assertEquals("IN_SERVICE",record.serviceState)
+        assertEquals(false,record.networkRoaming)
+    }
+
+    @Test fun legacyLogConnectionCallStillWritesUnknownConnection(){
+        db.logConnection(netType="4G LTE",cid="100",mnc="07",tac="31601",mcc="214",dbm=-90,radio=RadioTech.LTE)
+        val record=db.getRecords(1).single()
+        assertEquals(CellConnectionState.UNKNOWN,record.connectionState)
+        assertEquals(null,record.serviceState)
+    }
+
+    @Test fun serviceStateEventsPersistInOrderAndArePruned(){
+        val now=System.currentTimeMillis()
+        fun event(ts:Long,state:ServiceRegistrationState)=ServiceStateSnapshot(timestampMs=ts,state=state,dataRegistered=true,
+            roaming=false,operatorNumeric="21407",simOperator="21407",cellBandwidthsKhz=listOf(20_000,10_000),dataNetworkType="LTE",
+            source=ServiceStateSource.CALLBACK)
+        assertTrue(db.insertServiceStateEvent(event(now-400L*86_400_000L,ServiceRegistrationState.OUT_OF_SERVICE))>0)
+        assertTrue(db.insertServiceStateEvent(event(now-1_000,ServiceRegistrationState.IN_SERVICE))>0)
+        assertTrue(db.insertServiceStateEvent(event(now,ServiceRegistrationState.EMERGENCY_ONLY))>0)
+        val events=db.getServiceStateEvents()
+        assertEquals(3,events.size)
+        assertEquals(ServiceRegistrationState.EMERGENCY_ONLY,events.first().state)
+        assertEquals(listOf(20_000,10_000),events.first().cellBandwidthsKhz)
+        assertEquals(ServiceStateSource.CALLBACK,events.first().source)
+        db.pruneOldRecords()
+        assertEquals(2,db.countServiceStateEvents())
+        db.clear()
+        assertEquals(0,db.countServiceStateEvents())
     }
 
     private fun cell(cid:String,registered:Boolean=true)=CellData(registered,"4G LTE",cid,"07","31601",-90,"214",radioTech=RadioTech.LTE,pci=10,arfcn=2850)

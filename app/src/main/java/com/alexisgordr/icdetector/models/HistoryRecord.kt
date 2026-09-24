@@ -65,7 +65,25 @@ data class HistoryRecord(
      * analice estos datos necesita saber de qué tecnología era cada fila sin tener que fiarse de
      * una etiqueta de presentación. [RadioTech.UNKNOWN] en las filas anteriores a esta versión.
      */
-    val radio: RadioTech = RadioTech.UNKNOWN
+    val radio: RadioTech = RadioTech.UNKNOWN,
+    // ── v2.10.4 — Contexto de radio (schema 19). Nulo en filas anteriores: no se recogía. ──
+    /** Papel de la celda en la conexión cuando se guardó la fila. */
+    val connectionState: CellConnectionState? = null,
+    val bandwidthKhz: Int? = null,
+    /** Bandas declaradas, separadas por `;`. */
+    val bands: String? = null,
+    /** PLMN adicionales anunciados, separados por `;`. */
+    val additionalPlmns: String? = null,
+    val csgIndicator: Boolean? = null,
+    val csgIdentity: Int? = null,
+    val csgName: String? = null,
+    /** Portadoras secundarias en forma compacta (`LTE:6400:200;NR:632448:12`). */
+    val secondaryCarriers: String? = null,
+    /** Nombre de [ServiceRegistrationState] en el momento de la fila. */
+    val serviceState: String? = null,
+    val networkOperator: String? = null,
+    val simOperator: String? = null,
+    val networkRoaming: Boolean? = null
 )
 
 /** Misma identidad completa que [CellData.identityKey], aplicada a una fila histórica. */

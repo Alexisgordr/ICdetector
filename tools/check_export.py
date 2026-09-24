@@ -35,6 +35,16 @@ EXPECTED_COLUMNS_V21 = [
     "AnomalyConfidence", "ApiLat", "ApiLon", "TA", "TAUnit", "TAMeters", "Radio",
 ]
 
+# v2.10.4 — Contexto de radio, añadido al final. Solo recolección: no entra en ninguna heurística.
+RADIO_CONTEXT_COLUMNS_V2104 = [
+    "ServingConnection", "BandwidthKHz", "Bands", "AdditionalPlmns", "CsgIndicator",
+    "CsgIdentity", "CsgName", "SecondaryCarriers", "ServiceState", "NetworkOperator",
+    "SimOperator", "NetworkRoaming",
+]
+EXPECTED_COLUMNS_V2104 = EXPECTED_COLUMNS_V21 + RADIO_CONTEXT_COLUMNS_V2104
+SERVING_CONNECTION_VALUES = {"PRIMARY_SERVING", "SECONDARY_SERVING", "NONE", "UNKNOWN"}
+SERVICE_STATE_VALUES = {"IN_SERVICE", "OUT_OF_SERVICE", "EMERGENCY_ONLY", "POWER_OFF", "UNKNOWN"}
+
 failures = []
 notes = []
 
@@ -106,6 +116,40 @@ def ta_unit_diagnostic(unit_rows):
     if possible_legacy_stub:
         reliable -= sum(1 for r in zero_lte if fnum(r, "TAMeters") is not None)
     return len(usable), reliable, possible_legacy_stub, len(zero_lte)
+
+
+def radio_context_summary(rows):
+    """Resumen del contexto de radio v2.10.4. Puro, para poder probarlo.
+
+    Devuelve un dict con recuentos. Las filas anteriores a v2.10.4 tienen estas columnas vacías y
+    no cuentan en ningún sentido: vacío significa "no se recogía", no "no había".
+    """
+    def val(r, key):
+        return (r.get(key) or "").strip()
+
+    with_context = [r for r in rows if val(r, "ServingConnection")]
+    connection = Counter(val(r, "ServingConnection") for r in with_context)
+    service = Counter(val(r, "ServiceState") for r in rows if val(r, "ServiceState"))
+    invalid_connection = [r for r in with_context if val(r, "ServingConnection") not in SERVING_CONNECTION_VALUES]
+    invalid_service = [r for r in rows if val(r, "ServiceState") and val(r, "ServiceState") not in SERVICE_STATE_VALUES]
+    secondary = [r for r in with_context if val(r, "SecondaryCarriers")]
+    csg = [r for r in with_context if val(r, "CsgIndicator") == "1"]
+    operator_mismatch = [
+        r for r in rows
+        if val(r, "NetworkOperator") and val(r, "SimOperator")
+        and val(r, "NetworkOperator") != val(r, "SimOperator")
+        and val(r, "NetworkRoaming") == "0"
+    ]
+    return {
+        "rows_with_context": len(with_context),
+        "connection": connection,
+        "service": service,
+        "invalid_connection": len(invalid_connection),
+        "invalid_service": len(invalid_service),
+        "with_secondary": len(secondary),
+        "csg": len(csg),
+        "operator_mismatch": len(operator_mismatch),
+    }
 
 
 def main(path):
@@ -358,6 +402,28 @@ def main(path):
             notes.append(
                 f"{desconocidas} observaciones con Radio=UNKNOWN ({100 * desconocidas / len(rows):.0f} %). "
                 "Si no estás en CDMA, eso apunta a lecturas de CellInfo que el parser no reconoce."
+            )
+
+    if "ServingConnection" in columns:
+        rc = radio_context_summary(rows)
+        print("\nCONTEXTO DE RADIO (v2.10.4, solo recolección — no puntúa)")
+        print(f"  Filas con contexto de radio: {rc['rows_with_context']} de {len(rows)}")
+        for estado, n in rc["connection"].most_common():
+            print(f"    conexión {estado:<18} {n:6d}")
+        print(f"  Filas con portadoras secundarias: {rc['with_secondary']}")
+        print(f"  Filas en celda de grupo cerrado (CSG / posible femtocelda): {rc['csg']}")
+        for estado, n in rc["service"].most_common():
+            print(f"    servicio {estado:<18} {n:6d}")
+        print(f"  Red anunciada distinta de la SIM sin roaming: {rc['operator_mismatch']}")
+        check(
+            "ServingConnection y ServiceState solo contienen valores conocidos",
+            rc["invalid_connection"] == 0 and rc["invalid_service"] == 0,
+            f"{rc['invalid_connection']} conexión / {rc['invalid_service']} servicio desconocidos",
+        )
+        if rc["rows_with_context"] and not rc["connection"].get("PRIMARY_SERVING"):
+            notes.append(
+                "Ninguna fila con ServingConnection=PRIMARY_SERVING: este módem no rellena el estado "
+                "de conexión, así que la app elige la servidora como antes (primera registrada)."
             )
 
     print("\nVERIFICACIÓN EXTERNA (etiqueta, no puntúa)")

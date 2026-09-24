@@ -2,8 +2,9 @@ package com.alexisgordr.icdetector.storage
 
 import android.content.Context
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.mutableStateOf
 import androidx.test.core.app.ApplicationProvider
-import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.junit4.v2.createComposeRule
 import com.alexisgordr.icdetector.core.*
 import com.alexisgordr.icdetector.ui.GeometryScreen
 import org.junit.After
@@ -23,9 +24,12 @@ class GeometryMobilityIsolationTest {
     @Test fun destroyingGeometryDoesNotCloseOrMutateServiceOwnedTrip() {
         val engine = MobilityFamiliarityEngine(db, MobilityFamiliarityConfig(), true) { "service-trip" }
         engine.observe("A", MotionEvidence(MotionState.MOVING), 1)
-        compose.setContent { GeometryScreen(db) }
+        val showGeometry = mutableStateOf(true)
+        compose.setContent {
+            if (showGeometry.value) GeometryScreen(db) else EmptyContent()
+        }
         compose.waitForIdle()
-        compose.setContent { EmptyContent() }
+        compose.runOnIdle { showGeometry.value = false }
         compose.waitForIdle()
         engine.observe("B", MotionEvidence(MotionState.MOVING), 2)
         engine.observe("C", MotionEvidence(MotionState.MOVING), 3)

@@ -67,7 +67,20 @@ data class CellData(
     val transitionCoherence: TransitionCoherenceResult = TransitionCoherenceResult(),
     /** Revocable confidence learned only from this device's clean local history. */
     val localCellTrust: LocalCellTrust = LocalCellTrust(),
-    val stableSiteDecision: com.alexisgordr.icdetector.core.StableSiteDecision = com.alexisgordr.icdetector.core.StableSiteDecision()
+    val stableSiteDecision: com.alexisgordr.icdetector.core.StableSiteDecision = com.alexisgordr.icdetector.core.StableSiteDecision(),
+    // ── v2.10.4 — Contexto de radio. Solo recolección: ninguna heurística lee estos campos. ──
+    /** Papel de la celda en la conexión (`CellInfo.getCellConnectionStatus()`). */
+    val connectionState: CellConnectionState = CellConnectionState.UNKNOWN,
+    /** Ancho de banda de la portadora en kHz (LTE, API 28). Nulo si el módem no lo da. */
+    val bandwidthKhz: Int? = null,
+    /** Bandas que declara la celda (LTE/NR, API 30). Vacío si no se declaran. */
+    val bands: List<Int> = emptyList(),
+    /** PLMN adicionales que anuncia la celda, p. ej. en redes compartidas (API 30). */
+    val additionalPlmns: List<String> = emptyList(),
+    /** Grupo cerrado de abonados (femtocelda), si la celda lo declara (LTE/WCDMA, API 30). */
+    val csg: CsgInfo? = null,
+    /** Solo en la celda analizada: portadoras secundarias y entradas registradas extra. */
+    val secondaryCarriers: List<SecondaryCarrier> = emptyList()
 )
 
 /**

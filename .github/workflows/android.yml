@@ -76,11 +76,11 @@ jobs:
           sudo udevadm control --reload-rules
           sudo udevadm trigger --name-match=kvm
 
-      - name: Run Stable-Site and H15 storage tests
+      - name: Run all instrumentation tests
         uses: reactivecircus/android-emulator-runner@v2
         with:
           api-level: 35
           arch: x86_64
           profile: pixel_2
           disable-animations: true
-          script: ./gradlew connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=com.alexisgordr.icdetector.storage.StableSiteStorageTest,com.alexisgordr.icdetector.storage.CellDbHelperTrustEvidenceTest
+          script: ./gradlew connectedDebugAndroidTest

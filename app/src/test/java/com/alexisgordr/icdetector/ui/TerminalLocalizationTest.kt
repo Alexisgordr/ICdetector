@@ -84,4 +84,22 @@ class TerminalLocalizationTest {
         assertTrue(result.contains("Established local cell identity changed"))
         assertFalse(result.contains("Cambio en identidad"))
     }
+
+    @Test
+    fun `terminal translates v2_10_4 radio and service lines`() {
+        val service = localizeTerminalLine(
+            "[SERVICIO] Estado de servicio: EN SERVICIO → SOLO EMERGENCIAS · red=21407 · SIM=21407 · datos=LTE registrado · roaming=no"
+        )
+        assertTrue(service.contains("[SERVICE] Service state: IN SERVICE → EMERGENCY ONLY"))
+        assertTrue(service.contains("network=21407"))
+        assertTrue(service.contains("data=LTE registered"))
+        assertFalse(service.contains("SERVICIO"))
+
+        val radio = localizeTerminalLine(
+            "[RADIO] Servidora LTE 1301/48 · estado de conexión=PRIMARY_SERVING · entradas registradas=2 · sin portadoras secundarias"
+        )
+        assertTrue(radio.contains("Serving LTE 1301/48"))
+        assertTrue(radio.contains("connection state=PRIMARY_SERVING"))
+        assertTrue(radio.contains("no secondary carriers"))
+    }
 }

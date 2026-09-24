@@ -1,5 +1,18 @@
 # ICdetection Status
 
+## v2.10.4 — Radio context collection (stable)
+
+**Version code:** 32
+**Database schema:** 19 (additive migration from 18)
+**Security effect:** serving-cell selection only; no heuristic, weight or threshold changed
+
+The serving cell is chosen by the modem's `PRIMARY_SERVING` connection status and is the only entry
+analysed. An unusable declared primary makes the cycle abstain; fallback to the first usable
+registered entry is allowed only when no primary was declared. Secondary carriers, connection state, bandwidth,
+bands, additional PLMNs, CSG and `ServiceState` are collected for forensics, shown in the new RADIO
+tab and card, and exported. Service changes reach the UI only after SQLite confirms their insert.
+Live service telemetry remains current independently, and ordered processing rejects stale events.
+Devices that publish several registered entries get a dataset cut.
 ## v2.10.3 — H15 independent RF episodes (local candidate)
 
 **Version code:** 31

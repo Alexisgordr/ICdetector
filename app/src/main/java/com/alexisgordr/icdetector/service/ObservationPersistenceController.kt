@@ -2,6 +2,8 @@ package com.alexisgordr.icdetector.service
 
 import android.location.Location
 import com.alexisgordr.icdetector.models.CellData
+import com.alexisgordr.icdetector.models.ServiceStateSnapshot
+import com.alexisgordr.icdetector.models.toCompactString
 import com.alexisgordr.icdetector.storage.CellDbHelper
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -12,6 +14,8 @@ internal class ObservationPersistenceController(
     private val scope: CoroutineScope,
     private val db: CellDbHelper,
     private val location: () -> Location?,
+    /** v2.10.4 — Último ServiceState conocido, guardado junto a cada fila como contexto. */
+    private val serviceState: () -> ServiceStateSnapshot? = { null },
     private val onWrite: (Long) -> Unit,
     private val onPeriodicMissingLocation: (Long) -> Unit
 ) {
@@ -47,7 +51,9 @@ internal class ObservationPersistenceController(
         }
     }
 
-    private fun insert(cell: CellData, reason: String, fix: Location?): Long = db.logConnection(
+    private fun insert(cell: CellData, reason: String, fix: Location?): Long {
+        val service = serviceState()
+        return db.logConnection(
         netType = cell.networkType,
         cid = cell.cellId,
         mnc = cell.mnc,
@@ -66,8 +72,19 @@ internal class ObservationPersistenceController(
         anomalyConfidence = cell.anomalyConfidence,
         timingAdvance = cell.timingAdvance,
         timingAdvanceUnit = cell.timingAdvanceUnit,
-        radio = cell.radioTech
-    )
+        radio = cell.radioTech,
+        connectionState = cell.connectionState,
+        bandwidthKhz = cell.bandwidthKhz,
+        bands = cell.bands.joinToString(";").ifEmpty { null },
+        additionalPlmns = cell.additionalPlmns.joinToString(";").ifEmpty { null },
+        csg = cell.csg,
+        secondaryCarriers = cell.secondaryCarriers.toCompactString().ifEmpty { null },
+        serviceState = service?.state,
+        networkOperator = service?.operatorNumeric,
+        simOperator = service?.simOperator,
+        networkRoaming = service?.roaming
+        )
+    }
 
     private fun isRecordable(cell: CellData): Boolean =
         cell.cellId != "N/A" && cell.dbm != -999 && cell.dbm != Int.MAX_VALUE

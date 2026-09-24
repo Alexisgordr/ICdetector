@@ -47,13 +47,15 @@ object ForensicExporter {
         }.toByteArray()
 
         files["cells.csv"] = buildString {
-            appendLine("timestamp_utc,role,identity,mcc,mnc,tac,cid,radio,network_type,dbm,pci,arfcn,band,rsrq,sinr,ta,ta_unit")
+            appendLine("timestamp_utc,role,identity,mcc,mnc,tac,cid,radio,network_type,dbm,pci,arfcn,band,rsrq,sinr,ta,ta_unit,connection_state,bandwidth_khz")
             parsed.forEach { (s, j) ->
                 fun row(role: String, c: JSONObject) = appendLine(listOf(
                     Instant.ofEpochMilli(s.wallTimeMs), role, c.optString("identity"), c.optString("mcc"),
                     c.optString("mnc"), c.optString("tac"), c.optString("cid"), c.optString("radio"),
                     c.optString("networkType"), nullable(c,"dbm"), nullable(c,"pci"), nullable(c,"arfcn"),
-                    nullable(c,"band"), nullable(c,"rsrq"), nullable(c,"sinr"), nullable(c,"ta"), c.optString("taUnit")
+                    nullable(c,"band"), nullable(c,"rsrq"), nullable(c,"sinr"), nullable(c,"ta"), c.optString("taUnit"),
+                    // v2.10.4 — vacío en muestras anteriores, que no guardaban estos campos.
+                    c.optString("connectionState"), nullable(c,"bandwidthKhz")
                 ).joinToString(",") { csv(it) })
                 row("SERVING", j.getJSONObject("serving"))
                 val n = j.optJSONArray("neighbors") ?: JSONArray()

@@ -56,6 +56,15 @@ class MiniICService : Service() {
     private val _liveLogs = MutableStateFlow(listOf("[SYS] ICdetector Engine Iniciado...", "[SYS] Esperando hooks del módem..."))
     val liveLogs: StateFlow<List<String>> = _liveLogs
 
+    // v2.10.4 — Estado de servicio (ServiceState). Solo recolección y visualización.
+    private val serviceStatePersistence = com.alexisgordr.icdetector.core.ServiceStatePersistence()
+    private val serviceStateDispatcher = Dispatchers.IO.limitedParallelism(1)
+    private val _serviceState = MutableStateFlow<ServiceStateSnapshot?>(null)
+    val serviceState: StateFlow<ServiceStateSnapshot?> = _serviceState
+    private val _serviceEventsRevision = MutableStateFlow(0L)
+    val serviceEventsRevision: StateFlow<Long> = _serviceEventsRevision
+    private var lastRadioContextLog: String? = null
+
     private val _dbmHistory = MutableStateFlow<List<Int>>(emptyList())
     val dbmHistory: StateFlow<List<Int>> = _dbmHistory
 
@@ -71,6 +80,64 @@ class MiniICService : Service() {
     // Arranca en "N/A": hasta que la sonda mida algo de verdad no se afirma "OK".
     private val _networkLatencyState = MutableStateFlow<String>("N/A")
     val networkLatencyState: StateFlow<String> = _networkLatencyState
+
+    /**
+     * v2.10.4 — Recibe una lectura de ServiceState (callback o sondeo). Los cambios se insertan
+     * primero y solo después se publican a la UI y al terminal. No toca heurísticas.
+     */
+    private fun onServiceStateSnapshot(snapshot: ServiceStateSnapshot) {
+        // La telemetría actual se mantiene viva aunque la firma de evento no cambie. Una lectura
+        // atrasada nunca puede devolver la tarjeta a un estado anterior.
+        if (snapshot.timestampMs >= (_serviceState.value?.timestampMs ?: Long.MIN_VALUE)) {
+            _serviceState.value = snapshot
+        }
+        if (!::dbHelper.isInitialized) return
+        scope.launch(serviceStateDispatcher) {
+            serviceStatePersistence.persist(
+                snapshot = snapshot,
+                insert = dbHelper::insertServiceStateEvent
+            ) { change ->
+                appendLog(
+                    "[SERVICIO]",
+                    com.alexisgordr.icdetector.core.ServiceStateTracker.terminalLine(change)
+                )
+                _serviceEventsRevision.value = _serviceEventsRevision.value + 1L
+            }
+        }
+    }
+
+    /**
+     * v2.10.4 — Línea [RADIO] cuando cambia la servidora, su estado de conexión o sus portadoras
+     * secundarias. Se deduplica por firma para no repetir la misma línea en cada ciclo.
+     */
+    private fun logRadioContext(serving: CellData?, registeredCount: Int) {
+        if (serving == null) return
+        val carriers = serving.secondaryCarriers.toCompactString()
+        val signature = "${serving.identityKey}|${serving.connectionState}|$carriers|${serving.csg?.indicator}"
+        if (signature == lastRadioContextLog) return
+        lastRadioContextLog = signature
+        val bandwidth = serving.bandwidthKhz?.let { " · ${it / 1000} MHz" } ?: ""
+        val secondary = if (carriers.isNotEmpty()) "portadoras secundarias=$carriers" else "sin portadoras secundarias"
+        appendLog(
+            "[RADIO]",
+            "Servidora ${serving.radioTech.name} ${serving.arfcn ?: "?"}/${serving.pci ?: "?"}$bandwidth · " +
+                "estado de conexión=${serving.connectionState.name} · entradas registradas=$registeredCount · $secondary"
+        )
+        serving.csg?.takeIf { it.indicator }?.let { csg ->
+            appendLog(
+                "[RADIO]",
+                "Celda de grupo cerrado (CSG, posible femtocelda): id=${csg.identity ?: "?"}" +
+                    (csg.homeNodebName?.let { " nombre=$it" } ?: "")
+            )
+        }
+    }
+
+    private fun logUnusablePrimaryAbstention() {
+        val signature = "ABSTAIN_UNUSABLE_PRIMARY"
+        if (signature == lastRadioContextLog) return
+        lastRadioContextLog = signature
+        appendLog("[RADIO]", "Primaria declarada sin señal utilizable: ciclo en abstención.")
+    }
 
     private fun appendLog(type: String, message: String) {
         val timestamp = SimpleDateFormat("HH:mm:ss.SSS", Locale.getDefault()).format(Date())
@@ -279,7 +346,8 @@ class MiniICService : Service() {
             log = { appendLog("[SYS]", it) },
             deliver = { cells, fresh, registered ->
                 processCellInfo(cells, isFreshDelivery = fresh, fromRegisteredCallback = registered)
-            }
+            },
+            serviceStateSink = ::onServiceStateSnapshot
         )
         auditController = AuditLogController(
             log = ::appendLog,
@@ -308,6 +376,7 @@ class MiniICService : Service() {
             scope = scope,
             db = dbHelper,
             location = { getCurrentLocation() },
+            serviceState = { _serviceState.value },
             onWrite = ::noteWriteResult,
             onPeriodicMissingLocation = { timestamp ->
                 locationController.markCoordinatesPending(timestamp)
@@ -636,8 +705,14 @@ class MiniICService : Service() {
         fromRegisteredCallback: Boolean = false
     ) {
         try {
+            // v2.10.4 — Sondeo del ServiceState en cada entrega de celdas. El tracker descarta las
+            // repeticiones, así que solo un cambio real produce línea de terminal y evento.
+            telephonyController.pollServiceState()?.let(::onServiceStateSnapshot)
             val list = mutableListOf<CellData>()   // v2.1: ya no se reasigna (el TA no se comparte entre celdas)
             var activeObservationToken: Long? = null
+            // v2.10.4 — Un token por celda parseada (null en las no registradas). El token que
+            // cuenta es el de la celda que ServingCellSelection elija como servidora.
+            val parsedTokens = mutableListOf<Long?>()
             infoList?.forEach { info ->
                 val networkTypeString = if (info.isRegistered && info is CellInfoLte) {
                     getLteSpecificType()
@@ -657,19 +732,22 @@ class MiniICService : Service() {
                 val mnc = getNetworkOperatorMnc()
 
                 val parsed = CellParser.parseCell(info, networkTypeString, mcc, mnc)
-                if (parsed != null && parsed.dbm != Int.MAX_VALUE && parsed.dbm < 100) {
+                if (parsed != null) {
                     list.add(parsed)
-                    // El token pertenece a la primera celda registrada que sobrevivió al parser,
-                    // la misma que se convertirá en activeRaw. Una entrada NR inválida ya no puede
-                    // dominar el máximo ni mezclar dominios de reloj con el ancla LTE.
-                    if (parsed.isRegistered && activeObservationToken == null) {
-                        activeObservationToken = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-                            info.timestampMillis
-                        } else {
-                            @Suppress("DEPRECATION")
-                            TimeUnit.NANOSECONDS.toMillis(info.timeStamp)
-                        }
-                    }
+                    // El token pertenece a la celda registrada que se convertirá en activeRaw
+                    // (v2.10.4: la elegida por ServingCellSelection, no simplemente la primera).
+                    // Una entrada NR inválida ya no puede dominar el máximo ni mezclar dominios de
+                    // reloj con el ancla LTE.
+                    parsedTokens.add(
+                        if (parsed.isRegistered) {
+                            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                                info.timestampMillis
+                            } else {
+                                @Suppress("DEPRECATION")
+                                TimeUnit.NANOSECONDS.toMillis(info.timeStamp)
+                            }
+                        } else null
+                    )
                 }
             }
 
@@ -678,6 +756,32 @@ class MiniICService : Service() {
                 updateNotificationText(getString(R.string.no_signal_airplane))
                 return
             }
+
+            // v2.10.4 — Una sola celda servidora, elegida por el estado de conexión que declara el
+            // módem (PRIMARY_SERVING) y, si no lo declara, la primera registrada. Se coloca en la
+            // posición 0 con sus portadoras secundarias adjuntas, de modo que todo el código que
+            // busca "la primera registrada" (TA, Stable-Site, H15, historial, UI) ve la misma.
+            // Ver ServingCellSelection: antes se analizaban todas las registradas y ganaba la de
+            // más señal, que con agregación de portadoras podía ser una secundaria.
+            val servingIndex = com.alexisgordr.icdetector.core.ServingCellSelection.primaryIndex(list)
+            if (servingIndex < 0) {
+                // Si el módem declaró una primaria pero no proporcionó una señal utilizable,
+                // abstenerse: una secundaria nunca puede heredar el historial de la primaria.
+                val declaredPrimary = com.alexisgordr.icdetector.core.ServingCellSelection.hasDeclaredPrimary(list)
+                _cellFlow.value = com.alexisgordr.icdetector.core.ServingCellSelection.abstentionPublication()
+                if (declaredPrimary) logUnusablePrimaryAbstention()
+                updateNotificationText(getString(R.string.searching_network))
+                return
+            }
+            activeObservationToken = parsedTokens.getOrNull(servingIndex)
+            // La elección ya se hizo viendo también la primaria no utilizable. A partir de aquí
+            // se conserva el filtro histórico para que métricas inválidas no entren como vecinas.
+            val servingFirst = com.alexisgordr.icdetector.core.ServingCellSelection.withPrimaryFirst(
+                list.filter { it.dbm != Int.MAX_VALUE && it.dbm < 100 }
+            )
+            list.clear()
+            list.addAll(servingFirst)
+            logRadioContext(list.firstOrNull()?.takeIf { it.isRegistered }, list.count { it.isRegistered })
 
             // Solo una entrega con trabajo real puede invalidar otra que esté esperando el mutex.
             // Un callback vacío ya no crea una secuencia fantasma que haga perder el ciclo válido.
@@ -925,8 +1029,11 @@ class MiniICService : Service() {
                     )
                 } ?: false
 
-                val analyzedList = list.map { cell ->
-                    if (cell.isRegistered) {
+                // v2.10.4 — Solo se analiza la servidora (posición 0). Las demás entradas
+                // registradas son portadoras secundarias: se muestran, no se juzgan con el
+                // historial de otra celda.
+                val analyzedList = list.mapIndexed { index, cell ->
+                    if (index == 0 && cell.isRegistered) {
                         // FIX (coherencia de score): resolver el estado de verificación conocido
                         // (caché) ANTES de analizar, para que el bonus de VERIFIED / la penalización
                         // de NOT_FOUND y las heurísticas que dependen de `verified` (p.ej. la supresión
@@ -969,12 +1076,15 @@ class MiniICService : Service() {
                 }
 
                 withContext(Dispatchers.Main) {
-                    val sorted = analyzedList.sortedWith(
-                        compareByDescending<CellData> { it.isRegistered }
-                            .thenByDescending { it.dbm }
-                    )
+                    // v2.10.4 — La servidora va siempre primero; nunca se reordena por potencia.
+                    val analyzedServing = analyzedList.firstOrNull()?.takeIf { it.isRegistered }
+                    val sorted = listOfNotNull(analyzedServing) +
+                        analyzedList.drop(if (analyzedServing != null) 1 else 0).sortedWith(
+                            compareByDescending<CellData> { it.isRegistered }
+                                .thenByDescending { it.dbm }
+                        )
 
-                    val active = sorted.firstOrNull { it.isRegistered }
+                    val active = analyzedServing
                     if (active != null) {
                         val stableSiteStartedWatching = stableSiteDecision.enforced && !stableSiteIntensiveActive
                         stableSiteIntensiveActive = stableSiteDecision.enforced
@@ -1107,8 +1217,8 @@ class MiniICService : Service() {
                         
                         val finalStatus = verificationCache[cacheKey] ?: knownStatus
                         
-                        _cellFlow.value = sorted.map { 
-                            if (it.isRegistered) confirmedActive.copy(verified = finalStatus) else it 
+                        _cellFlow.value = sorted.mapIndexed { index, cell ->
+                            if (index == 0) confirmedActive.copy(verified = finalStatus) else cell
                         }
                         
                         updateNotification(confirmedActive.copy(verified = finalStatus))

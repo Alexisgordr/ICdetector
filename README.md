@@ -1,7 +1,7 @@
 ![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)
 ![Platform](https://img.shields.io/badge/Platform-Android%2010%2B-green.svg)
 ![Root Required](https://img.shields.io/badge/Root-Not%20Required-brightgreen.svg)
-![Status](https://img.shields.io/badge/Status-v2.10.3%20stable-brightgreen.svg)
+![Status](https://img.shields.io/badge/Status-v2.10.4%20stable-brightgreen.svg)
 [![Featured in Awesome Telco](https://img.shields.io/badge/Featured%20in-Awesome%20Telco-6f42c1.svg)](https://github.com/ravens/awesome-telco#imsi-catcher-detection)
 
 
@@ -29,6 +29,8 @@
 </table>
 
 # ICdetection — Open-Source Cellular Security Auditor
+
+Version 2.10.4 adds radio context collection. The serving cell is now selected by the modem's `PRIMARY_SERVING` connection status rather than by signal strength, and only that cell is analysed: with carrier aggregation, a secondary carrier could previously be scored and stored as the serving cell. If Android declares a primary whose signal sample is unusable, that cycle abstains instead of promoting a secondary; fallback is allowed only when no primary was declared. Connection state, secondary carriers, bandwidth, declared bands, additional PLMNs, closed subscriber group (possible femtocell) and `ServiceState` (in service, emergency only, out of service, roaming, network and SIM PLMN) are collected for forensics, shown in a new RADIO tab and a main-screen card, and exported. Service-state events are processed in order, persisted before the event list refreshes and rejected if stale; live channel and bandwidth telemetry still updates on every reading. None of these fields feeds a heuristic or the score. Schema 19 is additive and existing history is preserved.
 
 Version 2.10.3 corrects H15 RF-identity stability. H15 no longer freezes its own baseline when it is the only failing heuristic, and PCI persistence is now based on independent alternation episodes inside the same ARFCN rather than repeated samples from one handover. A stable one-way PCI replacement is treated as reconfiguration rather than RF instability. This is a detection-baseline dataset cut for H15; H15 weight, global thresholds, H1-H14/H16, Temporal Confidence and Threat Episode correlation remain unchanged. Schema 18 and existing history are preserved.
 
@@ -93,7 +95,7 @@ authenticated” or “guaranteed safe”.
 
 > **⚠️ Upgrading from a version older than v2.1.1:** uninstall the previous version first. Android refuses an in-place update when the APK is not signed with the same keystore, and a clean database is required because records written before v2.1.1 may hold an antenna coordinate where the device GPS position belongs. Export your CSV first if you want to keep the old history. v2.1.2 and later releases signed with the same keystore update in place normally. See `Status.md`.
 
-ICdetection v2.10.3 is the current stable release. The detector remains conservative and local-first.
+ICdetection v2.10.4 is the current stable release. The detector remains conservative and local-first.
 Version 2.10.3 changes only the semantics of H15 RF-identity stability so modem/handover artefacts do
 not become self-sustaining evidence. RF identity is still evaluated per carrier, while persistent
 one-way PCI/ARFCN changes remain handled by the separate historical reconfiguration quarantine.
@@ -759,7 +761,7 @@ Derivative works must remain open-source under GPL-compatible licensing.
 
 Thank you to everyone who has followed the project through its many iterations.
 
-ICdetection v2.10.3 is the current stable release within the boundaries of what Android userland
+ICdetection v2.10.4 is the current stable release within the boundaries of what Android userland
 allows without root or direct baseband access.
 
 Future updates will focus on bug fixes, field validation, false-positive analysis, and minor improvements discovered through real-world usage.

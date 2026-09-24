@@ -72,6 +72,29 @@ fun LiveTerminalPanel(logs: List<String>) {
 internal fun localizeTerminalLine(line: String): String {
     var translated = line
     val replacements = linkedMapOf(
+        // v2.10.4 — Líneas [RADIO] y [SERVICIO]. Van antes que las genéricas ("Celda ", etc.)
+        // y las frases largas antes que las cortas que contienen.
+        "[SERVICIO]" to "[SERVICE]",
+        "Estado de servicio" to "Service state",
+        "EN SERVICIO" to "IN SERVICE",
+        "SIN SERVICIO" to "OUT OF SERVICE",
+        "SOLO EMERGENCIAS" to "EMERGENCY ONLY",
+        "RADIO APAGADA" to "RADIO OFF",
+        "red anunciada distinta de la SIM sin roaming" to "network PLMN differs from SIM without roaming",
+        "selección manual de red" to "manual network selection",
+        " no registrado ·" to " not registered ·",
+        " registrado ·" to " registered ·",
+        "roaming=sí" to "roaming=yes",
+        " · datos=" to " · data=",
+        " · red=" to " · network=",
+        "sin portadoras secundarias" to "no secondary carriers",
+        "portadoras secundarias" to "secondary carriers",
+        "estado de conexión" to "connection state",
+        "entradas registradas" to "registered entries",
+        "Servidora " to "Serving ",
+        "Celda de grupo cerrado" to "Closed subscriber group cell",
+        "posible femtocelda" to "possible femtocell",
+        " nombre=" to " name=",
         "Celda ya verificada" to "Cell already verified",
         "Coordenadas frescas rellenadas" to "Fresh coordinates filled",
         "GPS inestable tras espera" to "GPS unstable after waiting",

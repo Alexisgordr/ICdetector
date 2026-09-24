@@ -1,0 +1,1 @@
+Radio context collection. PRIMARY_SERVING is authoritative; an unusable declared primary makes the cycle abstain instead of promoting a secondary. Radio shows live context while service events are ordered and persisted before refresh. Includes connection state, secondary carriers, bandwidth, bands, CSG and CSV export. Collection only: scoring unchanged. Schema 19 additive.
