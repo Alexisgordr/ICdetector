@@ -1,12 +1,12 @@
 ![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)
 ![Platform](https://img.shields.io/badge/Platform-Android%2010%2B-green.svg)
 ![Root Required](https://img.shields.io/badge/Root-Not%20Required-brightgreen.svg)
-![Status](https://img.shields.io/badge/Status-v2.10.2%20release-blue.svg)
+![Status](https://img.shields.io/badge/Status-v2.10.3%20candidate-orange.svg)
 [![Featured in Awesome Telco](https://img.shields.io/badge/Featured%20in-Awesome%20Telco-6f42c1.svg)](https://github.com/ravens/awesome-telco#imsi-catcher-detection)
 
 
 <table>
-  
+
   <tr>
     <td width="60%" valign="top">
       <h3>Forensic Cellular Monitoring Interface</h3>
@@ -30,11 +30,7 @@
 
 # ICdetection — Open-Source Cellular Security Auditor
 
-Version 2.10.2 includes the Stable-Site RF-neighbour compatibility work and fixes Stable-Site learning on devices that expose useful neighbour RAT/ARFCN/PCI
-without a complete Cell ID. Such observations are stored as explicitly local `RF_CONTEXT`
-fingerprints, never as cellular identities. Site maturity still requires independent days and
-reports whether full identity, RF-only, or no usable neighbour capability is available. Stable-Site
-remains isolated in shadow mode and schema 18 preserves the existing database.
+Version 2.10.3 corrects H15 RF-identity stability. Its own isolated failures no longer freeze the baseline, and persistence now means repeated alternation episodes inside one ARFCN rather than consecutive samples from one handover. A one-way stable PCI replacement is left to historical reconfiguration quarantine. This release is a dataset cut for H15; schema 18 and existing history are preserved.
 
 ICdetection is an open-source Android application focused on cellular-network auditing, heuristic anomaly detection, radio telemetry analysis, forensic logging, and local historical baseline learning.
 
@@ -736,8 +732,7 @@ If you have questions, find mistakes, or run into issues, please open an issue. 
 
 The detection baseline is stable/frozen while real-world data is collected. Future detection changes will be based on observed behavior, false positives, and field evidence rather than adding heuristics for their own sake.
 
-Best regards,  
+Best regards,
 Alexis
 
 Carpe diem.
-

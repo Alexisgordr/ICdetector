@@ -11,6 +11,9 @@ This manual explains how to operate the application, interpret its results, inve
 
 Stable-Site RF-only neighbour evidence now has deterministic retention matching complete neighbour identities. Exported site maturity is calculated with the same policy used by the application, and export validation applies technology-specific PCI limits. The database schema remains 18 and existing history is retained.
 
+## Version 2.10.3
+
+H15 detects repeated PCI alternation within one ARFCN. Consecutive observations during a single handover count as one episode; the PCI must return after another PCI to establish an independent episode. A stable one-way replacement is handled as historical reconfiguration. H15-only failures remain in H15's own baseline, preventing self-latching. This changes the H15 dataset baseline while preserving schema 18 and the existing database.
 ---
 
 ## 1. What ICdetection does
@@ -614,5 +617,3 @@ When reporting bugs, provide enough technical detail to reproduce the issue, but
 **Stay observant. Verify context. Preserve evidence carefully.**
 
 *Developed by Alexis Gómez Rodríguez.*
-
-

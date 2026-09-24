@@ -26,6 +26,11 @@ package com.alexisgordr.icdetector.models
  * Por eso H15 pasa a comparar PCI ÚNICAMENTE dentro de una misma portadora. Un clon real que
  * reconfigura su PCI lo hace en su propia portadora, así que no se pierde detección.
  *
+ * v2.10.3 — H15 significa alternancia, no sustitución permanente. Dos muestras consecutivas de
+ * un handover forman un episodio; un PCI necesita reaparecer después de otro PCI para demostrar
+ * un segundo episodio independiente. Un cambio único que permanece estable se deja a la
+ * cuarentena histórica, evitando convertir una reconfiguración legítima en inestabilidad.
+ *
  * Clave del mapa = ARFCN observado; [UNKNOWN_ARFCN] agrupa las filas antiguas sin ARFCN
  * registrado. Vacío = historial sin datos de portadora → H15 usa la lógica global anterior.
  */
@@ -38,7 +43,15 @@ data class CellRfStability(
     /** ARFCN -> lista de (PCI, nº de observaciones) en los últimos 30 días. */
     val pciByArfcn: Map<Int, List<Pair<Int, Int>>> = emptyMap(),
     /** ARFCN -> lista de (PCI, nº de observaciones) en la ventana reciente (48 h). */
-    val recentPciByArfcn: Map<Int, List<Pair<Int, Int>>> = emptyMap()
+    val recentPciByArfcn: Map<Int, List<Pair<Int, Int>>> = emptyMap(),
+    /** PCI -> episodios recientes independientes, para históricos sin desglose por portadora. */
+    val recentPciEpisodes: List<Pair<Int, Int>> = emptyList(),
+    /**
+     * ARFCN -> (PCI, episodios recientes independientes). Un episodio es una ejecución continua
+     * del mismo PCI dentro de la misma portadora; solo volver a ese PCI después de observar otro
+     * PCI en esa portadora abre un episodio nuevo. No depende de un intervalo temporal arbitrario.
+     */
+    val recentPciEpisodesByArfcn: Map<Int, List<Pair<Int, Int>>> = emptyMap()
 ) {
     companion object {
         /** Clave para observaciones sin ARFCN registrado (filas anteriores a la migración v6). */

@@ -32,6 +32,7 @@ import com.alexisgordr.icdetector.models.CellTransitionSummary
 import com.alexisgordr.icdetector.models.LocalCellTrustEvidence
 import com.alexisgordr.icdetector.models.LocalRfReconfiguration
 import com.alexisgordr.icdetector.models.LOCAL_TRUST_RECONFIGURATION_HISTORY_LIKE
+import com.alexisgordr.icdetector.models.SUBTHRESHOLD_PREFIX
 import com.alexisgordr.icdetector.models.MobilityGeometrySnapshot
 import com.alexisgordr.icdetector.models.MobilityTripSummary
 import com.alexisgordr.icdetector.models.MobilityGeometryProjection
@@ -2360,6 +2361,12 @@ class CellDbHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME, 
         // v2.1: mismo recuento de PCI, pero desglosado por portadora (ARFCN). Ver CellRfStability.
         val pciByArfcn = HashMap<Int, HashMap<Int, Int>>()
         val recentPciByArfcn = HashMap<Int, HashMap<Int, Int>>()
+        val recentPciEpisodes = HashMap<Int, Int>()
+        val recentPciEpisodesByArfcn = HashMap<Int, HashMap<Int, Int>>()
+        val lastPciByArfcn = HashMap<Int, Int>()
+        val currentEpisodeReachedRecent = HashMap<Int, Boolean>()
+        var lastGlobalPci: Int? = null
+        var currentGlobalEpisodeReachedRecent = false
         var total = 0
         val db = this.readableDatabase
         val now = System.currentTimeMillis()
@@ -2369,7 +2376,25 @@ class CellDbHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME, 
         val oldThreshold = dateFormat.format(Date(thirtyDaysAgo))
         val recentThreshold = dateFormat.format(Date(recentWindow))
 
-        if (!hasMatureTrustedBaseline(cellId, mnc, tac, mcc, radio, oldThreshold)) {
+        // H15 necesita conservar su propio baseline después de disparar. Además de filas limpias,
+        // admite filas cuyo único fallo sea H15; otras heurísticas nunca contaminan esta historia.
+        val h15Patterns = arrayOf(
+            "Identidad RF inestable:%",
+            "$SUBTHRESHOLD_PREFIX Identidad RF inestable:%",
+            "[%ciclos confirmando] Identidad RF inestable:%"
+        )
+        val eligibleSql = "(($COLUMN_SCORE >= ? AND ($COLUMN_FAILED_H IS NULL OR TRIM($COLUMN_FAILED_H) = '' OR $COLUMN_FAILED_H = 'OK')) " +
+            "OR (($COLUMN_FAILED_H LIKE ? OR $COLUMN_FAILED_H LIKE ? OR $COLUMN_FAILED_H LIKE ?) " +
+            "AND $COLUMN_FAILED_H NOT LIKE '% | %'))"
+        val mature = db.rawQuery(
+            "SELECT COUNT(*),COUNT(DISTINCT substr($COLUMN_TIMESTAMP,1,10)) FROM $TABLE_HISTORY " +
+                "WHERE $COLUMN_CID=? AND $COLUMN_MNC=? AND $COLUMN_TAC=? AND $COLUMN_MCC=? " +
+                "AND $COLUMN_RADIO=? AND $COLUMN_TIMESTAMP>=? AND $eligibleSql",
+            arrayOf(cellId, mnc, tac, mcc, radio.name, oldThreshold,
+                TRUSTED_BASELINE_MIN_SCORE.toString(), *h15Patterns)
+        ).use { it.moveToFirst() && it.getInt(0) >= TRUSTED_BASELINE_MIN_SAMPLES &&
+            it.getInt(1) >= TRUSTED_BASELINE_MIN_DAYS }
+        if (!mature) {
             return CellRfStability(0, emptyList(), emptyList())
         }
 
@@ -2381,14 +2406,15 @@ class CellDbHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME, 
               AND $COLUMN_TAC = ?
               AND $COLUMN_MCC = ?
               AND $COLUMN_RADIO = ?
-              AND $COLUMN_SCORE >= ?
-              AND ($COLUMN_FAILED_H IS NULL OR TRIM($COLUMN_FAILED_H) = '' OR $COLUMN_FAILED_H = 'OK')
+              AND $eligibleSql
               AND $COLUMN_TIMESTAMP > ?
+            ORDER BY $COLUMN_TIMESTAMP ASC, $COLUMN_ID ASC
         """.trimIndent()
 
         val cursor = db.rawQuery(
             query,
-            arrayOf(cellId, mnc, tac, mcc, radio.name, TRUSTED_BASELINE_MIN_SCORE.toString(), oldThreshold)
+            arrayOf(cellId, mnc, tac, mcc, radio.name,
+                TRUSTED_BASELINE_MIN_SCORE.toString(), *h15Patterns, oldThreshold)
         )
         try {
             if (cursor.moveToFirst()) {
@@ -2418,6 +2444,31 @@ class CellDbHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME, 
                             recentPciByArfcn.getOrPut(carrier) { HashMap() }
                                 .let { it[pci] = (it[pci] ?: 0) + 1 }
                         }
+
+                        // Episodios, no muestras: varias lecturas consecutivas de un handover son
+                        // una sola aparición. El mismo PCI solo suma otra vez tras alternar a otro
+                        // PCI en esa misma portadora.
+                        val carrierChanged = lastPciByArfcn[carrier] != pci
+                        if (carrierChanged) {
+                            lastPciByArfcn[carrier] = pci
+                            currentEpisodeReachedRecent[carrier] = isRecent
+                            if (isRecent) recentPciEpisodesByArfcn.getOrPut(carrier) { HashMap() }
+                                .let { it[pci] = (it[pci] ?: 0) + 1 }
+                        } else if (isRecent && currentEpisodeReachedRecent[carrier] != true) {
+                            currentEpisodeReachedRecent[carrier] = true
+                            recentPciEpisodesByArfcn.getOrPut(carrier) { HashMap() }
+                                .let { it[pci] = (it[pci] ?: 0) + 1 }
+                        }
+
+                        val globalChanged = lastGlobalPci != pci
+                        if (globalChanged) {
+                            lastGlobalPci = pci
+                            currentGlobalEpisodeReachedRecent = isRecent
+                            if (isRecent) recentPciEpisodes[pci] = (recentPciEpisodes[pci] ?: 0) + 1
+                        } else if (isRecent && !currentGlobalEpisodeReachedRecent) {
+                            currentGlobalEpisodeReachedRecent = true
+                            recentPciEpisodes[pci] = (recentPciEpisodes[pci] ?: 0) + 1
+                        }
                     }
 
                     if (arfcn != null) {
@@ -2439,7 +2490,11 @@ class CellDbHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME, 
             recentDistinctPci = recentPciCounts.map { it.key to it.value },
             recentDistinctArfcn = recentArfcnCounts.map { it.key to it.value },
             pciByArfcn = pciByArfcn.mapValues { (_, counts) -> counts.map { it.key to it.value } },
-            recentPciByArfcn = recentPciByArfcn.mapValues { (_, counts) -> counts.map { it.key to it.value } }
+            recentPciByArfcn = recentPciByArfcn.mapValues { (_, counts) -> counts.map { it.key to it.value } },
+            recentPciEpisodes = recentPciEpisodes.map { it.key to it.value },
+            recentPciEpisodesByArfcn = recentPciEpisodesByArfcn.mapValues { (_, counts) ->
+                counts.map { it.key to it.value }
+            }
         )
     }
 }

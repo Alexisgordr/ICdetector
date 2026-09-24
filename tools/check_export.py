@@ -84,6 +84,30 @@ def load(path):
         return reader.fieldnames or [], list(reader)
 
 
+def calendar_period_stats(times, row_count):
+    """Periodo inclusivo y densidad solo sobre días que realmente contienen observaciones."""
+    dates = {t.date() for t in times}
+    if not dates:
+        return 0, 0, 0.0
+    calendar_days = (max(dates) - min(dates)).days + 1
+    distinct_days = len(dates)
+    return calendar_days, distinct_days, row_count / distinct_days
+
+
+def ta_unit_diagnostic(unit_rows):
+    """Separa distancia calculable de ceros LTE legacy potencialmente rellenados por el módem."""
+    usable = [r for r in unit_rows if fnum(r, "TAMeters") is not None]
+    zero_lte = [r for r in unit_rows if fnum(r, "TA") == 0]
+    possible_legacy_stub = (
+        len(unit_rows) >= 10
+        and len(zero_lte) / len(unit_rows) >= 0.90
+    )
+    reliable = len(usable)
+    if possible_legacy_stub:
+        reliable -= sum(1 for r in zero_lte if fnum(r, "TAMeters") is not None)
+    return len(usable), reliable, possible_legacy_stub, len(zero_lte)
+
+
 def main(path):
     columns, rows = load(path)
     if not rows:
@@ -248,13 +272,14 @@ def main(path):
             pass
     if times:
         times.sort()
-        span_days = max((times[-1] - times[0]).days, 1)
+        calendar_days, distinct_days, rows_per_observed_day = calendar_period_stats(times, len(rows))
         gaps = [(b - a).total_seconds() / 3600 for a, b in zip(times, times[1:])]
         big = [g for g in gaps if g > 6]
-        print(f"  Periodo: {times[0].date()} -> {times[-1].date()} ({span_days} días)")
-        print(f"  Días distintos con datos: {len({t.date() for t in times})}")
+        print(f"  Periodo calendario: {times[0].date()} -> {times[-1].date()} "
+              f"({calendar_days} días, ambos extremos incluidos)")
+        print(f"  Días distintos con datos: {distinct_days}")
         print(f"  Huecos > 6 h: {len(big)}" + (f" (mayor: {max(big):.1f} h)" if big else ""))
-        print(f"  Filas/día de media: {len(rows) / span_days:.1f}")
+        print(f"  Filas/día con datos de media: {rows_per_observed_day:.1f}")
 
     # ---- Disponibilidad del Timing Advance ---------------------------------------------------
     # La pregunta "¿mi teléfono reporta TA?" no se podía contestar antes de v2.1 porque el dato
@@ -274,10 +299,19 @@ def main(path):
         else:
             units = Counter((r.get("TAUnit") or "?").strip() for r in with_ta)
             for unit, n in units.most_common():
-                usable = sum(1 for r in with_ta
-                             if (r.get("TAUnit") or "").strip() == unit
-                             and fnum(r, "TAMeters") is not None)
-                print(f"    {unit:<12} {n:6d} observaciones, {usable} con distancia derivable")
+                unit_rows = [r for r in with_ta if (r.get("TAUnit") or "").strip() == unit]
+                usable, reliable, possible_stub, zero_count = ta_unit_diagnostic(unit_rows)
+                if unit == "LTE_INDEX" and possible_stub:
+                    print(f"    {unit:<12} {n:6d} observaciones, {reliable} con distancia "
+                          f"derivable fiable; {zero_count} TA=0 ambiguos (posible stub legacy)")
+                    notes.append(
+                        f"Patrón agregado legacy: {zero_count}/{n} filas LTE_INDEX tienen TA=0. "
+                        "TA=0 puede ser legítimo individualmente, pero esta concentración puede "
+                        "proceder del antiguo stub del módem; no se cuentan automáticamente como "
+                        "distancia derivable fiable."
+                    )
+                else:
+                    print(f"    {unit:<12} {n:6d} observaciones, {usable} con distancia derivable")
             metres = [fnum(r, "TAMeters") for r in with_ta if fnum(r, "TAMeters") is not None]
             if metres:
                 metres.sort()

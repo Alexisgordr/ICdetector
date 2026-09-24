@@ -1,9 +1,15 @@
 # ICdetection Status
 
+## v2.10.3 — H15 independent RF episodes (local candidate)
+
+**Version code:** 31
+**Database schema:** 18 (unchanged)
+
+H15 now learns through its own isolated failures and requires repeated PCI alternation episodes within the same ARFCN. Consecutive handover samples form one episode; a persistent one-way replacement does not trigger H15. This is a documented dataset cut for H15 only. Other heuristics, weights and global thresholds are unchanged.
 ## v2.10.2 — Stable-Site RF retention and export consistency
 
-**Version code:** 30  
-**Database schema:** 18 (unchanged)  
+**Version code:** 30
+**Database schema:** 18 (unchanged)
 **Enforcement:** disabled / shadow only
 
 RF-only neighbour evidence now expires under the same policy as full neighbour identities. Exported maturity uses the runtime policy directly, and PCI validation is radio-specific. Existing history is preserved; H1–H16, scoring, trust and alerts are unchanged.
@@ -19,8 +25,8 @@ history is retained; H1–H16, scoring, trust and alerts are unchanged.
 
 ## v2.10.0 — Mobility Familiarity and Geometry export (release candidate)
 
-**Database schema:** 17 (additive migration from 16)  
-**Security effect:** none  
+**Database schema:** 17 (additive migration from 16)
+**Security effect:** none
 **Feature flag:** `MOBILITY_FAMILIARITY_ENABLED = true`
 
 The background service now owns a persistent mobility-trip engine. Route familiarity is descriptive
@@ -29,8 +35,8 @@ forensics. Geometry remains read-only and has no trip lifecycle reference. Geome
 
 ## v2.9.1 — emergency motion-sampling correction (local release candidate)
 
-**Version code:** 27  
-**Database schema:** 16 (unchanged)  
+**Version code:** 27
+**Database schema:** 16 (unchanged)
 **Enforcement:** disabled / shadow only
 
 Motion classification now consumes each new GPS timestamp once and is independent from cellular
@@ -296,10 +302,10 @@ or export columns. The v2.3.0 H1–H16 field-validation baseline therefore remai
 
 ## v2.3.0 — mobility-transition coherence release
 
-**Release:** stable  
-**Version code:** 9  
-**Database schema:** 15  
-**Detection baseline:** H1–H16 frozen for field validation  
+**Release:** stable
+**Version code:** 9
+**Database schema:** 15
+**Detection baseline:** H1–H16 frozen for field validation
 **Field-validation freeze:** active from 2026-09-18
 
 v2.3.0 adds H16, a local-first check for physically incoherent serving-cell transitions. It does
@@ -871,4 +877,3 @@ Gracias a todos los que estáis probando la app. Vuestros datos son literalmente
 posible esta versión.
 
 Alexis.
-

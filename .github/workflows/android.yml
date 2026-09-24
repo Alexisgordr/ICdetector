@@ -36,6 +36,7 @@ jobs:
 
       - name: Run source and SQLite regression checks
         run: |
+          python3 tools/test_check_export.py
           python3 tools/check_sql_affinity.py
           python3 tools/check_when_exhaustive.py
 
@@ -75,11 +76,11 @@ jobs:
           sudo udevadm control --reload-rules
           sudo udevadm trigger --name-match=kvm
 
-      - name: Run Stable-Site storage and migration tests
+      - name: Run Stable-Site and H15 storage tests
         uses: reactivecircus/android-emulator-runner@v2
         with:
           api-level: 35
           arch: x86_64
           profile: pixel_2
           disable-animations: true
-          script: ./gradlew connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=com.alexisgordr.icdetector.storage.StableSiteStorageTest
+          script: ./gradlew connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=com.alexisgordr.icdetector.storage.StableSiteStorageTest,com.alexisgordr.icdetector.storage.CellDbHelperTrustEvidenceTest

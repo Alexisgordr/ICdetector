@@ -506,20 +506,25 @@ object ThreatAnalyzer {
                         .map { it.first }.toSet()
                 }
 
-                // Sospechoso solo si >=2 PCI sólidos siguen activos recientemente (parpadeo real).
+                // Sospechoso solo si >=2 PCI sólidos reaparecen en >=2 episodios recientes
+                // independientes. Lecturas consecutivas de un único handover no son persistencia.
+                // Un reemplazo que permanece estable tampoco es H15: es reconfiguración y lo trata
+                // la cuarentena histórica. H15 conserva así su significado estricto de alternancia.
                 val pciFlapping = if (st.pciByArfcn.isNotEmpty()) {
                     st.pciByArfcn.any { (carrier, counts) ->
                         val solid = solidSet(counts)
                         if (solid.size < 2) return@any false
-                        val recent = st.recentPciByArfcn[carrier].orEmpty().map { it.first }.toSet()
-                        solid.intersect(recent).size >= 2
+                        val recurring = st.recentPciEpisodesByArfcn[carrier].orEmpty()
+                            .filter { it.second >= 2 }.map { it.first }.toSet()
+                        solid.intersect(recurring).size >= 2
                     }
                 } else {
                     // Compatibilidad: historial sin desglose por portadora (p. ej. tests o filas
                     // muy antiguas sin ARFCN). Se mantiene la regla global de v2.0.
                     val solidPci = solidSet(st.distinctPci)
-                    val recentPci = st.recentDistinctPci.map { it.first }.toSet()
-                    solidPci.intersect(recentPci).size >= 2
+                    val recurring = st.recentPciEpisodes.filter { it.second >= 2 }
+                        .map { it.first }.toSet()
+                    solidPci.intersect(recurring).size >= 2
                 }
 
                 if (pciFlapping) {

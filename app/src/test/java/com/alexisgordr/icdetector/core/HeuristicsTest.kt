@@ -398,7 +398,8 @@ class HeuristicsTest {
             distinctPci = listOf(50 to 3, 120 to 2),
             distinctArfcn = listOf(1500 to 5),
             recentDistinctPci = listOf(50 to 2, 120 to 2),
-            recentDistinctArfcn = listOf(1500 to 5)
+            recentDistinctArfcn = listOf(1500 to 5),
+            recentPciEpisodes = listOf(50 to 2, 120 to 2)
         )
         assertFalse(analyzeRf(rf).rfStabilityPassed)
     }
@@ -496,7 +497,8 @@ class HeuristicsTest {
             distinctPci = listOf(178 to 12, 290 to 8),
             distinctArfcn = listOf(2850 to 20),
             recentDistinctPci = listOf(178 to 6, 290 to 4),
-            recentDistinctArfcn = listOf(2850 to 10)
+            recentDistinctArfcn = listOf(2850 to 10),
+            recentPciEpisodes = listOf(178 to 2, 290 to 2)
         )
         assertFalse(analyzeRf(rf).rfStabilityPassed)
     }
@@ -533,7 +535,8 @@ class HeuristicsTest {
             recentDistinctPci = listOf(200 to 3, 473 to 3),
             recentDistinctArfcn = listOf(6400 to 6),
             pciByArfcn = mapOf(6400 to listOf(200 to 6, 473 to 7)),
-            recentPciByArfcn = mapOf(6400 to listOf(200 to 3, 473 to 3))
+            recentPciByArfcn = mapOf(6400 to listOf(200 to 3, 473 to 3)),
+            recentPciEpisodesByArfcn = mapOf(6400 to listOf(200 to 2, 473 to 2))
         )
         assertFalse(
             "dos PCI sólidos y recientes en la misma portadora siguen siendo sospechosos",
@@ -566,11 +569,60 @@ class HeuristicsTest {
             recentDistinctPci = listOf(50 to 3, 120 to 2),
             recentDistinctArfcn = emptyList(),
             pciByArfcn = mapOf(unknown to listOf(50 to 6, 120 to 4)),
-            recentPciByArfcn = mapOf(unknown to listOf(50 to 3, 120 to 2))
+            recentPciByArfcn = mapOf(unknown to listOf(50 to 3, 120 to 2)),
+            recentPciEpisodesByArfcn = mapOf(unknown to listOf(50 to 2, 120 to 2))
         )
         assertFalse(analyzeRf(rf).rfStabilityPassed)
     }
 
+
+    @Test fun `H15 CID 79591690 no encadena un handover defectuoso como alternancia`() {
+        // Traza real reducida: PCI 48 dominante; dos lecturas consecutivas de PCI 200 forman
+        // UN episodio, aunque sean dos muestras. Volver a 48 no convierte ese handover en latch.
+        val rf = com.alexisgordr.icdetector.models.CellRfStability(
+            totalObservations = 14,
+            distinctPci = listOf(48 to 12, 200 to 2),
+            distinctArfcn = listOf(2850 to 14),
+            recentDistinctPci = listOf(48 to 6, 200 to 2),
+            recentDistinctArfcn = listOf(2850 to 8),
+            pciByArfcn = mapOf(2850 to listOf(48 to 12, 200 to 2)),
+            recentPciByArfcn = mapOf(2850 to listOf(48 to 6, 200 to 2)),
+            recentPciEpisodesByArfcn = mapOf(2850 to listOf(48 to 2, 200 to 1))
+        )
+        assertTrue(analyzeRf(rf).rfStabilityPassed)
+    }
+
+    @Test fun `H15 conserva alternancia genuina en episodios independientes`() {
+        // 48 -> 200 -> 48 -> 200: cada PCI reaparece tras el contrario; son dos episodios
+        // independientes de ambos valores dentro de la misma portadora.
+        val rf = com.alexisgordr.icdetector.models.CellRfStability(
+            totalObservations = 16,
+            distinctPci = listOf(48 to 10, 200 to 6),
+            distinctArfcn = listOf(2850 to 16),
+            recentDistinctPci = listOf(48 to 5, 200 to 3),
+            recentDistinctArfcn = listOf(2850 to 8),
+            pciByArfcn = mapOf(2850 to listOf(48 to 10, 200 to 6)),
+            recentPciByArfcn = mapOf(2850 to listOf(48 to 5, 200 to 3)),
+            recentPciEpisodesByArfcn = mapOf(2850 to listOf(48 to 2, 200 to 2))
+        )
+        assertFalse(analyzeRf(rf).rfStabilityPassed)
+    }
+
+    @Test fun `H15 trata un cambio persistente de seis horas como reconfiguracion estable`() {
+        // 48 durante semanas -> 200 durante seis horas sigue siendo un solo episodio de 200.
+        // H15 mide alternancia, no un reemplazo estable; la cuarentena histórica trata ese caso.
+        val rf = com.alexisgordr.icdetector.models.CellRfStability(
+            totalObservations = 40,
+            distinctPci = listOf(48 to 30, 200 to 10),
+            distinctArfcn = listOf(2850 to 40),
+            recentDistinctPci = listOf(48 to 5, 200 to 10),
+            recentDistinctArfcn = listOf(2850 to 15),
+            pciByArfcn = mapOf(2850 to listOf(48 to 30, 200 to 10)),
+            recentPciByArfcn = mapOf(2850 to listOf(48 to 5, 200 to 10)),
+            recentPciEpisodesByArfcn = mapOf(2850 to listOf(48 to 1, 200 to 1))
+        )
+        assertTrue(analyzeRf(rf).rfStabilityPassed)
+    }
     @Test fun `H15 no dispara sin datos de estabilidad (null)`() {
         assertTrue(analyzeRf(null).rfStabilityPassed)
     }

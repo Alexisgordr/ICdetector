@@ -250,7 +250,8 @@ class ScenarioTest {
             recentDistinctPci = listOf(200 to 3, 473 to 3),
             recentDistinctArfcn = listOf(6400 to 6),
             pciByArfcn = mapOf(6400 to listOf(200 to 6, 473 to 7)),
-            recentPciByArfcn = mapOf(6400 to listOf(200 to 3, 473 to 3))
+            recentPciByArfcn = mapOf(6400 to listOf(200 to 3, 473 to 3)),
+            recentPciEpisodesByArfcn = mapOf(6400 to listOf(200 to 2, 473 to 2))
         )
         return (1..5).map { i ->
             Cycle(

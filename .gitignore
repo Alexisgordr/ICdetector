@@ -9,6 +9,7 @@ out/
 .android-user-build/
 .android-*/
 .tmp/
+__pycache__/
 build/
 app/build/
 captures/

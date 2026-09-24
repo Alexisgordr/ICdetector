@@ -1,5 +1,13 @@
 # Changelog
 
+## 2.10.3
+
+- H15 no longer freezes its own RF baseline: observations whose sole failure is H15 remain eligible for H15 history, while rows that also failed another heuristic remain excluded.
+- PCI persistence now requires independent alternation episodes within the same ARFCN. Consecutive samples from one handover count once; a PCI must disappear and later return after another PCI to form a new episode.
+- A stable one-way PCI replacement is treated as operator reconfiguration rather than RF instability. H15 weight, global thresholds, H1-H14/H16, TemporalConfidence and ThreatEpisodeTracker are unchanged.
+- `check_export.py` reports inclusive calendar span, averages rows over days that contain data and identifies aggregate legacy `LTE_INDEX`/TA=0 stub patterns without declaring an individual TA=0 invalid.
+- This H15 semantic correction is a dataset cut: comparisons across v2.10.2 and v2.10.3 must account for the changed RF-stability baseline.
+- Database schema remains 18; existing history is preserved.
 ## 2.10.2
 
 - RF-only Stable-Site neighbour context now follows the same retention policy as full neighbour identities: old day evidence and stale fingerprints are pruned deterministically.
@@ -731,4 +739,3 @@
 - `versionName`: `2.1`
 - `versionCode`: `3`
 - Database schema: `12`
-
