@@ -991,6 +991,7 @@ class MiniICService : Service() {
                         }
                         stableSitePreviousIdentity = active.identityKey
                         val siteEvidence = stableSiteDecision.evidence
+                        val neighbourDiagnostic = com.alexisgordr.icdetector.core.StableSiteNeighbourEvidence.diagnostic(neighbors)
                         val siteLog = "${stableSiteDecision.featureState}|${motionEvidence.state}|${motionEvidence.reason}|${siteEvidence?.siteNeighbourDays}|${stableSiteDecision.wouldTrigger}|${stableSiteDecision.enforced}"
                         if (siteLog != lastStableSiteLog) {
                             lastStableSiteLog = siteLog
@@ -998,6 +999,9 @@ class MiniICService : Service() {
                                 "[SITE]",
                                 "Protección=${stableSiteDecision.featureState}, sitio=${if (siteKey != null) "detectado" else "no disponible"}, " +
                                     "movimiento=${motionEvidence.state} (${motionEvidence.reason}), vecinos=${siteEvidence?.siteNeighbourDays ?: 0} días, " +
+                                    "capacidad=${siteEvidence?.neighbourCapability ?: neighbourDiagnostic.capability}, " +
+                                    "Neighbours raw=${neighbourDiagnostic.raw} fullIdentity=${neighbourDiagnostic.fullIdentity} rfOnly=${neighbourDiagnostic.rfOnly} withoutUsefulRf=${neighbourDiagnostic.withoutUsefulRf}, " +
+                                    "madurez=${siteEvidence?.maturityReason ?: "NO_SITE_DATA"}, " +
                                     "aplicación=${when { stableSiteDecision.enforced -> "SITE_UNVERIFIED"; stableSiteDecision.wouldTrigger -> "SOMBRA: aplicaría SITE_UNVERIFIED"; else -> "NO ACTIVA" }}"
                             )
                         }

@@ -44,7 +44,7 @@ import java.util.Locale
 class CellDbHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME, null, DATABASE_VERSION), ForensicStore, MobilityFamiliarityStore {
     companion object {
         private const val DATABASE_NAME = "icdetector_history.db"
-        private const val DATABASE_VERSION = 17
+        private const val DATABASE_VERSION = 18
         const val TABLE_HISTORY = "history"
         const val COLUMN_ID = "id"
         const val COLUMN_TIMESTAMP = "timestamp"
@@ -96,6 +96,8 @@ class CellDbHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME, 
         const val TABLE_SITE_MOTION_DAYS = "site_motion_days"
         const val TABLE_SITE_HOLDS = "site_holds"
         const val TABLE_SITE_SHADOW_TRIGGERS = "site_shadow_triggers"
+        const val TABLE_SITE_RF_NEIGHBOURS = "site_rf_neighbours"
+        const val TABLE_SITE_RF_NEIGHBOUR_DAYS = "site_rf_neighbour_days"
         const val TABLE_MOBILITY_TRIPS = "mobility_trips"
         const val TABLE_MOBILITY_TRIP_CELLS = "mobility_trip_cells"
         const val TABLE_MOBILITY_TRIP_EDGES = "mobility_trip_edges"
@@ -198,6 +200,29 @@ class CellDbHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME, 
             // puede barrer. En ninguno de los dos casos hay nada que salvar, y fallar aquí
             // impediría abrir la base entera.
         }
+    }
+
+    override fun onOpen(db: SQLiteDatabase) {
+        super.onOpen(db)
+        // v2.10.1 was still local when RAT-specific validation was hardened. If a development
+        // install already persisted an impossible sentinel/range, remove only that RF context;
+        // serving history, full neighbour identities and every valid fingerprint remain intact.
+        val exists = db.rawQuery(
+            "SELECT 1 FROM sqlite_master WHERE type='table' AND name=? LIMIT 1",
+            arrayOf(TABLE_SITE_RF_NEIGHBOURS)
+        ).use { it.moveToFirst() }
+        if (!exists) return
+        val valid = "((radio='LTE' AND arfcn BETWEEN 0 AND 262143 AND pci BETWEEN 0 AND 503) OR " +
+            "(radio='NR' AND arfcn BETWEEN 0 AND 3279165 AND pci BETWEEN 0 AND 1007) OR " +
+            "(radio='UMTS' AND arfcn BETWEEN 0 AND 16383 AND pci BETWEEN 0 AND 511)) AND " +
+            "fingerprint=('RFCTX:v1:'||radio||':'||arfcn||':'||pci)"
+        db.beginTransaction()
+        try {
+            db.execSQL("DELETE FROM $TABLE_SITE_RF_NEIGHBOUR_DAYS WHERE EXISTS (SELECT 1 FROM $TABLE_SITE_RF_NEIGHBOURS r WHERE r.site_key=$TABLE_SITE_RF_NEIGHBOUR_DAYS.site_key AND r.fingerprint=$TABLE_SITE_RF_NEIGHBOUR_DAYS.fingerprint AND NOT ($valid))")
+            db.execSQL("DELETE FROM $TABLE_SITE_RF_NEIGHBOURS WHERE NOT ($valid)")
+            db.execSQL("DELETE FROM $TABLE_SITE_RF_NEIGHBOUR_DAYS WHERE NOT EXISTS (SELECT 1 FROM $TABLE_SITE_RF_NEIGHBOURS r WHERE r.site_key=$TABLE_SITE_RF_NEIGHBOUR_DAYS.site_key AND r.fingerprint=$TABLE_SITE_RF_NEIGHBOUR_DAYS.fingerprint)")
+            db.setTransactionSuccessful()
+        } finally { db.endTransaction() }
     }
 
     override fun onCreate(db: SQLiteDatabase) {
@@ -309,6 +334,7 @@ class CellDbHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME, 
             try { db.execSQL("ALTER TABLE $TABLE_CELL_TRANSITIONS ADD COLUMN mobility_last_seen_ms INTEGER") } catch (_: Exception) {}
             createMobilityTables(db)
         }
+        if (oldVersion < 18) createStableSiteRfNeighbourTables(db)
     }
 
     private fun createStableSiteTables(db: SQLiteDatabase) {
@@ -320,6 +346,13 @@ class CellDbHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME, 
         db.execSQL("CREATE TABLE IF NOT EXISTS $TABLE_SITE_SHADOW_TRIGGERS (episode_id TEXT PRIMARY KEY NOT NULL, site_key TEXT, previous_identity TEXT, candidate_identity TEXT NOT NULL, first_seen_ms INTEGER NOT NULL, last_seen_ms INTEGER NOT NULL, evaluated_ms INTEGER, closed_ms INTEGER, shadow_recorded INTEGER NOT NULL DEFAULT 0, reason TEXT, motion_state TEXT, feature_state TEXT, globally_known INTEGER, known_at_site INTEGER, seen_as_neighbour INTEGER, serving_days INTEGER, neighbour_days INTEGER, corroborated INTEGER NOT NULL DEFAULT 0)")
         db.execSQL("CREATE INDEX IF NOT EXISTS idx_site_events_seen ON $TABLE_SITE_EVENTS(seen_ms)")
         db.execSQL("CREATE INDEX IF NOT EXISTS idx_site_cells_seen ON $TABLE_SITE_CELLS(last_seen_ms)")
+        createStableSiteRfNeighbourTables(db)
+    }
+
+    private fun createStableSiteRfNeighbourTables(db: SQLiteDatabase) {
+        db.execSQL("CREATE TABLE IF NOT EXISTS $TABLE_SITE_RF_NEIGHBOURS (site_key TEXT NOT NULL, fingerprint TEXT NOT NULL, radio TEXT NOT NULL, arfcn INTEGER NOT NULL, pci INTEGER NOT NULL, mcc TEXT, mnc TEXT, tac TEXT, first_seen_ms INTEGER NOT NULL, last_seen_ms INTEGER NOT NULL, observations INTEGER NOT NULL DEFAULT 0, PRIMARY KEY(site_key,fingerprint))")
+        db.execSQL("CREATE TABLE IF NOT EXISTS $TABLE_SITE_RF_NEIGHBOUR_DAYS (site_key TEXT NOT NULL, fingerprint TEXT NOT NULL, day TEXT NOT NULL, PRIMARY KEY(site_key,fingerprint,day))")
+        db.execSQL("CREATE INDEX IF NOT EXISTS idx_site_rf_neighbours_seen ON $TABLE_SITE_RF_NEIGHBOURS(last_seen_ms)")
     }
 
     private fun createTransitionTable(db: SQLiteDatabase) {
@@ -673,7 +706,7 @@ class CellDbHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME, 
         )
     }
 
-    /** Schema 16 evidence. The event key makes retries and duplicate modem callbacks idempotent. */
+    /** Stable-Site evidence. Full identities and local RF fingerprints are persisted separately. */
     fun recordStableSiteContext(
         eventKey: String,
         siteKey: String,
@@ -684,6 +717,8 @@ class CellDbHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME, 
     ) {
         val day = SimpleDateFormat("yyyy-MM-dd", Locale.ROOT).format(Date(wallMs))
         val observations = buildList { add(serving.identityKey to "SERVING"); neighbours.forEach { if (it.cellId != "N/A") add(it.identityKey to "NEIGHBOUR") } }.distinct()
+        val rfNeighbours = neighbours.mapNotNull(StableSiteNeighbourEvidence::rfFingerprint)
+            .distinctBy { it.value }
         val db = writableDatabase
         db.beginTransaction()
         try {
@@ -698,6 +733,23 @@ class CellDbHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME, 
                     })
                     db.execSQL("UPDATE $TABLE_SITE_CELLS SET observations=observations+1,last_seen_ms=MAX(last_seen_ms,?) WHERE site_key=? AND cell_identity=? AND role=?", arrayOf<Any>(wallMs, siteKey, identity, role))
                     db.insertWithOnConflict(TABLE_SITE_DAYS, null, ContentValues().apply { put("site_key", siteKey); put("cell_identity", identity); put("role", role); put("day", day) }, SQLiteDatabase.CONFLICT_IGNORE)
+                }
+            }
+            rfNeighbours.forEach { rf ->
+                val eventIdentity = "RF:${rf.value}"
+                val inserted = db.insertWithOnConflict(TABLE_SITE_EVENTS, null, ContentValues().apply {
+                    put("event_key", eventKey); put("site_key", siteKey); put("cell_identity", eventIdentity); put("role", "RF_NEIGHBOUR"); put("seen_ms", wallMs)
+                }, SQLiteDatabase.CONFLICT_IGNORE) != -1L
+                if (inserted) {
+                    val source = neighbours.first { StableSiteNeighbourEvidence.rfFingerprint(it)?.value == rf.value }
+                    val updated = db.update(TABLE_SITE_RF_NEIGHBOURS, ContentValues().apply { put("last_seen_ms", wallMs) }, "site_key=? AND fingerprint=?", arrayOf(siteKey, rf.value))
+                    if (updated == 0) db.insertOrThrow(TABLE_SITE_RF_NEIGHBOURS, null, ContentValues().apply {
+                        put("site_key", siteKey); put("fingerprint", rf.value); put("radio", rf.radio.name); put("arfcn", rf.arfcn); put("pci", rf.pci)
+                        put("mcc", source.mcc.takeUnless { it == "N/A" }); put("mnc", source.mnc.takeUnless { it == "N/A" }); put("tac", source.tac.takeUnless { it == "N/A" })
+                        put("first_seen_ms", wallMs); put("last_seen_ms", wallMs); put("observations", 0)
+                    })
+                    db.execSQL("UPDATE $TABLE_SITE_RF_NEIGHBOURS SET observations=observations+1,last_seen_ms=MAX(last_seen_ms,?) WHERE site_key=? AND fingerprint=?", arrayOf<Any>(wallMs, siteKey, rf.value))
+                    db.insertWithOnConflict(TABLE_SITE_RF_NEIGHBOUR_DAYS, null, ContentValues().apply { put("site_key", siteKey); put("fingerprint", rf.value); put("day", day) }, SQLiteDatabase.CONFLICT_IGNORE)
                 }
             }
             if (motion.state != MotionState.UNKNOWN) db.insertWithOnConflict(TABLE_SITE_MOTION_DAYS, null, ContentValues().apply {
@@ -719,13 +771,10 @@ class CellDbHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME, 
         val servingDays = scalar("SELECT COUNT(DISTINCT day) FROM $TABLE_SITE_DAYS WHERE site_key=? AND role='SERVING'", arrayOf(siteKey))
         val staticDays = scalar("SELECT COUNT(*) FROM $TABLE_SITE_MOTION_DAYS WHERE site_key=? AND state='STATIC_CONFIRMED'", arrayOf(siteKey))
         val neighbourDays = scalar("SELECT COUNT(DISTINCT day) FROM $TABLE_SITE_DAYS WHERE site_key=? AND role='NEIGHBOUR'", arrayOf(siteKey))
+        val rfNeighbourDays = scalar("SELECT COUNT(DISTINCT day) FROM $TABLE_SITE_RF_NEIGHBOUR_DAYS WHERE site_key=?", arrayOf(siteKey))
         val servingObs = scalar("SELECT COALESCE(SUM(observations),0) FROM $TABLE_SITE_CELLS WHERE site_key=? AND role='SERVING'", arrayOf(siteKey))
-        val state = when {
-            servingDays == 0 -> StableSiteFeatureState.BOOTSTRAP
-            servingDays < 5 || staticDays < 2 -> StableSiteFeatureState.LEARNING
-            servingDays < 7 || staticDays < 3 || neighbourDays < 3 || servingObs < 30 -> StableSiteFeatureState.SHADOW_READY
-            else -> StableSiteFeatureState.ACTIVE
-        }
+        val maturity = StableSiteMaturityPolicy.evaluate(servingDays, staticDays, neighbourDays, rfNeighbourDays, servingObs)
+        val state = maturity.state
         val currentServingDays = roleDays(current.identityKey, "SERVING")
         val currentNeighbourDays = roleDays(current.identityKey, "NEIGHBOUR")
         val globallyKnown = scalar("SELECT COUNT(*) FROM $TABLE_HISTORY WHERE $COLUMN_CID=? AND $COLUMN_MNC=? AND $COLUMN_TAC=? AND $COLUMN_MCC=? AND $COLUMN_RADIO=? LIMIT 1", arrayOf(current.cellId,current.mnc,current.tac,current.mcc,current.radioTech.name)) > 0
@@ -739,7 +788,7 @@ class CellDbHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME, 
             arrayOf(siteKey, current.identityKey)
         ).use { cursor -> if (cursor.moveToFirst()) cursor.getString(0) else null }
         val previousDays = effectivePreviousIdentity?.let { roleDays(it, "SERVING") } ?: 0
-        val evidence = StableSiteEvidence(siteKey, state, servingDays, staticDays, neighbourDays, currentServingDays, currentNeighbourDays, globallyKnown, previousDays, motion, servingObs, effectivePreviousIdentity)
+        val evidence = StableSiteEvidence(siteKey, state, servingDays, staticDays, maxOf(neighbourDays, rfNeighbourDays), currentServingDays, currentNeighbourDays, globallyKnown, previousDays, motion, servingObs, effectivePreviousIdentity, neighbourDays, rfNeighbourDays, maturity.capability, maturity.reason)
         // v2.9.0 initially measures wouldTrigger in shadow mode. Activation is deliberately
         // deferred until field telemetry demonstrates an acceptable false-positive rate.
         return StableSiteEvaluator.evaluate(evidence)
@@ -822,7 +871,7 @@ class CellDbHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME, 
     }
     private fun releaseStableSiteHold(episodeId:String) { writableDatabase.update(TABLE_SITE_HOLDS,ContentValues().apply{put("active",0)},"episode_id=?",arrayOf(episodeId)) }
 
-    fun resetStableSiteLearning() { val db=writableDatabase; db.beginTransaction(); try { listOf(TABLE_SITE_EVENTS,TABLE_SITE_DAYS,TABLE_SITE_CELLS,TABLE_SITE_MOTION_DAYS,TABLE_SITE_HOLDS,TABLE_SITE_SHADOW_TRIGGERS).forEach { db.delete(it,null,null) }; db.setTransactionSuccessful() } finally { db.endTransaction() } }
+    fun resetStableSiteLearning() { val db=writableDatabase; db.beginTransaction(); try { listOf(TABLE_SITE_EVENTS,TABLE_SITE_DAYS,TABLE_SITE_CELLS,TABLE_SITE_RF_NEIGHBOURS,TABLE_SITE_RF_NEIGHBOUR_DAYS,TABLE_SITE_MOTION_DAYS,TABLE_SITE_HOLDS,TABLE_SITE_SHADOW_TRIGGERS).forEach { db.delete(it,null,null) }; db.setTransactionSuccessful() } finally { db.endTransaction() } }
 
     /** Privacy-reduced field export: hashed sites, aggregate cells, motion bands and episodes. */
     fun getStableSiteExportFiles(): LinkedHashMap<String,String> {
@@ -835,15 +884,23 @@ class CellDbHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME, 
         val siteStats="SELECT s.site_key AS site_key,SUM(CASE WHEN s.role='SERVING' THEN s.observations ELSE 0 END) AS serving_observations,"+
                 "(SELECT COUNT(DISTINCT d.day) FROM $TABLE_SITE_DAYS d WHERE d.site_key=s.site_key AND d.role='SERVING') AS serving_days,"+
                 "(SELECT COUNT(DISTINCT m.day) FROM $TABLE_SITE_MOTION_DAYS m WHERE m.site_key=s.site_key AND m.state='STATIC_CONFIRMED') AS static_days,"+
-                "(SELECT COUNT(DISTINCT d.day) FROM $TABLE_SITE_DAYS d WHERE d.site_key=s.site_key AND d.role='NEIGHBOUR') AS neighbour_days,MIN(s.first_seen_ms) AS first_seen,MAX(s.last_seen_ms) AS last_seen FROM $TABLE_SITE_CELLS s GROUP BY s.site_key"
-        files += query("sites.csv","site_key,feature_state,serving_observations,serving_distinct_days,static_distinct_days,neighbour_distinct_days,first_seen_ms,last_seen_ms",
-            "SELECT site_key,CASE WHEN serving_days=0 THEN 'BOOTSTRAP' WHEN serving_days<5 OR static_days<2 THEN 'LEARNING' WHEN serving_days<7 OR static_days<3 OR neighbour_days<3 OR serving_observations<30 THEN 'SHADOW_READY' ELSE 'ACTIVE' END,"+
-                "serving_observations,serving_days,static_days,neighbour_days,first_seen,last_seen FROM ($siteStats)")
+                "(SELECT COUNT(DISTINCT d.day) FROM $TABLE_SITE_DAYS d WHERE d.site_key=s.site_key AND d.role='NEIGHBOUR') AS full_neighbour_days,"+
+                "(SELECT COALESCE(SUM(c.observations),0) FROM $TABLE_SITE_CELLS c WHERE c.site_key=s.site_key AND c.role='NEIGHBOUR') AS full_neighbour_observations,"+
+                "(SELECT COUNT(DISTINCT r.day) FROM $TABLE_SITE_RF_NEIGHBOUR_DAYS r WHERE r.site_key=s.site_key) AS rf_neighbour_days,"+
+                "(SELECT COALESCE(SUM(r.observations),0) FROM $TABLE_SITE_RF_NEIGHBOURS r WHERE r.site_key=s.site_key) AS rf_neighbour_observations,"+
+                "MIN(s.first_seen_ms) AS first_seen,MAX(s.last_seen_ms) AS last_seen FROM $TABLE_SITE_CELLS s GROUP BY s.site_key"
+        val stateSql="CASE WHEN serving_days=0 THEN 'BOOTSTRAP' WHEN serving_days<5 OR static_days<2 THEN 'LEARNING' WHEN serving_days<7 OR static_days<3 OR (full_neighbour_days<3 AND rf_neighbour_days<3) OR serving_observations<30 THEN 'SHADOW_READY' ELSE 'ACTIVE' END"
+        val capabilitySql="CASE WHEN full_neighbour_days>=3 THEN 'FULL_NEIGHBOUR_IDENTITY' WHEN rf_neighbour_days>0 THEN 'RF_NEIGHBOUR_ONLY' WHEN full_neighbour_days>0 THEN 'FULL_NEIGHBOUR_IDENTITY' ELSE 'NO_NEIGHBOUR_DATA' END"
+        val reasonSql="CASE WHEN serving_days<7 THEN 'NEEDS_SERVING_DAYS' WHEN static_days<3 THEN 'NEEDS_STATIC_DAYS' WHEN serving_observations<30 THEN 'NEEDS_SERVING_OBSERVATIONS' WHEN full_neighbour_days>=3 THEN 'MATURE_FULL_NEIGHBOUR_IDENTITY' WHEN rf_neighbour_days>=3 THEN 'MATURE_RF_NEIGHBOUR_ONLY' WHEN full_neighbour_days BETWEEN 1 AND 2 THEN 'NEEDS_FULL_NEIGHBOUR_DAYS' WHEN rf_neighbour_days BETWEEN 1 AND 2 THEN 'NEEDS_RF_NEIGHBOUR_DAYS' ELSE 'NO_USABLE_NEIGHBOUR_DATA' END"
+        files += query("sites.csv","site_key,feature_state,neighbour_capability,maturity_reason,serving_observations,serving_distinct_days,static_distinct_days,full_neighbour_observations,full_neighbour_distinct_days,rf_neighbour_observations,rf_neighbour_distinct_days,first_seen_ms,last_seen_ms",
+            "SELECT site_key,$stateSql,$capabilitySql,$reasonSql,serving_observations,serving_days,static_days,full_neighbour_observations,full_neighbour_days,rf_neighbour_observations,rf_neighbour_days,first_seen,last_seen FROM ($siteStats)")
         files += query("site_cells.csv","site_key,cell_identity,serving_observations,serving_distinct_days,neighbour_observations,neighbour_distinct_days,first_serving_ms,last_serving_ms,first_neighbour_ms,last_neighbour_ms",
             "SELECT s.site_key,s.cell_identity,SUM(CASE WHEN s.role='SERVING' THEN s.observations ELSE 0 END),"+
                 "(SELECT COUNT(*) FROM $TABLE_SITE_DAYS d WHERE d.site_key=s.site_key AND d.cell_identity=s.cell_identity AND d.role='SERVING'),"+
                 "SUM(CASE WHEN s.role='NEIGHBOUR' THEN s.observations ELSE 0 END),(SELECT COUNT(*) FROM $TABLE_SITE_DAYS d WHERE d.site_key=s.site_key AND d.cell_identity=s.cell_identity AND d.role='NEIGHBOUR'),"+
                 "MIN(CASE WHEN s.role='SERVING' THEN s.first_seen_ms END),MAX(CASE WHEN s.role='SERVING' THEN s.last_seen_ms END),MIN(CASE WHEN s.role='NEIGHBOUR' THEN s.first_seen_ms END),MAX(CASE WHEN s.role='NEIGHBOUR' THEN s.last_seen_ms END) FROM $TABLE_SITE_CELLS s GROUP BY s.site_key,s.cell_identity")
+        files += query("site_rf_neighbours.csv","site_key,rf_fingerprint,evidence_type,radio,arfcn,pci,mcc_metadata,mnc_metadata,tac_metadata,observations,distinct_days,first_seen_ms,last_seen_ms",
+            "SELECT r.site_key,r.fingerprint,'RF_CONTEXT',r.radio,r.arfcn,r.pci,r.mcc,r.mnc,r.tac,r.observations,(SELECT COUNT(*) FROM $TABLE_SITE_RF_NEIGHBOUR_DAYS d WHERE d.site_key=r.site_key AND d.fingerprint=r.fingerprint),r.first_seen_ms,r.last_seen_ms FROM $TABLE_SITE_RF_NEIGHBOURS r ORDER BY r.site_key,r.fingerprint")
         files += query("motion.csv","site_key,day,state,accuracy_band_m,duration_s,displacement_band_m","SELECT site_key,day,state,accuracy_band_m,duration_s,displacement_band_m FROM $TABLE_SITE_MOTION_DAYS ORDER BY day,site_key")
         files += query("shadow_episodes.csv","episode_id,site_key,previous_identity,candidate_identity,first_seen_ms,last_seen_ms,duration_ms,evaluated_ms,closed_ms,shadow_recorded,reason,motion_state,feature_state,globally_known,known_at_site,seen_as_neighbour,serving_days,neighbour_days,corroborated",
             "SELECT episode_id,site_key,previous_identity,candidate_identity,first_seen_ms,last_seen_ms,(last_seen_ms-first_seen_ms),evaluated_ms,closed_ms,shadow_recorded,reason,motion_state,feature_state,globally_known,known_at_site,seen_as_neighbour,serving_days,neighbour_days,corroborated FROM $TABLE_SITE_SHADOW_TRIGGERS ORDER BY first_seen_ms")

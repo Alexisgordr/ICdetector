@@ -67,6 +67,15 @@ an optional `n -> n+1` preview never changes the confirmed count until the backg
 
 ### Stable-site protection
 
+From v2.10.1, neighbour capability is explicit. A complete neighbour identity follows the original
+path. When Android withholds Cell ID but supplies RAT, ARFCN and PCI, the app records a local
+`RF_CONTEXT` fingerprint scoped to the hashed site; it is not a CID and is not globally unique.
+Three independent days are required through either the full-identity or RF-context path. With no
+usable neighbours the site remains `SHADOW_READY` and the export explains why. Timing Advance does
+not participate in this decision.
+The RF key accepts only RAT-specific Android ranges and excludes unavailable sentinels. Signal
+strength remains variable evidence and is never part of the fingerprint.
+
 Version 2.9.1 learns coarse local sites independently. Motion evidence advances only when Android
 delivers a genuinely new GPS fix. A poor fix temporarily reports `UNKNOWN` but preserves the good
 window for up to 60 seconds; longer gaps reset it. The 15-second GPS subscription has no movement

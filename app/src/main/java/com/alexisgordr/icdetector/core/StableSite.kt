@@ -6,6 +6,97 @@ enum class MotionState { UNKNOWN, STATIC_CONFIRMED, MOVING }
 enum class MotionReason { FIRST_FIX, INSUFFICIENT_DURATION, ACCURACY_POOR, NO_RECENT_FIX, STATIC, MOVEMENT }
 enum class StableSiteFeatureState { UNAVAILABLE, BOOTSTRAP, LEARNING, SHADOW_READY, ACTIVE }
 enum class StableSiteNovelty { KNOWN_AT_SITE, SITE_NOVEL, GLOBALLY_NOVEL }
+enum class NeighbourEvidenceCapability { FULL_NEIGHBOUR_IDENTITY, RF_NEIGHBOUR_ONLY, NO_NEIGHBOUR_DATA }
+
+/** Local RF context, deliberately not a globally unique cellular identity. */
+data class RfNeighbourFingerprint(
+    val value: String,
+    val radio: com.alexisgordr.icdetector.models.RadioTech,
+    val arfcn: Int,
+    val pci: Int
+)
+
+data class NeighbourDiagnostic(
+    val raw: Int,
+    val fullIdentity: Int,
+    val rfOnly: Int,
+    val withoutUsefulRf: Int
+) {
+    val capability: NeighbourEvidenceCapability get() = when {
+        fullIdentity > 0 -> NeighbourEvidenceCapability.FULL_NEIGHBOUR_IDENTITY
+        rfOnly > 0 -> NeighbourEvidenceCapability.RF_NEIGHBOUR_ONLY
+        else -> NeighbourEvidenceCapability.NO_NEIGHBOUR_DATA
+    }
+}
+
+object StableSiteNeighbourEvidence {
+    private const val ANDROID_UNAVAILABLE = Int.MAX_VALUE
+
+    fun isValidArfcn(radio: com.alexisgordr.icdetector.models.RadioTech, value: Int): Boolean =
+        value != ANDROID_UNAVAILABLE && when (radio) {
+            com.alexisgordr.icdetector.models.RadioTech.LTE -> value in 0..262_143
+            com.alexisgordr.icdetector.models.RadioTech.NR -> value in 0..3_279_165
+            com.alexisgordr.icdetector.models.RadioTech.UMTS -> value in 0..16_383
+            else -> false // GSM has ARFCN but this model receives no BSIC/PCI counterpart.
+        }
+
+    fun isValidPhysicalId(radio: com.alexisgordr.icdetector.models.RadioTech, value: Int): Boolean =
+        value != ANDROID_UNAVAILABLE && when (radio) {
+            com.alexisgordr.icdetector.models.RadioTech.LTE -> value in 0..503
+            com.alexisgordr.icdetector.models.RadioTech.NR -> value in 0..1007
+            com.alexisgordr.icdetector.models.RadioTech.UMTS -> value in 0..511
+            else -> false
+        }
+
+    fun rfFingerprint(cell: com.alexisgordr.icdetector.models.CellData): RfNeighbourFingerprint? {
+        if (cell.cellId != "N/A") return null
+        val radio = cell.radioTech.takeIf { it != com.alexisgordr.icdetector.models.RadioTech.UNKNOWN } ?: return null
+        val arfcn = cell.arfcn?.takeIf { isValidArfcn(radio, it) } ?: return null
+        val pci = cell.pci?.takeIf { isValidPhysicalId(radio, it) } ?: return null
+        return RfNeighbourFingerprint("RFCTX:v1:${radio.name}:$arfcn:$pci", radio, arfcn, pci)
+    }
+
+    fun diagnostic(neighbours: List<com.alexisgordr.icdetector.models.CellData>): NeighbourDiagnostic {
+        val full = neighbours.count { it.cellId != "N/A" }
+        val rf = neighbours.count { it.cellId == "N/A" && rfFingerprint(it) != null }
+        return NeighbourDiagnostic(neighbours.size, full, rf, neighbours.size - full - rf)
+    }
+}
+
+data class StableSiteMaturity(
+    val state: StableSiteFeatureState,
+    val capability: NeighbourEvidenceCapability,
+    val reason: String
+)
+
+object StableSiteMaturityPolicy {
+    fun evaluate(servingDays: Int, staticDays: Int, fullNeighbourDays: Int, rfNeighbourDays: Int, servingObservations: Int): StableSiteMaturity {
+        val capability = when {
+            fullNeighbourDays >= 3 -> NeighbourEvidenceCapability.FULL_NEIGHBOUR_IDENTITY
+            rfNeighbourDays > 0 -> NeighbourEvidenceCapability.RF_NEIGHBOUR_ONLY
+            fullNeighbourDays > 0 -> NeighbourEvidenceCapability.FULL_NEIGHBOUR_IDENTITY
+            else -> NeighbourEvidenceCapability.NO_NEIGHBOUR_DATA
+        }
+        val neighbourReady = fullNeighbourDays >= 3 || rfNeighbourDays >= 3
+        val state = when {
+            servingDays == 0 -> StableSiteFeatureState.BOOTSTRAP
+            servingDays < 5 || staticDays < 2 -> StableSiteFeatureState.LEARNING
+            servingDays < 7 || staticDays < 3 || !neighbourReady || servingObservations < 30 -> StableSiteFeatureState.SHADOW_READY
+            else -> StableSiteFeatureState.ACTIVE
+        }
+        val reason = when {
+            state == StableSiteFeatureState.ACTIVE -> "MATURE_${capability.name}"
+            servingDays < 7 -> "NEEDS_SERVING_DAYS"
+            staticDays < 3 -> "NEEDS_STATIC_DAYS"
+            servingObservations < 30 -> "NEEDS_SERVING_OBSERVATIONS"
+            fullNeighbourDays in 1..2 -> "NEEDS_FULL_NEIGHBOUR_DAYS"
+            rfNeighbourDays in 1..2 -> "NEEDS_RF_NEIGHBOUR_DAYS"
+            !neighbourReady && capability == NeighbourEvidenceCapability.NO_NEIGHBOUR_DATA -> "NO_USABLE_NEIGHBOUR_DATA"
+            else -> "MATURE"
+        }
+        return StableSiteMaturity(state, capability, reason)
+    }
+}
 
 // Field rollout switch. v2.9.1 records wouldTrigger but does not freeze trust learning.
 const val STABLE_SITE_ENFORCEMENT_ENABLED = false
@@ -106,7 +197,11 @@ data class StableSiteEvidence(
     val currentSeenGlobally: Boolean = false, val previousServingDays: Int = 0,
     val motion: MotionEvidence = MotionEvidence(MotionState.UNKNOWN),
     val servingObservations: Int = 0,
-    val previousIdentity: String? = null
+    val previousIdentity: String? = null,
+    val fullNeighbourDays: Int = siteNeighbourDays,
+    val rfNeighbourDays: Int = 0,
+    val neighbourCapability: NeighbourEvidenceCapability = if (siteNeighbourDays > 0) NeighbourEvidenceCapability.FULL_NEIGHBOUR_IDENTITY else NeighbourEvidenceCapability.NO_NEIGHBOUR_DATA,
+    val maturityReason: String = "UNKNOWN"
 )
 
 data class StableSiteDecision(

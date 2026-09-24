@@ -61,7 +61,7 @@ class StableSiteStorageTest {
         assertEquals(1,count(upgraded,"SELECT COUNT(*) FROM forensic_cases"))
         assertEquals(0,count(upgraded,"SELECT COUNT(*) FROM site_cell_evidence"))
         assertEquals(0,count(upgraded,"SELECT COUNT(*) FROM site_motion_days"))
-        assertEquals(17,upgraded.version)
+        assertEquals(18,upgraded.version)
     }
 
     @Test fun twentyPollsRemainOneEpisodeAndSurviveHelperRestart(){
@@ -106,6 +106,62 @@ class StableSiteStorageTest {
         assertTrue(files.getValue("shadow_episodes.csv").contains(serving.identityKey))
     }
 
+    @Test fun rfOnlyNeighboursPersistAcrossDaysAndCanMatureWithoutCid(){
+        val serving=cell("100");val rfOnly=cell("N/A",false);val base=1_750_000_000_000L
+        repeat(7){day->repeat(5){n->db.recordStableSiteContext("rf-$day-$n","site",serving,listOf(rfOnly),MotionEvidence(MotionState.STATIC_CONFIRMED,130,8f,2f),base+day*86_400_000L+n)}}
+        assertEquals(35,count(db.readableDatabase,"SELECT observations FROM site_rf_neighbours"))
+        assertEquals(7,count(db.readableDatabase,"SELECT COUNT(DISTINCT day) FROM site_rf_neighbour_days"))
+        val decision=db.evaluateStableSiteCandidate("site",cell("999"),serving.identityKey,MotionEvidence(MotionState.STATIC_CONFIRMED,130,8f,2f))
+        assertEquals(StableSiteFeatureState.ACTIVE,decision.featureState)
+        assertEquals(NeighbourEvidenceCapability.RF_NEIGHBOUR_ONLY,decision.evidence!!.neighbourCapability)
+        assertTrue(db.getStableSiteExportFiles().getValue("site_rf_neighbours.csv").contains("RFCTX:v1:LTE:2850:10"))
+    }
+
+    @Test fun uselessNeighbourCreatesNoRfEvidence(){
+        val useless=cell("N/A",false).copy(pci=null,arfcn=null)
+        db.recordStableSiteContext("bad","site",cell("100"),listOf(useless),MotionEvidence(MotionState.STATIC_CONFIRMED),1_750_000_000_000)
+        assertEquals(0,count(db.readableDatabase,"SELECT COUNT(*) FROM site_rf_neighbours"))
+    }
+
+    @Test fun timingAdvanceStubDoesNotBlockFullOrRfNeighbours(){
+        val stubFull=cell("200",false).copy(timingAdvance=0,timingAdvanceUnit=TimingAdvanceUnit.STUB_ZERO)
+        val stubRf=cell("N/A",false).copy(timingAdvance=0,timingAdvanceUnit=TimingAdvanceUnit.STUB_ZERO)
+        db.recordStableSiteContext("stub","site",cell("100"),listOf(stubFull,stubRf),MotionEvidence(MotionState.STATIC_CONFIRMED),1_750_000_000_000)
+        assertEquals(1,count(db.readableDatabase,"SELECT observations FROM site_cell_evidence WHERE role='NEIGHBOUR'"))
+        assertEquals(1,count(db.readableDatabase,"SELECT observations FROM site_rf_neighbours"))
+    }
+
+    @Test fun openingSchema18RemovesOnlyTechnicallyInvalidRfFingerprints(){
+        db.close();context.deleteDatabase(NAME)
+        val existing=context.openOrCreateDatabase(NAME,Context.MODE_PRIVATE,null)
+        existing.execSQL("CREATE TABLE site_rf_neighbours(site_key TEXT NOT NULL,fingerprint TEXT NOT NULL,radio TEXT NOT NULL,arfcn INTEGER NOT NULL,pci INTEGER NOT NULL,mcc TEXT,mnc TEXT,tac TEXT,first_seen_ms INTEGER NOT NULL,last_seen_ms INTEGER NOT NULL,observations INTEGER NOT NULL,PRIMARY KEY(site_key,fingerprint))")
+        existing.execSQL("CREATE TABLE site_rf_neighbour_days(site_key TEXT NOT NULL,fingerprint TEXT NOT NULL,day TEXT NOT NULL,PRIMARY KEY(site_key,fingerprint,day))")
+        existing.execSQL("INSERT INTO site_rf_neighbours VALUES('s','RFCTX:v1:LTE:0:503','LTE',0,503,NULL,NULL,NULL,1,1,2)")
+        existing.execSQL("INSERT INTO site_rf_neighbours VALUES('s','RFCTX:v1:LTE:2147483647:1007','LTE',2147483647,1007,NULL,NULL,NULL,1,1,2)")
+        existing.execSQL("INSERT INTO site_rf_neighbour_days VALUES('s','RFCTX:v1:LTE:0:503','2026-09-24')")
+        existing.execSQL("INSERT INTO site_rf_neighbour_days VALUES('s','RFCTX:v1:LTE:2147483647:1007','2026-09-24')")
+        existing.version=18;existing.close()
+        db=CellDbHelper(context);val opened=db.writableDatabase
+        assertEquals(1,count(opened,"SELECT COUNT(*) FROM site_rf_neighbours"))
+        assertEquals(1,count(opened,"SELECT COUNT(*) FROM site_rf_neighbour_days"))
+        assertEquals(1,count(opened,"SELECT COUNT(*) FROM site_rf_neighbours WHERE fingerprint='RFCTX:v1:LTE:0:503'"))
+    }
+
+    @Test fun schema17To18PreservesRowsAndAddsEmptyRfContext(){
+        db.close();context.deleteDatabase(NAME)
+        val legacy=context.openOrCreateDatabase(NAME,Context.MODE_PRIVATE,null)
+        legacy.execSQL("CREATE TABLE history(id INTEGER PRIMARY KEY,cid TEXT)")
+        legacy.execSQL("INSERT INTO history VALUES(1,'kept')")
+        legacy.execSQL("CREATE TABLE site_cell_evidence(site_key TEXT,cell_identity TEXT,role TEXT,first_seen_ms INTEGER,last_seen_ms INTEGER,observations INTEGER)")
+        legacy.execSQL("INSERT INTO site_cell_evidence VALUES('site','cell','SERVING',1,2,3)")
+        legacy.version=17;legacy.close()
+        db=CellDbHelper(context);val upgraded=db.writableDatabase
+        assertEquals(18,upgraded.version)
+        assertEquals(1,count(upgraded,"SELECT COUNT(*) FROM history WHERE cid='kept'"))
+        assertEquals(1,count(upgraded,"SELECT COUNT(*) FROM site_cell_evidence"))
+        assertEquals(0,count(upgraded,"SELECT COUNT(*) FROM site_rf_neighbours"))
+    }
+
     @Test fun schema16To17MigrationPreservesExistingSubsystems(){
         db.close();context.deleteDatabase(NAME)
         val legacy=context.openOrCreateDatabase(NAME,Context.MODE_PRIVATE,null)
@@ -121,7 +177,7 @@ class StableSiteStorageTest {
         legacy.execSQL("INSERT INTO cell_transitions VALUES('A','B',9,4,'PASSED',123)")
         legacy.version=16;legacy.close()
         db=CellDbHelper(context);val upgraded=db.writableDatabase
-        assertEquals(17,upgraded.version)
+        assertEquals(18,upgraded.version)
         assertEquals(1,count(upgraded,"SELECT COUNT(*) FROM history WHERE cid='history-kept'"))
         assertEquals(1,count(upgraded,"SELECT COUNT(*) FROM forensic_cases WHERE id=2"))
         assertEquals(1,count(upgraded,"SELECT COUNT(*) FROM forensic_samples WHERE id=3 AND case_id=2"))

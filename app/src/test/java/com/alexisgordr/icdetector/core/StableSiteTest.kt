@@ -5,6 +5,60 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class StableSiteTest {
+    @Test fun `rf neighbour fingerprint requires radio carrier and pci without pretending cid`() {
+        val useful = CellData(false,"4G LTE","N/A","07","31601",-100,"214",radioTech=RadioTech.LTE,pci=10,arfcn=2850)
+        val fingerprint = StableSiteNeighbourEvidence.rfFingerprint(useful)
+        assertEquals("RFCTX:v1:LTE:2850:10", fingerprint?.value)
+        assertFalse(fingerprint!!.value.contains("31601"))
+        assertNull(StableSiteNeighbourEvidence.rfFingerprint(useful.copy(pci=null)))
+        assertNull(StableSiteNeighbourEvidence.rfFingerprint(useful.copy(arfcn=null)))
+        assertNull(StableSiteNeighbourEvidence.rfFingerprint(useful.copy(cellId="123")))
+    }
+
+    @Test fun `same pci differs by carrier and radio`() {
+        val base = CellData(false,"4G LTE","N/A","07","N/A",-100,"214",radioTech=RadioTech.LTE,pci=10,arfcn=2850)
+        val a = StableSiteNeighbourEvidence.rfFingerprint(base)!!.value
+        val b = StableSiteNeighbourEvidence.rfFingerprint(base.copy(arfcn=2851))!!.value
+        val c = StableSiteNeighbourEvidence.rfFingerprint(base.copy(radioTech=RadioTech.NR))!!.value
+        assertNotEquals(a,b); assertNotEquals(a,c)
+    }
+
+    @Test fun `rf ranges follow the physical radio and accept channel zero`() {
+        fun fp(radio:RadioTech,arfcn:Int,pci:Int)=StableSiteNeighbourEvidence.rfFingerprint(
+            CellData(false,radio.name,"N/A","N/A","N/A",-100,"N/A",radioTech=radio,arfcn=arfcn,pci=pci)
+        )
+        assertNotNull(fp(RadioTech.LTE,0,0));assertNotNull(fp(RadioTech.LTE,262_143,503))
+        assertNull(fp(RadioTech.LTE,262_144,503));assertNull(fp(RadioTech.LTE,100,504))
+        assertNotNull(fp(RadioTech.NR,0,0));assertNotNull(fp(RadioTech.NR,3_279_165,1007))
+        assertNull(fp(RadioTech.NR,3_279_166,1007));assertNull(fp(RadioTech.NR,100,1008))
+        assertNotNull(fp(RadioTech.UMTS,0,0));assertNotNull(fp(RadioTech.UMTS,16_383,511))
+        assertNull(fp(RadioTech.UMTS,16_384,511));assertNull(fp(RadioTech.UMTS,100,512))
+        assertNull(fp(RadioTech.GSM,0,0));assertNull(fp(RadioTech.UNKNOWN,0,0))
+        listOf(-1,Int.MAX_VALUE).forEach { unavailable ->
+            assertNull(fp(RadioTech.LTE,unavailable,10));assertNull(fp(RadioTech.LTE,100,unavailable))
+        }
+        assertNull(fp(RadioTech.LTE,100,504)) // legal NR PCI, illegal LTE PCI
+        assertNotEquals(fp(RadioTech.LTE,100,10)!!.value,fp(RadioTech.NR,100,10)!!.value)
+    }
+
+    @Test fun `maturity accepts three independent full or rf days but never absent neighbours`() {
+        assertEquals(StableSiteFeatureState.ACTIVE, StableSiteMaturityPolicy.evaluate(7,3,3,0,30).state)
+        val rf = StableSiteMaturityPolicy.evaluate(7,3,0,3,30)
+        assertEquals(StableSiteFeatureState.ACTIVE,rf.state)
+        assertEquals(NeighbourEvidenceCapability.RF_NEIGHBOUR_ONLY,rf.capability)
+        assertEquals(NeighbourEvidenceCapability.RF_NEIGHBOUR_ONLY, StableSiteMaturityPolicy.evaluate(7,3,1,3,30).capability)
+        val absent = StableSiteMaturityPolicy.evaluate(30,20,0,0,5000)
+        assertEquals(StableSiteFeatureState.SHADOW_READY,absent.state)
+        assertEquals("NO_USABLE_NEIGHBOUR_DATA",absent.reason)
+        assertEquals(StableSiteFeatureState.SHADOW_READY, StableSiteMaturityPolicy.evaluate(7,3,0,1,50_000).state)
+    }
+
+    @Test fun `timing advance stub does not participate in neighbour capability`() {
+        val cell = CellData(false,"4G LTE","N/A","07","N/A",-100,"214",timingAdvance=0,
+            timingAdvanceUnit=TimingAdvanceUnit.STUB_ZERO,radioTech=RadioTech.LTE,pci=22,arfcn=1800)
+        assertEquals(NeighbourEvidenceCapability.RF_NEIGHBOUR_ONLY,StableSiteNeighbourEvidence.diagnostic(listOf(cell)).capability)
+    }
+
     @Test fun `first fix and bad accuracy are unknown`() {
         assertEquals(MotionState.UNKNOWN, MotionClassifier().observe(fix(0)).state)
         assertEquals(MotionState.UNKNOWN, MotionClassifier().observe(fix(0, accuracy = 80f)).state)

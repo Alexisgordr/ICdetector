@@ -1,0 +1,3 @@
+Fixed Stable Site neighbour learning on devices that expose neighbour RF context without full Cell ID. Stable Site can now learn conservative RF-only neighbour fingerprints using RAT + ARFCN + PCI, without treating them as full cell identities. This prevents `neighbour_distinct_days` from remaining permanently at zero on affected devices. Timing Advance remains unrelated to neighbour learning.
+
+Existing historical RF-neighbour evidence cannot be reconstructed retroactively; RF neighbour maturity begins accumulating after upgrading.

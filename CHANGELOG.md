@@ -1,5 +1,20 @@
 # Changelog
 
+## 2.10.1
+
+- Stable-Site now preserves useful neighbour RF context when Android exposes RAT, ARFCN and PCI
+  but withholds the complete Cell ID. RF fingerprints remain local site context and are never
+  represented as authentic cell identities.
+- Site maturity reports whether it is backed by full neighbour identities, RF-only context or no
+  usable neighbour data. Three independent neighbour days remain mandatory in either evidence
+  path; thousands of observations from one day cannot replace elapsed days.
+- Stable-Site exports now include capability, maturity reason, separate full/RF counts and a
+  dedicated RF fingerprint CSV. Schema 18 is an additive, history-preserving migration.
+- RF context now validates RAT-specific channel and physical-ID ranges: LTE PCI 0..503, NR PCI
+  0..1007 and UMTS PSC 0..511. Channel zero is retained where Android defines it as valid, while
+  `UNAVAILABLE`, negative and out-of-range values are rejected. CI now runs the Stable-Site
+  persistence and migration instrumentation suite on an Android emulator.
+
 ## 2.10.0
 
 ### Mobility Familiarity and Geometry export

@@ -1,5 +1,15 @@
 # ICdetection Status
 
+## v2.10.1 — Stable-Site RF neighbour compatibility (local release candidate)
+
+**Version code:** 29
+**Database schema:** 18 (additive migration from 17)
+**Enforcement:** disabled / shadow only
+
+Stable-Site distinguishes full neighbour identities, local RF-only fingerprints and absent usable
+neighbour data. RF-only evidence requires RAT, ARFCN and PCI and never becomes a Cell ID. Existing
+history is retained; H1–H16, scoring, trust and alerts are unchanged.
+
 ## v2.10.0 — Mobility Familiarity and Geometry export (release candidate)
 
 **Database schema:** 17 (additive migration from 16)  
