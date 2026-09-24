@@ -1,5 +1,12 @@
 # ICdetection Status
 
+## v2.10.2 — Stable-Site RF retention and export consistency
+
+**Version code:** 30  
+**Database schema:** 18 (unchanged)  
+**Enforcement:** disabled / shadow only
+
+RF-only neighbour evidence now expires under the same policy as full neighbour identities. Exported maturity uses the runtime policy directly, and PCI validation is radio-specific. Existing history is preserved; H1–H16, scoring, trust and alerts are unchanged.
 ## v2.10.1 — Stable-Site RF neighbour compatibility (local release candidate)
 
 **Version code:** 29
@@ -864,3 +871,4 @@ Gracias a todos los que estáis probando la app. Vuestros datos son literalmente
 posible esta versión.
 
 Alexis.
+

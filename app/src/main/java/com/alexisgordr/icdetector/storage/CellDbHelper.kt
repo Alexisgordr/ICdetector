@@ -889,11 +889,26 @@ class CellDbHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME, 
                 "(SELECT COUNT(DISTINCT r.day) FROM $TABLE_SITE_RF_NEIGHBOUR_DAYS r WHERE r.site_key=s.site_key) AS rf_neighbour_days,"+
                 "(SELECT COALESCE(SUM(r.observations),0) FROM $TABLE_SITE_RF_NEIGHBOURS r WHERE r.site_key=s.site_key) AS rf_neighbour_observations,"+
                 "MIN(s.first_seen_ms) AS first_seen,MAX(s.last_seen_ms) AS last_seen FROM $TABLE_SITE_CELLS s GROUP BY s.site_key"
-        val stateSql="CASE WHEN serving_days=0 THEN 'BOOTSTRAP' WHEN serving_days<5 OR static_days<2 THEN 'LEARNING' WHEN serving_days<7 OR static_days<3 OR (full_neighbour_days<3 AND rf_neighbour_days<3) OR serving_observations<30 THEN 'SHADOW_READY' ELSE 'ACTIVE' END"
-        val capabilitySql="CASE WHEN full_neighbour_days>=3 THEN 'FULL_NEIGHBOUR_IDENTITY' WHEN rf_neighbour_days>0 THEN 'RF_NEIGHBOUR_ONLY' WHEN full_neighbour_days>0 THEN 'FULL_NEIGHBOUR_IDENTITY' ELSE 'NO_NEIGHBOUR_DATA' END"
-        val reasonSql="CASE WHEN serving_days<7 THEN 'NEEDS_SERVING_DAYS' WHEN static_days<3 THEN 'NEEDS_STATIC_DAYS' WHEN serving_observations<30 THEN 'NEEDS_SERVING_OBSERVATIONS' WHEN full_neighbour_days>=3 THEN 'MATURE_FULL_NEIGHBOUR_IDENTITY' WHEN rf_neighbour_days>=3 THEN 'MATURE_RF_NEIGHBOUR_ONLY' WHEN full_neighbour_days BETWEEN 1 AND 2 THEN 'NEEDS_FULL_NEIGHBOUR_DAYS' WHEN rf_neighbour_days BETWEEN 1 AND 2 THEN 'NEEDS_RF_NEIGHBOUR_DAYS' ELSE 'NO_USABLE_NEIGHBOUR_DATA' END"
-        files += query("sites.csv","site_key,feature_state,neighbour_capability,maturity_reason,serving_observations,serving_distinct_days,static_distinct_days,full_neighbour_observations,full_neighbour_distinct_days,rf_neighbour_observations,rf_neighbour_distinct_days,first_seen_ms,last_seen_ms",
-            "SELECT site_key,$stateSql,$capabilitySql,$reasonSql,serving_observations,serving_days,static_days,full_neighbour_observations,full_neighbour_days,rf_neighbour_observations,rf_neighbour_days,first_seen,last_seen FROM ($siteStats)")
+        // v2.10.1 — Una sola fuente de verdad: la madurez que sale en el export la decide la misma
+        // StableSiteMaturityPolicy que usa la app en tiempo real. Antes había una copia de la regla
+        // en SQL; si una cambiaba y la otra no, el export habría descrito decisiones que la app no toma.
+        files["sites.csv"] = buildString {
+            appendLine("site_key,feature_state,neighbour_capability,maturity_reason,serving_observations,serving_distinct_days,static_distinct_days,full_neighbour_observations,full_neighbour_distinct_days,rf_neighbour_observations,rf_neighbour_distinct_days,first_seen_ms,last_seen_ms")
+            readableDatabase.rawQuery("SELECT site_key,serving_observations,serving_days,static_days,full_neighbour_observations,full_neighbour_days,rf_neighbour_observations,rf_neighbour_days,first_seen,last_seen FROM ($siteStats)",null).use { c ->
+                while (c.moveToNext()) {
+                    val maturity = StableSiteMaturityPolicy.evaluate(
+                        servingDays = c.getInt(2), staticDays = c.getInt(3),
+                        fullNeighbourDays = c.getInt(5), rfNeighbourDays = c.getInt(7),
+                        servingObservations = c.getInt(1)
+                    )
+                    appendLine(listOf(
+                        c.getString(0), maturity.state.name, maturity.capability.name, maturity.reason,
+                        c.getLong(1), c.getInt(2), c.getInt(3), c.getLong(4), c.getInt(5), c.getLong(6), c.getInt(7),
+                        if (c.isNull(8)) null else c.getLong(8), if (c.isNull(9)) null else c.getLong(9)
+                    ).joinToString(",") { csv(it) })
+                }
+            }
+        }
         files += query("site_cells.csv","site_key,cell_identity,serving_observations,serving_distinct_days,neighbour_observations,neighbour_distinct_days,first_serving_ms,last_serving_ms,first_neighbour_ms,last_neighbour_ms",
             "SELECT s.site_key,s.cell_identity,SUM(CASE WHEN s.role='SERVING' THEN s.observations ELSE 0 END),"+
                 "(SELECT COUNT(*) FROM $TABLE_SITE_DAYS d WHERE d.site_key=s.site_key AND d.cell_identity=s.cell_identity AND d.role='SERVING'),"+
@@ -1539,6 +1554,13 @@ class CellDbHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME, 
             db.delete(TABLE_SITE_CELLS, "last_seen_ms < ?", arrayOf(hardSiteCutoff.toString()))
             db.delete(TABLE_SITE_DAYS, "day < ?", arrayOf(SimpleDateFormat("yyyy-MM-dd", Locale.ROOT).format(Date(siteCutoff))))
             db.delete(TABLE_SITE_MOTION_DAYS, "day < ?", arrayOf(SimpleDateFormat("yyyy-MM-dd", Locale.ROOT).format(Date(siteCutoff))))
+            // v2.10.1 — RF-only neighbour context follows exactly the same retention as full
+            // neighbour identities. Without this, RF days older than 120 days kept counting towards
+            // site maturity while full-identity days expired, and the tables grew without bound.
+            db.delete(TABLE_SITE_RF_NEIGHBOUR_DAYS, "day < ?", arrayOf(SimpleDateFormat("yyyy-MM-dd", Locale.ROOT).format(Date(siteCutoff))))
+            db.delete(TABLE_SITE_RF_NEIGHBOURS, "last_seen_ms < ? AND observations < 3", arrayOf(siteCutoff.toString()))
+            db.delete(TABLE_SITE_RF_NEIGHBOURS, "last_seen_ms < ?", arrayOf(hardSiteCutoff.toString()))
+            db.execSQL("DELETE FROM $TABLE_SITE_RF_NEIGHBOUR_DAYS WHERE NOT EXISTS (SELECT 1 FROM $TABLE_SITE_RF_NEIGHBOURS r WHERE r.site_key=$TABLE_SITE_RF_NEIGHBOUR_DAYS.site_key AND r.fingerprint=$TABLE_SITE_RF_NEIGHBOUR_DAYS.fingerprint)")
             db.delete(TABLE_SITE_HOLDS, "last_seen_ms < ? AND active=0", arrayOf(siteCutoff.toString()))
             db.delete(TABLE_SITE_SHADOW_TRIGGERS, "last_seen_ms < ? AND closed_ms IS NOT NULL", arrayOf(siteCutoff.toString()))
             historyDeleted

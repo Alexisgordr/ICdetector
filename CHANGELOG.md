@@ -1,5 +1,11 @@
 # Changelog
 
+## 2.10.2
+
+- RF-only Stable-Site neighbour context now follows the same retention policy as full neighbour identities: old day evidence and stale fingerprints are pruned deterministically.
+- Stable-Site exports derive feature state, neighbour capability and maturity reason from the same policy used at runtime, avoiding duplicated decision logic.
+- The export validator now checks PCI ranges per radio technology: LTE 0..503, NR 0..1007 and UMTS 0..511.
+- Database schema remains 18. Existing history is preserved; H1-H16, scoring, trust and alert behaviour are unchanged.
 ## 2.10.1
 
 - Stable-Site now preserves useful neighbour RF context when Android exposes RAT, ARFCN and PCI
@@ -725,3 +731,4 @@
 - `versionName`: `2.1`
 - `versionCode`: `3`
 - Database schema: `12`
+

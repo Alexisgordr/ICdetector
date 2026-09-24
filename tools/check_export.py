@@ -190,12 +190,26 @@ def main(path):
     bad_dbm = [r for r in rows if not (-145 <= fnum_or(r, "DBM", -90) <= -30)]
     check("DBM dentro de rango físico (-145..-30)", not bad_dbm, f"{len(bad_dbm)} filas")
 
+    # El rango del identificador físico depende de la tecnología de la lectura (columna Radio),
+    # igual que en StableSiteNeighbourEvidence: LTE 0..503, NR 0..1007, UMTS (PSC) 0..511.
+    # Sin Radio (exports antiguos) o con otra tecnología se usa el rango más amplio, 0..1007.
+    pci_max = {"LTE": 503, "NR": 1007, "UMTS": 511}
     bad_pci = []
     for r in rows:
         pci = fnum(r, "PCI")
-        if pci is not None and not (0 <= pci <= 1007):
+        if pci is None:
+            continue
+        radio = (r.get("Radio") or "").strip().upper()
+        if not (0 <= pci <= pci_max.get(radio, 1007)):
             bad_pci.append(r)
-    check("PCI dentro de rango 3GPP (0..1007)", not bad_pci, f"{len(bad_pci)} filas")
+    check(
+        "PCI dentro de rango 3GPP por tecnología (LTE 0..503, NR 0..1007, UMTS 0..511)",
+        not bad_pci,
+        f"{len(bad_pci)} filas" + (
+            f" (p. ej. {bad_pci[0]['Timestamp']} Radio={bad_pci[0].get('Radio') or '?'} "
+            f"PCI={bad_pci[0]['PCI']})" if bad_pci else ""
+        ),
+    )
 
     bad_score = [r for r in rows if not (0 <= fnum_or(r, "SecurityScore", 100) <= 100)]
     check("SecurityScore entre 0 y 100", not bad_score, f"{len(bad_score)} filas")

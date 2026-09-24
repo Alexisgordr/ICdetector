@@ -6,6 +6,11 @@ This manual explains how to operate the application, interpret its results, inve
 
 > **Important:** ICdetection is an anomaly detector, not a device that can prove the presence of an IMSI catcher. A warning means that the observations deserve examination. It does not identify an attacker or establish intent by itself.
 
+
+## Version 2.10.2
+
+Stable-Site RF-only neighbour evidence now has deterministic retention matching complete neighbour identities. Exported site maturity is calculated with the same policy used by the application, and export validation applies technology-specific PCI limits. The database schema remains 18 and existing history is retained.
+
 ---
 
 ## 1. What ICdetection does
@@ -609,3 +614,5 @@ When reporting bugs, provide enough technical detail to reproduce the issue, but
 **Stay observant. Verify context. Preserve evidence carefully.**
 
 *Developed by Alexis Gómez Rodríguez.*
+
+

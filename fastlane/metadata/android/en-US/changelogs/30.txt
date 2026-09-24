@@ -1,0 +1,1 @@
+Fixed Stable Site RF-neighbour retention and reporting consistency. RF-only neighbour context now follows the same expiry policy as complete neighbour identities, preventing stale evidence from keeping a site mature. Stable Site exports now use the same maturity policy as the runtime, and the export validator checks PCI ranges per radio technology.

@@ -228,6 +228,53 @@ class StableSiteStorageTest {
         assertEquals(0,count(opened,"SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='site_cell_evidence'"))
     }
 
+    @Test fun exportedSiteMaturityMatchesRuntimeDecision(){
+        val serving=cell("100");val rfOnly=cell("N/A",false);val full=cell("200",false);val base=1_750_000_000_000L
+        val static=MotionEvidence(MotionState.STATIC_CONFIRMED,130,8f,2f)
+        // "rf": maduro solo con contexto RF · "full": maduro con identidad completa · "young": un solo día
+        repeat(7){day->repeat(5){n->
+            val t=base+day*86_400_000L+n
+            db.recordStableSiteContext("rf-$day-$n","rf",serving,listOf(rfOnly),static,t)
+            db.recordStableSiteContext("full-$day-$n","full",serving,listOf(full),static,t)
+        }}
+        db.recordStableSiteContext("young-0","young",serving,listOf(full),static,base)
+        val rows=db.getStableSiteExportFiles().getValue("sites.csv").lines().drop(1).filter{it.isNotBlank()}
+            .associate{line->line.split(",").let{it[0] to it}}
+        listOf("rf","full","young").forEach{site->
+            val runtime=db.evaluateStableSiteCandidate(site,cell("999"),serving.identityKey,static)
+            val exported=rows.getValue(site)
+            assertEquals(runtime.featureState.name,exported[1])
+            assertEquals(runtime.evidence!!.neighbourCapability.name,exported[2])
+            assertEquals(runtime.evidence!!.maturityReason,exported[3])
+        }
+        assertEquals("ACTIVE",rows.getValue("rf")[1]);assertEquals("MATURE_RF_NEIGHBOUR_ONLY",rows.getValue("rf")[3])
+        assertEquals("ACTIVE",rows.getValue("full")[1]);assertEquals("MATURE_FULL_NEIGHBOUR_IDENTITY",rows.getValue("full")[3])
+        assertEquals("LEARNING",rows.getValue("young")[1])
+    }
+
+    @Test fun pruningAppliesSiteRetentionToRfNeighbourContext(){
+        val now=System.currentTimeMillis(); val dayMs=86_400_000L
+        val fmt=java.text.SimpleDateFormat("yyyy-MM-dd",java.util.Locale.ROOT)
+        fun day(ago:Int)=fmt.format(java.util.Date(now-ago*dayMs))
+        val sql=db.writableDatabase
+        fun rf(pci:Int,lastSeenAgo:Int,obs:Int){
+            sql.execSQL("INSERT INTO site_rf_neighbours VALUES('s','RFCTX:v1:LTE:2850:$pci','LTE',2850,$pci,NULL,NULL,NULL,?,?,?)",arrayOf<Any>(now-lastSeenAgo*dayMs,now-lastSeenAgo*dayMs,obs))
+        }
+        fun rfDay(pci:Int,ago:Int)=sql.execSQL("INSERT INTO site_rf_neighbour_days VALUES('s','RFCTX:v1:LTE:2850:$pci',?)",arrayOf<Any>(day(ago)))
+        rf(1,0,5);        rfDay(1,0)                 // reciente: se conserva entero
+        rf(2,200,50);     rfDay(2,200);rfDay(2,100)  // frecuente pero viejo: fila viva, solo caduca el día >120
+        rf(3,200,2);      rfDay(3,200)               // raro y viejo: fuera
+        rf(4,400,50);     rfDay(4,400);rfDay(4,10)   // más de 365 días: fuera, y su día huérfano también
+        db.pruneOldRecords()
+        val r=db.readableDatabase
+        assertEquals(2,count(r,"SELECT COUNT(*) FROM site_rf_neighbours"))
+        assertEquals(1,count(r,"SELECT COUNT(*) FROM site_rf_neighbours WHERE pci=1"))
+        assertEquals(1,count(r,"SELECT COUNT(*) FROM site_rf_neighbours WHERE pci=2"))
+        assertEquals(2,count(r,"SELECT COUNT(*) FROM site_rf_neighbour_days"))
+        assertEquals(1,count(r,"SELECT COUNT(*) FROM site_rf_neighbour_days WHERE fingerprint='RFCTX:v1:LTE:2850:1'"))
+        assertEquals(1,count(r,"SELECT COUNT(*) FROM site_rf_neighbour_days WHERE fingerprint='RFCTX:v1:LTE:2850:2' AND day='${day(100)}'"))
+    }
+
     private fun cell(cid:String,registered:Boolean=true)=CellData(registered,"4G LTE",cid,"07","31601",-90,"214",radioTech=RadioTech.LTE,pci=10,arfcn=2850)
     private fun count(sqlite:SQLiteDatabase,sql:String)=sqlite.rawQuery(sql,null).use{it.moveToFirst();it.getInt(0)}
     private companion object{const val NAME="icdetector_history.db"}
