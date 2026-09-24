@@ -1,23 +1,32 @@
-![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)
+<div align="center">
+
+# ICdetection
+
+**Open-source, local-first cellular anomaly auditor for Android — no root required.**
+
+[![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](LICENSE)
 ![Platform](https://img.shields.io/badge/Platform-Android%2010%2B-green.svg)
 ![Root Required](https://img.shields.io/badge/Root-Not%20Required-brightgreen.svg)
 ![Status](https://img.shields.io/badge/Status-v2.10.4%20stable-brightgreen.svg)
+![Phase](https://img.shields.io/badge/Phase-Field%20collection%20freeze-orange.svg)
 [![Featured in Awesome Telco](https://img.shields.io/badge/Featured%20in-Awesome%20Telco-6f42c1.svg)](https://github.com/ravens/awesome-telco#imsi-catcher-detection)
 
+</div>
 
 <table>
-
   <tr>
     <td width="60%" valign="top">
       <h3>Forensic Cellular Monitoring Interface</h3>
       <p>
         ICdetection is a local-first Android tool for cellular-network auditing,
-        anomaly analysis, and real-time radio telemetry visualization.
+        anomaly analysis and real-time radio telemetry visualization.
       </p>
       <ul>
         <li><strong>Forensic Terminal:</strong> structured security and radio-event logging.</li>
-        <li><strong>Telemetry:</strong> real-time RSRP, RSRQ, SINR and Timing Advance visualization when available.</li>
+        <li><strong>Telemetry:</strong> real-time RSRP, RSRQ, SINR and Timing Advance when available.</li>
         <li><strong>Security Engine:</strong> conservative multi-heuristic cellular anomaly analysis.</li>
+        <li><strong>Radio Context:</strong> serving/secondary carriers, bands, CSG and service state.</li>
+        <li><strong>Forensics:</strong> incident black box, case capture and verifiable exports.</li>
       </ul>
     </td>
     <td width="40%" align="center">
@@ -28,157 +37,39 @@
   </tr>
 </table>
 
-# ICdetection — Open-Source Cellular Security Auditor
-
-Version 2.10.4 adds radio context collection. The serving cell is now selected by the modem's `PRIMARY_SERVING` connection status rather than by signal strength, and only that cell is analysed: with carrier aggregation, a secondary carrier could previously be scored and stored as the serving cell. If Android declares a primary whose signal sample is unusable, that cycle abstains instead of promoting a secondary; fallback is allowed only when no primary was declared. Connection state, secondary carriers, bandwidth, declared bands, additional PLMNs, closed subscriber group (possible femtocell) and `ServiceState` (in service, emergency only, out of service, roaming, network and SIM PLMN) are collected for forensics, shown in a new RADIO tab and a main-screen card, and exported. Service-state events are processed in order, persisted before the event list refreshes and rejected if stale; live channel and bandwidth telemetry still updates on every reading. None of these fields feeds a heuristic or the score. Schema 19 is additive and existing history is preserved.
-
-Version 2.10.3 corrects H15 RF-identity stability. H15 no longer freezes its own baseline when it is the only failing heuristic, and PCI persistence is now based on independent alternation episodes inside the same ARFCN rather than repeated samples from one handover. A stable one-way PCI replacement is treated as reconfiguration rather than RF instability. This is a detection-baseline dataset cut for H15; H15 weight, global thresholds, H1-H14/H16, Temporal Confidence and Threat Episode correlation remain unchanged. Schema 18 and existing history are preserved.
-
-Version 2.10.2 hardens Stable-Site maintenance: RF-only neighbour evidence now follows bounded retention, Stable-Site exports use the same maturity policy as runtime, and the export validator applies RAT-specific PCI/PSC limits.
-
-Version 2.10.1 added conservative RF-only neighbour context for Android devices that expose RAT/channel/PCI or PSC without a complete neighbour Cell ID. These fingerprints remain local context and are never treated as authenticated cellular identities.
-
-ICdetection is an open-source Android application focused on cellular-network auditing, heuristic anomaly detection, radio telemetry analysis, forensic logging, and local historical baseline learning.
-
-It is designed for privacy-conscious users, mobile security enthusiasts, researchers, forensic experimentation, cellular infrastructure auditing, and GrapheneOS / Pixel users interested in radio-layer visibility.
-
-ICdetection attempts to identify suspicious cellular behavior potentially associated with:
-
-- rogue base stations
-- fake BTS deployments
-- IMSI-catcher-like activity
-- downgrade attempts
-- abnormal reselection behavior
-- suspicious topology inconsistencies
-- cellular infrastructure impersonation patterns
-
-The application operates from Android userland without requiring root or direct baseband access.
-
-**Important:** ICdetection is not an IMSI-catcher proof tool. It is a local-first cellular anomaly auditor. Alerts should be interpreted as signals that the cellular environment deserves closer attention, not as definitive proof of surveillance or interception.
-
-Version 2.10.0 adds descriptive route memory backed by schema 17.
-`KNOWN_ON_ROUTE` only means that serving-cell transitions occurred in earlier independent trips; it
-does not alter trust, anomaly scores, heuristics, alerts, Stable-Site or forensic decisions. Trips
-belong to the background service and continue independently of the Geometry screen.
-
-Version 2.9.1 fixes Stable-Site motion sampling so only new GPS callbacks contribute evidence.
-Brief inaccurate fixes abstain without destroying the complete good window, while a 60-second gap
-invalidates it. Periodic stationary fixes are requested every 15 seconds with no distance gate;
-duplicate or out-of-order timestamps cannot manufacture static duration. The conservative 50 m
-accuracy limit and shadow-only rollout remain unchanged. Version 2.9.0 added privacy-reduced stable-site learning. It derives conservative motion state from
-successive accurate fixes, aggregates serving and neighbour identities by a hashed approximately
-500 m site bucket, and requires multi-day site-specific maturity. A new serving identity while
-confirmed static at an active site is evaluated as a potential `SITE_UNVERIFIED` event. Version
-2.9.0 reports this in shadow mode without freezing trust, opening forensics or changing H1-H16,
-anomaly scores or normal alarms. Schema 16 is additive; existing databases are preserved and site learning starts
-from zero because legacy rows lack accuracy, motion and neighbour context. A dedicated Stable-Site
-ZIP exports hashed sites, serving/neighbour evidence, motion bands and logical shadow episodes for
-field calibration without exact coordinates. `site_cells.csv` and `shadow_episodes.csv` contain
-complete cellular identities, like the topology ZIP, so review them before sharing. Version 2.8.1 lets high-frequency cells accumulate temporal trust evidence across the complete
-90-day window. The previous 500-row scan could permanently hide the fourteen-day history of cells
-seen more than roughly 36 times per day. Detailed radio and location analysis remains bounded, and
-its location/RF eligibility minimums use those 500 recent detailed rows. All existing safety gates
-for accepting a PCI/ARFCN reconfiguration remain active. Existing
-schema-15 databases are reused and must not be cleared. Version 2.8.0 hardens forensic evidence continuity, detects failed
-sample writes, preserves whole cases during retention, and enables the declared SQLite foreign
-keys. Physical decisions in H8, H11 and H14 now use the modem observation's `radioTech` rather
-than the user-facing 4G/5G icon label. This deliberately changes the detection baseline and must
-be recorded as a dataset cut. Schema 16 is additive and existing history remains compatible.
-The v2.7.0 release also displays a revocable local confidence profile for the serving
-cell. It learns only from clean observations spread across independent days and never exceeds 98%.
-`ESTABLISHED` means “consistent with this device's historical local pattern”, not “operator-
-authenticated” or “guaranteed safe”.
-
 ---
 
-# Project Status
-
-> **⚠️ Upgrading from a version older than v2.1.1:** uninstall the previous version first. Android refuses an in-place update when the APK is not signed with the same keystore, and a clean database is required because records written before v2.1.1 may hold an antenna coordinate where the device GPS position belongs. Export your CSV first if you want to keep the old history. v2.1.2 and later releases signed with the same keystore update in place normally. See `Status.md`.
-
-ICdetection v2.10.4 is the current stable release. The detector remains conservative and local-first.
-Version 2.10.3 changes only the semantics of H15 RF-identity stability so modem/handover artefacts do
-not become self-sustaining evidence. RF identity is still evaluated per carrier, while persistent
-one-way PCI/ARFCN changes remain handled by the separate historical reconfiguration quarantine.
-Stable-Site remains shadow-only and does not change H1-H16, anomaly scoring, Local Cell Trust,
-Temporal Confidence, alerts or forensic decisions.
-
-> **Definitive field-collection freeze:** v2.3.3 began the definitive data-collection campaign;
-> v2.3.4, v2.3.5 and v2.4.0 are targeted data-integrity and collection-continuity corrections.
-> v2.5.0 changed H16 shortcut handling, v2.5.1 changed baseline admission and temporal
-> confirmation, v2.5.2 changes GNSS admission for geographic evidence, v2.6.0 restructures the
-> service and localizes the interface, v2.7.0 hardens multi-signal detection and trusted
-> learning, and v2.7.1 improves geometry and antenna-history inspection without changing detection; record these
-> installation dates as dataset cuts.
-> v2.8.0 created a dataset cut for forensic and radio-technology corrections; v2.9.x introduced
-> Stable-Site in shadow mode; v2.10.0 added descriptive route familiarity; v2.10.1 added RF-only
-> Stable-Site neighbour context; and v2.10.2 corrected RF-context retention/export consistency.
-> v2.10.3 is a new dataset cut specifically for H15 RF-identity stability because its persistence
-> semantics changed from repeated samples to independent alternation episodes. Further detector
-> changes should remain limited to demonstrated defects found through field evidence.
-
-> **A note to users:** We apologize for the unusually frequent updates during this development
-> phase. They were necessary to correct issues discovered through real-world testing. The project
-> is now entering a stabilization period, with no further changes planned unless a significant bug
-> is found.
+> [!IMPORTANT]
+> **v2.10.4 is the definitive release for the next three months.**
 >
-> **Nota para los usuarios:** Pedimos disculpas por la frecuencia inusual de las actualizaciones
-> durante esta fase de desarrollo. Fueron necesarias para corregir problemas encontrados durante
-> las pruebas reales. El proyecto entra ahora en una fase de estabilización y no se prevén más
-> cambios salvo que aparezca un error importante.
+> ICdetection has entered a **field-collection freeze**. No new heuristics, weights, thresholds or
+> detection features will be added during this period. The methodology stays fixed so real-world
+> data can be collected, compared and validated over time.
+>
+> Only genuine bugs that affect data integrity, collection continuity, database safety, privacy,
+> exports, crashes or clearly incorrect behavior will be fixed — and, whenever possible, without
+> changing the dataset semantics.
+>
+> Read the full notice in **[IMPORTANT.md](IMPORTANT.md)**.
 
-> **What v2.3.0 changes:** H16 compares a real handover with device movement, GPS quality, visible
-> neighbours, locally learned coverage zones, and trusted previous transitions. It has no fixed
-> “maximum tower distance” and returns `N/A` whenever the available evidence is not defensible.
-
-> **Topology explorer:** the history area now includes a local, read-only view of cells and
-> directional handover routes. Analysts can inspect route frequency, trusted observations, last
-> state, and recency without changing the detector or its learned baseline. A privacy-gated ZIP
-> export provides CSV, directed GraphML, metadata, and SHA-256 checksums for external analysis.
-
-> **What the v2.2 series means:** an observation at `1/3` can leave an incident record and start a forensic capture, while only a sustained event reaching `3/3` is presented as confirmed. This improves traceability without weakening the conservative confirmation model.
-
-v2.1.1 was the project's **data-integrity release**. It added no new heuristics and no new detection claims. It exists because the first two months of field collection surfaced problems that made that very collection unable to answer the questions it was designed to answer: sub-threshold heuristic failures were recorded with their reason erased, API-supplied tower coordinates were overwriting the device's own GPS positions in the history, two heuristics were firing on carrier-aggregation artifacts, and the history was so sparse that the RF fingerprint never woke up. `Status.md` and `v2.1Roadmap.md` carry the full evidence and the fixes.
-
-**H16 begins as a conservative field-validation rule.** Its low weight cannot trigger an alert by
-itself, related mobility evidence is not double-counted, and its local transition baseline learns
-only from coherent events with mature geographic history. Field data is still required to validate
-its false-positive rate and the expert-estimated Bayesian likelihood ratios.
-
-Future work continues to focus on:
-
-- bug fixes
-- field validation
-- false-positive analysis
-- exported CSV review
-- small targeted corrections discovered in real-world usage
-
-No new detection claims should be assumed until they are validated against real-world data.
-
----
-
-# Community Recognition
-
-[![Featured in awesome-telco](https://img.shields.io/badge/Featured%20in-awesome--telco-4c8bf5.svg)](https://github.com/ravens/awesome-telco)
-
-ICdetection is listed in [**awesome-telco**](https://github.com/ravens/awesome-telco), a curated
-community collection of telecommunications software, research resources, protocols, datasets, and
-security tooling. Its inclusion helps researchers and telecommunications practitioners discover the
-project alongside other open-source tools in the field.
-
-Inclusion in a community-maintained list is recognition and visibility, not an independent security
-audit, certification, or endorsement of ICdetection's detection results.
+> [!TIP]
+> **Starting a clean research dataset?** Export anything you want to keep, then **uninstall and
+> reinstall v2.10.4** (or use *Settings → Apps → ICdetection → Storage → Clear data*). In v2.10.4
+> the in-app *Delete history* button does not yet clear the route-familiarity trip tables; this will
+> be corrected in a later release. Reinstalling also removes your OpenCellID key, so enter it again.
 
 ---
 
 ## Table of Contents
 
-- [Community Recognition](#community-recognition)
-- [Development Disclosure](#development-disclosure)
-- [Project Philosophy](#project-philosophy)
+- [What ICdetection is — and is not](#what-icdetection-is--and-is-not)
+- [What's new in v2.10.4](#whats-new-in-v2104)
+- [Highlights](#highlights)
 - [Technical Limitations](#technical-limitations)
 - [Device & Hardware Compatibility](#device--hardware-compatibility)
 - [Detection Engine](#detection-engine)
 - [Statistical and Historical Hardening](#statistical-and-historical-hardening)
+- [Radio Context](#radio-context)
 - [Stable-Site Learning (Shadow Mode)](#stable-site-learning-shadow-mode)
 - [Temporal Confidence](#temporal-confidence)
 - [Incident Black Box](#incident-black-box)
@@ -187,445 +78,374 @@ audit, certification, or endorsement of ICdetection's detection results.
 - [Telemetry & Visualization](#telemetry--visualization)
 - [Infrastructure Verification](#infrastructure-verification)
 - [Privacy & Networking](#privacy--networking)
-- [Forensic Logging](#forensic-logging)
-- [Forensic Case Export](#forensic-case-export)
+- [Forensic Logging & Exports](#forensic-logging--exports)
 - [False Positives](#false-positives)
 - [Security & Threat Model](#security--threat-model)
+- [Community Recognition](#community-recognition)
+- [Development Disclosure](#development-disclosure)
+- [Release History](#release-history)
 - [Related Research & Inspiration](#related-research--inspiration)
 - [License](#license)
 - [Acknowledgements](#acknowledgements)
 
 ---
 
-# Development Disclosure
+## What ICdetection is — and is not
 
-This project was developed using an AI-assisted workflow.
+ICdetection is an open-source Android application focused on cellular-network auditing, heuristic
+anomaly detection, radio telemetry analysis, forensic logging and local historical baseline
+learning. It runs entirely in Android userland, **without root or direct baseband access**.
 
-The lead developer (**Alexis Gomez Rodriguez**) designed and directed:
+It is designed for privacy-conscious users, mobile-security enthusiasts, researchers, forensic
+experimentation, cellular infrastructure auditing, and GrapheneOS / Pixel users interested in
+radio-layer visibility.
 
-- heuristic logic
-- detection architecture
-- threat scoring behavior
-- forensic telemetry workflow
-- validation methodology
-- anomaly correlation logic
-- false-positive reduction strategy
-- project direction and operational philosophy
+It looks for cellular behavior potentially associated with:
 
-AI assistance, including Gemini, Claude, ChatGPT and DeepSeek, was used for:
+- rogue base stations and fake BTS deployments
+- IMSI-catcher-like activity
+- downgrade attempts
+- abnormal reselection behavior
+- suspicious topology inconsistencies
+- cellular infrastructure impersonation patterns
 
-- Kotlin implementation support
-- Android API integration
-- architectural iteration
-- debugging assistance
-- refactoring support
-- documentation support
+> [!WARNING]
+> **ICdetection is not an IMSI-catcher proof tool.** It is a local-first cellular anomaly auditor.
+> Alerts are signals that the cellular environment deserves closer attention — never definitive
+> proof of surveillance or interception.
 
-The code was written with AI assistance, but the system design, detection approach, heuristic selection, false-positive tradeoffs, validation decisions, and project direction were manually reviewed and directed by the developer.
+### Project philosophy
 
-I do not claim to be a Kotlin, Android, or telecommunications expert. This project is the result of focused self-study, field testing, careful iteration, and AI-assisted development under my direction.
-
-Every heuristic and detection decision in this project is something I aim to understand, explain, and defend honestly.
-
----
-
-# Project Philosophy
-
-ICdetection does **not** claim to provide definitive IMSI-catcher detection.
-
-Instead, the application follows a probabilistic forensic approach based on:
-
-- heuristic correlation
-- anomaly scoring
-- infrastructure consistency validation
-- timing analysis
-- local telemetry verification
-- behavioral pattern analysis
-- historical baseline learning
-
-The primary goal is to provide visibility, anomaly awareness, forensic logging, infrastructure auditing, radio telemetry analysis, and local evidence for later review within the technical limits imposed by Android.
+Instead of claiming definitive detection, ICdetection follows a probabilistic forensic approach
+built on heuristic correlation, anomaly scoring, infrastructure consistency validation, timing
+analysis, local telemetry verification, behavioral pattern analysis and historical baseline
+learning. The goal is visibility, anomaly awareness and local evidence for later review — within the
+technical limits imposed by Android.
 
 ---
 
-# Technical Limitations
+## What's new in v2.10.4
 
-Modern Android devices do not expose the complete cellular protocol stack to third-party applications.
+| Area | Change |
+|---|---|
+| **Serving-cell selection** | The serving cell is chosen by the modem's `PRIMARY_SERVING` status, never by signal strength. Only that cell is analysed; with carrier aggregation a secondary carrier could previously be scored and stored as the serving cell. |
+| **Safe abstention** | If Android declares a primary whose signal sample is unusable, the cycle abstains instead of promoting a secondary. No registered cell is exposed as active during abstention. Fallback to the first registered entry happens only when no primary is declared. |
+| **Radio context** | Connection state, secondary carriers, bandwidth, declared bands, additional PLMNs, closed subscriber group (possible femtocell) and `ServiceState` are collected for forensics. |
+| **RADIO tab & card** | A new RADIO tab (History → RADIO) and a main-screen card, in English and Spanish, with CSV export of service-state changes. |
+| **Service-state events** | Processed in order, persisted before the event list refreshes, and rejected if stale. Live channel and bandwidth telemetry still update on every reading. |
+| **Storage** | Schema 19 is additive; existing history is preserved. The history CSV gains 12 columns at the end. |
 
-This means ICdetection cannot directly access:
+None of the new radio-context fields feeds a heuristic or the score. H1–H16, weights, thresholds,
+Temporal Confidence, Stable-Site and Local Cell Trust are unchanged.
 
-- complete RRC signaling
-- NAS messages
-- full modem telemetry
-- low-level baseband internals
+---
+
+## Highlights
+
+- **No root, no baseband access** — everything comes from public Android telephony APIs.
+- **Conservative by design** — anomalies must persist across cycles before they are confirmed.
+- **Honest diagnostics** — unavailable data is reported as `N/A`, never assumed to be safe.
+- **Local-first privacy** — no cloud, no analytics, no ads, no hidden telemetry.
+- **Forensic exports** — CSV, ZIP cases and GraphML with SHA-256 checksums and privacy notes.
+- **Self-validating data** — `tools/check_export.py` checks the invariants the design guarantees.
+- **Tested** — unit tests, lint, release build and on-emulator storage/migration tests run in CI.
+
+---
+
+## Technical Limitations
+
+Modern Android devices do not expose the complete cellular protocol stack to third-party
+applications. ICdetection cannot directly access:
+
+- complete RRC signaling or NAS messages
+- full modem telemetry or low-level baseband internals
 - complete LTE/5G control-plane traffic
 - cryptographic session details
-- all identity-request events
-- all ciphering state transitions
+- all identity-request events or ciphering state transitions
 
-As a result, detection is heuristic in nature and should never be interpreted as definitive proof of surveillance or interception.
-
-Sophisticated LTE/5G interception systems may emulate legitimate carrier infrastructure and remain difficult, or impossible, to distinguish from real towers using Android-only telemetry.
-
----
-
-# Device & Hardware Compatibility
-
-ICdetection relies heavily on Android radio callbacks and telephony APIs. Hardware, firmware, modem implementation, Android version, and vendor HAL behavior significantly affect telemetry quality.
-
-## Recommended Environment
-
-Google Pixel devices running:
-
-- stock Android
-- GrapheneOS
-- near-AOSP Android environments
-
-generally provide cleaner and more consistent Android telephony behavior than heavily customized OEM builds.
-
-Advanced radio-security signals such as ciphering state, identifier disclosure events, or modem-level security callbacks remain highly dependent on:
-
-- Android version
-- modem firmware
-- vendor HAL support
-- exposed Android APIs
-- required system permissions
-- device-specific implementation details
-
-If these signals are not exposed by the device, ICdetection marks or treats them as unavailable rather than assuming they are safe.
-
-## OEM Firmware Limitations
-
-Manufacturers using heavily customized Android stacks, such as OneUI, MIUI, EMUI and similar systems, may modify or restrict radio HAL behavior.
-
-This may:
-
-- obfuscate radio metrics
-- suppress Timing Advance visibility
-- hide or alter signal-quality values
-- limit telephony callback consistency
-- prevent access to ciphering or identifier-disclosure information
-
-The application may still function normally on these devices, but some advanced heuristics can become partially degraded or unavailable.
-
-## Android Support
-
-- **Android 14+:** best practical support currently available in Android userland.
-- **Android 12 / 13:** supported in heuristic-analysis mode.
-- **Android 10 / 11:** may work depending on device telemetry support, but advanced behavior can be limited.
+Detection is therefore heuristic and must never be read as definitive proof of surveillance or
+interception. Sophisticated LTE/5G interception systems may emulate legitimate carrier
+infrastructure and remain difficult — or impossible — to distinguish from real towers using
+Android-only telemetry.
 
 ---
 
-# Detection Engine
+## Device & Hardware Compatibility
 
-ICdetection continuously performs multi-layer heuristic analysis during cell reselections, handovers, signal transitions, topology changes, mobility events, and observed changes in local radio behavior.
+ICdetection relies on Android radio callbacks and telephony APIs. Hardware, firmware, modem
+implementation, Android version and vendor HAL behavior all affect telemetry quality.
 
-Current analysis layers include:
+### Recommended environment
 
-## Isolated Cell Detection
+Google Pixel devices running stock Android, **GrapheneOS** or near-AOSP builds generally provide
+cleaner and more consistent telephony behavior than heavily customized OEM builds.
 
-Detects serving cells operating without coherent neighboring infrastructure. This can be useful against amateur rogue BTS deployments or isolated SDR configurations, but it can also occur in rural areas or unusual coverage environments.
+Advanced radio-security signals — ciphering state, identifier-disclosure events or modem-level
+security callbacks — depend on the Android version, modem firmware, vendor HAL support, exposed
+APIs, required system permissions and device-specific details. When a device does not expose them,
+ICdetection marks them as unavailable rather than assuming they are safe.
 
-## Signal Dominance Analysis
+### OEM firmware limitations
 
-Detects abnormal signal dominance deltas between the serving cell and neighboring cells, potentially indicating forced camping behavior. This is environment-sensitive and is softened in sparse or rural contexts to reduce false positives.
+Heavily customized stacks (OneUI, MIUI, EMUI and similar) may obfuscate radio metrics, suppress
+Timing Advance, alter signal-quality values, limit callback consistency or hide ciphering
+information. The app still works, but some advanced heuristics can be degraded or unavailable.
 
-## MCC Consistency Validation
+### Android support
 
-Detects Mobile Country Code inconsistencies between nearby cells. This is a strong anomaly when observed in normal non-border environments, but still requires contextual interpretation.
-
-## Multi-MNC Density Analysis
-
-Flags environments containing unusually high operator-code diversity. This is treated as weak evidence because MVNOs, roaming, transport hubs, and border regions can produce legitimate diversity.
-
-## TAC Regional Consistency
-
-Validates Tracking Area Code coherence against surrounding infrastructure. TAC deviations can be meaningful, but operator maintenance and regional network changes can also produce unusual values.
-
-## Timing Advance Geometric Analysis
-
-Attempts to correlate physical distance estimation using Timing Advance telemetry and tower-position validation when enough data is available. This is highly device-dependent and may be unavailable or unreliable on some hardware.
-
-## Ghost Neighbor Detection
-
-Detects cases where the serving cell is very strong while all visible neighboring cells are extremely weak. This may indicate an artificially controlled RF environment, but can also occur in difficult radio conditions.
-
-## ARFCN / Frequency Sanity Validation
-
-Performs frequency sanity checks against expected radio ranges and technology-specific limits. This is mostly a guard against impossible or malformed radio values, not a complete regional spectrum validator.
-
-## Ciphering Integrity Monitoring
-
-ICdetection v2.0 does not claim direct null-cipher or IMSI-disclosure detection on standard Android installs.
-
-Ciphering state is reported as unavailable unless the operating system exposes a supported and accessible signal. If the device does not expose this information, ICdetection treats it as N/A rather than PASSED or FAILED. It does not assume the network is safe simply because ciphering information cannot be read.
-
-## Anti Ping-Pong Analysis
-
-Detects aggressive reselection loops and repetitive handover behavior while applying mobility-aware filtering to reduce false positives during vehicular movement.
-
-## Geographic Consistency Analysis
-
-Validates Cell IDs against a local GPS-based historical database built from previous observations.
-
-This can detect cases where the same Cell ID appears from physically inconsistent locations over time, which may be consistent with mobile rogue infrastructure cloning legitimate tower identifiers.
-
-Because it is anchored to the device's own location history, this heuristic does not rely on public tower databases. Its scope is limited to cells for which prior history and a valid location fix already exist.
-
-## Signal Baseline Anomaly
-
-Learns each cell's typical signal level at a given location from the device's own historical observations, then flags readings that are anomalously strong compared to that learned baseline.
-
-A nearby transmitter impersonating a cell that is normally weaker at that location may appear far stronger than its own history.
-
-Only the "stronger than usual" direction is treated as suspicious, since weaker-than-usual readings are commonly caused by obstruction, distance, congestion, or environmental changes.
-
-## Intra-LTE Band Downgrade Analysis
-
-Detects suspicious shifts from high-frequency capacity bands to lower-frequency sub-GHz bands when the previous signal was strong and there is no evidence of progressive signal degradation.
-
-This can be consistent with forced camping or rogue-cell behavior, but it is not treated as proof by itself.
-
-## RF Identity Stability Analysis
-
-H15 inspects the device's own history for a cell identity and looks for **repeated alternation** between PCI values within the same carrier (ARFCN). It is intended to detect RF-identity instability, not a single persistent network reconfiguration.
-
-A PCI run is treated as one episode regardless of how many consecutive samples Android reports during that run. The same alternate PCI forms another independent episode only after the same ARFCN has returned to a different PCI and later comes back again. For example, `48,48,200,200,48` contains one alternate-PCI episode, while `48,200,48,200` contains two. This prevents several samples from one handover from being mistaken for independent persistence.
-
-H15 also avoids a self-reinforcing history loop. Observations whose **only** failure is H15 remain eligible for H15's own RF history, allowing later normal PCI observations to repair the baseline. A row that contains H15 together with another heuristic failure remains excluded from that baseline.
-
-The heuristic still requires a meaningful alternate share and sufficient recent evidence, and comparison remains scoped to the same ARFCN. A one-way change such as `48 -> 200` that then remains stable is not classified as H15 instability; persistent changes are handled by the separate historical reconfiguration quarantine. H15's weight and the global alert thresholds are unchanged in v2.10.3.
-
-**v2.1 correction.** Field data showed that carrier aggregation can make Android attribute a secondary carrier's PCI to the serving identity. H15 therefore compares PCI values only within the same ARFCN rather than mixing carriers.
-
-**v2.10.3 correction.** Real-world handover traces showed that repeated modem samples could both manufacture persistence and freeze H15's own baseline. Persistence is now episode-based and isolated H15 failures can feed back into H15 history. Because this changes RF-stability semantics, v2.10.3 is a dataset cut for H15 comparisons.
-
-## RF Quality Fingerprint
-
-Complementing the signal-power baseline, the engine can learn each cell's signal-quality signature using RSRQ and SINR.
-
-Because RSRQ and SINR are noisy, this check is deliberately strict. It requires many samples and a large deviation in both metrics simultaneously. It remains dormant until enough history accumulates.
+| Android | Support |
+|---|---|
+| **14+** | Best practical support currently available in Android userland. |
+| **12 / 13** | Supported in heuristic-analysis mode. |
+| **10 / 11** | May work depending on device telemetry; advanced behavior can be limited. |
 
 ---
 
-# Statistical and Historical Hardening
+## Detection Engine
 
-Beyond individual heuristics, the engine refines the quality of its evidence using the device's own accumulated history. These layers are fully offline and conservative by design.
+ICdetection continuously performs multi-layer heuristic analysis during cell reselections,
+handovers, signal transitions, topology changes, mobility events and changes in local radio
+behavior.
 
-## Percentile-Based Baseline
+<details open>
+<summary><strong>Analysis layers</strong></summary>
 
-In addition to mean and standard deviation, the per-cell power baseline stores high-percentile historical values. With sufficient samples, an anomaly must exceed the cell's own high historical range, making the check more robust against non-normal distributions and occasional legitimate strong readings.
+#### Isolated Cell Detection
+Detects serving cells operating without coherent neighboring infrastructure. Useful against amateur
+rogue BTS deployments or isolated SDR setups, but it can also occur in rural areas.
 
-## Cell Reputation
+#### Signal Dominance Analysis
+Detects abnormal signal-dominance deltas between the serving cell and its neighbors, potentially
+indicating forced camping. Softened in sparse or rural contexts to reduce false positives.
 
-Each cell earns a trust score derived from local history: observation volume, observations across distinct days, and the proportion of clean past scores.
+#### MCC Consistency Validation
+Detects Mobile Country Code inconsistencies between nearby cells. A strong anomaly in normal
+non-border environments, but still interpreted in context.
 
-This trust is used only to dampen the weight of noisy instantaneous heuristics on well-established cells. It never increases suspicion and does not suppress physics-anchored evidence such as geographic inconsistency, MCC mismatch, ciphering failure, or RF identity instability.
+#### Multi-MNC Density Analysis
+Flags unusually high operator-code diversity. Treated as weak evidence: MVNOs, roaming, transport
+hubs and border regions produce legitimate diversity.
 
-## Context-Aware Scoring
+#### TAC Regional Consistency
+Validates Tracking Area Code coherence against surrounding infrastructure. Operator maintenance and
+regional changes can also produce unusual values.
 
-Some heuristics are environment-sensitive. A strong isolated cell is much more suspicious in dense urban conditions than in a rural coverage area. ICdetection softens these weak signals based on neighbor density and local cell reputation.
+#### Timing Advance Geometric Analysis
+Correlates Timing Advance distance estimates with tower-position validation when enough data exists.
+Highly device-dependent; modems that report a constant zero are detected as `STUB_ZERO` and excluded
+from geometry.
 
-## Bayesian-Inspired Anomaly Confidence
+#### Ghost Neighbor Detection
+Detects a very strong serving cell while every visible neighbor is extremely weak — possibly an
+artificially controlled RF environment, or simply difficult radio conditions.
 
-The app includes a Bayesian-inspired scorer that combines failed heuristics into an **uncalibrated anomaly-confidence signal**. Correlated evidence groups are handled conservatively so that multiple symptoms of the same physical phenomenon do not inflate the result unfairly.
+#### ARFCN / Frequency Sanity Validation
+Guards against impossible or malformed channel values using technology-specific limits. It is not a
+complete regional spectrum validator.
 
-The likelihood ratios are expert-derived rather than empirically calibrated against a representative population of confirmed IMSI catchers and benign networks. The result must therefore not be interpreted as a literal probability that a transmitter is malicious.
+#### Ciphering Integrity Monitoring
+ICdetection does not claim direct null-cipher or IMSI-disclosure detection on standard Android
+installs. Ciphering state is `N/A` unless the operating system exposes a supported and accessible
+signal — never assumed to be `PASSED`.
+
+#### Anti Ping-Pong Analysis
+Detects aggressive reselection loops and repetitive handovers, with mobility-aware filtering during
+vehicular movement.
+
+#### Geographic Consistency Analysis
+Validates Cell IDs against a local GPS-based history built from the device's own observations. It can
+reveal the same Cell ID appearing from physically inconsistent locations over time. It does not rely
+on public tower databases.
+
+#### Signal Baseline Anomaly
+Learns each cell's typical signal level at a given location and flags readings that are anomalously
+**stronger** than that baseline. Weaker-than-usual readings are not treated as suspicious, since
+obstruction and distance commonly cause them.
+
+#### Intra-LTE Band Downgrade Analysis
+Detects suspicious shifts from high-frequency capacity bands to sub-GHz bands when the previous signal
+was strong and there was no progressive degradation.
+
+#### RF Identity Stability (H15)
+Looks for **repeated alternation** between PCI values within the same carrier (ARFCN). A PCI run
+counts as one episode however many samples Android reports: `48,48,200,200,48` is one alternate
+episode, `48,200,48,200` is two. Observations whose only failure is H15 remain in H15's own history,
+so later normal readings repair the baseline instead of freezing it. A stable one-way change such as
+`48 → 200` is handled by the separate reconfiguration quarantine, not as instability.
+
+#### RF Quality Fingerprint
+Learns each cell's RSRQ/SINR signature. Deliberately strict: it needs many samples and a large
+deviation in both metrics at once, and stays dormant until enough history accumulates.
+
+#### Mobility Sanity (H16)
+Compares a real handover with device movement, GPS quality, visible neighbors, locally learned
+coverage zones and trusted previous transitions. It has no fixed maximum tower distance, returns
+`N/A` when evidence is not defensible, and its low weight cannot trigger an alert by itself.
+
+</details>
 
 ---
 
-# Stable-Site Learning (Shadow Mode)
+## Statistical and Historical Hardening
 
-Stable-Site is a privacy-reduced local context model designed to learn whether the device repeatedly observes a coherent cellular environment while physically static. Sites are represented by hashed, overlapping approximately 500 m grid buckets rather than newly stored exact site coordinates. Only sufficiently fresh and accurate location evidence is allowed to contribute positive static context.
+These layers refine evidence using the device's own accumulated history. They are fully offline and
+conservative by design.
 
-Stable-Site remains **shadow-only**. It does not change H1-H16, `SecurityScore`, Bayesian-inspired anomaly confidence, Local Cell Trust, Temporal Confidence, alerts or ordinary forensic decisions. Its purpose is field calibration and future contextual analysis without silently changing the established detector.
+- **Percentile-based baseline** — with enough samples, an anomaly must exceed the cell's own high
+  historical range, which is robust against non-normal distributions.
+- **Cell reputation** — trust derived from observation volume, distinct days and clean past scores.
+  It only dampens noisy instantaneous heuristics on well-established cells; it never increases
+  suspicion and never suppresses physics-anchored evidence.
+- **Local Cell Trust** — a revocable confidence profile learned from clean observations across
+  independent days, capped at 98%. `ESTABLISHED` means *consistent with this device's local
+  history*, not *operator-authenticated*.
+- **Context-aware scoring** — environment-sensitive signals are softened by neighbor density and
+  local reputation.
+- **Bayesian-inspired anomaly confidence** — combines failed heuristics into an **uncalibrated**
+  signal (0–95). Likelihood ratios are expert-derived, not empirically calibrated, so the value is
+  not a literal probability.
 
-### Neighbour capability
+---
 
-Android devices differ substantially in what they expose for neighbouring cells. Since v2.10.1 Stable-Site distinguishes:
+## Radio Context
+
+*New in v2.10.4 — collection and diagnostics only; it never changes the score.*
+
+| Field | What it tells you |
+|---|---|
+| **Connection state** | Whether each cell is `PRIMARY`, `SECONDARY`, `NONE` or `UNKNOWN`, as declared by the modem. |
+| **Secondary carriers** | Carrier-aggregation secondaries and the NR leg of 5G NSA, listed instead of analysed. |
+| **Bandwidth & bands** | Carrier bandwidth and the bands each cell declares. |
+| **Additional PLMNs** | Extra networks announced by the cell (e.g. network sharing). |
+| **CSG** | Closed subscriber group — a possible femtocell. Context, not an anomaly by itself. |
+| **Service state** | In service, emergency only, out of service or radio off; data/voice registration, roaming, network PLMN and SIM PLMN. |
+
+The **RADIO** tab (History → RADIO) shows the live serving cell, its carriers, every visible cell with
+its connection state and the recent service-state changes, exportable to CSV. The terminal logs
+`[RADIO]` when the serving cell or its carriers change and `[SERVICIO]` when the service state
+changes. "Not reported" means the modem or Android did not provide the field.
+
+---
+
+## Stable-Site Learning (Shadow Mode)
+
+Stable-Site is a privacy-reduced local context model that learns whether the device repeatedly
+observes a coherent cellular environment while physically static. Sites are hashed, overlapping
+~500 m grid buckets — no exact site coordinates are stored. Only fresh and accurate location
+evidence contributes positive static context.
+
+Stable-Site is **shadow-only**: it does not change H1–H16, the security score, anomaly confidence,
+Local Cell Trust, Temporal Confidence, alerts or ordinary forensic decisions.
+
+**Neighbour capability**
 
 - `FULL_NEIGHBOUR_IDENTITY` — a complete neighbour cellular identity is available.
-- `RF_NEIGHBOUR_ONLY` — the complete Cell ID is unavailable, but validated local RF context is available.
-- `NO_NEIGHBOUR_DATA` — there is not enough usable neighbour information; no evidence is invented.
+- `RF_NEIGHBOUR_ONLY` — no complete Cell ID, but validated local RF context (`RFCTX:v1:RAT:ARFCN:PCI`).
+  It is **not** a Cell ID and is never presented as an authenticated identity.
+- `NO_NEIGHBOUR_DATA` — not enough usable neighbour information; nothing is invented.
 
-RF-only context uses a local fingerprint such as `RFCTX:v1:RAT:ARFCN:PCI` (or the corresponding technology-specific channel/physical identifier). It is **not** a Cell ID, is never presented as an authenticated identity, and is validated against RAT-specific channel and PCI/PSC limits. Timing Advance is independent of neighbour learning and is not required for RF-only maturity.
-
-### Maturity and retention
-
-An `ACTIVE` Stable-Site context requires at least seven distinct serving days, three confirmed static days, thirty serving observations and at least three independent neighbour-evidence days. The neighbour requirement can be satisfied by full neighbour identities or RF-only context; large sample volume from one day cannot replace elapsed days.
-
-Schema 18 stores RF-only neighbour evidence separately from full cellular identities. Existing databases migrate additively. Historical RF context discarded by versions that did not store it cannot be reconstructed retroactively, so those neighbour days begin accumulating only after a capable version is installed.
-
-Since v2.10.2, RF-only neighbour context follows bounded retention like the rest of Stable-Site: old day evidence and stale fingerprints are pruned, orphan day rows are removed, and exports derive maturity state/capability/reason from the same policy used by runtime rather than a duplicated SQL decision tree.
+**Maturity** — `ACTIVE` requires at least seven distinct serving days, three confirmed static days,
+thirty serving observations and three independent neighbour-evidence days. Large sample volume from
+a single day cannot replace elapsed days. RF-only context follows the same bounded retention as full
+identities, and exports derive maturity from the same policy used at runtime.
 
 ---
 
-# Temporal Confidence
+## Temporal Confidence
 
-Anomalies must persist across multiple analysis cycles before triggering a confirmed threat alert.
+Anomalies must persist across multiple analysis cycles before a confirmed alert. Transient failures
+are logged but do not immediately raise alarms, which reduces false-positive fatigue.
 
-Transient heuristic failures are logged but do not immediately raise confirmed alarms. This reduces false-positive fatigue in dynamic RF environments and makes the app more useful during daily use.
+| Phase | Meaning |
+|---|---|
+| `1/3` | Initial observation — an incident record and forensic capture may begin. |
+| `2/3` | The condition persists, but it is not yet a confirmed threat. |
+| `3/3` | The temporal confirmation requirement has been reached. |
 
-v2.2.0 exposes the full temporal progression:
-
-- `1/3` — initial observation; an incident record and forensic capture may begin.
-- `2/3` — the condition persists, but it is not yet a confirmed threat.
-- `3/3` — the configured temporal confirmation requirement has been reached.
-
-The phase can move as fresh radio observations arrive. A rule may also move between `N/A`, `PASS`,
-and `FAIL` when the modem or Android begins or stops exposing the data needed to evaluate it.
-
----
-
-# Incident Black Box
-
-The incident black box preserves the lifecycle of a suspicious episode independently from the
-ordinary antenna history. It records the first observation at `1/3`, the highest temporal phase
-reached, score, anomaly confidence, reason, and a snapshot of the heuristic diagnostics.
-
-Incident states are:
-
-- `OBSERVING` — the condition has started but is not confirmed.
-- `CONFIRMED` — the event reached `3/3`.
-- `RECOVERED` — subsequent observations returned to normal.
-- `INTERRUPTED` — the application or monitoring service stopped before the lifecycle completed.
-
-This history improves later review, but it does not turn a heuristic alert into definitive proof
-of a rogue base station or surveillance activity.
+A rule may move between `N/A`, `PASS` and `FAIL` as the modem or Android starts or stops exposing the
+data needed to evaluate it.
 
 ---
 
-# Capability Diagnostics & Baseline Maturity
+## Incident Black Box
 
-The live diagnostics view reports whether each rule passed, failed, or could not be evaluated.
-An `N/A` result is accompanied by a contextual explanation, such as unavailable modem telemetry,
-missing location, insufficient latency context, or an immature historical baseline.
+The black box preserves the lifecycle of a suspicious episode independently from ordinary antenna
+history: first observation, highest phase reached, score, anomaly confidence, reason and a snapshot
+of the diagnostics.
 
-The application also reports the maturity of the historical data used by:
+| State | Meaning |
+|---|---|
+| `OBSERVING` | Started but not confirmed. |
+| `CONFIRMED` | Reached `3/3`. |
+| `RECOVERED` | Subsequent observations returned to normal. |
+| `INTERRUPTED` | Monitoring stopped before the lifecycle completed. |
 
-- the RSRP power baseline
-- the RSRQ/SINR quality fingerprint
-- PCI identity stability
-- local cell reputation
-- Stable-Site feature state, neighbour capability and maturity reason
-
-These indicators make it possible to distinguish an inactive-looking rule from one that is waiting
-for enough trustworthy data. They are diagnostic information and do not independently increase the
-threat score.
+It improves later review; it does not turn a heuristic alert into proof.
 
 ---
 
-# Battery Optimization
+## Capability Diagnostics & Baseline Maturity
 
-ICdetection requires unoptimized battery settings to ensure reliable long-running monitoring.
-
-Version 2.4.0 deliberately keeps the GPS-only stream active 24/7 while monitoring and holds a partial
-wake lock so the collection loop continues with the screen off. This materially increases battery
-use. Below 5% battery while unplugged, GPS and the wake lock pause to avoid losing the entire
-collection session to a powered-off phone; they resume automatically after recovery or charging.
-Android battery optimization and manufacturer policies may still interfere, so exclude the app
-manually when continuity matters.
-
-Recommended setting:
-
-**Settings -> Apps -> ICdetection -> Battery -> Battery optimization -> Don't optimize**
-
-The app may guide the user toward the relevant settings screen, but the final exception grant is controlled by Android and the user.
+The live diagnostics view reports whether each rule passed, failed or could not be evaluated. Every
+`N/A` comes with a reason: unavailable modem telemetry, missing location, insufficient latency
+context or an immature baseline. It also shows the maturity of the RSRP baseline, the RSRQ/SINR
+fingerprint, PCI identity stability, local reputation and Stable-Site state — so an inactive-looking
+rule can be told apart from one that is still waiting for trustworthy data.
 
 ---
 
-# Telemetry & Visualization
+## Battery Optimization
 
-The live identity row shows `CELL ID`, `TAC/LAC`, the operator as `MCC / MNC`, and `ARFCN` in a
-compact four-column layout. Expanded history rows also retain the visible `MCC/MNC` identity.
+For reliable long-running collection, ICdetection keeps a GPS-only stream active while monitoring and
+holds a partial wake lock so collection continues with the screen off. This increases battery use.
+Below 5% battery while unplugged, GPS and the wake lock pause and resume automatically after charging.
 
-## Forensic Terminal
-
-Structured event-driven logging designed to preserve meaningful security and radio events while minimizing noisy output.
-
-## Real-Time Signal Graphs
-
-Continuous signal visualization with contextual heuristic overlays.
-
-## Timing Advance Visualization
-
-Timing Advance visualization for distance-behavior analysis when TA is exposed by the device.
-
-## Threat Scoring Engine
-
-Dynamic multi-factor anomaly scoring with contextual correlation.
-
-## Persistent Telemetry History
-
-Session-aware logging and local infrastructure observation tracking.
+**Settings → Apps → ICdetection → Battery → Battery optimization → Don't optimize**
 
 ---
 
-# Infrastructure Verification
+## Telemetry & Visualization
 
-ICdetection can optionally cross-reference observed infrastructure using OpenCellID.
-
-These services are used to compare observed cells against publicly known crowdsourced databases.
-
-Public tower databases are:
-
-- incomplete
-- community-maintained
-- occasionally outdated
-- uneven across regions and operators
-
-A "not found" result does **not** imply malicious infrastructure.
-
-External requests are only made when the user configures and enables infrastructure verification APIs.
-
-WiGLE is no longer queried. Its limited quota and inconclusive replies could obscure a valid
-OpenCellID result without adding dependable coverage. Existing local history remains compatible.
+- **Forensic Terminal** — event-driven logging of meaningful security and radio events.
+- **Real-time signal graphs** — continuous visualization with heuristic overlays.
+- **Timing Advance visualization** — when the device exposes TA.
+- **Threat scoring engine** — dynamic multi-factor anomaly scoring.
+- **Topology explorer** — a local, read-only view of cells and directional handover routes.
+- **Geometry view** — handover graph over positions observed by this phone, with route familiarity.
+- **Identity row** — `CELL ID`, `TAC/LAC`, `MCC / MNC` and `ARFCN` in a compact layout.
 
 ---
 
-# Privacy & Networking
+## Infrastructure Verification
 
-## Local-First Design
-
-The application follows a local-first privacy philosophy.
-
-By default:
-
-- no cloud synchronization exists
-- no analytics are collected
-- no advertising SDKs are included
-- no hidden telemetry exists
-- no user tracking exists
-
-All historical telemetry is stored locally on the device unless the user explicitly exports it.
-
-## Optional SOCKS5 Routing
-
-ICdetection supports optional SOCKS5 proxy routing for infrastructure-verification requests, including Tor / Orbot-style local proxy setups.
+ICdetection can optionally cross-reference observed cells with **OpenCellID**. Public databases are
+incomplete, community-maintained, occasionally outdated and uneven across regions, so a
+`NOT_FOUND` result does **not** imply malicious infrastructure. Requests are made only after you
+configure and enable verification. WiGLE is no longer queried.
 
 ---
 
-# Forensic Logging
+## Privacy & Networking
 
-## SQLite Event Storage
+**Local-first design.** No cloud synchronization, no analytics, no advertising SDKs, no hidden
+telemetry and no user tracking. All history stays on the device unless you export it, and
+`allowBackup` is disabled.
 
-Telemetry and forensic events are stored locally on-device in SQLite.
+**Optional SOCKS5 routing.** Verification requests can be routed through a SOCKS5 proxy, including
+Tor / Orbot-style local setups.
 
-v2.2.0 adds bounded forensic cases. A case begins automatically when an observation reaches phase
-`1/3`, includes up to 60 seconds of pre-event context, follows the complete episode, and remains
-open for 60 seconds after recovery. A recurrence during that window continues the same case. An
-individual capture is limited to 30 minutes.
+---
 
-The recorder can preserve serving and neighboring cell observations, radio identity and quality,
-Timing Advance when available, GPS position and accuracy, latency and verification state, temporal
-phase, score, confidence, heuristic explanations, device capabilities, and relevant terminal logs.
-It deliberately excludes API credentials, IMSI, IMEI, and the phone number.
+## Forensic Logging & Exports
 
-Cases move through `CAPTURING`, `POST_CAPTURE`, `READY`, and `INTERRUPTED` states. The forensic view
-refreshes while monitoring so the current case state remains visible.
+All telemetry and forensic events are stored locally in SQLite.
 
-## Forensic Case Export
-
-A ready case can be exported as a ZIP archive containing:
+**Forensic cases.** A case starts automatically at phase `1/3`, includes up to 60 s of pre-event
+context, follows the whole episode and stays open 60 s after recovery (30 min maximum). It keeps
+serving and neighbor observations, radio identity and quality, connection state, Timing Advance when
+available, GPS position and accuracy, latency, verification state, phase, score, confidence,
+heuristic explanations, capabilities and relevant terminal logs. It never stores API credentials,
+IMSI, IMEI or the phone number.
 
 ```text
 ICD-YYYY-MM-DD-NNNN.zip
@@ -638,143 +458,199 @@ ICD-YYYY-MM-DD-NNNN.zip
 └── SHA256SUMS.txt
 ```
 
-`SHA256SUMS.txt` can reveal whether an exported member was modified later. It is not a digital
-signature and does not, by itself, establish legal chain of custody. Because an export can contain
-precise location and cellular metadata, review and protect it before sharing.
+`SHA256SUMS.txt` reveals later modification of an exported member. It is not a digital signature and
+does not by itself establish legal chain of custody.
 
-## CSV Export
+**Other exports.** Topology (CSV + GraphML + checksums), Geometry (coordinate-free CSV + GraphML),
+Stable-Site (hashed sites, neighbours, motion bands, shadow episodes) and RADIO service-state
+changes (CSV).
 
-CSV export is available for:
+**History CSV columns**
 
-- external analysis
-- mapping
-- reporting
-- research
-- archival workflows
+```text
+Timestamp, NetType, CID, MNC, TAC, MCC, DBM, Verified, SecurityScore, FailedHeuristics, Lat, Lon,
+PCI, ARFCN, RSRQ, SINR, AnomalyConfidence, ApiLat, ApiLon, TA, TAUnit, TAMeters, Radio,
+ServingConnection, BandwidthKHz, Bands, AdditionalPlmns, CsgIndicator, CsgIdentity, CsgName,
+SecondaryCarriers, ServiceState, NetworkOperator, SimOperator, NetworkRoaming
+```
 
-Columns: `Timestamp, NetType, CID, MNC, TAC, MCC, DBM, Verified, SecurityScore, FailedHeuristics, Lat, Lon, PCI, ARFCN, RSRQ, SINR, AnomalyConfidence, ApiLat, ApiLon, TA, TAUnit, TAMeters, Radio`.
+Validate any export with:
 
-Validate any export with `python3 tools/check_export.py <file.csv>` — it checks the invariants the
-design guarantees and prints how mature the history is. The validator uses RAT-specific physical-ID
-ranges (LTE PCI `0..503`, NR PCI `0..1007`, UMTS PSC `0..511`), reports the inclusive calendar span
-and averages observations over days that actually contain data. Legacy histories where `LTE_INDEX`
-is repeatedly recorded as `TA=0` are reported as an aggregate **possible stub pattern**, not as
-reliably derivable distance; an individual TA value of zero is not automatically declared invalid.
+```bash
+python3 tools/check_export.py <file.csv>
+```
 
-Three points matter for analysis:
+It checks the invariants the design guarantees, applies RAT-specific physical-ID ranges (LTE PCI
+`0..503`, NR PCI `0..1007`, UMTS PSC `0..511`), reports calendar coverage and maturity, summarises
+the v2.10.4 radio context and flags legacy `LTE_INDEX` / `TA=0` stub patterns.
 
-- **`Lat` / `Lon` are the device's own GPS position** at the moment of the observation, and nothing else. The antenna position reported by OpenCellID lives in its own `ApiLat` / `ApiLon` columns. Before v2.1 both were written to the same pair of columns, which silently mixed two different quantities.
-- **`FailedHeuristics` entries prefixed with `[sub-umbral]`** are heuristics that failed without reaching the alarm threshold. They are observations, not alerts, and they are recorded precisely so that false positives can be studied. Before v2.1 they were stored as `OK`.
-- **`Verified` is a label, not a verdict, and it has five values.** `VERIFIED` (OpenCellID returned *this* cell — identity checked field by field — with a credible coordinate), `NOT_FOUND` (OpenCellID's documented "cell not found" response), `REJECTED` (a reply arrived but did not survive the checks — wrong identity, sentinel or impossible coordinate, incomplete body), `ERROR` (no interpretable reply: quota, rejected key, timeout, 404) and `PENDING`. None of them changes `SecurityScore`: the score comes only from the local heuristic engine. A `VERIFIED` older than 30 days is re-checked; historical rows are kept either way.
+Key points for analysis:
 
-Exports may contain sensitive location and cellular metadata. Users should treat exported files as private forensic material.
+- **`Lat` / `Lon` are always the device's own GPS position.** The OpenCellID antenna position lives
+  in `ApiLat` / `ApiLon`.
+- **`[sub-umbral]` entries** in `FailedHeuristics` failed without reaching the alarm threshold. They
+  are observations kept on purpose so false positives can be studied.
+- **`Verified` is a label, not a verdict:** `VERIFIED`, `NOT_FOUND`, `REJECTED`, `ERROR` or `PENDING`.
+  None of them changes `SecurityScore`.
 
----
-
-# False Positives
-
-False positives are possible and expected.
-
-Legitimate situations that may trigger heuristic alerts include:
-
-- carrier maintenance
-- roaming environments
-- dense urban deployments
-- indoor DAS systems
-- femtocells
-- NSA / 5G transitions
-- temporary spectrum reconfiguration
-- rural coverage gaps
-- public transport routes
-- tunnels, basements, elevators, and parking garages
-- vendor-specific Android radio behavior
-
-ICdetection should be interpreted as a forensic auditing tool, telemetry analyzer, anomaly detector, and local evidence collector, not as definitive proof of surveillance activity.
+> [!CAUTION]
+> Exports can contain precise location and cellular metadata. Treat them as private forensic material
+> and review them before sharing.
 
 ---
 
-# Security & Threat Model
+## False Positives
 
-ICdetection is primarily useful against:
+False positives are possible and expected. Legitimate causes include carrier maintenance, roaming,
+dense urban deployments, indoor DAS systems, femtocells, NSA / 5G transitions, temporary spectrum
+reconfiguration, rural coverage gaps, public transport routes, tunnels, basements, elevators and
+parking garages, and vendor-specific Android radio behavior.
 
-- amateur rogue BTS deployments
-- poorly configured SDR towers
-- simple fake base stations
-- aggressive downgrade attempts
-- abnormal cellular behavior
-- topology inconsistencies
-- unstable Cell ID / PCI behavior
+---
 
-The application is less reliable against:
+## Security & Threat Model
 
-- sophisticated LTE/5G interception platforms
-- carrier-grade rogue infrastructure
-- systems that accurately emulate legitimate network parameters
-- attacks that do not expose anomalies through Android APIs
-- lawful intercept or surveillance occurring inside operator infrastructure
+| More useful against | Less reliable against |
+|---|---|
+| Amateur rogue BTS deployments | Sophisticated LTE/5G interception platforms |
+| Poorly configured SDR towers | Carrier-grade rogue infrastructure |
+| Simple fake base stations | Systems that accurately emulate legitimate parameters |
+| Aggressive downgrade attempts | Attacks that expose no anomaly through Android APIs |
+| Topology inconsistencies and unstable Cell ID / PCI | Interception inside operator infrastructure |
 
 These limitations are inherent to Android userland restrictions.
 
 ---
 
-# Related Research & Inspiration
+## Community Recognition
 
-This project was inspired by public research involving:
+ICdetection is listed in [**awesome-telco**](https://github.com/ravens/awesome-telco), a curated
+community collection of telecommunications software, research resources, protocols, datasets and
+security tooling.
 
-- LTE security
-- IMSI-catcher detection
-- SDR rogue BTS analysis
-- Android telephony limitations
-- cellular anomaly detection
-- radio-layer privacy research
-
-Relevant public projects and research areas include:
-
-- SnoopSnitch
-- AIMSICD
-- LTEInspector
-- OWL
-- academic LTE-security research
-- SDR-based rogue BTS experimentation
+Inclusion in a community-maintained list is recognition and visibility — not an independent security
+audit, certification or endorsement of ICdetection's detection results.
 
 ---
 
-# License
+## Development Disclosure
 
-Licensed under the **GNU General Public License v3.0 (GPL-3.0)**.
+This project was developed with an AI-assisted workflow.
 
-You are free to:
+The lead developer (**Alexis Gomez Rodriguez**) designed and directed the heuristic logic, detection
+architecture, threat-scoring behavior, forensic telemetry workflow, validation methodology, anomaly
+correlation, false-positive reduction strategy and the overall project direction.
 
-- use
-- study
-- modify
-- redistribute
-- audit
+AI assistance — including Gemini, Claude, ChatGPT and DeepSeek — was used for Kotlin implementation,
+Android API integration, architectural iteration, debugging, refactoring and documentation.
 
-the software under GPL terms.
-
-Derivative works must remain open-source under GPL-compatible licensing.
+I do not claim to be a Kotlin, Android or telecommunications expert. This project is the result of
+focused self-study, field testing, careful iteration and AI-assisted development under my direction.
+Every heuristic and detection decision is something I aim to understand, explain and defend honestly.
 
 ---
 
-# Acknowledgements
+## Release History
 
-Thank you to everyone who has followed the project through its many iterations.
+Every release that changes detection behavior is recorded as a **dataset cut**. The full detail lives
+in [`CHANGELOG.md`](CHANGELOG.md) and [`Status.md`](Status.md).
 
-ICdetection v2.10.4 is the current stable release within the boundaries of what Android userland
-allows without root or direct baseband access.
+<details>
+<summary><strong>v2.10.x — Stable-Site, route memory, H15 and radio context</strong></summary>
 
-Future updates will focus on bug fixes, field validation, false-positive analysis, and minor improvements discovered through real-world usage.
+- **v2.10.4** — Serving cell chosen by `PRIMARY_SERVING`; safe abstention; radio context, RADIO tab
+  and service-state events. Schema 19. **Definitive release for the field-collection freeze.**
+- **v2.10.3** — H15 reasons about independent PCI alternation episodes and no longer freezes its own
+  baseline. Dataset cut for H15.
+- **v2.10.2** — Bounded retention for RF-only neighbour evidence; exports use the runtime maturity
+  policy; RAT-specific PCI/PSC validation.
+- **v2.10.1** — Conservative RF-only neighbour context for devices without complete neighbour Cell
+  IDs. Schema 18.
+- **v2.10.0** — Descriptive route memory (Mobility Familiarity) and Geometry export. `KNOWN_ON_ROUTE`
+  means earlier independent trips saw those transitions — not trust. Schema 17.
 
-This is the first Android application I have ever built, and I put a lot of care into it.
+</details>
 
-I do not have formal telecommunications or Android-development training. This project is the result of focused self-study, field testing, and AI-assisted development under my direction. I designed the detection approach, selected and rejected heuristics, reviewed the logic, tested behavior in real conditions, and made the project decisions while AI tools helped with Kotlin/Android implementation.
+<details>
+<summary><strong>v2.9.x — Stable-Site learning</strong></summary>
 
-If you have questions, find mistakes, or run into issues, please open an issue. I will review it honestly and fix what I can.
+- **v2.9.1** — Motion classification driven by real GPS callbacks; brief inaccurate fixes abstain;
+  a 60 s gap invalidates the window.
+- **v2.9.0** — Privacy-reduced Stable-Site learning in shadow mode with hashed ~500 m buckets and
+  multi-day maturity. Schema 16.
 
-The detection baseline is stable/frozen while real-world data is collected. Version 2.10.3 is an explicit H15 dataset cut because it corrects a demonstrated handover-related feedback loop; future detection changes should likewise be driven by observed behavior, false positives and field evidence rather than adding heuristics for their own sake.
+</details>
 
-Best regards,
-Alexis
+<details>
+<summary><strong>v2.8.x and earlier</strong></summary>
 
-Carpe diem.
+- **v2.8.1** — Frequent cells accumulate temporal trust across the full 90-day window.
+- **v2.8.0** — Forensic continuity hardening, failed-write detection, whole-case retention, SQLite
+  foreign keys; H8/H11/H14 use the observation's real radio technology. Dataset cut.
+- **v2.7.x** — Multi-signal detection hardening and revocable Local Cell Trust; geometry and
+  antenna-history inspection.
+- **v2.6.0** — Service restructuring and interface localization.
+- **v2.5.x** — H16 shortcut handling, baseline admission, temporal confirmation and GNSS admission
+  changes. Each recorded as a dataset cut.
+- **v2.3.x / v2.4.0** — H16 mobility sanity, topology explorer, data-integrity and collection-
+  continuity corrections; v2.3.3 began the first definitive campaign.
+- **v2.2.x** — Temporal phases `1/3`–`3/3`, incident black box and bounded forensic cases.
+- **v2.1.x** — Data-integrity release: sub-threshold reasons preserved, GPS and antenna coordinates
+  separated, carrier-aggregation false positives removed.
+
+> Upgrading from a version older than **v2.1.1** requires uninstalling first: those APKs were signed
+> with a different key and their history may mix antenna and device coordinates.
+
+</details>
+
+---
+
+## Related Research & Inspiration
+
+Inspired by public research on LTE security, IMSI-catcher detection, SDR rogue-BTS analysis, Android
+telephony limitations, cellular anomaly detection and radio-layer privacy, including **SnoopSnitch**,
+**AIMSICD**, **LTEInspector**, **OWL**, academic LTE-security research and SDR-based rogue-BTS
+experimentation.
+
+---
+
+## License
+
+Licensed under the **GNU General Public License v3.0 (GPL-3.0)**. You are free to use, study, modify,
+redistribute and audit the software under GPL terms. Derivative works must remain open source under
+GPL-compatible licensing.
+
+---
+
+## Acknowledgements
+
+Thank you to everyone who has followed the project through its many iterations — and for your
+patience with the frequent releases during development. They were necessary to correct issues found
+through real-world testing.
+
+**ICdetection v2.10.4 is the definitive release for the next three months.** During this period I
+will not change the detector unless a significant bug appears. The time will be used to collect data,
+observe real behavior, measure false positives and learn from the evidence. After that, the data will
+decide what — if anything — changes next.
+
+This is the first Android application I have ever built, and I put a lot of care into it. I do not
+have formal telecommunications or Android-development training; I designed the detection approach,
+selected and rejected heuristics, reviewed the logic, tested it in real conditions and made the
+project decisions, while AI tools helped with the Kotlin/Android implementation.
+
+If you have questions, find mistakes or run into issues, please **open an issue**. I will review it
+honestly and fix what I can.
+
+> **Nota para los usuarios:** pedimos disculpas por la frecuencia inusual de actualizaciones durante
+> el desarrollo; fueron necesarias para corregir problemas encontrados en pruebas reales. La v2.10.4
+> es la versión definitiva durante los próximos tres meses, y no se harán cambios salvo que aparezca
+> un error importante.
+
+<div align="center">
+
+Best regards,<br>
+**Alexis**
+
+*Carpe diem.*
+
+</div>
