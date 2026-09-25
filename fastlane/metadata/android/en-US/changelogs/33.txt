@@ -1,0 +1,1 @@
+Definitive release for the field-collection freeze. Delete history is now a complete, atomic reset including route trips. App and service share one database connection; retention is atomic. H3/H4 report N/A instead of an empty PASS when neighbours carry no MCC/MNC. Verification no longer stays stuck in PENDING. No heuristic, weight, threshold or score change. Schema 19 unchanged.

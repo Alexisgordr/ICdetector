@@ -135,9 +135,9 @@ fun HistoryPanel(
                     onClick = {
                         scope.launch(Dispatchers.IO) {
                             dbHelper.clear()
-                            items = emptyList()
-                            totalRecordCount = 0
                             withContext(Dispatchers.Main) {
+                                items = emptyList()
+                                totalRecordCount = 0
                                 showDeleteConfirm.value = false
                                 deleteConfirmText = ""
                             }

@@ -53,7 +53,7 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        dbHelper = CellDbHelper(this)
+        dbHelper = CellDbHelper.getInstance(this)
         
         // No iniciamos el servicio aquí directamente para evitar crasheos por permisos en Android 14+
         // El inicio del servicio se gestionará desde el MainLayout cuando los permisos sean otorgados.
@@ -114,9 +114,12 @@ class MainActivity : ComponentActivity() {
 
     override fun onDestroy() {
         super.onDestroy()
-        if (isBound) {
-            unbindService(connection)
+        // Un bindService() aceptado exige su unbindService() aunque la conexión aún no haya
+        // llegado (isBinding): si no, la actividad destruida deja la conexión colgada.
+        if (isBound || isBinding) {
+            try { unbindService(connection) } catch (_: IllegalArgumentException) {}
             isBound = false
+            isBinding = false
         }
     }
 }

@@ -55,52 +55,66 @@ internal class ExternalVerificationController(
         }
 
         scope.launch(Dispatchers.IO) {
-            val loc = currentLocation()
-            val stored = db.getKnownStatus(
-                cell.mnc, cell.tac, cell.cellId, cell.mcc,
-                loc?.latitude, loc?.longitude, cell.radioTech
-            )
-            if (stored != VerificationStatus.PENDING) {
-                cache[key] = stored
-                if (stored == VerificationStatus.NOT_FOUND) notFoundTimes[key] = now()
-                publish(cell, stored)
-                persist(cell, stored)
-                return@launch
-            }
-
-            log("Verificando antena MCC ${cell.mcc} · MNC ${cell.mnc} · TAC ${cell.tac} · CID ${cell.cellId}")
-            val result = OpenCellIdClient.tryOpenCellIdSyncWithData(cell, token, proxyEnabled(), client)
-            log("OpenCellID → ${result.status.name}")
-            result.reason?.let(log)
-
-            var status = result.status
-            val data = result.record
-            if (status == VerificationStatus.VERIFIED && data != null) {
-                val lat = data.optDouble("lat", Double.NaN)
-                val lon = data.optDouble("lon", Double.NaN)
-                val hasCoordinates = !lat.isNaN() && !lon.isNaN()
-                if (hasCoordinates && coordinateValidator.isValid(lat, lon, cell)) {
-                    completeVerified(cell, key, lat, lon)
-                    return@launch
+            try {
+                verifyNow(cell, key, token)
+            } catch (e: Exception) {
+                // Sin esto la antena se quedaba en PENDING en la caché y mayAttempt() no la
+                // volvía a intentar hasta reiniciar el servicio. Como ERROR se reintenta sola.
+                if (cache[key] == VerificationStatus.PENDING) {
+                    cache[key] = VerificationStatus.ERROR
+                    errorTimes[key] = now()
                 }
-                status = VerificationDecision.combine(VerificationStatus.PENDING, VerificationStatus.REJECTED)
-                log(if (hasCoordinates) {
-                    "OpenCellID: respuesta descartada por coordenada no creíble. No se concluye nada sobre la antena."
-                } else {
-                    "OpenCellID: respuesta sin coordenadas; no se puede comprobar."
-                })
+                log("Error al verificar (${e.javaClass.simpleName}). Se reintentará más tarde.")
             }
-
-            if (status != VerificationStatus.VERIFIED &&
-                db.hasRecentVerifiedRecord(cell.cellId, cell.mnc, cell.tac, cell.mcc, cell.radioTech)) {
-                cache[key] = VerificationStatus.VERIFIED
-                log("Esta antena ya constaba verificada; una consulta vacía o fallida no borra esa evidencia.")
-                persist(cell, VerificationStatus.VERIFIED)
-                publish(cell, VerificationStatus.VERIFIED)
-                return@launch
-            }
-            complete(cell, key, status)
         }
+    }
+
+    private fun verifyNow(cell: CellData, key: String, token: String) {
+        val loc = currentLocation()
+        val stored = db.getKnownStatus(
+            cell.mnc, cell.tac, cell.cellId, cell.mcc,
+            loc?.latitude, loc?.longitude, cell.radioTech
+        )
+        if (stored != VerificationStatus.PENDING) {
+            cache[key] = stored
+            if (stored == VerificationStatus.NOT_FOUND) notFoundTimes[key] = now()
+            publish(cell, stored)
+            persist(cell, stored)
+            return
+        }
+
+        log("Verificando antena MCC ${cell.mcc} · MNC ${cell.mnc} · TAC ${cell.tac} · CID ${cell.cellId}")
+        val result = OpenCellIdClient.tryOpenCellIdSyncWithData(cell, token, proxyEnabled(), client)
+        log("OpenCellID → ${result.status.name}")
+        result.reason?.let(log)
+
+        var status = result.status
+        val data = result.record
+        if (status == VerificationStatus.VERIFIED && data != null) {
+            val lat = data.optDouble("lat", Double.NaN)
+            val lon = data.optDouble("lon", Double.NaN)
+            val hasCoordinates = !lat.isNaN() && !lon.isNaN()
+            if (hasCoordinates && coordinateValidator.isValid(lat, lon, cell)) {
+                completeVerified(cell, key, lat, lon)
+                return
+            }
+            status = VerificationDecision.combine(VerificationStatus.PENDING, VerificationStatus.REJECTED)
+            log(if (hasCoordinates) {
+                "OpenCellID: respuesta descartada por coordenada no creíble. No se concluye nada sobre la antena."
+            } else {
+                "OpenCellID: respuesta sin coordenadas; no se puede comprobar."
+            })
+        }
+
+        if (status != VerificationStatus.VERIFIED &&
+            db.hasRecentVerifiedRecord(cell.cellId, cell.mnc, cell.tac, cell.mcc, cell.radioTech)) {
+            cache[key] = VerificationStatus.VERIFIED
+            log("Esta antena ya constaba verificada; una consulta vacía o fallida no borra esa evidencia.")
+            persist(cell, VerificationStatus.VERIFIED)
+            publish(cell, VerificationStatus.VERIFIED)
+            return
+        }
+        complete(cell, key, status)
     }
 
     private fun complete(cell: CellData, key: String, requested: VerificationStatus) {

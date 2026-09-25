@@ -37,6 +37,16 @@ class GeometryMobilityIsolationTest {
         assertEquals(setOf(MobilityEdge("A", "B"), MobilityEdge("B", "C")), db.tripEdges("service-trip"))
     }
 
+    @Test fun deleteHistoryAlsoClearsMobilityTrips() {
+        val engine = MobilityFamiliarityEngine(db, MobilityFamiliarityConfig(), true) { "pre-reset-trip" }
+        engine.observe("A", MotionEvidence(MotionState.MOVING), 1)
+        engine.observe("B", MotionEvidence(MotionState.MOVING), 2)
+        db.clear()
+        assertEquals(null, db.openTrip())
+        assertEquals(emptySet<String>(), db.tripCells("pre-reset-trip"))
+        assertEquals(emptySet<MobilityEdge>(), db.tripEdges("pre-reset-trip"))
+    }
+
     @Composable private fun EmptyContent() = Unit
     private companion object { const val NAME = "icdetector_history.db" }
 }

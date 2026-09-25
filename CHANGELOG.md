@@ -1,5 +1,38 @@
 # Changelog
 
+## 2.10.5
+
+### Stabilization — definitive release for the field-collection freeze
+
+No heuristic, weight, threshold, scoring rule or database schema changed. Schema remains 19.
+
+- **Delete history is now complete and atomic.** It also clears `mobility_trips`,
+  `mobility_trip_cells` and `mobility_trip_edges`, which previously survived the reset and could
+  carry pre-reset routes into a new dataset. Every table is cleared in a single transaction.
+- **Atomic daily retention.** `pruneOldRecords` runs in one transaction, so an interrupted prune can
+  no longer leave forensic cases without their samples or Stable-Site tables half trimmed.
+- **Single shared database connection.** The activity and the background service now use one
+  `CellDbHelper` instance. Two independent connections could fail with `database is locked` when
+  both wrote at once (for example, deleting history while the service stored a sample), closing the
+  app.
+- **Neighbour MCC/MNC are no longer invented.** Only the registered cell inherits the operator's
+  MCC/MNC when the modem omits them; neighbours without identity stay `N/A`. Previously H3 (MCC) and
+  H4 (MNC) compared the network with itself and always reported PASS on devices that do not expose
+  neighbour identities. They now report N/A, like H5 (TAC). The same-cell Timing Advance copy treats
+  an `N/A` MCC/MNC as unknown so it keeps working. **Dataset note:** H3/H4 `PASS` → `N/A` on such
+  devices, and new `site_rf_neighbours` rows store `NULL` MCC/MNC; older rows keep the copied
+  operator values. Score and anomaly confidence are unchanged, since a passing rule never
+  contributed to either.
+- **External verification no longer gets stuck.** An exception during an OpenCellID check left the
+  cell as `PENDING` in memory, which is never retried, until the service restarted. It now falls
+  back to `ERROR` and retries after 60 s.
+- **Lifecycle fixes.** The activity unbinds from the service even if it is destroyed while still
+  binding; the history list is reset on the UI thread after *Delete history*.
+- **CI.** `actions/checkout`, `actions/setup-java` and `gradle/actions/setup-gradle` moved to v5
+  (Node 24).
+- **Tests.** New `CellParserIdentityTest`, an H3/H4 N/A case in `HeuristicsTest` and an
+  instrumented check that *Delete history* clears route trips.
+
 ## 2.10.4
 
 ### Radio context collection

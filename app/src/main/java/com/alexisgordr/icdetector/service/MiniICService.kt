@@ -290,7 +290,7 @@ class MiniICService : Service() {
     override fun onCreate() {
         super.onCreate()
         isServiceRunning = true
-        dbHelper = CellDbHelper(this)
+        dbHelper = CellDbHelper.getInstance(this)
         mobilityFamiliarity = com.alexisgordr.icdetector.core.MobilityFamiliarityEngine(dbHelper)
         scope.launch(Dispatchers.IO) {
             val recovery = mobilityFamiliarity.recover(System.currentTimeMillis())
@@ -806,9 +806,9 @@ class MiniICService : Service() {
                         !c.isRegistered &&
                             c.timingAdvance != null && c.timingAdvance >= 0 &&
                             c.cellId == activeCell.cellId &&
-                            c.mnc == activeCell.mnc &&
+                            (c.mnc == activeCell.mnc || c.mnc == "N/A") &&
                             c.tac == activeCell.tac &&
-                            c.mcc == activeCell.mcc
+                            (c.mcc == activeCell.mcc || c.mcc == "N/A")
                     }
                     if (sameCellWithTa != null) {
                         list[activeIndex] = activeCell.copy(

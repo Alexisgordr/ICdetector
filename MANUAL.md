@@ -1,4 +1,4 @@
-# ICdetection Field Manual —
+# ICdetection Field Manual — v2.10.5
 
 ICdetection is an open-source Android application for passive cellular-network auditing and anomaly analysis. It observes information exposed by Android, compares each observation with the device's local history and, when configured, cross-checks cells against external tower databases.
 
@@ -39,6 +39,23 @@ Service-state changes are displayed only after their database insert succeeds, s
 RADIO event refresh reads the same event that caused it. Live channel and bandwidth fields still
 follow every current reading. A deduplicated `[RADIO]` line records cycles skipped because a
 declared primary had no usable signal telemetry.
+
+## Version 2.10.5
+
+v2.10.5 is the definitive release for the field-collection freeze. It changes no heuristic,
+threshold or score and keeps schema 19.
+
+- **Delete history** now performs a complete reset in a single transaction, including the
+  route-familiarity trips. It is the recommended way to start a clean dataset.
+- The app and the background service share one database connection, and daily retention runs
+  atomically, so a reset or prune can no longer be left half done.
+- H3 (MCC consistency) and H4 (MNC limit) show **N/A** when neighbour cells do not report their
+  identity, which is the normal case on many modems, including Pixel devices. Before v2.10.5 they
+  showed PASS because neighbours were filled with your own operator's values. On phones that do
+  report neighbour identities nothing changes.
+- A cell whose external verification fails unexpectedly is retried after a minute instead of
+  remaining `PENDING` until the service restarts.
+
 ---
 
 ## 1. What ICdetection does
@@ -430,6 +447,11 @@ all samples belonging to it, so export it first if it may be useful later.
 
 Routine history may be pruned according to the configured retention policy to prevent unlimited database growth. Export important information before clearing application data or uninstalling the app.
 
+**Delete history** (type `BORRAR` to confirm) removes antenna history, incidents, forensic cases,
+transitions, service-state events, Stable-Site learning and route-familiarity trips in one
+all-or-nothing operation. Since v2.10.5 it is a complete reset; export first anything you want to
+keep.
+
 Retention and the forensic-sample cap are enforced when monitoring starts and then approximately
 once every 24 hours while the service remains active. The History screen loads the 2,000 most recent
 rows to keep memory use bounded, but **EXPORT CSV** still streams the complete retained database.
@@ -608,6 +630,10 @@ ICdetection is a transparent multi-signal anomaly auditor. It provides leads, hi
 ### Most rules show `N/A`
 
 Check permissions, GPS, API configuration, connectivity, and the capability explanations. Allow time for baselines to mature. Some measurements may remain unavailable permanently on a particular modem.
+
+H3 (MCC), H4 (MNC) and H5 (TAC) compare the serving cell with its neighbours' identities. Many
+modems report only the frequency, PCI and signal of neighbour cells, so these three rules can remain
+`N/A` permanently on such devices. That is an honest abstention, not a fault.
 
 ### A rule alternates between `N/A` and `PASS`
 

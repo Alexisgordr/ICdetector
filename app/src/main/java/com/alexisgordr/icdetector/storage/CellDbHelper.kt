@@ -49,6 +49,18 @@ import java.util.Locale
 
 class CellDbHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME, null, DATABASE_VERSION), ForensicStore, MobilityFamiliarityStore {
     companion object {
+        @Volatile private var instance: CellDbHelper? = null
+
+        /**
+         * Una sola conexión para todo el proceso. La pantalla y el servicio abrían cada uno su
+         * propio helper: dos pools sobre el mismo archivo, y si ambos escribían a la vez uno podía
+         * recibir `database is locked` (p. ej. "Borrar historial" mientras el servicio guarda).
+         */
+        fun getInstance(context: Context): CellDbHelper =
+            instance ?: synchronized(this) {
+                instance ?: CellDbHelper(context.applicationContext).also { instance = it }
+            }
+
         private const val DATABASE_NAME = "icdetector_history.db"
         private const val DATABASE_VERSION = 19
         const val TABLE_HISTORY = "history"
@@ -1693,13 +1705,27 @@ class CellDbHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME, 
 
     fun clear() {
         val db = this.writableDatabase
-        db.execSQL("DELETE FROM $TABLE_HISTORY")
-        db.execSQL("DELETE FROM $TABLE_INCIDENTS")
-        db.execSQL("DELETE FROM $TABLE_FORENSIC_SAMPLES")
-        db.execSQL("DELETE FROM $TABLE_FORENSIC_CASES")
-        db.execSQL("DELETE FROM $TABLE_CELL_TRANSITIONS")
-        try { db.execSQL("DELETE FROM $TABLE_SERVICE_STATE_EVENTS") } catch (_: Exception) {}
-        resetStableSiteLearning()
+        // Todo o nada: si el proceso muere a mitad no queda un historial borrado con sus
+        // incidentes o casos forenses todavía vivos.
+        db.beginTransaction()
+        try {
+            db.execSQL("DELETE FROM $TABLE_HISTORY")
+            db.execSQL("DELETE FROM $TABLE_INCIDENTS")
+            db.execSQL("DELETE FROM $TABLE_FORENSIC_SAMPLES")
+            db.execSQL("DELETE FROM $TABLE_FORENSIC_CASES")
+            db.execSQL("DELETE FROM $TABLE_CELL_TRANSITIONS")
+            try { db.execSQL("DELETE FROM $TABLE_SERVICE_STATE_EVENTS") } catch (_: Exception) {}
+            // Los trayectos de Mobility Familiarity también son historial de ubicación: sin esto
+            // "Borrar historial" dejaba vivas las rutas aprendidas. El motor no guarda el trayecto
+            // abierto en memoria (lo relee con openTrip()), así que vaciarlas es seguro.
+            db.execSQL("DELETE FROM $TABLE_MOBILITY_TRIP_EDGES")
+            db.execSQL("DELETE FROM $TABLE_MOBILITY_TRIP_CELLS")
+            db.execSQL("DELETE FROM $TABLE_MOBILITY_TRIPS")
+            resetStableSiteLearning()
+            db.setTransactionSuccessful()
+        } finally {
+            db.endTransaction()
+        }
     }
 
     /**
@@ -1716,41 +1742,49 @@ class CellDbHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME, 
             val sdf = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.ROOT)
             val threshold = sdf.format(Date(cutoff))
             val db = this.writableDatabase
-            val historyDeleted = db.delete(TABLE_HISTORY, "$COLUMN_TIMESTAMP < ?", arrayOf(threshold))
-            db.delete(TABLE_INCIDENTS, "updated_at < ?", arrayOf(threshold))
-            val oldCases = db.rawQuery("SELECT id FROM $TABLE_FORENSIC_CASES WHERE updated_at < ?", arrayOf(threshold)).use { c ->
-                buildList { while (c.moveToNext()) add(c.getLong(0)) }
-            }
-            oldCases.forEach { id -> db.delete(TABLE_FORENSIC_SAMPLES, "case_id=?", arrayOf(id.toString())) }
-            db.delete(TABLE_FORENSIC_CASES, "updated_at < ?", arrayOf(threshold))
-            db.delete(TABLE_CELL_TRANSITIONS, "last_seen_ms < ?", arrayOf(cutoff.toString()))
-            // v2.10.4 — Eventos de servicio: misma antigüedad que el historial y un tope de filas,
-            // por si un módem inestable genera cambios continuos.
+            // Una sola transacción: si el proceso muere a mitad de la poda no quedan casos
+            // forenses sin sus muestras ni tablas de sitios a medio recortar.
+            db.beginTransaction()
             try {
-                db.delete(TABLE_SERVICE_STATE_EVENTS, "ts_ms < ?", arrayOf(cutoff.toString()))
-                db.execSQL(
-                    "DELETE FROM $TABLE_SERVICE_STATE_EVENTS WHERE id NOT IN " +
-                        "(SELECT id FROM $TABLE_SERVICE_STATE_EVENTS ORDER BY ts_ms DESC, id DESC LIMIT $MAX_SERVICE_STATE_EVENTS)"
-                )
-            } catch (_: Exception) {}
-            val siteCutoff = System.currentTimeMillis() - 120L * 24 * 60 * 60 * 1000
-            val eventCutoff = System.currentTimeMillis() - 14L * 24 * 60 * 60 * 1000
-            val hardSiteCutoff = System.currentTimeMillis() - 365L * 24 * 60 * 60 * 1000
-            db.delete(TABLE_SITE_EVENTS, "seen_ms < ?", arrayOf(eventCutoff.toString()))
-            db.delete(TABLE_SITE_CELLS, "last_seen_ms < ? AND observations < 3", arrayOf(siteCutoff.toString()))
-            db.delete(TABLE_SITE_CELLS, "last_seen_ms < ?", arrayOf(hardSiteCutoff.toString()))
-            db.delete(TABLE_SITE_DAYS, "day < ?", arrayOf(SimpleDateFormat("yyyy-MM-dd", Locale.ROOT).format(Date(siteCutoff))))
-            db.delete(TABLE_SITE_MOTION_DAYS, "day < ?", arrayOf(SimpleDateFormat("yyyy-MM-dd", Locale.ROOT).format(Date(siteCutoff))))
-            // v2.10.1 — RF-only neighbour context follows exactly the same retention as full
-            // neighbour identities. Without this, RF days older than 120 days kept counting towards
-            // site maturity while full-identity days expired, and the tables grew without bound.
-            db.delete(TABLE_SITE_RF_NEIGHBOUR_DAYS, "day < ?", arrayOf(SimpleDateFormat("yyyy-MM-dd", Locale.ROOT).format(Date(siteCutoff))))
-            db.delete(TABLE_SITE_RF_NEIGHBOURS, "last_seen_ms < ? AND observations < 3", arrayOf(siteCutoff.toString()))
-            db.delete(TABLE_SITE_RF_NEIGHBOURS, "last_seen_ms < ?", arrayOf(hardSiteCutoff.toString()))
-            db.execSQL("DELETE FROM $TABLE_SITE_RF_NEIGHBOUR_DAYS WHERE NOT EXISTS (SELECT 1 FROM $TABLE_SITE_RF_NEIGHBOURS r WHERE r.site_key=$TABLE_SITE_RF_NEIGHBOUR_DAYS.site_key AND r.fingerprint=$TABLE_SITE_RF_NEIGHBOUR_DAYS.fingerprint)")
-            db.delete(TABLE_SITE_HOLDS, "last_seen_ms < ? AND active=0", arrayOf(siteCutoff.toString()))
-            db.delete(TABLE_SITE_SHADOW_TRIGGERS, "last_seen_ms < ? AND closed_ms IS NOT NULL", arrayOf(siteCutoff.toString()))
-            historyDeleted
+                val historyDeleted = db.delete(TABLE_HISTORY, "$COLUMN_TIMESTAMP < ?", arrayOf(threshold))
+                db.delete(TABLE_INCIDENTS, "updated_at < ?", arrayOf(threshold))
+                val oldCases = db.rawQuery("SELECT id FROM $TABLE_FORENSIC_CASES WHERE updated_at < ?", arrayOf(threshold)).use { c ->
+                    buildList { while (c.moveToNext()) add(c.getLong(0)) }
+                }
+                oldCases.forEach { id -> db.delete(TABLE_FORENSIC_SAMPLES, "case_id=?", arrayOf(id.toString())) }
+                db.delete(TABLE_FORENSIC_CASES, "updated_at < ?", arrayOf(threshold))
+                db.delete(TABLE_CELL_TRANSITIONS, "last_seen_ms < ?", arrayOf(cutoff.toString()))
+                // v2.10.4 — Eventos de servicio: misma antigüedad que el historial y un tope de filas,
+                // por si un módem inestable genera cambios continuos.
+                try {
+                    db.delete(TABLE_SERVICE_STATE_EVENTS, "ts_ms < ?", arrayOf(cutoff.toString()))
+                    db.execSQL(
+                        "DELETE FROM $TABLE_SERVICE_STATE_EVENTS WHERE id NOT IN " +
+                            "(SELECT id FROM $TABLE_SERVICE_STATE_EVENTS ORDER BY ts_ms DESC, id DESC LIMIT $MAX_SERVICE_STATE_EVENTS)"
+                    )
+                } catch (_: Exception) {}
+                val siteCutoff = System.currentTimeMillis() - 120L * 24 * 60 * 60 * 1000
+                val eventCutoff = System.currentTimeMillis() - 14L * 24 * 60 * 60 * 1000
+                val hardSiteCutoff = System.currentTimeMillis() - 365L * 24 * 60 * 60 * 1000
+                db.delete(TABLE_SITE_EVENTS, "seen_ms < ?", arrayOf(eventCutoff.toString()))
+                db.delete(TABLE_SITE_CELLS, "last_seen_ms < ? AND observations < 3", arrayOf(siteCutoff.toString()))
+                db.delete(TABLE_SITE_CELLS, "last_seen_ms < ?", arrayOf(hardSiteCutoff.toString()))
+                db.delete(TABLE_SITE_DAYS, "day < ?", arrayOf(SimpleDateFormat("yyyy-MM-dd", Locale.ROOT).format(Date(siteCutoff))))
+                db.delete(TABLE_SITE_MOTION_DAYS, "day < ?", arrayOf(SimpleDateFormat("yyyy-MM-dd", Locale.ROOT).format(Date(siteCutoff))))
+                // v2.10.1 — RF-only neighbour context follows exactly the same retention as full
+                // neighbour identities. Without this, RF days older than 120 days kept counting towards
+                // site maturity while full-identity days expired, and the tables grew without bound.
+                db.delete(TABLE_SITE_RF_NEIGHBOUR_DAYS, "day < ?", arrayOf(SimpleDateFormat("yyyy-MM-dd", Locale.ROOT).format(Date(siteCutoff))))
+                db.delete(TABLE_SITE_RF_NEIGHBOURS, "last_seen_ms < ? AND observations < 3", arrayOf(siteCutoff.toString()))
+                db.delete(TABLE_SITE_RF_NEIGHBOURS, "last_seen_ms < ?", arrayOf(hardSiteCutoff.toString()))
+                db.execSQL("DELETE FROM $TABLE_SITE_RF_NEIGHBOUR_DAYS WHERE NOT EXISTS (SELECT 1 FROM $TABLE_SITE_RF_NEIGHBOURS r WHERE r.site_key=$TABLE_SITE_RF_NEIGHBOUR_DAYS.site_key AND r.fingerprint=$TABLE_SITE_RF_NEIGHBOUR_DAYS.fingerprint)")
+                db.delete(TABLE_SITE_HOLDS, "last_seen_ms < ? AND active=0", arrayOf(siteCutoff.toString()))
+                db.delete(TABLE_SITE_SHADOW_TRIGGERS, "last_seen_ms < ? AND closed_ms IS NOT NULL", arrayOf(siteCutoff.toString()))
+                db.setTransactionSuccessful()
+                historyDeleted
+            } finally {
+                db.endTransaction()
+            }
         } catch (_: Exception) {
             0
         }

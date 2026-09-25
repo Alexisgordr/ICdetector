@@ -45,8 +45,8 @@ object CellParser {
             is CellInfoLte -> {
                 val id = info.cellIdentity
                 val dbm = info.cellSignalStrength.dbm
-                val cellMcc = id.mccString ?: mcc
-                val cellMnc = id.mncString ?: mnc
+                val cellMcc = identityOrFallback(id.mccString, reg, mcc)
+                val cellMnc = identityOrFallback(id.mncString, reg, mnc)
                 val rsrq = info.cellSignalStrength.rsrq
                     .let { if (it == Int.MAX_VALUE) null else it }
                 val sinr = info.cellSignalStrength.rssnr
@@ -74,8 +74,8 @@ object CellParser {
                 // normalizado del framework para no inyectar un valor absurdo (2147483647)
                 // que dispararía en falso todas las heurísticas de potencia.
                 val dbm = strength.ssRsrp.let { if (it == Int.MAX_VALUE) strength.dbm else it }
-                val cellMcc = id.mccString ?: mcc
-                val cellMnc = id.mncString ?: mnc
+                val cellMcc = identityOrFallback(id.mccString, reg, mcc)
+                val cellMnc = identityOrFallback(id.mncString, reg, mnc)
                 // TA de NR. Dos rutas con unidades DISTINTAS, y por eso la unidad viaja con el
                 // valor (ver TimingAdvanceUnit):
                 //  - getTimingAdvanceMicros() devuelve microsegundos de ida y vuelta -> NR_RAW.
@@ -119,8 +119,8 @@ object CellParser {
             is CellInfoWcdma -> {
                 val id = info.cellIdentity
                 val dbm = info.cellSignalStrength.dbm
-                val cellMcc = id.mccString ?: mcc
-                val cellMnc = id.mncString ?: mnc
+                val cellMcc = identityOrFallback(id.mccString, reg, mcc)
+                val cellMnc = identityOrFallback(id.mncString, reg, mnc)
                 // Sin Timing Advance: CellSignalStrengthWcdma no lo expone en la API pública.
                 CellData(reg, networkTypeString, id.cid.valOrNa(), cellMnc, id.lac.valOrNa(), dbm, cellMcc, radioTech = radioTechOf(info), arfcn = id.uarfcn, pci = id.psc)
                     .withRadioContext(connectionOf(info), null, extrasWcdma(id))
@@ -128,8 +128,8 @@ object CellParser {
             is CellInfoGsm -> {
                 val id = info.cellIdentity
                 val dbm = info.cellSignalStrength.dbm
-                val cellMcc = id.mccString ?: mcc
-                val cellMnc = id.mncString ?: mnc
+                val cellMcc = identityOrFallback(id.mccString, reg, mcc)
+                val cellMnc = identityOrFallback(id.mncString, reg, mnc)
                 val ta = info.cellSignalStrength.timingAdvance.let { if (it == Int.MAX_VALUE) null else it }
                 CellData(reg, networkTypeString, id.cid.valOrNa(), cellMnc, id.lac.valOrNa(), dbm, cellMcc, timingAdvance = ta, timingAdvanceUnit = TimingAdvanceUnit.GSM_INDEX, radioTech = radioTechOf(info), arfcn = id.arfcn)
                     .withRadioContext(connectionOf(info), null, extrasGsm(id))
@@ -173,6 +173,15 @@ object CellParser {
     } catch (_: Exception) {
         CellConnectionState.UNKNOWN
     }
+
+    /**
+     * MCC/MNC de una celda. Solo la celda registrada hereda el del operador cuando el módem no lo
+     * informa. Una vecina sin identidad se queda en "N/A": su MCC/MNC viaja en el SIB1, que el
+     * móvil no lee de las vecinas, y rellenarlo con el de nuestra red hacía que H3 y H4 salieran
+     * "superadas" sin haber comparado nada (y guardaba ese MCC/MNC inventado en la BD de sitios).
+     */
+    internal fun identityOrFallback(reported: String?, registered: Boolean, operatorValue: String): String =
+        reported ?: if (registered) operatorValue else "N/A"
 
     /** Ancho de banda en kHz; `CellInfo.UNAVAILABLE` (Int.MAX_VALUE) y valores no positivos son nulos. */
     internal fun validBandwidth(value: Int): Int? = value.takeIf { it in 1 until Int.MAX_VALUE }

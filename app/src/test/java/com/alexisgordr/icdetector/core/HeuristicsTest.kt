@@ -187,6 +187,16 @@ class HeuristicsTest {
         assertTrue(analyze(active(mnc = "01"), neighbors = n).mncCountPassed)
     }
 
+    // ---------- H3/H4 sin identidad de vecinas ----------
+    // Caso real de campo (Pixel 9a): el módem solo da EARFCN/PCI/potencia de las vecinas. Sin
+    // MCC/MNC que comparar, H3 y H4 deben abstenerse, no darse por superadas.
+    @Test fun `H3 y H4 no se evaluan si ninguna vecina trae MCC ni MNC`() {
+        val n = listOf(neighbor(-90, mcc = "N/A", mnc = "N/A"), neighbor(-95, mcc = "N/A", mnc = "N/A"))
+        val report = analyze(active(), neighbors = n)
+        assertEquals(HeuristicStatus.NOT_EVALUATED, report.mccConsistency)
+        assertEquals(HeuristicStatus.NOT_EVALUATED, report.mncCount)
+    }
+
     // ---------- H5: Desviación TAC ----------
     @Test fun `H5 dispara si el TAC activo no esta entre las vecinas`() {
         assertFalse(analyze(active(tac = "100"), neighbors = listOf(neighbor(-90, tac = "200"))).tacDeviationPassed)

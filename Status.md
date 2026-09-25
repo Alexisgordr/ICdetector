@@ -1,6 +1,19 @@
 # ICdetection Status
 
-## v2.10.4 — Radio context collection (stable)
+## v2.10.5 — Stabilization, definitive freeze release (stable)
+
+**Version code:** 33
+**Database schema:** 19 (unchanged)
+**Security effect:** none; H1–H16, weights, thresholds and scoring unchanged
+**Phase:** field-collection freeze (approximately three months)
+
+Final integrity release before the campaign. *Delete history* is complete and atomic, including
+route-familiarity trips; daily retention is atomic; the app and service share one SQLite connection.
+Neighbour MCC/MNC are no longer copied from the operator, so H3/H4 report N/A instead of an empty
+PASS on devices without neighbour identities — a documented dataset note for H3/H4 and
+`site_rf_neighbours` MCC/MNC only. Verification can no longer stay stuck in PENDING after an error.
+
+## v2.10.4 — Radio context collection (superseded by v2.10.5)
 
 **Version code:** 32
 **Database schema:** 19 (additive migration from 18)
