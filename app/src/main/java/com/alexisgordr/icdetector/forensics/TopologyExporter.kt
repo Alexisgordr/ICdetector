@@ -39,11 +39,14 @@ object TopologyExporter {
         val files = linkedMapOf<String, ByteArray>()
         val identities = transitions.flatMap { listOf(it.fromIdentity, it.toIdentity) }.distinct().sorted()
 
+        // v2.10.6 — Agrupadas una sola vez: la exportación ya no tiene tope de rutas.
+        val incomingByCell = transitions.groupBy { it.toIdentity }
+        val outgoingByCell = transitions.groupBy { it.fromIdentity }
         files["cells.csv"] = buildString {
             appendLine("identity,incoming_routes,outgoing_routes,incoming_handovers,outgoing_handovers,trusted_incoming,trusted_outgoing")
             identities.forEach { identity ->
-                val incoming = transitions.filter { it.toIdentity == identity }
-                val outgoing = transitions.filter { it.fromIdentity == identity }
+                val incoming = incomingByCell[identity].orEmpty()
+                val outgoing = outgoingByCell[identity].orEmpty()
                 appendLine(listOf(
                     identity, incoming.size, outgoing.size,
                     incoming.sumOf { it.observations }, outgoing.sumOf { it.observations },

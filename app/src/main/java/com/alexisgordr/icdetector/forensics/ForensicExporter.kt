@@ -3,6 +3,7 @@ package com.alexisgordr.icdetector.forensics
 import android.content.Context
 import android.net.Uri
 import com.alexisgordr.icdetector.models.ForensicCase
+import com.alexisgordr.icdetector.models.ForensicSample
 import com.alexisgordr.icdetector.storage.CellDbHelper
 import org.json.JSONArray
 import org.json.JSONObject
@@ -13,11 +14,33 @@ import java.util.zip.ZipOutputStream
 
 object ForensicExporter {
     fun export(context: Context, db: CellDbHelper, forensicCase: ForensicCase, uri: Uri) {
-        val samples = db.getForensicSamples(forensicCase.id)
+        val packageInfo = context.packageManager.getPackageInfo(context.packageName, 0)
+        val files = buildFiles(
+            forensicCase = forensicCase,
+            samples = db.getForensicSamples(forensicCase.id),
+            appVersion = packageInfo.versionName ?: "unknown",
+            appVersionCode = packageInfo.longVersionCode
+        )
+        context.contentResolver.openOutputStream(uri)?.use { raw ->
+            ZipOutputStream(raw).use { zip -> files.forEach { (name, bytes) ->
+                zip.putNextEntry(ZipEntry(name)); zip.write(bytes); zip.closeEntry()
+            } }
+        } ?: error("No se pudo abrir el destino del caso forense")
+    }
+
+    /**
+     * v2.10.6 — Contenido del ZIP, separado de Android para poder probarlo en la JVM, igual que
+     * TopologyExporter y GeometryExporter. Los archivos y su contenido no cambian.
+     */
+    internal fun buildFiles(
+        forensicCase: ForensicCase,
+        samples: List<ForensicSample>,
+        appVersion: String,
+        appVersionCode: Long
+    ): LinkedHashMap<String, ByteArray> {
         val parsed = samples.map { it to JSONObject(it.payloadJson) }
         val files = linkedMapOf<String, ByteArray>()
         val firstPayload = parsed.firstOrNull()?.second
-        val packageInfo = context.packageManager.getPackageInfo(context.packageName, 0)
 
         files["case.json"] = JSONObject().apply {
             put("schemaVersion", 1); put("caseId", forensicCase.caseCode)
@@ -26,8 +49,8 @@ object ForensicExporter {
             put("updatedAt", forensicCase.updatedAt); put("closedAt", forensicCase.closedAt ?: JSONObject.NULL)
             put("cellIdentity", forensicCase.cellIdentity); put("highestPhase", forensicCase.highestPhase)
             put("confirmed", forensicCase.confirmed); put("sampleCount", samples.size)
-            put("appVersion", packageInfo.versionName ?: "unknown")
-            put("appVersionCode", packageInfo.longVersionCode)
+            put("appVersion", appVersion)
+            put("appVersionCode", appVersionCode)
             put("device", firstPayload?.optString("device") ?: "unknown")
             put("android", firstPayload?.optString("android") ?: "unknown")
             put("integrityNote", "SHA-256 detects later modification; it is not a legal chain-of-custody signature.")
@@ -94,12 +117,7 @@ object ForensicExporter {
         files["SHA256SUMS.txt"] = files.entries.joinToString("\n", postfix = "\n") { (name, bytes) ->
             "${sha256(bytes)}  $name"
         }.toByteArray()
-
-        context.contentResolver.openOutputStream(uri)?.use { raw ->
-            ZipOutputStream(raw).use { zip -> files.forEach { (name, bytes) ->
-                zip.putNextEntry(ZipEntry(name)); zip.write(bytes); zip.closeEntry()
-            } }
-        } ?: error("No se pudo abrir el destino del caso forense")
+        return LinkedHashMap(files)
     }
 
     private fun nullable(o: JSONObject, key: String): Any = if (!o.has(key) || o.isNull(key)) "" else o.get(key)

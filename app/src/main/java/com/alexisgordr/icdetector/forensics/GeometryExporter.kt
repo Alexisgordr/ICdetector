@@ -14,7 +14,8 @@ import java.util.zip.ZipOutputStream
 object GeometryExporter {
     fun export(context: Context, db: CellDbHelper, uri: Uri) {
         val info = context.packageManager.getPackageInfo(context.packageName, 0)
-        val files = buildFiles(db.getMobilityGeometrySnapshot(), info.versionName ?: "unknown", info.longVersionCode, Instant.now())
+        // v2.10.6 — Sin tope: la exportación lleva todas las rutas y trayectos guardados.
+        val files = buildFiles(db.getMobilityGeometrySnapshot(limit = null), info.versionName ?: "unknown", info.longVersionCode, Instant.now())
         context.contentResolver.openOutputStream(uri)?.use { raw ->
             ZipOutputStream(raw).use { zip -> files.forEach { (name, bytes) ->
                 zip.putNextEntry(ZipEntry(name)); zip.write(bytes); zip.closeEntry()

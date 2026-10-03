@@ -91,7 +91,9 @@ fun HistoryPanel(
             items = dbHelper.getRecords(limit = HISTORY_UI_RECORD_LIMIT)
             incidents = dbHelper.getIncidents()
             forensicCases = dbHelper.getForensicCases()
-            transitions = dbHelper.getCellTransitions()
+            // v2.10.6 — Todas las rutas, sin el tope de 250. La lista es perezosa (LazyColumn):
+            // solo se dibujan las filas visibles, así que miles de rutas no la ralentizan.
+            transitions = dbHelper.getAllCellTransitions()
         }
     }
 
@@ -103,7 +105,7 @@ fun HistoryPanel(
     }
 
     LaunchedEffect(showTopology) {
-        if (showTopology) transitions = withContext(Dispatchers.IO) { dbHelper.getCellTransitions() }
+        if (showTopology) transitions = withContext(Dispatchers.IO) { dbHelper.getAllCellTransitions() }
     }
 
     if (showDeleteConfirm.value) {
@@ -487,7 +489,8 @@ private fun TopologyPanel(
         if (uri != null) scope.launch {
             exportMessage = "Exportando topología…"
             val result = withContext(Dispatchers.IO) {
-                runCatching { TopologyExporter.export(context, transitions, uri) }
+                // v2.10.6 — Exporta todas las rutas guardadas (antes, como mucho 250).
+                runCatching { TopologyExporter.export(context, dbHelper.getAllCellTransitions(), uri) }
             }
             exportMessage = if (result.isSuccess) "Topología exportada correctamente" else
                 "Error: ${result.exceptionOrNull()?.message}"

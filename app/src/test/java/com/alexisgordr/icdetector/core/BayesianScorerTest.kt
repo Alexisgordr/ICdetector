@@ -169,4 +169,25 @@ class BayesianScorerTest {
         val probada = BayesianScorer.calculate(listOf("ciphering"), "PENDING", false, trustScore = 100)
         assertEquals("el cifrado anulado vale igual aunque la celda sea de confianza", nueva, probada, 0.001f)
     }
+
+    /**
+     * v2.10.6 — Cada nombre que ThreatAnalyzer puede añadir a la lista de fallos debe tener su
+     * razón de verosimilitud. Un nombre sin LR vale 1.0 y no suma nada, en silencio: si algún
+     * día se añade una heurística y se olvida su peso, este test lo dice.
+     */
+    @Test
+    fun `toda heuristica que ThreatAnalyzer puede emitir tiene peso`() {
+        val emitted = listOf(
+            "isolated", "powerJump", "mccMismatch", "mncCount", "tacDev", "taDistance",
+            "ghostCells", "arfcn", "ciphering", "pingPong", "h11", "signalBaseline",
+            "bandDowngrade", "rfStability", "transitionCoherence"
+        )
+        val prior = BayesianScorer.calculate(emptyList(), "PENDING", false)
+        emitted.forEach { name ->
+            val posterior = BayesianScorer.calculate(listOf(name), "PENDING", false)
+            assertTrue("'$name' no tiene LR: no mueve el posterior ($posterior)", posterior > prior)
+        }
+        // La latencia no va en la lista: entra por su propio parámetro, y también debe pesar.
+        assertTrue(BayesianScorer.calculate(emptyList(), "PENDING", true) > prior)
+    }
 }

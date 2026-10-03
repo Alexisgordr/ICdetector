@@ -36,7 +36,7 @@ internal class ServingTransitionTracker(
             if (previous == null) return TransitionCoherenceResult()
             if (previous.cell.identityKey == active.identityKey) {
                 return if (activeIdentity == active.identityKey && now <= activeExpiresAt) activeResult
-                else TransitionCoherenceResult(explanation = "N/A: esperando el siguiente handover para comprobar la movilidad.")
+                else TransitionCoherenceResult(explanation = "N/A: sin handover reciente; esperando el siguiente para comprobar la movilidad.")
             }
             activeIdentity = null
             activeResult = TransitionCoherenceResult()

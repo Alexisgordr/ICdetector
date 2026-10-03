@@ -55,9 +55,13 @@ object MobilityGeometryProjection {
             pendingEdges.forEach { add(it.from); add(it.to) }
             trips.firstOrNull { it.state == "OPEN" }?.lastServing?.let(::add)
         }
+        // v2.10.6 — Agrupadas una sola vez. Filtrar la lista completa por cada celda era
+        // O(celdas × rutas); con la exportación sin tope eso podía tardar mucho.
+        val incomingByCell = transitions.groupBy { it.toIdentity }
+        val outgoingByCell = transitions.groupBy { it.fromIdentity }
         val cells = identities.sorted().map { identity ->
-            val incoming = transitions.filter { it.toIdentity == identity }
-            val outgoing = transitions.filter { it.fromIdentity == identity }
+            val incoming = incomingByCell[identity].orEmpty()
+            val outgoing = outgoingByCell[identity].orEmpty()
             val incident = incoming + outgoing
             val good = incident.count { it.tripCount >= config.priorTripsRequired }
             val familiarity = when {

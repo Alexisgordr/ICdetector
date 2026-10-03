@@ -651,14 +651,29 @@ class CellDbHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME, 
             arrayOf(fromIdentity, toIdentity)
         ).use { cursor -> if (cursor.moveToFirst()) cursor.getInt(0) else 0 }
 
-    /** Vista agregada para el explorador técnico; no modifica el baseline ni la detección. */
-    fun getCellTransitions(limit: Int = 250): List<CellTransitionSummary> {
+    /**
+     * Vista agregada para el explorador técnico; no modifica el baseline ni la detección.
+     * Acotada a las [limit] rutas usadas más recientemente para que las pantallas no carguen
+     * miles de filas. Para exportar se usa [getAllCellTransitions].
+     */
+    fun getCellTransitions(limit: Int = 250): List<CellTransitionSummary> =
+        queryCellTransitions(limit.coerceIn(1, 1_000))
+
+    /**
+     * v2.10.6 — Todas las rutas guardadas, sin tope. Las exportaciones de Topología y Geometry
+     * usaban la lista acotada de las pantallas (250 / 1.000) y salían recortadas en silencio.
+     * Solo lee: no toca la detección ni lo que se guarda.
+     */
+    fun getAllCellTransitions(): List<CellTransitionSummary> = queryCellTransitions(null)
+
+    private fun queryCellTransitions(limit: Int?): List<CellTransitionSummary> {
         val out = mutableListOf<CellTransitionSummary>()
         readableDatabase.rawQuery(
             "SELECT from_identity,to_identity,observations,trusted_observations,last_status,last_seen_ms," +
                 "trip_count,last_trip_id,mobility_first_seen_ms,mobility_last_seen_ms " +
-                "FROM $TABLE_CELL_TRANSITIONS ORDER BY last_seen_ms DESC LIMIT ?",
-            arrayOf(limit.coerceIn(1, 1_000).toString())
+                "FROM $TABLE_CELL_TRANSITIONS ORDER BY last_seen_ms DESC" +
+                (if (limit != null) " LIMIT ?" else ""),
+            limit?.let { arrayOf(it.toString()) }
         ).use { cursor ->
             while (cursor.moveToNext()) {
                 out += CellTransitionSummary(
@@ -678,17 +693,20 @@ class CellDbHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME, 
         return out
     }
 
-    /** One bounded, read-only snapshot for Geometry/export. It never mutates an open trip. */
-    fun getMobilityGeometrySnapshot(limit: Int = 1_000): MobilityGeometrySnapshot {
-        val transitions = getCellTransitions(limit)
+    /**
+     * Read-only snapshot for Geometry/export. It never mutates an open trip.
+     * [limit] bounds the screen; `null` (export) returns every stored route and trip.
+     */
+    fun getMobilityGeometrySnapshot(limit: Int? = 1_000): MobilityGeometrySnapshot {
+        val transitions = if (limit == null) getAllCellTransitions() else getCellTransitions(limit)
         val trips = mutableListOf<MobilityTripSummary>()
         readableDatabase.rawQuery(
             "SELECT t.trip_id,t.started_at_ms,t.closed_at_ms,t.state,t.close_reason,t.has_moving," +
                 "COUNT(DISTINCT c.cell_identity),COUNT(DISTINCT e.from_identity||char(0)||e.to_identity),t.last_serving " +
                 "FROM $TABLE_MOBILITY_TRIPS t LEFT JOIN $TABLE_MOBILITY_TRIP_CELLS c ON c.trip_id=t.trip_id " +
                 "LEFT JOIN $TABLE_MOBILITY_TRIP_EDGES e ON e.trip_id=t.trip_id GROUP BY t.trip_id " +
-                "ORDER BY t.started_at_ms DESC LIMIT ?",
-            arrayOf(limit.coerceIn(1, 5_000).toString())
+                "ORDER BY t.started_at_ms DESC" + (if (limit != null) " LIMIT ?" else ""),
+            limit?.let { arrayOf(it.coerceIn(1, 5_000).toString()) }
         ).use { c -> while (c.moveToNext()) trips += MobilityTripSummary(
             c.getString(0), c.getLong(1), if(c.isNull(2))null else c.getLong(2), c.getString(3),
             if(c.isNull(4))null else c.getString(4), c.getInt(5)!=0, c.getInt(6), c.getInt(7),

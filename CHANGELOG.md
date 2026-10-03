@@ -1,5 +1,28 @@
 # Changelog
 
+## Unreleased (post-v2.10.5, freeze-safe)
+
+Bug fixes that do **not** change detection, scoring, alerts, thresholds, stored data or the
+database schema. Safe to ship during the field-collection freeze.
+
+- **Topology and Geometry no longer truncate routes** (#9). Both screens and both exports
+  read every stored transition. Previously Topology stopped at 250 routes, the Geometry screen
+  at 400 and the Geometry export at 1,000 (plus an internal 1,000 clamp), silently keeping
+  only the most recently used routes. Per-cell aggregation in `TopologyExporter` and
+  `MobilityGeometryProjection` now groups routes once instead of filtering the full list per
+  cell, so thousands of routes stay fast. The screens remain lazily rendered.
+- **`ForensicExporter`** builds its ZIP contents in a pure `buildFiles` function, like the
+  other exporters, and now has unit tests. File names and contents are unchanged.
+- **`check_export.py`**: the "not enough cells in both states" note is attached to the
+  VERIFIED/NOT_FOUND check instead of the REJECTED one (#10), and a new invariant checks that
+  `TA`, `TAUnit` and `TAMeters` agree with how the app writes them.
+- **Text-only:** a suspicious cell without a reason can no longer produce the literal `null`
+  in its confirmation text, and the H16 explanation after an expired verdict reads "no recent
+  handover".
+- **Tests:** every heuristic name `ThreatAnalyzer` can emit must carry a likelihood ratio;
+  Topology per-cell counts with 3,000 routes; instrumented check that screens and exports
+  return all 1,200 stored routes.
+
 ## 2.10.5
 
 ### Stabilization — definitive release for the field-collection freeze

@@ -114,7 +114,13 @@ class TemporalConfidence(
             ),
             suspiciousReason = when {
                 isConfirmed -> cell.suspiciousReason
-                cell.isSuspicious -> "[$currentStreak/$requiredCycles ciclos confirmando] ${cell.suspiciousReason}"
+                // v2.10.6 — Si una celda llegara sospechosa sin motivo, se escribía el literal
+                // "null". Hoy no ocurre (todo fallo añade su motivo), pero el texto ya no depende
+                // de ello. Con motivo, la cadena es idéntica a la de antes.
+                cell.isSuspicious -> listOfNotNull(
+                    "[$currentStreak/$requiredCycles ciclos confirmando]",
+                    cell.suspiciousReason
+                ).joinToString(" ")
                 // La celda no llega al umbral de sospecha, pero SÍ falló heurísticas. Antes esto
                 // era `null` y el motivo se perdía para siempre: la fila acababa en el historial
                 // como "85 / OK". Ahora se conserva marcado como sub-umbral. No cambia nada del

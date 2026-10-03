@@ -118,6 +118,39 @@ def ta_unit_diagnostic(unit_rows):
     return len(usable), reliable, possible_legacy_stub, len(zero_lte)
 
 
+TA_METERS_PER_UNIT = {"LTE_INDEX": 78, "GSM_INDEX": 554}
+TA_UNITS = {"LTE_INDEX", "GSM_INDEX", "NR_RAW", "STUB_ZERO", "UNKNOWN"}
+
+
+def ta_consistency_issues(rows):
+    """Filas cuyo TA, TAUnit y TAMeters se contradicen. Pura, para poder probarla.
+
+    Reproduce cómo escribe la app esas tres columnas (ExportUtils.csvRow y
+    TimingAdvanceUnit.toMeters):
+      - sin TA, TAUnit y TAMeters van vacíos;
+      - con TA, TAUnit es una unidad conocida;
+      - solo LTE_INDEX (×78) y GSM_INDEX (×554) dan metros, y solo con TA >= 0;
+      - NR_RAW, STUB_ZERO y UNKNOWN nunca dan metros: no hay conversión defendible.
+    """
+    def val(r, key):
+        return (r.get(key) or "").strip()
+
+    issues = []
+    for r in rows:
+        ta, unit, metres = fnum(r, "TA"), val(r, "TAUnit"), fnum(r, "TAMeters")
+        if ta is None:
+            ok = not unit and metres is None and not val(r, "TAMeters")
+        elif unit not in TA_UNITS:
+            ok = False
+        elif unit in TA_METERS_PER_UNIT and ta >= 0:
+            ok = metres is not None and metres == ta * TA_METERS_PER_UNIT[unit]
+        else:
+            ok = not val(r, "TAMeters")
+        if not ok:
+            issues.append(r)
+    return issues
+
+
 def radio_context_summary(rows):
     """Resumen del contexto de radio v2.10.4. Puro, para poder probarlo.
 
@@ -287,6 +320,16 @@ def main(path):
         bad_conf = [r for r in rows if not (0 <= fnum_or(r, conf_key, 0.0) <= 95)]
         check(f"{conf_key} entre 0 y 95 (techo epistémico)", not bad_conf, f"{len(bad_conf)} filas")
 
+    if "TAUnit" in columns:
+        bad_ta = ta_consistency_issues(rows)
+        check(
+            "TA, TAUnit y TAMeters coherentes entre sí",
+            not bad_ta,
+            f"{len(bad_ta)} filas (p. ej. {bad_ta[0].get('Timestamp')} TA={bad_ta[0].get('TA')!r} "
+            f"TAUnit={bad_ta[0].get('TAUnit')!r} TAMeters={bad_ta[0].get('TAMeters')!r})"
+            if bad_ta else "",
+        )
+
     # ---- 5. Integridad de identidad ---------------------------------------------------------
     na_identity = [r for r in rows if r.get("CID") == "N/A" and r.get("FailedHeuristics") != "OK"]
     check("Ninguna anomalía registrada sobre una celda sin identidad", not na_identity,
@@ -445,6 +488,13 @@ def main(path):
         print(f"  Heurísticas fallidas en celdas NOT_FOUND: {tasa_nf:.1f}%")
         print(f"  Heurísticas fallidas en celdas VERIFIED:  {tasa_ver:.1f}%")
         print("  (si las dos cifras se parecen, el estado de verificación no aporta señal)")
+    else:
+        # v2.10.6 — Antes este aviso colgaba del `else` de REJECTED y salía siempre que no
+        # hubiera respuestas descartadas, aunque ya existieran celdas VERIFIED y NOT_FOUND.
+        notes.append(
+            "Todavía no hay celdas de los dos estados (VERIFIED y NOT_FOUND) como para comparar. "
+            "Esa comparación es la que decidirá si el verificador externo se queda o se va."
+        )
 
     rechazadas = estados.get("REJECTED", 0)
     if rechazadas:
@@ -453,11 +503,6 @@ def main(path):
             "coincide, coordenada no creíble o respuesta incompleta). No son antenas desconocidas: "
             "son respuestas de las que no se puede concluir nada. Si la cifra es alta, el problema "
             "está en la consulta o en la fuente, no en la red que te rodea."
-        )
-    else:
-        notes.append(
-            "Todavía no hay celdas de los dos estados (VERIFIED y NOT_FOUND) como para comparar. "
-            "Esa comparación es la que decidirá si el verificador externo se queda o se va."
         )
 
     print("\nOBSERVACIONES DEL HISTORIAL")

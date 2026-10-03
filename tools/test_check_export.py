@@ -4,7 +4,9 @@ from pathlib import Path
 import sys
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from check_export import calendar_period_stats, radio_context_summary, ta_unit_diagnostic
+from check_export import (
+    calendar_period_stats, radio_context_summary, ta_consistency_issues, ta_unit_diagnostic
+)
 
 
 class ExportSummaryTest(unittest.TestCase):
@@ -28,6 +30,32 @@ class ExportSummaryTest(unittest.TestCase):
             [{"TA": "0", "TAMeters": "0"}]
         )
         self.assertEqual((1, 1, False, 1), (usable, reliable, possible_stub, zeros))
+
+
+class TaConsistencyTest(unittest.TestCase):
+    def test_rows_written_by_the_app_are_consistent(self):
+        rows = [
+            {"TA": "", "TAUnit": "", "TAMeters": ""},
+            {"TA": "3", "TAUnit": "LTE_INDEX", "TAMeters": "234"},
+            {"TA": "2", "TAUnit": "GSM_INDEX", "TAMeters": "1108"},
+            {"TA": "0", "TAUnit": "LTE_INDEX", "TAMeters": "0"},
+            {"TA": "512", "TAUnit": "NR_RAW", "TAMeters": ""},
+            {"TA": "0", "TAUnit": "STUB_ZERO", "TAMeters": ""},
+            {"TA": "7", "TAUnit": "UNKNOWN", "TAMeters": ""},
+            {"TA": "-1", "TAUnit": "LTE_INDEX", "TAMeters": ""},
+        ]
+        self.assertEqual([], ta_consistency_issues(rows))
+
+    def test_metres_without_a_defensible_unit_are_flagged(self):
+        rows = [
+            {"TA": "512", "TAUnit": "NR_RAW", "TAMeters": "39936"},
+            {"TA": "0", "TAUnit": "STUB_ZERO", "TAMeters": "0"},
+            {"TA": "3", "TAUnit": "LTE_INDEX", "TAMeters": "300"},
+            {"TA": "", "TAUnit": "LTE_INDEX", "TAMeters": ""},
+            {"TA": "3", "TAUnit": "", "TAMeters": ""},
+            {"TA": "3", "TAUnit": "METRES", "TAMeters": ""},
+        ]
+        self.assertEqual(6, len(ta_consistency_issues(rows)))
 
 
 class RadioContextSummaryTest(unittest.TestCase):

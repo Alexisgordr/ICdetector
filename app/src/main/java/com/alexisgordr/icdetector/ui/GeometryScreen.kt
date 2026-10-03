@@ -137,7 +137,9 @@ fun GeometryScreen(dbHelper: CellDbHelper, modifier: Modifier = Modifier) {
             val profiles = samples.mapNotNull { (identity, list) ->
                 CellGeometry.profileOrNull(list)?.let { identity to it }
             }.toMap()
-            val mobility = dbHelper.getMobilityGeometrySnapshot(limit = 400)
+            // v2.10.6 — Todas las rutas, sin el tope de 400. Se calcula en segundo plano y en
+            // tiempo lineal; el lienzo solo dibuja una línea por ruta.
+            val mobility = dbHelper.getMobilityGeometrySnapshot(limit = null)
             val routes = mobility.transitions
             Snapshot(
                 nodes = profiles.map { (identity, p) ->
