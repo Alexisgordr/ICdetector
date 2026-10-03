@@ -1,4 +1,4 @@
-# ICdetection Field Manual — v2.10.5
+# ICdetection Field Manual — v2.10.6
 
 ICdetection is an open-source Android application for passive cellular-network auditing and anomaly analysis. It observes information exposed by Android, compares each observation with the device's local history and, when configured, cross-checks cells against external tower databases.
 
@@ -55,6 +55,20 @@ threshold or score and keeps schema 19.
   report neighbour identities nothing changes.
 - A cell whose external verification fails unexpectedly is retried after a minute instead of
   remaining `PENDING` until the service restarts.
+
+
+## Version 2.10.6
+
+A maintenance release inside the freeze. Detection, scores, alerts and stored data are unchanged,
+so v2.10.5 remains the dataset baseline.
+
+- **Topology** (History) and **Geometry** now show and export **every** stored route. Earlier
+  versions stopped at 250 (Topology), 400 (Geometry screen) and 1,000 (Geometry export), keeping
+  only the most recently used routes. Nothing had been lost: the database always kept them all.
+- `tools/check_export.py` no longer claims there are no VERIFIED / NOT_FOUND cells when both
+  exist, and it now checks that `TA`, `TAUnit` and `TAMeters` agree.
+- History and Geometry are fully translated, including the export privacy warnings. To confirm a
+  deletion, type the word shown in the dialog: `DELETE` in English or `BORRAR` in Spanish.
 
 ---
 
@@ -199,6 +213,10 @@ A missing public-database record does not make a cell malicious. Public datasets
 ### Proxy
 
 If required by your threat model, configure the supported proxy and a compatible service such as Orbot. Verify that API requests still succeed after enabling it.
+
+### Latency detection (experimental)
+
+Off by default. When you enable it in Settings, and only while traffic leaves over mobile data (not over Wi-Fi, a VPN or the SOCKS5 proxy), the app sends an HTTPS `HEAD` request roughly every 30 seconds to three third-party endpoints: `www.google.com/generate_204` (Google), `one.one.one.one` (Cloudflare) and `dns.quad9.net` (Quad9). The requests carry no cell or location data, but they reveal your IP address to those services. Together with optional OpenCellID verification, these are the only network connections the app makes.
 
 ---
 
@@ -441,13 +459,14 @@ The app separates three types of information:
 - **Forensic cases:** Detailed evidence captured around qualifying incidents.
 
 Closed incidents and completed or interrupted forensic cases can be deleted individually. Expand
-the relevant item, select its delete action, and type exactly `BORRAR` in the confirmation dialog.
+the relevant item, select its delete action, and type exactly the word the dialog asks for:
+`DELETE` in the English interface or `BORRAR` in the Spanish one.
 Active incidents and captures cannot be deleted. Deleting a forensic case also permanently removes
 all samples belonging to it, so export it first if it may be useful later.
 
 Routine history may be pruned according to the configured retention policy to prevent unlimited database growth. Export important information before clearing application data or uninstalling the app.
 
-**Delete history** (type `BORRAR` to confirm) removes antenna history, incidents, forensic cases,
+**Delete history** (type `DELETE`, or `BORRAR` in the Spanish interface, to confirm) removes antenna history, incidents, forensic cases,
 transitions, service-state events, Stable-Site learning and route-familiarity trips in one
 all-or-nothing operation. Since v2.10.5 it is a complete reset; export first anything you want to
 keep.

@@ -28,6 +28,7 @@ import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
+import android.annotation.SuppressLint
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -35,6 +36,7 @@ import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.alexisgordr.icdetector.core.CellGeometry
+import com.alexisgordr.icdetector.core.MobilityFamiliarity
 import com.alexisgordr.icdetector.R
 import com.alexisgordr.icdetector.models.CellTransitionSummary
 import com.alexisgordr.icdetector.models.MobilityCellPresentation
@@ -84,6 +86,7 @@ private fun transformedGraphPoint(point: Offset, size: IntSize, scale: Float, pa
  *     enseña rutas al baseline. Solo enseña lo que ya hay.
  */
 @Composable
+@SuppressLint("LocalContextGetResourceValueCall")
 fun GeometryScreen(dbHelper: CellDbHelper, modifier: Modifier = Modifier) {
 
     data class Node(
@@ -114,21 +117,21 @@ fun GeometryScreen(dbHelper: CellDbHelper, modifier: Modifier = Modifier) {
     var exportMessage by remember { mutableStateOf<String?>(null) }
     val exportLauncher = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/zip")) { uri ->
         if (uri != null) scope.launch {
-            exportMessage = "Exportando geometría…"
+            exportMessage = context.getString(R.string.geometry_exporting)
             val result = withContext(Dispatchers.IO) { runCatching { GeometryExporter.export(context, dbHelper, uri) } }
-            exportMessage = if (result.isSuccess) "Geometría exportada correctamente" else "Error: ${result.exceptionOrNull()?.message}"
+            exportMessage = if (result.isSuccess) context.getString(R.string.geometry_exported) else context.getString(R.string.export_error_format, result.exceptionOrNull()?.message.toString())
         }
     }
 
     if (confirmExport) AlertDialog(
         onDismissRequest = { confirmExport = false },
-        title = { Text("EXPORTAR GEOMETRÍA") },
-        text = { Text("El ZIP contiene identidades celulares y patrones asociados a lugares o rutas frecuentados. No incluye coordenadas GPS precisas. Revísalo antes de compartirlo públicamente.") },
+        title = { Text(stringResource(R.string.export_geometry)) },
+        text = { Text(stringResource(R.string.geometry_export_privacy_warning)) },
         confirmButton = { TextButton(onClick = {
             confirmExport = false
             exportLauncher.launch("ICD-geometry-${System.currentTimeMillis()}.zip")
-        }) { Text("EXPORTAR") } },
-        dismissButton = { TextButton(onClick = { confirmExport = false }) { Text("CANCELAR") } }
+        }) { Text(stringResource(R.string.export)) } },
+        dismissButton = { TextButton(onClick = { confirmExport = false }) { Text(stringResource(R.string.cancel)) } }
     )
 
     LaunchedEffect(Unit) {
@@ -541,20 +544,20 @@ private fun MobilityPanel(snapshot: MobilityGeometrySnapshot, onExport: () -> Un
     Surface(color = Color(0xFF111A1D), shape = RoundedCornerShape(6.dp)) {
         Column(Modifier.fillMaxWidth().padding(9.dp), verticalArrangement = Arrangement.spacedBy(3.dp)) {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                Text("MOVILIDAD · MEMORIA CONTEXTUAL", color=Color(0xFF80CBC4),fontFamily=FontFamily.Monospace,fontSize=10.sp,fontWeight=FontWeight.Bold)
+                Text(stringResource(R.string.mobility_title), color=Color(0xFF80CBC4),fontFamily=FontFamily.Monospace,fontSize=10.sp,fontWeight=FontWeight.Bold)
                 TextButton(onClick=onExport, contentPadding=PaddingValues(horizontal=5.dp,vertical=0.dp)) {
-                    Icon(Icons.Default.Share,null,Modifier.size(13.dp));Spacer(Modifier.width(3.dp));Text("EXPORTAR GEOMETRÍA",fontSize=8.sp)
+                    Icon(Icons.Default.Share,null,Modifier.size(13.dp));Spacer(Modifier.width(3.dp));Text(stringResource(R.string.export_geometry),fontSize=8.sp)
                 }
             }
-            GeometryLine("Viaje", if(trip==null)"INACTIVO" else "ACTIVO · ${trip.tripId.take(8)}")
-            GeometryLine("Movimiento", if(trip?.hadMoving==true)"MOVING OBSERVADO" else "SIN EVIDENCIA")
-            GeometryLine("Celdas / edges distintos", "${trip?.distinctCells ?: 0} / ${trip?.edgeCount ?: 0}")
-            GeometryLine("Celda actual", current?.familiarity?.name ?: "UNKNOWN_ON_ROUTE")
-            GeometryLine("Good edges previos", "${current?.goodEdges ?: 0}/2 · K=3")
-            GeometryLine("Transiciones observadas acumuladas", transitionTotal.toString())
-            GeometryLine("Máx. viajes históricos por arista", historicalTrips.toString())
+            GeometryLine(stringResource(R.string.mobility_trip), if(trip==null) stringResource(R.string.mobility_trip_inactive) else stringResource(R.string.mobility_trip_active_format, trip.tripId.take(8)))
+            GeometryLine(stringResource(R.string.mobility_movement), if(trip?.hadMoving==true) stringResource(R.string.mobility_moving_observed) else stringResource(R.string.mobility_no_evidence))
+            GeometryLine(stringResource(R.string.mobility_distinct_cells_edges), "${trip?.distinctCells ?: 0} / ${trip?.edgeCount ?: 0}")
+            GeometryLine(stringResource(R.string.mobility_current_cell), familiarityLabel(current?.familiarity))
+            GeometryLine(stringResource(R.string.mobility_prior_good_edges), "${current?.goodEdges ?: 0}/2 · K=3")
+            GeometryLine(stringResource(R.string.mobility_transitions_total), transitionTotal.toString())
+            GeometryLine(stringResource(R.string.mobility_max_trips_per_edge), historicalTrips.toString())
             if(trip!=null && snapshot.pendingEdges.isNotEmpty()) {
-                Text("Las ${snapshot.pendingEdges.size} aristas abiertas aún NO cuentan en trip_count. Si el viaje cierra válido: n → n+1.",color=Color(0xFFFFB300),fontFamily=FontFamily.Monospace,fontSize=8.sp,lineHeight=11.sp)
+                Text(stringResource(R.string.mobility_pending_edges_format, snapshot.pendingEdges.size),color=Color(0xFFFFB300),fontFamily=FontFamily.Monospace,fontSize=8.sp,lineHeight=11.sp)
             }
         }
     }
@@ -606,12 +609,12 @@ private fun NodeCard(
                 if (enodeb != null) stringResource(R.string.sector_format, enodeb.toString(), sector.toString()) else stringResource(R.string.not_deducible_lte)
             )
             GeometryLine(stringResource(R.string.incoming_outgoing), "$incoming / $outgoing")
-            GeometryLine("LocalCellTrust", mobility?.localTrustState ?: "NO DISPONIBLE")
-            GeometryLine("Mobility", mobility?.familiarity?.name ?: "UNKNOWN_ON_ROUTE")
-            GeometryLine("Good edges", "${mobility?.goodEdges ?: 0}/2")
-            GeometryLine("Viajes relevantes", (mobility?.relevantTripCount ?: 0).toString())
-            GeometryLine("Transiciones entrada/salida", "${mobility?.incomingTransitions ?: 0} / ${mobility?.outgoingTransitions ?: 0}")
-            GeometryLine("Trusted entrada/salida", "${mobility?.trustedIncoming ?: 0} / ${mobility?.trustedOutgoing ?: 0}")
+            GeometryLine(stringResource(R.string.geometry_local_cell_trust), mobility?.localTrustState ?: stringResource(R.string.geometry_not_available))
+            GeometryLine(stringResource(R.string.geometry_mobility), familiarityLabel(mobility?.familiarity))
+            GeometryLine(stringResource(R.string.geometry_good_edges), "${mobility?.goodEdges ?: 0}/2")
+            GeometryLine(stringResource(R.string.geometry_relevant_trips), (mobility?.relevantTripCount ?: 0).toString())
+            GeometryLine(stringResource(R.string.geometry_transitions_in_out), "${mobility?.incomingTransitions ?: 0} / ${mobility?.outgoingTransitions ?: 0}")
+            GeometryLine(stringResource(R.string.geometry_trusted_in_out), "${mobility?.trustedIncoming ?: 0} / ${mobility?.trustedOutgoing ?: 0}")
         }
     }
 }
@@ -670,13 +673,27 @@ private fun RouteGeometryCard(route: CellGeometry.RouteCheck, summary: CellTrans
                     color = Color(0xFF888888), fontFamily = FontFamily.Monospace, fontSize = 9.sp
                 )
                 Text(
-                    "Transiciones ${route.observations} · Viajes ${summary?.tripCount ?: 0}",
+                    stringResource(R.string.geometry_route_counts_format, route.observations, summary?.tripCount ?: 0),
                     color = color, fontFamily = FontFamily.Monospace, fontSize = 9.sp
                 )
             }
         }
     }
 }
+
+/**
+ * v2.10.6 — Etiqueta localizada de la familiaridad de ruta. La pantalla ya no muestra el nombre
+ * interno del enum (UNKNOWN_ON_ROUTE…); las exportaciones lo siguen escribiendo tal cual.
+ */
+@Composable
+private fun familiarityLabel(familiarity: MobilityFamiliarity?): String = stringResource(
+    when (familiarity) {
+        MobilityFamiliarity.KNOWN_ON_ROUTE -> R.string.mobility_familiarity_known
+        MobilityFamiliarity.OBSERVED_ON_ROUTE -> R.string.mobility_familiarity_observed
+        MobilityFamiliarity.UNKNOWN_ON_ROUTE -> R.string.mobility_familiarity_unknown
+        null -> R.string.mobility_familiarity_unknown
+    }
+)
 
 @Composable
 private fun GeometryLine(label: String, value: String) {

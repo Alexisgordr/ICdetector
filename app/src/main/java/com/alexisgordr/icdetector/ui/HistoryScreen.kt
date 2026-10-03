@@ -46,6 +46,7 @@ import com.alexisgordr.icdetector.models.SUBTHRESHOLD_PREFIX
 import com.alexisgordr.icdetector.models.identityKey
 import com.alexisgordr.icdetector.models.CellTransitionSummary
 import com.alexisgordr.icdetector.models.HeuristicStatus
+import com.alexisgordr.icdetector.models.VerificationStatus
 import com.alexisgordr.icdetector.storage.CellDbHelper
 import com.alexisgordr.icdetector.utils.ExportUtils
 import kotlinx.coroutines.Dispatchers
@@ -109,19 +110,21 @@ fun HistoryPanel(
     }
 
     if (showDeleteConfirm.value) {
-        val deleteArmed = deleteConfirmText.trim().equals("BORRAR", ignoreCase = false)
+        // v2.10.6 — La palabra de confirmación sigue el idioma de la interfaz (DELETE / BORRAR).
+        // Antes se comparaba siempre con «BORRAR» aunque la pantalla en inglés pidiera DELETE.
+        val confirmWord = stringResource(R.string.delete_confirm_word)
+        val deleteArmed = deleteConfirmText.trim().equals(confirmWord, ignoreCase = false)
         AlertDialog(
             onDismissRequest = { showDeleteConfirm.value = false; deleteConfirmText = "" },
             title = { Text(stringResource(R.string.history_delete_title), color = Color.White, fontFamily = FontFamily.Monospace) },
             text = {
                 Column {
                     Text(
-                        "Esta acción eliminará permanentemente $totalRecordCount registros de antenas, " +
-                            "sus incidentes y sus casos forenses. No hay copia de seguridad y no se puede deshacer.",
+                        stringResource(R.string.history_delete_warning_format, totalRecordCount),
                         color = Color(0xFF888888), fontFamily = FontFamily.Monospace
                     )
                     Spacer(modifier = Modifier.height(12.dp))
-                    Text(stringResource(R.string.history_delete_prompt), color = Color(0xFFCF6679), fontFamily = FontFamily.Monospace, fontSize = 12.sp)
+                    Text(stringResource(R.string.history_delete_prompt, confirmWord), color = Color(0xFFCF6679), fontFamily = FontFamily.Monospace, fontSize = 12.sp)
                     OutlinedTextField(
                         value = deleteConfirmText,
                         onValueChange = { deleteConfirmText = it },
@@ -197,12 +200,12 @@ fun HistoryPanel(
                 Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.back), tint = Color.White)
             }
             Text(when {
-                showForensics -> "LABORATORIO FORENSE"
-                showTopology -> "TOPOLOGÍA DE HANDOVERS"
-                showGeometry -> "GEOMETRÍA DE CELDAS"
+                showForensics -> stringResource(R.string.history_title_forensics)
+                showTopology -> stringResource(R.string.history_title_topology)
+                showGeometry -> stringResource(R.string.history_title_geometry)
                 showRadio -> stringResource(R.string.radio_title)
-                showIncidents -> "CAJA NEGRA DE INCIDENTES"
-                else -> "HISTORIAL DE ANTENAS"
+                showIncidents -> stringResource(R.string.history_title_incidents)
+                else -> stringResource(R.string.history_title_antennas)
             }, color = Color(0xFF666666), fontFamily = FontFamily.Monospace, fontSize = 12.sp)
         }
 
@@ -261,8 +264,7 @@ fun HistoryPanel(
         } else {
             if (totalRecordCount > items.size) {
                 Text(
-                    "Mostrando las ${items.size} observaciones más recientes de $totalRecordCount. " +
-                        "La exportación incluye el historial completo.",
+                    stringResource(R.string.history_showing_recent_format, items.size, totalRecordCount),
                     color = Color(0xFF888888),
                     fontFamily = FontFamily.Monospace,
                     fontSize = 11.sp
@@ -292,7 +294,10 @@ fun HistoryPanel(
                                 onFailure = { error ->
                                     Toast.makeText(
                                         context,
-                                        "❌ Error al exportar: ${error.message ?: "desconocido"}",
+                                        context.getString(
+                                            R.string.export_failed_format,
+                                            error.message ?: context.getString(R.string.unknown_error)
+                                        ),
                                         Toast.LENGTH_SHORT
                                     ).show()
                                 }
@@ -436,7 +441,7 @@ private fun AntennaDetailAccordions(
             Row(Modifier.fillMaxWidth().padding(vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f)) {
                     Text(record.timestamp, color = Color(0xFFAAAAAA), fontSize = 10.sp, fontFamily = FontFamily.Monospace)
-                    Text("${record.verified.name} · ${"%.5f".format(java.util.Locale.ROOT, record.lat)}, ${"%.5f".format(java.util.Locale.ROOT, record.lon)}", color = Color(0xFF777777), fontSize = 9.sp, fontFamily = FontFamily.Monospace)
+                    Text("${verificationStatusLabel(record.verified)} · ${"%.5f".format(java.util.Locale.ROOT, record.lat)}, ${"%.5f".format(java.util.Locale.ROOT, record.lon)}", color = Color(0xFF777777), fontSize = 9.sp, fontFamily = FontFamily.Monospace)
                 }
                 LocationButton(record.lat!!, record.lon!!, record.cid)
             }
@@ -447,7 +452,7 @@ private fun AntennaDetailAccordions(
     if (open == AntennaSection.HANDOVERS) {
         routes.forEach { route ->
             val direction = if (route.fromIdentity == identity) "→ ${route.toIdentity}" else "← ${route.fromIdentity}"
-            DetailText("$direction\n${route.observations}× · confianza ${(route.trustRatio * 100).toInt()}% · ${route.lastStatus.name} · ${DateFormat.getDateTimeInstance(DateFormat.SHORT, DateFormat.SHORT).format(Date(route.lastSeenMs))}")
+            DetailText("$direction\n${route.observations}× · ${stringResource(R.string.route_trust_label)} ${(route.trustRatio * 100).toInt()}% · ${routeStatusLabel(route.lastStatus)} · ${DateFormat.getDateTimeInstance(DateFormat.SHORT, DateFormat.SHORT).format(Date(route.lastSeenMs))}")
         }
         if (routes.isEmpty()) DetailText(stringResource(R.string.antenna_no_handovers))
     }
@@ -455,7 +460,7 @@ private fun AntennaDetailAccordions(
     if (open == AntennaSection.TECHNICAL) {
         val latest = records.first()
         val oldest = records.last()
-        DetailText("CID ${latest.cid} · MCC/MNC ${latest.mcc}/${latest.mnc} · TAC ${latest.tac}\n${latest.radio.name} · PCI ${latest.pci ?: "N/A"} · ARFCN ${latest.arfcn ?: "N/A"}\n${latest.dbm} dBm · RSRQ ${latest.rsrq ?: "N/A"} · SINR ${latest.sinr ?: "N/A"} · TA ${latest.timingAdvance ?: "N/A"} ${latest.timingAdvanceUnit.name}\n${latest.verified.name} · score ${latest.score}% · anomalía ${"%.1f".format(java.util.Locale.ROOT, latest.anomalyConfidence)}%\n${records.size} muestras · ${oldest.timestamp} — ${latest.timestamp}")
+        DetailText("CID ${latest.cid} · MCC/MNC ${latest.mcc}/${latest.mnc} · TAC ${latest.tac}\n${latest.radio.name} · PCI ${latest.pci ?: "N/A"} · ARFCN ${latest.arfcn ?: "N/A"}\n${latest.dbm} dBm · RSRQ ${latest.rsrq ?: "N/A"} · SINR ${latest.sinr ?: "N/A"} · TA ${latest.timingAdvance ?: "N/A"} ${latest.timingAdvanceUnit.name}\n${verificationStatusLabel(latest.verified)} · score ${latest.score}% · ${stringResource(R.string.antenna_anomaly_label)} ${"%.1f".format(java.util.Locale.ROOT, latest.anomalyConfidence)}%\n${records.size} ${stringResource(R.string.antenna_samples_label)} · ${oldest.timestamp} — ${latest.timestamp}")
     }
 }
 
@@ -474,6 +479,7 @@ private fun DetailText(text: String) {
 }
 
 @Composable
+@SuppressLint("LocalContextGetResourceValueCall")
 private fun TopologyPanel(
     dbHelper: CellDbHelper,
     transitions: List<CellTransitionSummary>,
@@ -487,32 +493,26 @@ private fun TopologyPanel(
         ActivityResultContracts.CreateDocument("application/zip")
     ) { uri ->
         if (uri != null) scope.launch {
-            exportMessage = "Exportando topología…"
+            exportMessage = context.getString(R.string.topology_exporting)
             val result = withContext(Dispatchers.IO) {
                 // v2.10.6 — Exporta todas las rutas guardadas (antes, como mucho 250).
                 runCatching { TopologyExporter.export(context, dbHelper.getAllCellTransitions(), uri) }
             }
-            exportMessage = if (result.isSuccess) "Topología exportada correctamente" else
-                "Error: ${result.exceptionOrNull()?.message}"
+            exportMessage = if (result.isSuccess) context.getString(R.string.topology_exported) else
+                context.getString(R.string.export_error_format, result.exceptionOrNull()?.message.toString())
         }
     }
     val stableSiteExportLauncher = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/zip")) { uri ->
         if(uri!=null) scope.launch {
-            exportMessage="Exportando Stable-Site…"
+            exportMessage=context.getString(R.string.stable_site_exporting)
             val result=withContext(Dispatchers.IO){runCatching{StableSiteExporter.export(context,dbHelper,uri)}}
-            exportMessage=if(result.isSuccess)"Stable-Site exportado correctamente" else "Error: ${result.exceptionOrNull()?.message}"
+            exportMessage=if(result.isSuccess)context.getString(R.string.stable_site_exported) else context.getString(R.string.export_error_format, result.exceptionOrNull()?.message.toString())
         }
     }
     if (confirmExport) AlertDialog(
         onDismissRequest = { confirmExport = false },
         title = { Text(stringResource(R.string.export_topology_title)) },
-        text = {
-            Text(
-                "El paquete contiene identidades celulares y rutas de handover que pueden " +
-                    "revelar patrones habituales de movimiento. No incluye IMSI, IMEI, teléfono " +
-                    "ni credenciales. Revísalo antes de compartirlo."
-            )
-        },
+        text = { Text(stringResource(R.string.topology_export_privacy_warning)) },
         confirmButton = { TextButton(onClick = {
             confirmExport = false
             exportLauncher.launch("ICD-topology-${System.currentTimeMillis()}.zip")
@@ -535,15 +535,15 @@ private fun TopologyPanel(
 
     Column(modifier) {
         Text(
-            "MAPA LÓGICO LOCAL · NO MODIFICA EL SCORE",
+            stringResource(R.string.topology_header),
             color = Color(0xFF777777), fontFamily = FontFamily.Monospace, fontSize = 9.sp
         )
         Spacer(Modifier.height(8.dp))
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-            TopologyMetric("CELDAS", uniqueCells.toString(), Modifier.weight(1f))
-            TopologyMetric("RUTAS", transitions.size.toString(), Modifier.weight(1f))
-            TopologyMetric("HANDOVERS", totalHandovers.toString(), Modifier.weight(1f))
-            TopologyMetric("FIABLES", trustedRoutes.toString(), Modifier.weight(1f))
+            TopologyMetric(stringResource(R.string.topology_metric_cells), uniqueCells.toString(), Modifier.weight(1f))
+            TopologyMetric(stringResource(R.string.routes), transitions.size.toString(), Modifier.weight(1f))
+            TopologyMetric(stringResource(R.string.topology_metric_handovers), totalHandovers.toString(), Modifier.weight(1f))
+            TopologyMetric(stringResource(R.string.topology_metric_trusted), trustedRoutes.toString(), Modifier.weight(1f))
         }
         Spacer(Modifier.height(8.dp))
         Row(
@@ -581,7 +581,7 @@ private fun TopologyPanel(
         if (transitions.isEmpty()) {
             Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                 Text(
-                    "SIN RUTAS TODAVÍA\nLa topología aparecerá tras los primeros handovers",
+                    stringResource(R.string.topology_empty),
                     color = Color(0xFF555555), fontFamily = FontFamily.Monospace,
                     fontSize = 11.sp, lineHeight = 16.sp
                 )
@@ -612,10 +612,11 @@ private fun TopologyMetric(label: String, value: String, modifier: Modifier = Mo
 
 @Composable
 private fun TopologyRouteCard(route: CellTransitionSummary) {
-    val (statusText, statusColor) = when (route.lastStatus) {
-        HeuristicStatus.PASSED -> "COHERENTE" to Color(0xFF4CAF50)
-        HeuristicStatus.FAILED -> "REVISAR" to Color(0xFFCF6679)
-        HeuristicStatus.NOT_EVALUATED -> "APRENDIENDO" to Color(0xFFFFA000)
+    val statusText = routeStatusLabel(route.lastStatus)
+    val statusColor = when (route.lastStatus) {
+        HeuristicStatus.PASSED -> Color(0xFF4CAF50)
+        HeuristicStatus.FAILED -> Color(0xFFCF6679)
+        HeuristicStatus.NOT_EVALUATED -> Color(0xFFFFA000)
     }
     val lastSeen = remember(route.lastSeenMs) {
         java.text.SimpleDateFormat("yyyy-MM-dd HH:mm", java.util.Locale.getDefault())
@@ -645,7 +646,7 @@ private fun TopologyRouteCard(route: CellTransitionSummary) {
             )
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                 Text(
-                    "${route.observations} observaciones · ${route.trustedObservations} fiables",
+                    stringResource(R.string.topology_route_counts_format, route.observations, route.trustedObservations),
                     color = Color(0xFF999999), fontFamily = FontFamily.Monospace, fontSize = 8.sp
                 )
                 Text(lastSeen, color = Color(0xFF666666), fontFamily = FontFamily.Monospace, fontSize = 8.sp)
@@ -653,6 +654,43 @@ private fun TopologyRouteCard(route: CellTransitionSummary) {
         }
     }
 }
+
+// v2.10.6 — Etiquetas localizadas de estados que antes se mostraban con `.name` (VERIFIED,
+// PASSED, READY…). Solo cambian lo que se ve: el almacenamiento y las exportaciones siguen
+// usando el nombre del enum.
+
+/** Estado de verificación externa, con los mismos textos que [VerificationBadge]. */
+@Composable
+private fun verificationStatusLabel(status: VerificationStatus): String = stringResource(
+    when (status) {
+        VerificationStatus.VERIFIED -> R.string.badge_registered
+        VerificationStatus.NOT_FOUND -> R.string.badge_not_found
+        VerificationStatus.REJECTED -> R.string.badge_rejected
+        VerificationStatus.PENDING -> R.string.badge_pending
+        VerificationStatus.ERROR -> R.string.badge_error
+    }
+)
+
+/** Último veredicto de una ruta de handover (H16), igual que en la tarjeta de Topología. */
+@Composable
+private fun routeStatusLabel(status: HeuristicStatus): String = stringResource(
+    when (status) {
+        HeuristicStatus.PASSED -> R.string.coherent
+        HeuristicStatus.FAILED -> R.string.review
+        HeuristicStatus.NOT_EVALUATED -> R.string.topology_status_learning
+    }
+)
+
+/** Estado de un caso forense. */
+@Composable
+private fun forensicStateLabel(state: ForensicCaseState): String = stringResource(
+    when (state) {
+        ForensicCaseState.CAPTURING -> R.string.forensic_state_capturing
+        ForensicCaseState.POST_CAPTURE -> R.string.forensic_state_post_capture
+        ForensicCaseState.READY -> R.string.forensic_state_ready
+        ForensicCaseState.INTERRUPTED -> R.string.forensic_state_interrupted
+    }
+)
 
 /** Convierte MCC-MNC-TAC-CID-RADIO a una etiqueta compacta sin perder la identidad completa. */
 private fun topologyIdentityLabel(identity: String): String {
@@ -671,14 +709,16 @@ private fun TypedDeleteDialog(
     onConfirm: () -> Unit
 ) {
     var confirmation by remember { mutableStateOf("") }
-    val armed = confirmation == "BORRAR"
+    // v2.10.6 — Misma palabra localizada que el borrado del historial (DELETE / BORRAR).
+    val confirmWord = stringResource(R.string.delete_confirm_word)
+    val armed = confirmation == confirmWord
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(title, fontFamily = FontFamily.Monospace) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 Text(description, color = Color(0xFFAAAAAA), fontFamily = FontFamily.Monospace, fontSize = 11.sp)
-                Text(stringResource(R.string.delete_type_prompt), color = Color(0xFFCF6679), fontFamily = FontFamily.Monospace, fontSize = 10.sp)
+                Text(stringResource(R.string.delete_type_prompt, confirmWord), color = Color(0xFFCF6679), fontFamily = FontFamily.Monospace, fontSize = 10.sp)
                 OutlinedTextField(
                     value = confirmation,
                     onValueChange = { confirmation = it },
@@ -699,6 +739,7 @@ private fun TypedDeleteDialog(
 }
 
 @Composable
+@SuppressLint("LocalContextGetResourceValueCall")
 private fun ForensicCaseList(
     dbHelper: CellDbHelper,
     cases: List<ForensicCase>,
@@ -714,9 +755,9 @@ private fun ForensicCaseList(
     val launcher = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/zip")) { uri ->
         val selected = selectedForExport
         if (uri != null && selected != null) scope.launch {
-            exportMessage = "Exportando ${selected.caseCode}…"
+            exportMessage = context.getString(R.string.forensic_exporting_format, selected.caseCode)
             val result = withContext(Dispatchers.IO) { runCatching { ForensicExporter.export(context, dbHelper, selected, uri) } }
-            exportMessage = if (result.isSuccess) "Caso exportado correctamente" else "Error: ${result.exceptionOrNull()?.message}"
+            exportMessage = if (result.isSuccess) context.getString(R.string.forensic_exported) else context.getString(R.string.export_error_format, result.exceptionOrNull()?.message.toString())
         }
     }
     if (confirmExport) AlertDialog(
@@ -745,7 +786,7 @@ private fun ForensicCaseList(
     }
     Column(modifier) {
         Text(
-            "Ventana automática: 60 s antes · episodio completo · 60 s después",
+            stringResource(R.string.forensic_window_note),
             color = Color(0xFF777777), fontFamily = FontFamily.Monospace, fontSize = 9.sp,
             modifier = Modifier.padding(bottom = 8.dp)
         )
@@ -766,7 +807,7 @@ private fun ForensicCaseList(
                     Column(Modifier.fillMaxWidth().padding(12.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) {
                         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                             Text(fc.caseCode, color = Color.White, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Bold, fontSize = 11.sp)
-                            Text(fc.state.name, color = color, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Bold, fontSize = 9.sp)
+                            Text(forensicStateLabel(fc.state), color = color, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Bold, fontSize = 9.sp)
                         }
                         Text(stringResource(R.string.forensic_phase_format, fc.highestPhase, fc.sampleCount), color = Color(0xFFAAAAAA), fontFamily = FontFamily.Monospace, fontSize = 9.sp)
                         if (fc.origin == ForensicCaseOrigin.TRUST_CONTRADICTION) {
@@ -951,7 +992,7 @@ fun IntelPanel(dbHelper: CellDbHelper) {
         Spacer(Modifier.height(8.dp))
 
         Text(
-            "RESUMEN DE INTELIGENCIA RF",
+            stringResource(R.string.intel_title),
             color = Color(0xFF555555),
             fontFamily = FontFamily.Monospace,
             fontSize = 10.sp,
@@ -962,9 +1003,9 @@ fun IntelPanel(dbHelper: CellDbHelper) {
 
         // Grid 2x3 uniforme
         Row(modifier = Modifier.fillMaxWidth()) {
-            IntelCell(Modifier.weight(1f), "CELDAS", totalCells.toString())
-            IntelCell(Modifier.weight(1f), "CONEXIONES", totalConnections.toString())
-            IntelCell(Modifier.weight(1f), "SCORE MEDIO", String.format(java.util.Locale.ROOT, "%.1f%%", avgScore))
+            IntelCell(Modifier.weight(1f), stringResource(R.string.intel_cells), totalCells.toString())
+            IntelCell(Modifier.weight(1f), stringResource(R.string.intel_connections), totalConnections.toString())
+            IntelCell(Modifier.weight(1f), stringResource(R.string.intel_avg_score), String.format(java.util.Locale.ROOT, "%.1f%%", avgScore))
         }
 
         Spacer(Modifier.height(6.dp))
@@ -972,10 +1013,10 @@ fun IntelPanel(dbHelper: CellDbHelper) {
         Spacer(Modifier.height(6.dp))
 
         Row(modifier = Modifier.fillMaxWidth()) {
-            IntelCell(Modifier.weight(1f), "VERIFIED", verifiedCells.toString(), Color(0xFF4CAF50))
-            IntelCell(Modifier.weight(1f), "NOT FOUND", notFoundCells.toString(), Color(0xFFFFA000))
+            IntelCell(Modifier.weight(1f), stringResource(R.string.intel_verified), verifiedCells.toString(), Color(0xFF4CAF50))
+            IntelCell(Modifier.weight(1f), stringResource(R.string.intel_not_found), notFoundCells.toString(), Color(0xFFFFA000))
             IntelCell(
-                Modifier.weight(1f), "SOSPECHOSAS", suspiciousCells.toString(),
+                Modifier.weight(1f), stringResource(R.string.intel_suspicious), suspiciousCells.toString(),
                 if (suspiciousCells > 0) Color(0xFFCF6679) else Color(0xFF4CAF50)
             )
         }
@@ -985,9 +1026,9 @@ fun IntelPanel(dbHelper: CellDbHelper) {
         Spacer(Modifier.height(6.dp))
 
         Row(modifier = Modifier.fillMaxWidth()) {
-            IntelCell(Modifier.weight(1f), "CON GPS", recordsWithGps.toString())
+            IntelCell(Modifier.weight(1f), stringResource(R.string.intel_with_gps), recordsWithGps.toString())
             IntelCell(
-                Modifier.weight(1f), "ANOMALÍAS", anomalousCells.toString(),
+                Modifier.weight(1f), stringResource(R.string.intel_anomalies), anomalousCells.toString(),
                 if (anomalousCells > 0) Color(0xFFFFA000) else Color(0xFF4CAF50)
             )
             // Período en 2 líneas para que no se corte

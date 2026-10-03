@@ -2,23 +2,26 @@ package com.alexisgordr.icdetector.util
 
 import android.content.Context
 import android.content.res.Configuration
+import android.content.res.Resources
 import java.util.Locale
 
 /** Keeps the explicitly selected app language independent from the system language. */
 object LocaleController {
     private const val PREFS = "miniic_prefs"
     private const val KEY = "app_language"
-    private const val DEFAULT_LANGUAGE = "es"
-    private val supported = setOf("es", "en")
 
-    fun selectedLanguage(context: Context): String =
-        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-            .getString(KEY, DEFAULT_LANGUAGE)
-            ?.takeIf(supported::contains)
-            ?: DEFAULT_LANGUAGE
+    /**
+     * Idioma elegido en Ajustes o, si nunca se eligió, el del sistema (castellano o, si no lo es,
+     * inglés). El del sistema se lee de [Resources.getSystem] porque [Locale.getDefault] ya refleja
+     * el idioma que la propia app impuso en [localizedContext].
+     */
+    fun selectedLanguage(context: Context): String = AppLanguage.resolve(
+        saved = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getString(KEY, null),
+        systemLanguage = Resources.getSystem().configuration.locales[0]?.language
+    )
 
     fun selectLanguage(context: Context, languageTag: String) {
-        require(languageTag in supported)
+        require(languageTag in AppLanguage.supported)
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
             .edit()
             .putString(KEY, languageTag)

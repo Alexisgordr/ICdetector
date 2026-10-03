@@ -107,58 +107,90 @@ fun MainLayout(context: Context, dbHelper: CellDbHelper, service: MiniICService?
         }
     }
 
-    // Solicitud inicial. Notificaciones es opcional para usar la interfaz: Android 13+ permite
-    // denegarla y aun así ejecutar el servicio en primer plano, aunque no lo muestre en el cajón.
-    // No se repite automáticamente tras una denegación permanente.
+    // Solicitud inicial. Ubicación y teléfono no se piden en frío: primero se muestra la pantalla
+    // que explica para qué sirve cada permiso y el diálogo de Android sale al pulsar el botón
+    // (v2.10.6). Si ya están concedidos y solo falta Notificaciones (opcional en Android 13+),
+    // se pide directamente como antes. No se repite automáticamente tras una denegación permanente.
     LaunchedEffect(Unit) {
-        if (!hasLoc || !hasPhone || (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU && !hasNotif)) {
-            val arr = mutableListOf(
-                Manifest.permission.ACCESS_FINE_LOCATION,
-                Manifest.permission.READ_PHONE_STATE
-            ).apply {
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                    add(Manifest.permission.POST_NOTIFICATIONS)
-                }
-            }.toTypedArray()
-            launcher.launch(arr)
-        } else {
-            // Si ya tenemos los permisos críticos, iniciamos el servicio de forma segura
-            (context as? MainActivity)?.startAndBindService()
+        if (hasLoc && hasPhone) {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU && !hasNotif) {
+                launcher.launch(arrayOf(Manifest.permission.POST_NOTIFICATIONS))
+            } else {
+                // Si ya tenemos los permisos críticos, iniciamos el servicio de forma segura
+                (context as? MainActivity)?.startAndBindService()
+            }
         }
     }
 
     if (!hasLoc || !hasPhone) {
-        Box(modifier = Modifier
-            .fillMaxSize()
-            .statusBarsPadding()
-            .padding(32.dp), contentAlignment = Alignment.Center) {
-            Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(16.dp)) {
-                Text(
-                    stringResource(R.string.permissions_required),
-                    color = Color(0xFF888888),
-                    textAlign = androidx.compose.ui.text.style.TextAlign.Center,
-                    fontSize = 14.sp
-                )
-                Button(
-                    onClick = {
-                        val arr = mutableListOf(
-                            Manifest.permission.ACCESS_FINE_LOCATION,
-                            Manifest.permission.READ_PHONE_STATE
-                        ).apply {
-                            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU && !hasNotif) {
-                                add(Manifest.permission.POST_NOTIFICATIONS)
-                            }
-                        }.toTypedArray()
-                        launcher.launch(arr)
-                    },
-                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF333333))
-                ) {
-                    Text(stringResource(R.string.grant), color = Color.White)
+        PermissionRationale(onGrant = {
+            val arr = mutableListOf(
+                Manifest.permission.ACCESS_FINE_LOCATION,
+                Manifest.permission.READ_PHONE_STATE
+            ).apply {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU && !hasNotif) {
+                    add(Manifest.permission.POST_NOTIFICATIONS)
                 }
-            }
-        }
+            }.toTypedArray()
+            launcher.launch(arr)
+        }, onOpenSettings = {
+            context.startActivity(
+                android.content.Intent(
+                    android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+                    android.net.Uri.fromParts("package", context.packageName, null)
+                ).addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+            )
+        })
     } else {
         MainScreenContent(dbHelper = dbHelper, service = service)
+    }
+}
+
+/**
+ * v2.10.6 — Explica cada permiso antes de que Android muestre su diálogo. Antes la app pedía
+ * ubicación, teléfono y notificaciones nada más abrirse sin decir para qué.
+ */
+@Composable
+private fun PermissionRationale(onGrant: () -> Unit, onOpenSettings: () -> Unit) {
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .statusBarsPadding()
+            .navigationBarsPadding()
+            .verticalScroll(rememberScrollState())
+            .padding(horizontal = 24.dp, vertical = 32.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp)
+    ) {
+        Text(stringResource(R.string.permissions_title), color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.Bold)
+        Text(stringResource(R.string.permissions_required), color = Color(0xFFAAAAAA), fontSize = 14.sp)
+        PermissionReason(Icons.Default.LocationOn, R.string.permission_location_title, R.string.permission_location_body)
+        PermissionReason(Icons.Default.Phone, R.string.permission_phone_title, R.string.permission_phone_body)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            PermissionReason(Icons.Default.Notifications, R.string.permission_notifications_title, R.string.permission_notifications_body)
+        }
+        Text(stringResource(R.string.permissions_privacy), color = Color(0xFF888888), fontSize = 12.sp)
+        Button(
+            onClick = onGrant,
+            modifier = Modifier.fillMaxWidth(),
+            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF2E7D32))
+        ) {
+            Text(stringResource(R.string.grant), color = Color.White)
+        }
+        Text(stringResource(R.string.permissions_denied_hint), color = Color(0xFF888888), fontSize = 12.sp)
+        OutlinedButton(onClick = onOpenSettings, modifier = Modifier.fillMaxWidth()) {
+            Text(stringResource(R.string.permissions_open_settings), color = Color(0xFFCCCCCC))
+        }
+    }
+}
+
+@Composable
+private fun PermissionReason(icon: androidx.compose.ui.graphics.vector.ImageVector, title: Int, body: Int) {
+    Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+        Icon(icon, contentDescription = null, tint = Color(0xFF4CAF50), modifier = Modifier.size(22.dp))
+        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            Text(stringResource(title), color = Color.White, fontSize = 15.sp, fontWeight = FontWeight.Bold)
+            Text(stringResource(body), color = Color(0xFFBBBBBB), fontSize = 13.sp)
+        }
     }
 }
 

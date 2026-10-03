@@ -10,9 +10,14 @@ The application works without root and stores its history locally on the device.
 
 OpenCellID verification is optional. Users provide their own token, and the application can operate without this service.
 
+Network connections (all optional):
+
+• OpenCellID (opencellid.org): cell verification, off until the user enters their own API token. It sends the serving cell's identity (MCC, MNC, TAC/LAC, Cell ID and radio type) and can be routed through a SOCKS5 proxy such as Tor/Orbot.
+• Latency detection (experimental setting): off by default. Only when the user enables it, and only while traffic leaves over mobile data (not over Wi-Fi, a VPN or the SOCKS5 proxy), the app sends an HTTPS HEAD request roughly every 30 seconds to each of these third-party endpoints: www.google.com/generate_204 (Google), one.one.one.one (Cloudflare) and dns.quad9.net (Quad9). These requests carry no cell or location data, but like any connection they reveal the device's IP address to those services.
+
 Permissions:
 
 • Location: required by Android for access to certain cellular information and used for geographical consistency checks.
 • Phone state: required to inspect cellular network and cell information.
-• Internet: used optionally for OpenCellID and user-enabled network checks.
+• Internet: used only for the optional OpenCellID verification and the optional latency detection described above.
 • Foreground service and notifications: keep persistent monitoring visible and controllable.

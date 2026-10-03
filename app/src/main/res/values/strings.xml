@@ -35,7 +35,7 @@
     <string name="author_signature">MADE BY ALEXIS G. // OPEN SOURCE</string>
     <string name="openstreetmap_location">View location in OpenStreetMap</string>
     <string name="history_delete_title">Delete history?</string>
-    <string name="history_delete_prompt">Type DELETE to confirm:</string>
+    <string name="history_delete_prompt">Type %1$s to confirm:</string>
     <string name="delete_all">DELETE ALL</string>
     <string name="cancel">CANCEL</string>
     <string name="tab_antennas">CELLS</string>
@@ -70,7 +70,7 @@
     <string name="period">PERIOD</string>
     <string name="most_seen">MOST SEEN</string>
     <string name="networks">NETWORKS</string>
-    <string name="grant">Grant</string>
+    <string name="grant">Grant permissions</string>
     <string name="settings_accessibility">Settings</string>
     <string name="sector_status">SECTOR STATUS</string>
     <string name="security_audit">SECURITY AUDIT</string>
@@ -101,7 +101,7 @@
     <string name="monitoring_active">Monitoring active</string>
     <string name="verified_label">✅ VERIFIED</string><string name="not_found_label">➖ NOT REGISTERED</string><string name="rejected_label">⚠️ RESPONSE REJECTED</string><string name="api_error_label">⚠️ API ERROR</string><string name="pending_label">⏳ PENDING</string>
     <string name="security_alerts_channel">Security alerts</string><string name="stop">Stop</string>
-    <string name="permissions_required">ICdetection requires location and phone permissions to work.</string>
+    <string name="permissions_required">Android will ask you for these permissions next. This is what each one is used for.</string>
     <string name="monitor">MONITOR</string><string name="history">HISTORY</string>
     <string name="searching_signal">SEARCHING FOR SIGNAL…</string><string name="system_compromised">SYSTEM COMPROMISED</string><string name="no_anomalies">NO ANOMALIES DETECTED</string>
     <string name="observing_score">OBSERVING — %1$d%%</string><string name="unconfirmed_anomaly_score">UNCONFIRMED ANOMALY — %1$d%%</string>
@@ -143,7 +143,7 @@
     <string name="antenna_no_gps">No GPS locations recorded</string>
     <string name="antenna_no_handovers">No handovers recorded</string>
     <string name="delete">DELETE</string>
-    <string name="delete_type_prompt">Type BORRAR exactly to confirm permanent deletion.</string>
+    <string name="delete_type_prompt">Type %1$s exactly to confirm permanent deletion.</string>
     <string name="delete_forensic_title">Delete forensic case?</string>
     <string name="delete_forensic_description">This permanently deletes %1$s and all of its captured samples. Export it first if you want to preserve it.</string>
     <string name="delete_forensic_case">DELETE FORENSIC CASE</string>
@@ -203,4 +203,86 @@
     <string name="service_emergency">EMERGENCY ONLY</string>
     <string name="service_power_off">RADIO OFF</string>
     <string name="service_unknown">UNKNOWN</string>
+
+    <!-- v2.10.6 — Textos de History/Geometry que estaban fijos en el código y no seguían el idioma de la interfaz. -->
+    <string name="delete_confirm_word">DELETE</string>
+    <string name="history_delete_warning_format">This will permanently delete %1$d cell records, their incidents and their forensic cases. There is no backup and it cannot be undone.</string>
+    <string name="history_title_antennas">CELL HISTORY</string>
+    <string name="history_title_incidents">INCIDENT BLACK BOX</string>
+    <string name="history_title_forensics">FORENSIC LAB</string>
+    <string name="history_title_topology">HANDOVER TOPOLOGY</string>
+    <string name="history_title_geometry">CELL GEOMETRY</string>
+    <string name="history_showing_recent_format">Showing the %1$d most recent observations out of %2$d. The export includes the full history.</string>
+    <string name="export_failed_format">❌ Export failed: %1$s</string>
+    <string name="unknown_error">unknown</string>
+    <string name="export_error_format">Error: %1$s</string>
+    <string name="route_trust_label">trust</string>
+    <string name="antenna_anomaly_label">anomaly</string>
+    <string name="antenna_samples_label">samples</string>
+    <string name="topology_exporting">Exporting topology…</string>
+    <string name="topology_exported">Topology exported successfully</string>
+    <string name="stable_site_exporting">Exporting Stable-Site…</string>
+    <string name="stable_site_exported">Stable-Site exported successfully</string>
+    <string name="topology_export_privacy_warning">The package contains cell identities and handover routes that can reveal habitual movement patterns. It does not include IMSI, IMEI, phone number or credentials. Review it before sharing it.</string>
+    <string name="topology_header">LOCAL LOGICAL MAP · DOES NOT CHANGE THE SCORE</string>
+    <string name="topology_metric_cells">CELLS</string>
+    <string name="topology_metric_handovers">HANDOVERS</string>
+    <string name="topology_metric_trusted">TRUSTED</string>
+    <string name="topology_empty">NO ROUTES YET\nThe topology will appear after the first handovers</string>
+    <string name="topology_status_learning">LEARNING</string>
+    <string name="topology_route_counts_format">%1$d observations · %2$d trusted</string>
+    <string name="forensic_exporting_format">Exporting %1$s…</string>
+    <string name="forensic_exported">Case exported successfully</string>
+    <string name="forensic_window_note">Automatic window: 60 s before · full episode · 60 s after</string>
+    <string name="intel_title">RF INTELLIGENCE SUMMARY</string>
+    <string name="intel_cells">CELLS</string>
+    <string name="intel_connections">CONNECTIONS</string>
+    <string name="intel_avg_score">AVG SCORE</string>
+    <string name="intel_suspicious">SUSPICIOUS</string>
+    <string name="intel_with_gps">WITH GPS</string>
+    <string name="intel_anomalies">ANOMALIES</string>
+    <string name="export_geometry">EXPORT GEOMETRY</string>
+    <string name="geometry_exporting">Exporting geometry…</string>
+    <string name="geometry_exported">Geometry exported successfully</string>
+    <string name="geometry_export_privacy_warning">The ZIP contains cell identities and patterns linked to places or routes you frequent. It does not include precise GPS coordinates. Review it before sharing it publicly.</string>
+    <string name="mobility_title">MOBILITY · CONTEXTUAL MEMORY</string>
+    <string name="mobility_trip">Trip</string>
+    <string name="mobility_trip_inactive">INACTIVE</string>
+    <string name="mobility_trip_active_format">ACTIVE · %1$s</string>
+    <string name="mobility_movement">Movement</string>
+    <string name="mobility_moving_observed">MOVING OBSERVED</string>
+    <string name="mobility_no_evidence">NO EVIDENCE</string>
+    <string name="mobility_distinct_cells_edges">Distinct cells / edges</string>
+    <string name="mobility_current_cell">Current cell</string>
+    <string name="mobility_prior_good_edges">Prior good edges</string>
+    <string name="mobility_transitions_total">Accumulated observed transitions</string>
+    <string name="mobility_max_trips_per_edge">Max. historical trips per edge</string>
+    <string name="mobility_pending_edges_format">The %1$d open edges do NOT count towards trip_count yet. If the trip closes valid: n → n+1.</string>
+    <string name="geometry_not_available">NOT AVAILABLE</string>
+    <string name="geometry_relevant_trips">Relevant trips</string>
+    <string name="geometry_transitions_in_out">Transitions in/out</string>
+    <string name="geometry_trusted_in_out">Trusted in/out</string>
+    <string name="geometry_route_counts_format">Transitions %1$d · Trips %2$d</string>
+    <string name="intel_verified">VERIFIED</string>
+    <string name="intel_not_found">NOT FOUND</string>
+    <string name="geometry_local_cell_trust">Local cell trust</string>
+    <string name="geometry_mobility">Mobility</string>
+    <string name="geometry_good_edges">Good edges</string>
+    <string name="mobility_familiarity_unknown">UNKNOWN ON ROUTE</string>
+    <string name="mobility_familiarity_observed">OBSERVED ON ROUTE</string>
+    <string name="mobility_familiarity_known">KNOWN ON ROUTE</string>
+    <string name="forensic_state_capturing">CAPTURING</string>
+    <string name="forensic_state_post_capture">POST-CAPTURE</string>
+    <string name="forensic_state_ready">READY</string>
+    <string name="forensic_state_interrupted">INTERRUPTED</string>
+    <string name="permissions_title">Permissions ICdetection needs</string>
+    <string name="permission_location_title">Precise location</string>
+    <string name="permission_location_body">Android only shares the serving and neighbour cells (Cell ID, PCI, frequency, signal) with apps that have location access. GPS coordinates also let the app compare each antenna with where it was seen before (H11, H13, H16), record where an incident happened and build the Geometry view. While monitoring runs, location is used continuously by a foreground service with a visible notification.</string>
+    <string name="permission_phone_title">Phone state</string>
+    <string name="permission_phone_body">Needed to follow the network state: operator, registration, service and data-network changes, and the cellular security events Android reports. ICdetection does not read calls, SMS, contacts, your phone number or IMEI.</string>
+    <string name="permission_notifications_title">Notifications (optional)</string>
+    <string name="permission_notifications_body">Shows the ongoing monitoring notification and warns you when an anomaly is confirmed. You can deny it: monitoring still works, but you will not see alerts outside the app.</string>
+    <string name="permissions_privacy">Coordinates and radio readings are stored only on this phone. OpenCellID checks send the cell identity, never your position, and only if you add an API key in Settings.</string>
+    <string name="permissions_denied_hint">If you denied a permission and Android no longer asks, grant it from the app settings.</string>
+    <string name="permissions_open_settings">Open app settings</string>
 </resources>

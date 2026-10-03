@@ -9,7 +9,8 @@
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](LICENSE)
 ![Platform](https://img.shields.io/badge/Platform-Android%2010%2B-green.svg)
 ![Root Required](https://img.shields.io/badge/Root-Not%20Required-brightgreen.svg)
-![Release](https://img.shields.io/badge/Release-v2.10.5%20definitive-brightgreen.svg)
+![Release](https://img.shields.io/badge/Release-v2.10.6-brightgreen.svg)
+![Baseline](https://img.shields.io/badge/Dataset%20baseline-v2.10.5-blue.svg)
 ![Phase](https://img.shields.io/badge/Phase-Total%20freeze-blue.svg)
 ![Schema](https://img.shields.io/badge/DB%20schema-19-informational.svg)
 [![Featured in Awesome Telco](https://img.shields.io/badge/Featured%20in-Awesome%20Telco-6f42c1.svg)](https://github.com/ravens/awesome-telco#imsi-catcher-detection)
@@ -64,11 +65,19 @@
 >
 > 📄 Read the full notice in **[IMPORTANT.md](IMPORTANT.md)**.
 
+> [!NOTE]
+> **v2.10.6 is a maintenance release inside the freeze.** Topology and Geometry now show and
+> export **every** stored route (they used to stop at 250 / 400 / 1,000), the History and Geometry
+> screens are fully translated (the delete confirmation word follows the interface language), the
+> export validator is fixed and the forensic exporter gained tests. **Detection, scoring, alerts, stored data and the
+> database schema are unchanged**, so v2.10.5 remains the dataset baseline and no reset is needed.
+
 > [!TIP]
 > **Starting a clean research dataset?** Export anything you want to keep, then use
-> **History → Delete history** (type `BORRAR` to confirm). Since v2.10.5 it performs a complete,
-> all-or-nothing reset, including the route-familiarity trip tables. Uninstalling and reinstalling
-> still works too, but it also removes your OpenCellID key.
+> **History → Delete history** and type the confirmation word (`DELETE` in English, `BORRAR`
+> in Spanish). Since v2.10.5 it performs a complete, all-or-nothing reset, including the
+> route-familiarity trip tables. Uninstalling and reinstalling still works too, but it also
+> removes your OpenCellID key.
 
 ---
 
@@ -169,7 +178,8 @@ campaign; from Day 1 the detector is left untouched so the data can speak for it
 
 | | |
 |---|---|
-| **Definitive release** | v2.10.5 (version code 33) |
+| **Methodology baseline** | v2.10.5 (version code 33) |
+| **Current release** | v2.10.6 (version code 34) — maintenance only, no detection or data change |
 | **Database schema** | 19 (unchanged from v2.10.4) |
 | **Detection baseline** | H1–H16, weights, thresholds, Temporal Confidence, Local Cell Trust and Stable-Site frozen |
 | **Duration** | Approximately three months |
@@ -505,6 +515,13 @@ transaction.
 **Optional SOCKS5 routing.** Verification requests can be routed through a SOCKS5 proxy, including
 Tor / Orbot-style local setups.
 
+**Every network connection is optional and off by default.**
+
+| Feature | When it connects | Endpoint(s) | What is sent |
+|---|---|---|---|
+| OpenCellID verification | Only after you enter your own API token | `opencellid.org` | Serving-cell identity (MCC, MNC, TAC/LAC, Cell ID, radio type) and your token; can go through SOCKS5 |
+| Latency detection (experimental) | Only if you enable it in Settings, and only over mobile data (not over Wi-Fi, a VPN or the SOCKS5 proxy); one round roughly every 30 s | `www.google.com/generate_204` (Google), `one.one.one.one` (Cloudflare), `dns.quad9.net` (Quad9) | An HTTPS `HEAD` request with no cell or location data; like any connection, it reveals your IP address to those services |
+
 ---
 
 ## 🧾 Forensic logging & exports
@@ -635,6 +652,10 @@ in [`CHANGELOG.md`](CHANGELOG.md) and [`Status.md`](Status.md).
 <details open>
 <summary><strong>v2.10.x — Stable-Site, route memory, H15, radio context and the definitive freeze</strong></summary>
 
+- **v2.10.6** — Maintenance inside the freeze: uncapped Topology and Geometry (screens and
+  exports), History and Geometry fully localized (English/Spanish) including privacy warnings and
+  the delete confirmation word, network endpoints documented, validator fixes, forensic exporter
+  tests. No detection, scoring or data change.
 - **v2.10.5** — Stabilization release. Complete and atomic *Delete history* (including route trips),
   single shared database connection, atomic retention, honest `N/A` for H3/H4 without neighbour
   identities, verification retry fix. Schema 19 unchanged. **Definitive release for the

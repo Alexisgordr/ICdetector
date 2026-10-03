@@ -1,10 +1,40 @@
 # Changelog
 
-## Unreleased (post-v2.10.5, freeze-safe)
+## 2.10.6
+
+### Maintenance release inside the freeze
 
 Bug fixes that do **not** change detection, scoring, alerts, thresholds, stored data or the
 database schema. Safe to ship during the field-collection freeze.
 
+- **Fixed: deletion confirmation ignored the interface language.** The English UI asked for `DELETE` but
+  the code only accepted the hard-coded word `BORRAR`, in both the history reset and the
+  incident / forensic-case dialogs. The expected word is now the string resource
+  `delete_confirm_word` (`DELETE` in English, `BORRAR` in Spanish) and every prompt shows it.
+- **Fixed: Spanish text hard-coded in History and Geometry.** Screen titles, the history
+  deletion warning, export privacy warnings (Topology and Geometry), export status messages,
+  Topology metrics and route states, the forensic capture window note, the RF intelligence
+  summary and the Mobility / node detail labels moved to string resources with English and
+  Spanish versions. Warning meaning and detail are unchanged. Route-familiarity states are shown
+  as localized labels instead of raw enum names (`UNKNOWN_ON_ROUTE`…), which exports keep as-is,
+  and the Spanish strings no longer mix English terms.
+- **Fixed: first launch ignored the system language.** The app always started in Spanish until a
+  language was picked in Settings. It now follows the system: Spanish when the phone is in Spanish
+  (any region), English for any other language. A language chosen in Settings still wins.
+- **Fixed: permissions were requested without saying why.** On first launch Android asked for
+  location, phone and notification access straight away. The app now first shows a screen that
+  explains what each permission is used for (and that notifications are optional), then opens the
+  system dialog. It also links to the app settings when a permission was denied permanently.
+- **Fixed: Spanish words in the English live terminal.** With the interface in English, many
+  terminal lines and heuristic explanations were still partly in Spanish. The translation table was
+  applied in the order it was written, so a short entry broke a longer phrase before the whole
+  phrase could match, and several service, audit, TA, GPS, Stable-Site, verification and H16
+  messages had no entry. Phrases now apply longest first and the missing ones were added. Display
+  only: stored and exported logs are unchanged.
+- **Documented: every network connection.** The F-Droid description, README and manual now name
+  every network connection: OpenCellID, and the optional, off-by-default latency detection that
+  sends HTTPS `HEAD` requests to `www.google.com/generate_204` (Google), `one.one.one.one`
+  (Cloudflare) and `dns.quad9.net` (Quad9). `NetworkLatencyMonitor` is unchanged.
 - **Topology and Geometry no longer truncate routes** (#9). Both screens and both exports
   read every stored transition. Previously Topology stopped at 250 routes, the Geometry screen
   at 400 and the Geometry export at 1,000 (plus an internal 1,000 clamp), silently keeping

@@ -1,5 +1,20 @@
 # ICdetection Status
 
+## v2.10.6 — Maintenance inside the freeze (stable)
+
+**Version code:** 34
+**Database schema:** 19 (unchanged)
+**Security effect:** none; H1–H16, weights, thresholds, scoring and stored data unchanged
+**Dataset baseline:** still v2.10.5
+
+Topology and Geometry screens and exports read every stored route instead of stopping at
+250 / 400 / 1,000; per-cell aggregation is linear. `ForensicExporter` builds its ZIP in a pure,
+tested function with unchanged output. `check_export.py` fixes the "both states" note and adds a
+TA / TAUnit / TAMeters consistency invariant. Text-only fixes in TemporalConfidence and H16.
+Localization fixes: the delete confirmation word follows the UI language (`DELETE` / `BORRAR`),
+History and Geometry no longer contain hard-coded Spanish, and the F-Droid description names
+OpenCellID, Google, Cloudflare and Quad9 as the only network endpoints.
+
 ## v2.10.5 — Stabilization, definitive freeze release (stable)
 
 **Version code:** 33

@@ -10,11 +10,16 @@ La aplicación funciona sin root y almacena el historial localmente en el dispos
 
 Las consultas a OpenCellID son opcionales. El usuario debe aportar su propio token y puede utilizar la aplicación sin este servicio.
 
+Conexiones de red (todas opcionales):
+
+• OpenCellID (opencellid.org): verificación de celdas, desactivada hasta que el usuario introduce su propio token de API. Envía la identidad de la celda servidora (MCC, MNC, TAC/LAC, Cell ID y tipo de radio) y puede enrutarse por un proxy SOCKS5 como Tor/Orbot.
+• Detección de latencia (ajuste experimental): desactivada por defecto. Solo si el usuario la activa, y solo mientras el tráfico sale por datos móviles (no por Wi-Fi, VPN ni el proxy SOCKS5), la app envía aproximadamente cada 30 segundos una petición HTTPS HEAD a cada uno de estos servicios de terceros: www.google.com/generate_204 (Google), one.one.one.one (Cloudflare) y dns.quad9.net (Quad9). Estas peticiones no incluyen datos de celdas ni de ubicación, pero como cualquier conexión revelan la dirección IP del dispositivo a esos servicios.
+
 Permisos:
 
 • Ubicación: Android la exige para acceder a determinada información celular y se utiliza en comprobaciones geográficas.
 • Estado del teléfono: necesario para consultar la red y las celdas visibles.
-• Internet: utilizado opcionalmente para OpenCellID y las comprobaciones de red activadas por el usuario.
+• Internet: utilizado solo para la verificación opcional con OpenCellID y la detección de latencia opcional descritas arriba.
 • Servicio en primer plano y notificaciones: permiten mantener la monitorización visible y controlable.
 
 La cantidad y calidad de la telemetría dependen del teléfono, el módem, el firmware y la versión de Android.

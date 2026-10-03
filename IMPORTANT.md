@@ -2,6 +2,11 @@
 
 > **Definitive release:** v2.10.5 (version code 33) · **Database schema:** 19 ·
 > **Duration:** approximately three months
+>
+> **Current maintenance release:** v2.10.6 (version code 34). It completes the Topology and
+> Geometry views and exports, finishes the English/Spanish localization of History and Geometry,
+> documents every network endpoint and fixes the export validator. It does **not** change detection,
+> scoring, alerts or stored data, so the v2.10.5 baseline and Day 1 still hold. No reset needed.
 
 ICdetection is now entering a **three-month field-collection and stabilization period**.
 
@@ -26,7 +31,7 @@ recommend starting with a **fresh local database after upgrading to v2.10.5**.
 This reset is **recommended for dataset consistency, not required for normal app operation**.
 
 > **How to reset:** export anything you want to keep, then open **History → Delete history** and
-> type `BORRAR` to confirm.
+> type `DELETE` (English interface) or `BORRAR` (Spanish interface) to confirm.
 >
 > Since v2.10.5 this is a complete reset. It removes antenna history, incidents, forensic cases,
 > transitions, service-state events, Stable-Site learning **and** the route-familiarity trip tables
