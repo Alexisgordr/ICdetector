@@ -9,13 +9,13 @@
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](LICENSE)
 ![Platform](https://img.shields.io/badge/Platform-Android%2010%2B-green.svg)
 ![Root Required](https://img.shields.io/badge/Root-Not%20Required-brightgreen.svg)
-![Release](https://img.shields.io/badge/Release-v2.10.7-brightgreen.svg)
+![Release](https://img.shields.io/badge/Release-v2.10.8-brightgreen.svg)
 ![Baseline](https://img.shields.io/badge/Dataset%20baseline-v2.10.5-blue.svg)
-![Phase](https://img.shields.io/badge/Phase-Total%20freeze-blue.svg)
+![Phase](https://img.shields.io/badge/Phase-Field%20collection%20freeze-blue.svg)
 ![Schema](https://img.shields.io/badge/DB%20schema-19-informational.svg)
 [![Featured in Awesome Telco](https://img.shields.io/badge/Featured%20in-Awesome%20Telco-6f42c1.svg)](https://github.com/ravens/awesome-telco#imsi-catcher-detection)
 
-[**What's new**](#-whats-new-in-v2105) ·
+[**What's new**](#-whats-new-in-v2108) ·
 [**Freeze**](#-the-field-collection-freeze) ·
 [**Detection engine**](#-detection-engine) ·
 [**Exports**](#-forensic-logging--exports) ·
@@ -51,28 +51,24 @@
 ---
 
 > [!IMPORTANT]
-> ### ❄️ Total freeze — v2.10.5 is the definitive release.
+> ### ❄️ Field-collection freeze — v2.10.5 is the dataset baseline
 >
-> **This is the final version of the detector for the field-collection campaign. Development is
-> closed.**
+> The detector is frozen for a field-collection campaign of approximately three months.
+> v2.10.5 fixed the last data-integrity and stability issues found before the campaign and defines
+> the dataset baseline. No new heuristics, weights, thresholds or detection features will be added
+> during the freeze.
 >
-> v2.10.5 closes the development cycle. It fixes the last data-integrity and stability bugs found
-> before the campaign, and from here on the detector **stays exactly as it is for the next three
-> months**: no new heuristics, weights, thresholds or detection features.
->
-> Only genuine bugs that affect data integrity, collection continuity, database safety, privacy,
-> exports or crashes will be fixed — without changing the dataset semantics whenever possible.
+> Later releases are **maintenance only**: they fix bugs in the interface, localization,
+> notifications and stability. Detection, scoring, what triggers an alarm, stored data and the
+> database schema stay as in v2.10.5, so data collected with any of them is directly comparable and
+> no reset is needed.
 >
 > 📄 Read the full notice in **[IMPORTANT.md](IMPORTANT.md)**.
 
 > [!NOTE]
-> **v2.10.7 is a maintenance release inside the freeze.** The alert tone now follows the
-> notification volume and respects silent mode, a confirmed alarm reads **"Network anomaly
-> confirmed"** instead of "System compromised", and repeated terminal lines during an alarm are
-> written once.
-> v2.10.6 before it made Topology and Geometry show and export **every** stored route and finished
-> the English/Spanish localization. **Detection, scoring, what triggers an alert, stored data and
-> the database schema are unchanged**, so v2.10.5 remains the dataset baseline and no reset is needed.
+> **Current release: v2.10.8** (maintenance). A confirmed alarm now posts a notification, all
+> notifications follow the app language, and several display issues were fixed. See
+> [What's new in v2.10.8](#-whats-new-in-v2108).
 
 > [!TIP]
 > **Starting a clean research dataset?** Export anything you want to keep, then use
@@ -86,7 +82,7 @@
 ## 📑 Table of Contents
 
 - [What ICdetection is — and is not](#-what-icdetection-is--and-is-not)
-- [What's new in v2.10.5](#-whats-new-in-v2105)
+- [What's new in v2.10.8](#-whats-new-in-v2108)
 - [The field-collection freeze](#-the-field-collection-freeze)
 - [Highlights](#-highlights)
 - [Technical limitations](#-technical-limitations)
@@ -148,40 +144,36 @@ technical limits imposed by Android.
 
 ---
 
-## ✨ What's new in v2.10.5
+## ✨ What's new in v2.10.8
 
-A **stabilization release**. No heuristic, weight, threshold, score or database schema changes —
-only fixes to how data is written, reset and reported.
+A **maintenance release inside the freeze**. Detection, scoring, thresholds, what triggers an alarm,
+stored data and the database schema are unchanged.
 
 | Area | Change |
 |---|---|
-| **Delete history** | Now a complete, all-or-nothing reset. It also clears the route-familiarity trip tables (`mobility_trips`, `mobility_trip_cells`, `mobility_trip_edges`), which previously survived and could carry old routes into a new dataset. |
-| **Database safety** | The app and the background service share a single SQLite connection, so deleting history while the service writes can no longer fail with `database is locked` and close the app. History deletion and daily retention now run in one transaction each — an interruption can no longer leave half-deleted data. |
-| **Neighbour identity honesty** | Neighbours whose MCC/MNC Android does not report stay `N/A` instead of inheriting your own operator's values. H3 (MCC) and H4 (MNC) now report **N/A** when there is nothing to compare, instead of a meaningless **PASS**. See the dataset note below. |
-| **External verification** | A cell whose OpenCellID check hit an unexpected error could stay `PENDING` until the service restarted. It now falls back to `ERROR` and retries after 60 s, as designed. |
-| **Stability** | The service connection is released correctly if the screen closes while binding; the history list is refreshed on the UI thread after a reset. |
-| **CI** | GitHub Actions moved to Node 24 releases (`checkout`, `setup-java`, `setup-gradle` v5). |
+| **Alarm notification** | A confirmed alarm now posts a notification once per episode on the *Security alerts* channel ("Network anomaly confirmed", with cell ID, network and main reason). Previously it only played a tone and was recorded, so it went unnoticed with the phone on silent. |
+| **Localization** | Notification titles, actions, channel names and collection notices follow the app language (English or Spanish). The background service now uses the language chosen in Settings. |
+| **Sub-threshold label** | `[sub-umbral]` is shown as `[sub-threshold]` in the English interface. The stored value and exports are unchanged. |
+| **Baseline maturity** | Power, RSRQ/SINR fingerprint and PCI baselines show **WAITING** instead of `EMPTY · 0 samples` while a cell has not yet earned trust (5 clean observations on 2 different days). |
+| **Display fixes** | `98%%` under *Local cell trust* now reads `98%`; the launch placeholder is translated. |
+| **Stability** | Opening the map or the *Support project* link no longer closes the app on a phone without a browser. |
+| **Codebase** | Unused WiGLE code and three unused texts were removed. The only network connections remain OpenCellID and the optional latency check. |
 
-> [!NOTE]
-> **Dataset note (H3/H4 only).** Most modems — Pixel devices included — only measure frequency, PCI
-> and power for neighbour cells; their MCC, MNC and TAC travel in each cell's SIB1, which the phone
-> reads only from the cell it is camped on. Before v2.10.5, missing neighbour MCC/MNC was filled with
-> your operator's own values, so H3 compared your network with itself and always passed. From
-> v2.10.5, H3/H4 show `N/A` in that situation and new `site_rf_neighbours` rows store `NULL` MCC/MNC.
-> **The security score and anomaly confidence are unchanged** — a passing rule never contributed to
-> either. On devices that do report neighbour identities, H3 and H4 behave exactly as before.
+Earlier maintenance releases (v2.10.6, v2.10.7) are summarised in the
+[release history](#-release-history); full details are in [`CHANGELOG.md`](CHANGELOG.md).
 
 ---
 
 ## ❄️ The field-collection freeze
 
-**ICdetection is now in a total freeze.** v2.10.5 is the last release that changes code before the
-campaign; from Day 1 the detector is left untouched so the data can speak for itself.
+**ICdetection is in a field-collection freeze.** v2.10.5 defines the methodology baseline: from Day 1
+the detection logic is left untouched so the data can speak for itself. Later releases only fix bugs
+that do not change detection or stored data.
 
 | | |
 |---|---|
 | **Methodology baseline** | v2.10.5 (version code 33) |
-| **Current release** | v2.10.7 (version code 35) — maintenance only, no detection or data change |
+| **Current release** | v2.10.8 (version code 36) — maintenance only, no detection or data change |
 | **Database schema** | 19 (unchanged from v2.10.4) |
 | **Detection baseline** | H1–H16, weights, thresholds, Temporal Confidence, Local Cell Trust and Stable-Site frozen |
 | **Duration** | Approximately three months |
@@ -196,6 +188,14 @@ will be documented explicitly as a new dataset cut.
 
 The full reasoning, the recommended reset and the questions this campaign aims to answer are in
 **[IMPORTANT.md](IMPORTANT.md)**.
+
+> [!NOTE]
+> **Dataset note (H3/H4).** Most modems — Pixel devices included — only measure frequency, PCI and
+> power for neighbour cells; their MCC, MNC and TAC travel in each cell's SIB1, which the phone reads
+> only from the cell it is camped on. Before v2.10.5, missing neighbour MCC/MNC was filled with your
+> operator's own values, so H3 compared your network with itself and always passed. From v2.10.5,
+> H3/H4 show `N/A` in that situation and new `site_rf_neighbours` rows store `NULL` MCC/MNC. The
+> security score and anomaly confidence are unaffected: a passing rule never contributed to either.
 
 ---
 
@@ -484,13 +484,19 @@ RSRP baseline, the RSRQ/SINR fingerprint, PCI identity stability, local reputati
 state — so an inactive-looking rule can be told apart from one that is still waiting for trustworthy
 data.
 
+The RSRP baseline, the RSRQ/SINR fingerprint and PCI identity stability are only learned from a cell
+once it is trusted: at least **5 clean observations on 2 different days** within the last 30 days
+(power and fingerprint also need 5 samples within 500 m of the current position). Until then they
+show **WAITING**. Observations are stored throughout, and once the cell becomes trusted all clean
+samples from the window count at once. Local reputation has no such gate.
+
 ---
 
 ## 🔋 Battery optimization
 
 For reliable long-running collection, ICdetection keeps a GPS-only stream active while monitoring and
 holds a partial wake lock so collection continues with the screen off. This increases battery use.
-Below 5% battery while unplugged, GPS and the wake lock pause and resume automatically after charging.
+At 5% battery or less while unplugged, GPS and the wake lock pause and resume automatically after charging.
 
 **Settings → Apps → ICdetection → Battery → Battery optimization → Don't optimize**
 
@@ -517,7 +523,7 @@ Below 5% battery while unplugged, GPS and the wake lock pause and resume automat
 ICdetection can optionally cross-reference observed cells with **OpenCellID**. Public databases are
 incomplete, community-maintained, occasionally outdated and uneven across regions, so a
 `NOT_FOUND` result does **not** imply malicious infrastructure. Requests are made only after you
-configure and enable verification. WiGLE is no longer queried.
+configure and enable verification. WiGLE support has been removed.
 
 Verification is a **label, not a verdict**: its result never changes the security score.
 
@@ -598,7 +604,8 @@ Key points for analysis:
 - **`Lat` / `Lon` are always the device's own GPS position.** The OpenCellID antenna position lives
   in `ApiLat` / `ApiLon`.
 - **`[sub-umbral]` entries** in `FailedHeuristics` failed without reaching the alarm threshold. They
-  are observations kept on purpose so false positives can be studied.
+  are observations kept on purpose so false positives can be studied. The English interface displays
+  them as `[sub-threshold]`; the stored value is always `[sub-umbral]`.
 - **`Verified` is a label, not a verdict:** `VERIFIED`, `NOT_FOUND`, `REJECTED`, `ERROR` or `PENDING`.
   None of them changes `SecurityScore`.
 - **Neighbour MCC/MNC in Stable-Site exports** is empty when the modem did not report it. Rows
@@ -671,8 +678,12 @@ Every release that changes detection behavior is recorded as a **dataset cut**. 
 in [`CHANGELOG.md`](CHANGELOG.md) and [`Status.md`](Status.md).
 
 <details open>
-<summary><strong>v2.10.x — Stable-Site, route memory, H15, radio context and the definitive freeze</strong></summary>
+<summary><strong>v2.10.x — Stable-Site, route memory, H15, radio context and the field-collection freeze</strong></summary>
 
+- **v2.10.8** — Maintenance inside the freeze: confirmed-alarm notification (once per episode),
+  notifications and service follow the app language, `[sub-threshold]` in English, WAITING state for
+  trust-gated baselines, `98%` fix, no crash without a browser, unused WiGLE code removed. No
+  detection, scoring or data change.
 - **v2.10.7** — Maintenance inside the freeze: the alert tone respects silent mode (notification
   stream instead of alarm stream), the confirmed-alarm label reads "Network anomaly confirmed",
   neutral wording for the rapid-cell-change log line, and
@@ -684,7 +695,7 @@ in [`CHANGELOG.md`](CHANGELOG.md) and [`Status.md`](Status.md).
   tests. No detection, scoring or data change.
 - **v2.10.5** — Stabilization release. Complete and atomic *Delete history* (including route trips),
   single shared database connection, atomic retention, honest `N/A` for H3/H4 without neighbour
-  identities, verification retry fix. Schema 19 unchanged. **Definitive release for the
+  identities, verification retry fix. Schema 19 unchanged. **Dataset baseline for the
   field-collection freeze.**
 - **v2.10.4** — Serving cell chosen by `PRIMARY_SERVING`; safe abstention; radio context, RADIO tab
   and service-state events. Schema 19.
@@ -752,34 +763,32 @@ GPL-compatible licensing.
 
 ## 🙏 Acknowledgements
 
-Thank you to everyone who has followed the project through its many iterations — and for your
-patience with the frequent releases during development. They were necessary to correct issues found
-through real-world testing.
+Thank you to everyone who has followed the project, tested it in real conditions and reported
+issues. The frequent releases during development were necessary to correct problems found in the
+field.
 
-**ICdetection v2.10.5 is the definitive release for the next three months.** It closes development
-with the last integrity fixes, and from now on I will not change the detector unless a significant
-bug appears. The time will be used to collect data, observe real behavior, measure false positives
-and learn from the evidence. After that, the data will decide what — if anything — changes next.
+With the field-collection freeze, v2.10.5 defines the dataset baseline for the next three months.
+The detector will not change during that period; only bugs that do not alter detection or stored
+data are fixed. The time will be used to collect data, observe real behaviour, measure false
+positives and learn from the evidence. After that, the data will decide what — if anything —
+changes next.
 
-This is the first Android application I have ever built, and I put a lot of care into it. I do not
-have formal telecommunications or Android-development training; I designed the detection approach,
-selected and rejected heuristics, reviewed the logic, tested it in real conditions and made the
-project decisions, while AI tools helped with the Kotlin/Android implementation.
+This is my first Android application. I do not have formal training in telecommunications or
+Android development: I designed the detection approach, selected and rejected heuristics, reviewed
+the logic, tested it in real conditions and made the project decisions, while AI tools helped with
+the Kotlin/Android implementation.
 
-If you have questions, find mistakes or run into issues, please **open an issue**. I will review it
-honestly and fix what I can.
+Questions, corrections and bug reports are welcome — please **[open an issue](https://github.com/alexisgordr/ICdetector/issues)**.
+Every report is reviewed and addressed where possible.
 
 > **Nota para los usuarios:** gracias por vuestra paciencia con la frecuencia de actualizaciones
-> durante el desarrollo; fueron necesarias para corregir problemas encontrados en pruebas reales. La
-> **v2.10.5 es la versión definitiva** durante los próximos tres meses: cierra el desarrollo con los
-> últimos arreglos de integridad de datos, y no se harán más cambios salvo que aparezca un error
-> importante.
+> durante el desarrollo; fueron necesarias para corregir problemas encontrados en pruebas reales.
+> La **v2.10.5 es la base del conjunto de datos** durante los próximos tres meses: el detector no
+> cambia en ese periodo y solo se publican correcciones de errores que no alteran la detección ni
+> los datos guardados (la versión actual es la v2.10.8).
 
 <div align="center">
 
-Best regards,<br>
-**Alexis**
-
-*Carpe diem.*
+**Alexis Gomez Rodriguez**
 
 </div>

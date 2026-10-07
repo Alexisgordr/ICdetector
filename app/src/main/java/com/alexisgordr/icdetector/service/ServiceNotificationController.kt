@@ -11,6 +11,10 @@ import android.content.Intent
 import android.provider.Settings
 import androidx.core.app.NotificationCompat
 import com.alexisgordr.icdetector.MainActivity
+import com.alexisgordr.icdetector.models.CellData
+import com.alexisgordr.icdetector.ui.localizeTerminalLine
+import com.alexisgordr.icdetector.util.AppLanguage
+import com.alexisgordr.icdetector.util.LocaleController
 
 /** Owns notification construction and channels for the foreground service. */
 internal class ServiceNotificationController(
@@ -20,14 +24,18 @@ internal class ServiceNotificationController(
     fun createChannels() {
         val manager = context.getSystemService(NotificationManager::class.java)
         manager.createNotificationChannel(
-            NotificationChannel(CHANNEL_ID, "miniIC Channel", NotificationManager.IMPORTANCE_LOW)
+            NotificationChannel(
+                CHANNEL_ID,
+                context.getString(R.string.channel_monitoring_name),
+                NotificationManager.IMPORTANCE_LOW
+            )
         )
         manager.createNotificationChannel(
             NotificationChannel(
                 ALERT_CHANNEL_ID,
                 context.getString(R.string.security_alerts_channel),
                 NotificationManager.IMPORTANCE_HIGH
-            ).apply { description = "Avisos accionables de degradación celular" }
+            ).apply { description = context.getString(R.string.channel_alerts_description) }
         )
     }
 
@@ -45,7 +53,7 @@ internal class ServiceNotificationController(
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
         )
         return NotificationCompat.Builder(context, CHANNEL_ID)
-            .setContentTitle("ICdetection: Monitoreo · GPS continuo")
+            .setContentTitle(context.getString(R.string.notif_monitoring_title))
             .setContentText(text)
             .setSmallIcon(android.R.drawable.ic_menu_info_details)
             .setContentIntent(openApp)
@@ -67,17 +75,51 @@ internal class ServiceNotificationController(
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
         )
         val notification = NotificationCompat.Builder(context, ALERT_CHANNEL_ID)
-            .setContentTitle("ICdetection: red 2G/3G detectada")
+            .setContentTitle(context.getString(R.string.notif_legacy_network_title))
             .setContentText(context.getString(R.string.airplane_settings_hint))
             .setSmallIcon(android.R.drawable.stat_sys_warning)
             .setPriority(NotificationCompat.PRIORITY_HIGH)
             .setCategory(NotificationCompat.CATEGORY_ALARM)
             .setContentIntent(settings)
-            .addAction(android.R.drawable.ic_menu_manage, "ABRIR AJUSTES", settings)
+            .addAction(android.R.drawable.ic_menu_manage, context.getString(R.string.notif_open_settings), settings)
             .setAutoCancel(true)
             .build()
         context.getSystemService(NotificationManager::class.java)
             .notify(AIRPLANE_ACTION_NOTIFICATION_ID, notification)
+    }
+
+    /**
+     * v2.10.8 — Una alarma confirmada solo sonaba y se guardaba: si el móvil estaba en el bolsillo
+     * o con el sonido apagado, no quedaba ningún aviso visible. Se publica una notificación por
+     * episodio (la misma regla que decide cuándo se guarda la alarma). No cambia la detección.
+     */
+    fun showConfirmedAlarm(cell: CellData) {
+        val openApp = PendingIntent.getActivity(
+            context,
+            3,
+            Intent(context, MainActivity::class.java),
+            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
+        )
+        // El motivo se guarda en castellano (dato del dataset); solo se traduce para mostrarlo.
+        val storedReason = cell.suspiciousReason.orEmpty()
+        val reason = if (LocaleController.selectedLanguage(context) == AppLanguage.ENGLISH) {
+            localizeTerminalLine(storedReason)
+        } else {
+            storedReason
+        }
+        val body = context.getString(R.string.alarm_notification_body_format, cell.cellId, cell.networkType, reason)
+        val notification = NotificationCompat.Builder(context, ALERT_CHANNEL_ID)
+            .setContentTitle(context.getString(R.string.alarm_notification_title))
+            .setContentText(body)
+            .setStyle(NotificationCompat.BigTextStyle().bigText(body))
+            .setSmallIcon(android.R.drawable.stat_sys_warning)
+            .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .setCategory(NotificationCompat.CATEGORY_STATUS)
+            .setContentIntent(openApp)
+            .setAutoCancel(true)
+            .build()
+        context.getSystemService(NotificationManager::class.java)
+            .notify(CONFIRMED_ALARM_NOTIFICATION_ID, notification)
     }
 
     companion object {
@@ -85,5 +127,6 @@ internal class ServiceNotificationController(
         const val ALERT_CHANNEL_ID = "miniic_security_alerts"
         const val NOTIFICATION_ID = 202
         const val AIRPLANE_ACTION_NOTIFICATION_ID = 204
+        const val CONFIRMED_ALARM_NOTIFICATION_ID = 205
     }
 }

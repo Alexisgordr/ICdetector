@@ -66,11 +66,6 @@ class TerminalLocalizationCoverageTest {
         "OpenCellID: respuesta no interpretable (HTTP 500). Respuesta: <html>",
         "OpenCellID: error 7 de la API. Respuesta: {}",
         "OpenCellID: la respuesta no es de la celda preguntada. No verifica nada, y tampoco demuestra que la antena no esté. Respuesta: {}",
-        "WiGLE: 0 resultados para esta celda. Respuesta: {}",
-        "WiGLE: devolvió 2 registro(s), ninguno de la celda preguntada. Se descarta la respuesta; no se concluye nada sobre la antena. Respuesta: {}",
-        "WiGLE: consulta rechazada (bad query). NO significa que la antena no exista. Respuesta: {}",
-        "WiGLE: credenciales rechazadas o cuenta sin acceso a datos de celdas (HTTP 401). La búsqueda de celdas de WiGLE no está abierta a todas las cuentas. Respuesta: {}",
-        "WiGLE: límite de consultas alcanzado. Se reintentará. Respuesta: {}",
         "OpenCellID: sin conexión o respuesta ilegible.",
         "N/A: sin lectura celular válida.",
         "N/A: Wi-Fi activo; se evita atribuir el contexto de red al enlace celular.",
@@ -102,6 +97,9 @@ class TerminalLocalizationCoverageTest {
         "Downgrade de banda forzado (1800MHz→800MHz, B3→B20)",
         "Identidad RF inestable: misma Cell ID alternando PCI en la misma portadora (posible clon)",
         "[2/3 ciclos confirmando]",
+        "[sub-umbral] Multitud de MNCs",
+        "[sub-umbral] Cambio en identidad celular consolidada (%)",
+        "[sub-umbral] Huella RF incoherente con el historial (RSRQ/SINR muy desviados)",
         "[SERVICIO] Estado de servicio: EN SERVICIO · red=21407 (Movistar) · SIM=21407 · datos=LTE no registrado · roaming=no"
     )
 
@@ -115,6 +113,12 @@ class TerminalLocalizationCoverageTest {
     @Test fun `long phrases win over the short words they contain`() {
         assertEquals("Hardware ciphering", localizeTerminalLine("Cifrado hardware"))
         assertEquals("[2/3 cycles confirming]", localizeTerminalLine("[2/3 ciclos confirmando]"))
+    }
+
+    @Test fun `subthreshold prefix is translated for display only`() {
+        // v2.10.8 — El prefijo guardado (SUBTHRESHOLD_PREFIX) no cambia; solo se traduce al mostrarlo.
+        assertEquals("[sub-threshold] Many MNCs", localizeTerminalLine("[sub-umbral] Multitud de MNCs"))
+        assertEquals("[sub-umbral]", com.alexisgordr.icdetector.models.SUBTHRESHOLD_PREFIX)
     }
 
     @Test fun `technical values survive translation`() {

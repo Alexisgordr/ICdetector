@@ -10,7 +10,7 @@ import org.junit.Test
 /**
  * Banco de pruebas de la semántica de verificación.
  *
- * Cada caso reproduce una respuesta real de WiGLE u OpenCellID — cuota agotada, key inválida,
+ * Cada caso reproduce una respuesta real de OpenCellID — cuota agotada, key inválida,
  * resultado vacío, identidad cambiada, 404 — y comprueba qué estado se emite. Esto es lo que no
  * existía cuando la app se pasó meses dando por verificadas antenas ajenas: la decisión vivía
  * enredada con la red y no había forma de probarla.
@@ -122,25 +122,6 @@ class VerificationDecisionTest {
     }
 
     @Test
-    fun `la identidad celular oficial de WiGLE se interpreta completa`() {
-        val recibida = VerificationDecision.reportedFromWigleId(
-            "21407_31601_123456", "LTE"
-        )
-        assertEquals(
-            VerificationDecision.Reported("214", "07", "31601", "123456", RadioTech.LTE),
-            recibida
-        )
-        assertTrue(VerificationDecision.identityMatches(esperada, recibida!!))
-    }
-
-    @Test
-    fun `un id WiGLE ajeno o mal formado nunca verifica`() {
-        val ajena = VerificationDecision.reportedFromWigleId("21407_31601_999999", "LTE")
-        assertFalse(VerificationDecision.identityMatches(esperada, ajena!!))
-        assertEquals(null, VerificationDecision.reportedFromWigleId("respuesta-sin-identidad"))
-    }
-
-    @Test
     fun `OpenCellID usa lac y cellid antes que auxiliares a cero`() {
         val recibida = VerificationDecision.reportedFromOpenCellId(
             mcc = "214", mnc = "7", lac = "31601", tac = "0",
@@ -241,52 +222,6 @@ class VerificationDecisionTest {
         assertEquals(VerificationStatus.ERROR, VerificationDecision.forOpenCellId(200, false, -1, false).status)
     }
 
-    // ── WiGLE ────────────────────────────────────────────────────────────────────────────────
-
-    @Test
-    fun `wigle con un resultado de la celda preguntada verifica`() {
-        val v = VerificationDecision.forWigle(200, success = true, resultCount = 1, identityOk = true)
-        assertEquals(VerificationStatus.VERIFIED, v.status)
-    }
-
-    @Test
-    fun `wigle con consulta valida y cero resultados es una negativa fiable`() {
-        val v = VerificationDecision.forWigle(200, success = true, resultCount = 0, identityOk = false)
-        assertEquals(VerificationStatus.NOT_FOUND, v.status)
-    }
-
-    @Test
-    fun `wigle con resultados de otras celdas se descarta, no se niega`() {
-        // El caso que hundió las verificaciones antiguas: la búsqueda no filtraba y devolvía
-        // antenas ajenas. Ni verifica ni desmiente: descarta.
-        val v = VerificationDecision.forWigle(200, success = true, resultCount = 5, identityOk = false)
-        assertEquals(VerificationStatus.REJECTED, v.status)
-    }
-
-    @Test
-    fun `wigle con success false es ERROR aunque el HTTP sea 200`() {
-        // Así responde WiGLE cuando se agota la cuota o la cuenta no tiene acceso al endpoint de
-        // celdas. Contarlo como "antena desconocida" contamina el historial entero.
-        val v = VerificationDecision.forWigle(200, success = false, resultCount = 0, identityOk = false)
-        assertEquals(VerificationStatus.ERROR, v.status)
-    }
-
-    @Test
-    fun `wigle sin permiso para datos de celdas es ERROR`() {
-        assertEquals(VerificationStatus.ERROR, VerificationDecision.forWigle(401, false, 0, false).status)
-        assertEquals(VerificationStatus.ERROR, VerificationDecision.forWigle(403, false, 0, false).status)
-    }
-
-    @Test
-    fun `wigle con 429 es ERROR`() {
-        assertEquals(VerificationStatus.ERROR, VerificationDecision.forWigle(429, false, 0, false).status)
-    }
-
-    @Test
-    fun `wigle con 404 es ERROR, no una negativa`() {
-        assertEquals(VerificationStatus.ERROR, VerificationDecision.forWigle(404, false, 0, false).status)
-    }
-
     // ── VERIFIED exige que TODO esté bien, no solo el contenido ──────────────────────────────
 
     @Test
@@ -336,21 +271,10 @@ class VerificationDecisionTest {
         assertTrue("Debería existir al menos un camino a VERIFIED", alcanzables.isNotEmpty())
     }
 
-    @Test
-    fun `WiGLE tampoco verifica con un HTTP de error`() {
-        for (http in listOf(401, 403, 404, 429, 500)) {
-            assertEquals(
-                "HTTP $http no puede verificar",
-                VerificationStatus.ERROR,
-                VerificationDecision.forWigle(http, success = true, resultCount = 1, identityOk = true).status
-            )
-        }
-    }
-
     // ── La invariante que resume todo ────────────────────────────────────────────────────────
 
     @Test
-    fun `solo dos respuestas en el mundo producen NOT_FOUND`() {
+    fun `solo la negativa explicita de OpenCellID produce NOT_FOUND`() {
         val negativas = mutableListOf<String>()
         for (http in listOf(200, 401, 403, 404, 429, 500, 503)) {
             for (code in listOf(-1, 1, 2, 6, 7)) {
@@ -362,26 +286,14 @@ class VerificationDecisionTest {
                     }
                 }
             }
-            for (success in listOf(true, false)) {
-                for (n in listOf(0, 1, 5)) {
-                    for (ok in listOf(true, false)) {
-                        if (VerificationDecision.forWigle(http, success, n, ok).status ==
-                            VerificationStatus.NOT_FOUND
-                        ) negativas.add("wigle http=$http success=$success n=$n idOk=$ok")
-                    }
-                }
-            }
         }
         // OpenCellID: HTTP 2xx declarando `code = 1`, con o sin coordenada — un cuerpo que dice
         // "cell not found" y a la vez trae coordenadas es contradictorio, y manda el error
-        // declarado. WiGLE: HTTP 2xx, success, cero resultados.
+        // declarado. (v2.10.8: se retiran los casos de WiGLE junto con su código sin uso.)
         assertTrue(
             "Alguna combinación inesperada produce NOT_FOUND: $negativas",
-            negativas.all {
-                (it.startsWith("ocid") && it.contains("http=200") && it.contains("code=1")) ||
-                    (it.startsWith("wigle") && it.contains("http=200") && it.contains("success=true") && it.contains("n=0"))
-            }
+            negativas.all { it.contains("http=200") && it.contains("code=1") }
         )
-        assertTrue("Debería haber al menos una negativa de cada fuente", negativas.size >= 2)
+        assertTrue("Debería existir la negativa explícita de OpenCellID", negativas.isNotEmpty())
     }
 }

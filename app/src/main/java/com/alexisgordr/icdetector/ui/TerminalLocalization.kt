@@ -17,6 +17,9 @@ internal fun localizeTerminalLine(line: String): String {
 }
 
 private val replacements = linkedMapOf(
+    // v2.10.8 — Prefijo de las observaciones sub-umbral. El dato guardado sigue en castellano
+    // (SUBTHRESHOLD_PREFIX); solo se traduce al mostrarlo.
+    "[sub-umbral]" to "[sub-threshold]",
     // v2.10.4 — Líneas [RADIO] y [SERVICIO]. Van antes que las genéricas ("Celda ", etc.)
     // y las frases largas antes que las cortas que contienen.
     "[SERVICIO]" to "[SERVICE]",
@@ -330,15 +333,6 @@ private val replacements = linkedMapOf(
     "respuesta no interpretable (HTTP " to "unreadable response (HTTP ",
     " de la API. Respuesta:" to " from the API. Response:",
     "la respuesta no es de la celda preguntada. No verifica nada, y tampoco demuestra que la antena no esté." to "the response is not for the requested cell. It verifies nothing, and does not prove the antenna is absent either.",
-    "0 resultados para esta celda." to "0 results for this cell.",
-    "WiGLE: devolvió " to "WiGLE: returned ",
-    " registro(s), ninguno de la celda preguntada." to " record(s), none for the requested cell.",
-    "Se descarta la respuesta; no se concluye nada sobre la antena." to "Response discarded; nothing is concluded about the antenna.",
-    "WiGLE: consulta rechazada" to "WiGLE: query rejected",
-    "NO significa que la antena no exista." to "It does NOT mean the antenna does not exist.",
-    "credenciales rechazadas o cuenta sin acceso a datos de celdas (HTTP " to "credentials rejected or account without access to cell data (HTTP ",
-    "La búsqueda de celdas de WiGLE no está abierta a todas las cuentas." to "WiGLE cell search is not open to every account.",
-    "límite de consultas alcanzado. Se reintentará." to "query limit reached. Will retry.",
     "sin conexión o respuesta ilegible." to "no connection or unreadable response.",
     // DiagnosticEngine / TransitionCoherence
     "N/A: Wi-Fi activo; se evita atribuir el contexto de red al enlace celular." to "N/A: Wi-Fi active; network context is not attributed to the cellular link.",

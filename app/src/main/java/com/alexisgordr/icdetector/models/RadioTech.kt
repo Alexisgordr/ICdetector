@@ -23,7 +23,7 @@ enum class RadioTech {
     UNKNOWN;
 
     /**
-     * Nombre del parámetro `radio` tal y como lo esperan OpenCellID y WiGLE, o null si no se sabe
+     * Nombre del parámetro `radio` tal y como lo espera OpenCellID, o null si no se sabe
      * de qué tecnología se trata — en cuyo caso no se envía el filtro, porque enviar un valor
      * inventado sería peor que no filtrar.
      */

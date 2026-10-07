@@ -259,7 +259,8 @@ fun SettingsPanel(service: MiniICService?, onSave: () -> Unit) {
             TextButton(
                 onClick = {
                     val intent = Intent(Intent.ACTION_VIEW, "https://buymeacoffee.com/alexisgomez".toUri())
-                    context.startActivity(intent)
+                    // v2.10.8 — Sin navegador instalado, la app se cerraba al pulsar.
+                    runCatching { context.startActivity(intent) }
                 },
                 colors = ButtonDefaults.textButtonColors(contentColor = Color(0xFFFFDD00)),
                 modifier = Modifier

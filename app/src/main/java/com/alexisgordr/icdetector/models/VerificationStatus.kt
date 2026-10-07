@@ -1,7 +1,7 @@
 package com.alexisgordr.icdetector.models
 
 /**
- * Resultado de consultar a las bases públicas (WiGLE / OpenCellID) por una celda.
+ * Resultado de consultar a la base pública (OpenCellID) por una celda.
  *
  * ── POR QUÉ HAY CINCO Y NO CUATRO ────────────────────────────────────────────────────────────
  * Durante toda la v2.0 y buena parte de la v2.1 hubo cuatro estados, y [NOT_FOUND] hacía de cajón
@@ -28,9 +28,8 @@ enum class VerificationStatus {
     VERIFIED,
 
     /**
-     * Negativa explícita y fiable. Solo dos respuestas en el mundo entran aquí:
-     *  - OpenCellID con `code == 1` (literalmente "cell not found"),
-     *  - WiGLE con `success: true` y `results: []` (consulta válida, cero resultados).
+     * Negativa explícita y fiable. Solo una respuesta entra aquí:
+     *  - OpenCellID con `code == 1` (literalmente "cell not found").
      *
      * Cualquier otra cosa que "no sea un sí" es [REJECTED] o [ERROR], nunca esto.
      */

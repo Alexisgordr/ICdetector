@@ -47,7 +47,7 @@ data class CellData(
     val anomalyConfidence: Float = 0f,
     /**
      * Distancia en metros entre tu posición GPS y la posición que las bases públicas
-     * (WiGLE/OpenCellID) atribuyen a esta antena — v2.1.
+     * (OpenCellID) atribuye a esta antena — v2.1.
      *
      * Es SOLO PARA MOSTRAR. No entra en ninguna heurística, a propósito: es una estimación de
      * calidad muy distinta a la del Timing Advance (depende de lo buena que sea la coordenada de

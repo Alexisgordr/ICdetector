@@ -1,5 +1,46 @@
 # Changelog
 
+## 2.10.8
+
+### Maintenance release inside the freeze
+
+Bugs found during testing. Detection, scoring, thresholds, what triggers an alarm, stored data
+and the database schema are **unchanged**. Safe to ship during the field-collection freeze.
+
+- **Fixed: a confirmed alarm showed no notification** (#17). It only played the tone and was
+  recorded in History. With the phone on silent and the app in the background, nobody noticed it.
+  A confirmed alarm now posts one notification per episode on the existing *Security alerts*
+  channel: **"Network anomaly confirmed"** / **"Anomalía de red confirmada"**, with the cell ID,
+  network and main reason. Tapping it opens the app. When an alarm is confirmed is unchanged: the
+  notification follows the same rule that already saved the alarm once per episode.
+- **Fixed: notifications in Spanish with the interface in English** (#15). The monitoring and
+  2G/3G notification titles, the *Open settings* button, the latency warning, the collection
+  interrupted / write failed notices, the notification channel name ("miniIC Channel") and its
+  description were hard-coded in Spanish. They are now translated into English and Spanish. The
+  background service also follows the language chosen in Settings (it used the system language).
+  Channel IDs are unchanged, so your notification settings are kept.
+- **Fixed: "[sub-umbral]" not translated in English** (#13). History and the terminal now show
+  `[sub-threshold]` with the interface in English. The stored value and the exports keep
+  `[sub-umbral]`, so the dataset is unchanged.
+- **Fixed: "EMPTY · 0 samples" looked like a bug** (#14). The power, RSRQ/SINR fingerprint and PCI
+  baselines only count once a cell is trusted (5 clean observations on 2 different days). Until
+  then they now show **"WAITING · needs 5 clean samples on 2 days"** / **"EN ESPERA · necesita 5
+  muestras limpias en 2 días"**, with a short explanation under *Baseline maturity*. The rule
+  itself is unchanged.
+- **Fixed: "98%%" shown with a double percent sign** (#15) under *Local cell trust*.
+- **Fixed: the app could close when opening a link** (#15). The map button (OpenStreetMap) and
+  *Support project* crashed the app on a phone with no browser installed. Now nothing happens.
+- **Fixed: "Iniciando..." shown in Spanish** for a moment on launch with the interface in English (#15).
+- **Removed: unused WiGLE code** (#16). The app no longer queried WiGLE, but its client and tests
+  were still in the source. They are removed so the code matches the documentation: the only
+  network connections are OpenCellID and the optional latency check. Old WiGLE credentials are
+  still deleted from the device on start-up.
+- **Removed: three texts no screen used** (`geometry_legend`, `not_evaluated_explanation`,
+  `terminal_technical_event`).
+- **Tests:** notification texts exist in both languages and are not hard-coded, no `%%` in plain
+  texts, the confirmed-alarm notification is posted once per episode, `[sub-umbral]` is translated
+  for display only, and the WiGLE client is gone.
+
 ## 2.10.7
 
 ### Maintenance release inside the freeze

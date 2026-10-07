@@ -4,7 +4,9 @@ import com.alexisgordr.icdetector.models.RadioTech
 import com.alexisgordr.icdetector.models.VerificationStatus
 
 /**
- * Qué significa cada respuesta de WiGLE / OpenCellID. **Sin red, sin JSON, sin Android.**
+ * Qué significa cada respuesta de OpenCellID. **Sin red, sin JSON, sin Android.**
+ *
+ * v2.10.8 — Se retira el código de WiGLE que quedaba sin uso (la app ya no lo consultaba).
  *
  * ── POR QUÉ ESTÁ AQUÍ Y NO DENTRO DE LOS CLIENTES ────────────────────────────────────────────
  * El fallo más caro de este proyecto no estuvo en pedir mal los datos —que también—, sino en
@@ -55,30 +57,6 @@ object VerificationDecision {
 
     /** Veredicto y el motivo en texto llano, listo para el terminal. */
     data class Verdict(val status: VerificationStatus, val reason: String?)
-
-    /**
-     * Interpreta el identificador que WiGLE devuelve en `results[].id`.
-     *
-     * Aunque los filtros de búsqueda se llaman `cell_op`, `cell_net` y `cell_id`, la respuesta no
-     * repite esos tres campos: los empaqueta como `MCC+MNC_AREA_CELLID`. Es el mismo formato que
-     * genera la aplicación oficial de WiGLE al registrar una celda. No leer este campo hacía que
-     * una respuesta correcta pareciese no contener Cell ID y terminase en REJECTED.
-     */
-    fun reportedFromWigleId(id: String?, radio: String? = null): Reported? {
-        val partes = id?.trim()?.split('_', limit = 3) ?: return null
-        if (partes.size != 3) return null
-        val operador = partes[0]
-        if (operador.length < 4 || operador.any { !it.isDigit() }) return null
-        if (partes[1].toLongOrNull() == null || partes[2].toLongOrNull() == null) return null
-
-        return Reported(
-            mcc = operador.substring(0, 3),
-            mnc = operador.substring(3),
-            area = partes[1],
-            cellId = partes[2],
-            radio = RadioTech.fromApi(radio)
-        )
-    }
 
     /**
      * Construye la identidad con el esquema real de `/cell/get`.
@@ -248,61 +226,5 @@ object VerificationDecision {
         // ni confirmar ni desmentir. No se sabe.
         return Verdict(VerificationStatus.ERROR,
             "OpenCellID: respuesta sin coordenadas y sin código de error. Respuesta: $crudo")
-    }
-
-    /**
-     * Veredicto para una respuesta de **WiGLE**.
-     *
-     * @param httpCode código HTTP.
-     * @param success el campo `success` del cuerpo (WiGLE contesta 200 con `success:false` cuando
-     *   se agota la cuota o la cuenta no tiene acceso al endpoint de celdas).
-     * @param resultCount número de registros devueltos.
-     * @param identityOk si alguno de esos registros es la celda preguntada.
-     */
-    fun forWigle(
-        httpCode: Int,
-        success: Boolean,
-        resultCount: Int,
-        identityOk: Boolean,
-        mensajeApi: String? = null,
-        crudo: String = ""
-    ): Verdict {
-        if (httpCode in 200..299 && success) {
-            return when {
-                // Consulta válida, cero resultados: WiGLE no tiene esta celda. Negativa fiable.
-                resultCount == 0 ->
-                    Verdict(VerificationStatus.NOT_FOUND, "WiGLE: 0 resultados para esta celda. Respuesta: $crudo")
-
-                identityOk -> Verdict(VerificationStatus.VERIFIED, null)
-
-                // Vinieron registros, pero ninguno es la celda preguntada. Eso no demuestra que la
-                // celda no esté: demuestra que esta respuesta no sirve para demostrarlo.
-                else -> Verdict(
-                    VerificationStatus.REJECTED,
-                    "WiGLE: devolvió $resultCount registro(s), ninguno de la celda preguntada. " +
-                        "Se descarta la respuesta; no se concluye nada sobre la antena. Respuesta: $crudo"
-                )
-            }
-        }
-
-        return when {
-            httpCode in 200..299 ->
-                Verdict(VerificationStatus.ERROR,
-                    "WiGLE: consulta rechazada${if (mensajeApi != null) " ($mensajeApi)" else ""}. NO significa que la antena no exista. Respuesta: $crudo")
-
-            httpCode == 401 || httpCode == 403 ->
-                Verdict(VerificationStatus.ERROR,
-                    "WiGLE: credenciales rechazadas o cuenta sin acceso a datos de celdas (HTTP $httpCode). " +
-                        "La búsqueda de celdas de WiGLE no está abierta a todas las cuentas. Respuesta: $crudo")
-
-            httpCode == 429 ->
-                Verdict(VerificationStatus.ERROR, "WiGLE: límite de consultas alcanzado. Se reintentará. Respuesta: $crudo")
-
-            httpCode == 404 ->
-                Verdict(VerificationStatus.ERROR,
-                    "WiGLE: HTTP 404 (endpoint no encontrado). No dice nada sobre la antena.")
-
-            else -> Verdict(VerificationStatus.ERROR, "WiGLE: HTTP $httpCode. Respuesta: $crudo")
-        }
     }
 }

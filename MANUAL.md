@@ -1,4 +1,4 @@
-# ICdetection Field Manual — v2.10.7
+# ICdetection Field Manual — v2.10.8
 
 ICdetection is an open-source Android application for passive cellular-network auditing and anomaly analysis. It observes information exposed by Android, compares each observation with the device's local history and, when configured, cross-checks cells against external tower databases.
 
@@ -42,7 +42,7 @@ declared primary had no usable signal telemetry.
 
 ## Version 2.10.5
 
-v2.10.5 is the definitive release for the field-collection freeze. It changes no heuristic,
+v2.10.5 is the dataset baseline for the field-collection freeze. It changes no heuristic,
 threshold or score and keeps schema 19.
 
 - **Delete history** now performs a complete reset in a single transaction, including the
@@ -56,6 +56,23 @@ threshold or score and keeps schema 19.
 - A cell whose external verification fails unexpectedly is retried after a minute instead of
   remaining `PENDING` until the service restarts.
 
+
+## Version 2.10.8
+
+A maintenance release inside the freeze. Detection, scores, what triggers an alarm and stored data
+are unchanged, so v2.10.5 remains the dataset baseline.
+
+- **Alarm notification:** a confirmed alarm now posts a notification (**Network anomaly
+  confirmed** / *Anomalía de red confirmada*) with the cell ID, network and main reason. It appears
+  once per alarm episode on the *Security alerts* channel; tapping it opens the app. It is visible
+  even when the phone is on silent.
+- **Language:** all notifications follow the language chosen in Settings (English or Spanish).
+- **Sub-threshold label:** in English, `[sub-umbral]` is shown as `[sub-threshold]`. Exports keep
+  `[sub-umbral]`.
+- **Baseline maturity:** power, fingerprint and PCI show **WAITING** until the cell is trusted (see
+  section 6).
+- **Fixes:** `98%` under *Local cell trust*; the map and *Support project* links no longer close the
+  app on a phone without a browser.
 
 ## Version 2.10.7
 
@@ -370,6 +387,8 @@ cell identities and routes can reveal habitual movement patterns; review it befo
 ## 6. Baseline maturity
 
 Historical rules need repeated observations before they become reliable. The maturity indicators show whether enough local history exists for those checks.
+
+The RSRP power baseline, the RSRQ/SINR fingerprint and PCI identity stability only use a cell once it is **trusted**: at least 5 clean observations (score ≥ 85, no failed rule) on 2 different days within the last 30 days. Power and fingerprint also need 5 samples within 500 m of your current position. Until then these rows show **WAITING · needs 5 clean samples on 2 days**. This is expected, not a fault: observations are stored meanwhile, and once the cell becomes trusted all clean samples from the window count at once. *Local reputation* has no such gate and counts every observation.
 
 A new installation will naturally contain immature baselines and several `N/A` results. To improve them:
 

@@ -4,7 +4,7 @@ import com.alexisgordr.icdetector.models.VerificationStatus
 import org.json.JSONObject
 
 /** De dónde vino una respuesta de verificación. */
-enum class VerificationSource { OPENCELLID, WIGLE }
+enum class VerificationSource { OPENCELLID }
 
 /** Motivo técnico que puede requerir una política de reintento específica. */
 enum class VerificationFailure { NONE, RATE_LIMITED }

@@ -21,6 +21,7 @@ import com.alexisgordr.icdetector.core.ThreatAnalyzer
 import com.alexisgordr.icdetector.models.*
 import com.alexisgordr.icdetector.storage.CellDbHelper
 import com.alexisgordr.icdetector.telephony.CellParser
+import com.alexisgordr.icdetector.util.LocaleController
 import com.alexisgordr.icdetector.forensics.ForensicRecorder
 import com.alexisgordr.icdetector.forensics.TrustContradictionTransitionTracker
 import com.alexisgordr.icdetector.forensics.TrustContradictionSignal
@@ -289,6 +290,12 @@ class MiniICService : Service() {
         if (becameVisible && ::telephonyController.isInitialized) requestFreshCellInfo()
     }
 
+    // v2.10.8 — Las notificaciones salían en el idioma del sistema aunque la app estuviera en otro:
+    // el servicio no aplicaba el idioma elegido en Ajustes, solo MainActivity.
+    override fun attachBaseContext(newBase: Context) {
+        super.attachBaseContext(LocaleController.localizedContext(newBase))
+    }
+
     override fun onCreate() {
         super.onCreate()
         isServiceRunning = true
@@ -391,6 +398,9 @@ class MiniICService : Service() {
             log = { appendLog("[SEC]", it) },
             requestPreciseLocation = { requestHighAccuracyFix() },
             persistConfirmedAlarm = observationPersistence::recordConfirmedAlarm,
+            notifyConfirmedAlarm = { cell ->
+                scope.launch(Dispatchers.Main) { notificationController.showConfirmedAlarm(cell) }
+            },
             strongSignalEnabled = { isStrongSignalAlarmEnabled },
             strongSignalThreshold = { alarmThreshold },
             legacyProtectionEnabled = { is3gAirplaneModeEnabled }
@@ -413,7 +423,13 @@ class MiniICService : Service() {
         }
         
         val prefs = getSharedPreferences("miniic_prefs", MODE_PRIVATE)
-        collectionHealthController = CollectionHealthController(prefs)
+        collectionHealthController = CollectionHealthController(
+            preferences = prefs,
+            interruptedText = { hours, minutes ->
+                getString(R.string.collection_interrupted_format, hours.toInt(), minutes.toInt())
+            },
+            writeFailureText = { getString(R.string.write_failure_notification) }
+        )
         openCellIdKey = (prefs.getString("opencellid_key", "") ?: "").trim()
         // WiGLE ya no participa en la verificación. Elimina secretos y estado heredados.
         prefs.edit()
@@ -613,7 +629,7 @@ class MiniICService : Service() {
             toneGenerator?.startTone(ToneGenerator.TONE_CDMA_SOFT_ERROR_LITE, 300)
             val notification = NotificationCompat.Builder(this@MiniICService, CHANNEL_ID)
                 .setSmallIcon(android.R.drawable.ic_dialog_alert)
-                .setContentTitle("⚠ Anomalía de Red")
+                .setContentTitle(getString(R.string.notif_latency_title))
                 .setContentText(getString(R.string.latency_warning))
                 .setPriority(NotificationCompat.PRIORITY_HIGH)
                 .setAutoCancel(true)
@@ -1558,7 +1574,7 @@ class MiniICService : Service() {
         when (collectionHealthController.noteWrite(rowId)) {
             CollectionHealthController.Change.FAILED -> {
                 appendLog("[SYS]", "⚠ ESCRITURA FALLIDA: la base de datos rechaza las filas (¿disco lleno?). La recolección NO está guardando datos.")
-                updateNotificationText(CollectionHealthController.WRITE_FAILURE_TEXT, force = true)
+                updateNotificationText(getString(R.string.write_failure_notification), force = true)
             }
             CollectionHealthController.Change.RECOVERED -> {
                 appendLog("[SYS]", "Escritura en base de datos restablecida.")

@@ -83,7 +83,6 @@
     <string name="geometry_insufficient_format">GEOMETRÍA INSUFICIENTE\n\n%1$d celda(s) con perfil de las %2$d vistas con GPS.\nHacen falta al menos %3$d muestras geolocalizadas por celda.\nSe llena al repetir tus trayectos habituales.</string>
     <string name="geometry_disclaimer">CENTRO DE OBSERVACIÓN · NO ES LA POSICIÓN DE LA ANTENA · NO MODIFICA EL SCORE</string>
     <string name="profiled">PERFILADAS</string><string name="sites">SITIOS</string><string name="routes">RUTAS</string><string name="review">REVISAR</string>
-    <string name="geometry_legend">Círculo = radio P90 de tus observaciones, a escala. Flecha = handover; grosor por observaciones, verde por coherencia aprendida. Toca un nodo para ver su ficha.</string>
     <string name="geometry_legend_interactive">Pellizca para ampliar · arrastra para explorar · doble toque para ampliar/reencuadrar · toca un nodo para ver su ficha. El ámbar resalta la celda seleccionada y sus rutas.</string>
     <string name="geometry_zoom_format">%1$d%%</string>
     <string name="geometry_zoom_out">Alejar</string>
@@ -111,12 +110,10 @@
     <string name="critical_battery_gps_paused">Batería crítica: GPS continuo en pausa</string><string name="no_signal_airplane">Sin señal / Modo Avión</string><string name="searching_network">Buscando red…</string>
     <string name="latency_warning">Latencia anómala persistente — posible interferencia MITM</string><string name="airplane_settings_hint">Toca para abrir los ajustes de Modo Avión.</string>
     <string name="heuristic_rule_format">H%1$d · regla de detección</string><string name="status_passed">SUPERADA</string><string name="status_failed">FALLIDA</string><string name="status_coherent">COHERENTE</string><string name="status_incoherent">INCOHERENTE</string>
-    <string-array name="heuristic_names"><item>Celda aislada</item><item>Estabilidad de potencia</item><item>Consistencia MCC</item><item>Límite MNC</item><item>Validación regional TAC</item><item>Coherencia geométrica (TA)</item><item>Espectro de vecinos</item><item>Sanidad ARFCN</item><item>Cifrado hardware</item><item>Anti ping-pong</item><item>Consistencia geográfica</item><item>Correlación latencia + RF</item><item>Baseline y huella RF</item><item>Downgrade de banda</item><item>Estabilidad de identidad RF</item><item>Coherencia de transición celular</item></string-array>
-    <string name="not_evaluated_explanation">No hay suficientes datos fiables para evaluar esta regla.</string><string name="transition_explanation_passed">El handover observado es coherente con las rutas locales aprendidas.</string><string name="transition_explanation_failed">El handover observado no concuerda con las rutas locales aprendidas.</string><string name="transition_explanation_na">No hay suficiente historial fiable de rutas para evaluar esta transición.</string>
+    <string-array name="heuristic_names"><item>Celda aislada</item><item>Estabilidad de potencia</item><item>Consistencia MCC</item><item>Límite MNC</item><item>Validación regional TAC</item><item>Coherencia geométrica (TA)</item><item>Espectro de vecinos</item><item>Sanidad ARFCN</item><item>Cifrado hardware</item><item>Anti ping-pong</item><item>Consistencia geográfica</item><item>Correlación latencia + RF</item><item>Baseline y huella RF</item><item>Downgrade de banda</item><item>Estabilidad de identidad RF</item><item>Coherencia de transición celular</item></string-array><string name="transition_explanation_passed">El handover observado es coherente con las rutas locales aprendidas.</string><string name="transition_explanation_failed">El handover observado no concuerda con las rutas locales aprendidas.</string><string name="transition_explanation_na">No hay suficiente historial fiable de rutas para evaluar esta transición.</string>
     <string name="mobility_sanity">CORDURA DE MOVILIDAD · H16</string>
     <string name="badge_registered">REGISTRADA</string><string name="badge_not_found">SIN REGISTRO</string><string name="badge_rejected">RESPUESTA DESCARTADA</string><string name="badge_pending">PENDIENTE</string><string name="badge_error">ERROR API</string>
     <string name="raw_terminal_output">SALIDA RAW DEL TERMINAL</string>
-    <string name="terminal_technical_event">Evento técnico de diagnóstico; el detalle original permanece disponible en la exportación forense.</string>
     <string name="current_technology">TECNOLOGÍA</string><string name="signal_power">POTENCIA</string><string name="radio_band">BANDA</string>
     <string name="audit_updated">Auditoría de seguridad actualizada</string><string name="temporal_confirmed_format">CONFIRMACIÓN TEMPORAL %1$s · CONFIRMADA</string><string name="temporal_observing_format">CONFIRMACIÓN TEMPORAL %1$s · OBSERVANDO</string>
     <string name="heuristic_index">ÍNDICE HEURÍSTICO · SOLO DATOS EVALUADOS</string><string name="evaluation_summary_format">%1$d/%2$d evaluadas · %3$d fallos · %4$d sin datos</string><string name="evaluation_short_format">%1$d/%2$d EVALUADAS · %3$d FALLOS</string><string name="anomaly_confidence_format">Confianza de anomalía (no calibrada): %1$s%%</string>
@@ -126,7 +123,7 @@
     <string name="local_trust_title">CONFIANZA LOCAL DE LA CELDA</string>
     <string name="local_trust_format">%1$s · %2$d%%</string>
     <string name="local_trust_progress">%1$d/%2$d días · %3$d/%4$d muestras limpias · %5$d h observadas</string>
-    <string name="local_trust_ceiling">Evidencia local revocable · techo epistémico 98%%</string>
+    <string name="local_trust_ceiling">Evidencia local revocable · techo epistémico 98%</string>
     <string name="trust_state_new">NUEVA</string><string name="trust_state_learning">APRENDIENDO</string><string name="trust_state_established">CONSOLIDADA</string><string name="trust_state_changed">CAMBIADA</string><string name="trust_state_quarantined">EN CUARENTENA</string><string name="trust_state_site_unverified">SITIO SIN VERIFICAR</string>
     <string name="trust_desc_new">Aún no hay historial limpio suficiente; no se afirma legitimidad.</string>
     <string name="trust_desc_learning">Construyendo un perfil local durante días independientes con identidad RF, GPS y handovers fiables.</string>
@@ -285,4 +282,17 @@
     <string name="permissions_privacy">Las coordenadas y las lecturas de radio se guardan solo en este teléfono. Las consultas a OpenCellID envían la identidad de la celda, nunca tu posición, y solo si añades una clave de API en Ajustes.</string>
     <string name="permissions_denied_hint">Si denegaste un permiso y Android ya no lo vuelve a pedir, concédelo desde los ajustes de la app.</string>
     <string name="permissions_open_settings">Abrir ajustes de la app</string>
+    <string name="notif_monitoring_title">ICdetection: monitorización · GPS continuo</string>
+    <string name="notif_legacy_network_title">ICdetection: red 2G/3G detectada</string>
+    <string name="notif_open_settings">ABRIR AJUSTES</string>
+    <string name="channel_monitoring_name">Monitorización</string>
+    <string name="channel_alerts_description">Avisos accionables de degradación celular</string>
+    <string name="notif_latency_title">⚠ Anomalía de red</string>
+    <string name="collection_interrupted_format">⚠ Recolección interrumpida %1$dh %2$dmin</string>
+    <string name="write_failure_notification">⚠ ESCRITURA FALLIDA — no se están guardando datos</string>
+    <string name="audit_starting">Iniciando…</string>
+    <string name="alarm_notification_title">Anomalía de red confirmada</string>
+    <string name="alarm_notification_body_format">CID %1$s · %2$s · %3$s</string>
+    <string name="baseline_waiting">EN ESPERA · necesita 5 muestras limpias en 2 días</string>
+    <string name="baseline_maturity_hint">Las líneas base de potencia, huella y PCI solo se usan cuando una celda tiene 5 observaciones limpias en 2 días distintos. Mientras tanto, las muestras se guardan.</string>
 </resources>

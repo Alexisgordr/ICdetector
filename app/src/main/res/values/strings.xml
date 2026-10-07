@@ -83,7 +83,6 @@
     <string name="geometry_insufficient_format">INSUFFICIENT GEOMETRY\n\n%1$d profiled cell(s) out of %2$d seen with GPS.\nAt least %3$d geolocated samples per cell are required.\nIt fills as you repeat your usual routes.</string>
     <string name="geometry_disclaimer">OBSERVATION CENTRE · NOT THE ANTENNA POSITION · DOES NOT CHANGE THE SCORE</string>
     <string name="profiled">PROFILED</string><string name="sites">SITES</string><string name="routes">ROUTES</string><string name="review">REVIEW</string>
-    <string name="geometry_legend">Circle = P90 radius of your observations, to scale. Arrow = handover; thickness by observations, green by learned coherence. Tap a node for details.</string>
     <string name="geometry_legend_interactive">Pinch to zoom · drag to explore · double tap to zoom/reset · tap a node for details. Amber highlights the selected cell and its routes.</string>
     <string name="geometry_zoom_format">%1$d%%</string>
     <string name="geometry_zoom_out">Zoom out</string>
@@ -111,12 +110,10 @@
     <string name="critical_battery_gps_paused">Critical battery: continuous GPS paused</string><string name="no_signal_airplane">No signal / Airplane mode</string><string name="searching_network">Searching for network…</string>
     <string name="latency_warning">Persistent anomalous latency — possible MITM interference</string><string name="airplane_settings_hint">Tap to open Airplane mode settings.</string>
     <string name="heuristic_rule_format">H%1$d · detection rule</string><string name="status_passed">PASSED</string><string name="status_failed">FAILED</string><string name="status_coherent">COHERENT</string><string name="status_incoherent">INCOHERENT</string>
-    <string-array name="heuristic_names"><item>Isolated cell</item><item>Signal-power stability</item><item>MCC consistency</item><item>MNC limit</item><item>Regional TAC validation</item><item>Geometric coherence (TA)</item><item>Neighbor spectrum</item><item>ARFCN sanity</item><item>Hardware ciphering</item><item>Anti ping-pong</item><item>Geographic consistency</item><item>Latency + RF correlation</item><item>Baseline and RF fingerprint</item><item>Band downgrade</item><item>RF identity stability</item><item>Cellular-transition coherence</item></string-array>
-    <string name="not_evaluated_explanation">Not enough reliable data to evaluate this rule.</string><string name="transition_explanation_passed">The observed handover is coherent with learned local routes.</string><string name="transition_explanation_failed">The observed handover is inconsistent with learned local routes.</string><string name="transition_explanation_na">There is not enough trusted route history to evaluate this transition.</string>
+    <string-array name="heuristic_names"><item>Isolated cell</item><item>Signal-power stability</item><item>MCC consistency</item><item>MNC limit</item><item>Regional TAC validation</item><item>Geometric coherence (TA)</item><item>Neighbor spectrum</item><item>ARFCN sanity</item><item>Hardware ciphering</item><item>Anti ping-pong</item><item>Geographic consistency</item><item>Latency + RF correlation</item><item>Baseline and RF fingerprint</item><item>Band downgrade</item><item>RF identity stability</item><item>Cellular-transition coherence</item></string-array><string name="transition_explanation_passed">The observed handover is coherent with learned local routes.</string><string name="transition_explanation_failed">The observed handover is inconsistent with learned local routes.</string><string name="transition_explanation_na">There is not enough trusted route history to evaluate this transition.</string>
     <string name="mobility_sanity">MOBILITY SANITY · H16</string>
     <string name="badge_registered">REGISTERED</string><string name="badge_not_found">NOT REGISTERED</string><string name="badge_rejected">RESPONSE REJECTED</string><string name="badge_pending">PENDING</string><string name="badge_error">API ERROR</string>
     <string name="raw_terminal_output">RAW TERMINAL OUTPUT</string>
-    <string name="terminal_technical_event">Technical diagnostic event; raw detail remains available in forensic export.</string>
     <string name="current_technology">TECHNOLOGY</string><string name="signal_power">POWER</string><string name="radio_band">BAND</string>
     <string name="audit_updated">Security audit updated</string><string name="temporal_confirmed_format">TEMPORAL CONFIRMATION %1$s · CONFIRMED</string><string name="temporal_observing_format">TEMPORAL CONFIRMATION %1$s · OBSERVING</string>
     <string name="heuristic_index">HEURISTIC INDEX · EVALUATED DATA ONLY</string><string name="evaluation_summary_format">%1$d/%2$d evaluated · %3$d failures · %4$d unavailable</string><string name="evaluation_short_format">%1$d/%2$d EVALUATED · %3$d FAILURES</string><string name="anomaly_confidence_format">Anomaly confidence (uncalibrated): %1$s%%</string>
@@ -126,7 +123,7 @@
     <string name="local_trust_title">LOCAL CELL CONFIDENCE</string>
     <string name="local_trust_format">%1$s · %2$d%%</string>
     <string name="local_trust_progress">%1$d/%2$d days · %3$d/%4$d clean samples · %5$d h observed</string>
-    <string name="local_trust_ceiling">Revocable local evidence · epistemic ceiling 98%%</string>
+    <string name="local_trust_ceiling">Revocable local evidence · epistemic ceiling 98%</string>
     <string name="trust_state_new">NEW</string><string name="trust_state_learning">LEARNING</string><string name="trust_state_established">ESTABLISHED</string><string name="trust_state_changed">CHANGED</string><string name="trust_state_quarantined">QUARANTINED</string><string name="trust_state_site_unverified">SITE UNVERIFIED</string>
     <string name="trust_desc_new">Not enough clean history yet; no legitimacy claim is made.</string>
     <string name="trust_desc_learning">Building a local profile across independent days, RF identity, GPS and trusted handovers.</string>
@@ -285,4 +282,17 @@
     <string name="permissions_privacy">Coordinates and radio readings are stored only on this phone. OpenCellID checks send the cell identity, never your position, and only if you add an API key in Settings.</string>
     <string name="permissions_denied_hint">If you denied a permission and Android no longer asks, grant it from the app settings.</string>
     <string name="permissions_open_settings">Open app settings</string>
+    <string name="notif_monitoring_title">ICdetection: monitoring · continuous GPS</string>
+    <string name="notif_legacy_network_title">ICdetection: 2G/3G network detected</string>
+    <string name="notif_open_settings">OPEN SETTINGS</string>
+    <string name="channel_monitoring_name">Monitoring</string>
+    <string name="channel_alerts_description">Actionable cellular degradation alerts</string>
+    <string name="notif_latency_title">⚠ Network anomaly</string>
+    <string name="collection_interrupted_format">⚠ Collection interrupted %1$dh %2$dmin</string>
+    <string name="write_failure_notification">⚠ WRITE FAILED — data is not being saved</string>
+    <string name="audit_starting">Starting…</string>
+    <string name="alarm_notification_title">Network anomaly confirmed</string>
+    <string name="alarm_notification_body_format">CID %1$s · %2$s · %3$s</string>
+    <string name="baseline_waiting">WAITING · needs 5 clean samples on 2 days</string>
+    <string name="baseline_maturity_hint">Power, fingerprint and PCI baselines are only used once a cell has 5 clean observations on 2 different days. Samples are stored meanwhile.</string>
 </resources>

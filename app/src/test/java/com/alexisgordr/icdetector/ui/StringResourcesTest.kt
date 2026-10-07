@@ -134,4 +134,85 @@ class StringResourcesTest {
         assertTrue(service.contains("ToneGenerator(AudioManager.STREAM_NOTIFICATION"))
         assertFalse(service.contains("Ignorando alerta"))
     }
+
+    // v2.10.8 — "%%" solo se convierte en "%" cuando el texto se formatea con argumentos. En un
+    // texto sin argumentos se veía literalmente "98%%".
+    @Test fun `plain strings do not show a doubled percent sign`() {
+        val placeholder = Regex("%\\d+\\$")
+        listOf(en, es).forEach { strings ->
+            strings.filterValues { !placeholder.containsMatchIn(it) }.forEach { (key, value) ->
+                assertFalse("$key shows %% literally", value.contains("%%"))
+            }
+        }
+        assertTrue(en.getValue("local_trust_ceiling").endsWith("98%"))
+        assertTrue(es.getValue("local_trust_ceiling").endsWith("98%"))
+    }
+
+    // v2.10.8 — Las notificaciones salían en castellano con la interfaz en inglés.
+    @Test fun `notification texts exist in both languages and are not hard-coded`() {
+        listOf(
+            "notif_monitoring_title", "notif_legacy_network_title", "notif_open_settings",
+            "channel_monitoring_name", "channel_alerts_description", "notif_latency_title",
+            "collection_interrupted_format", "write_failure_notification", "audit_starting",
+            "alarm_notification_title", "alarm_notification_body_format"
+        ).forEach { key ->
+            assertTrue("$key (en)", en.getValue(key).isNotBlank())
+            assertTrue("$key (es)", es.getValue(key).isNotBlank())
+        }
+        assertEquals("Network anomaly confirmed", en.getValue("alarm_notification_title"))
+        assertEquals("Anomalía de red confirmada", es.getValue("alarm_notification_title"))
+        val service = "src/main/java/com/alexisgordr/icdetector/service"
+        val sources = listOf(
+            "$service/ServiceNotificationController.kt", "$service/MiniICService.kt",
+            "$service/CollectionHealthController.kt", "src/main/java/com/alexisgordr/icdetector/ui/MainScreen.kt"
+        ).associateWith { module(it).readText() }
+        listOf(
+            "\"miniIC Channel\"", "Monitoreo · GPS continuo", "red 2G/3G detectada", "\"ABRIR AJUSTES\"",
+            "\"Avisos accionables", "\"⚠ Anomalía de Red\"", "\"⚠ ESCRITURA FALLIDA —", "\"Iniciando..."
+        ).forEach { text ->
+            sources.forEach { (file, source) -> assertFalse("$file hard-codes $text", source.contains(text)) }
+        }
+        val service2 = sources.getValue("$service/MiniICService.kt")
+        assertTrue("service must use the app language", service2.contains("LocaleController.localizedContext"))
+    }
+
+    // v2.10.8 — Una alarma confirmada publica un aviso visible, una vez por episodio.
+    @Test fun `confirmed alarm posts a notification once per episode`() {
+        val alerts = module("src/main/java/com/alexisgordr/icdetector/service/SecurityAlertController.kt").readText()
+        val episode = alerts.substringAfter("if (confirmed && persistedAlarmCellId != cell.cellId) {").substringBefore("}")
+        assertTrue(episode.contains("persistConfirmedAlarm(cell)"))
+        assertTrue(episode.contains("notifyConfirmedAlarm(cell)"))
+        val notifications = module("src/main/java/com/alexisgordr/icdetector/service/ServiceNotificationController.kt").readText()
+        assertTrue(notifications.contains("fun showConfirmedAlarm"))
+        assertTrue(notifications.contains("ALERT_CHANNEL_ID = \"miniic_security_alerts\""))
+        assertTrue(notifications.contains("CHANNEL_ID = \"miniic_channel\""))
+    }
+
+    // v2.10.8 — Potencia, huella y PCI muestran un estado de espera mientras la celda no es de
+    // confianza, en vez de "EMPTY · 0 muestras".
+    @Test fun `trust-gated baselines explain the waiting period`() {
+        assertTrue(en.getValue("baseline_waiting").startsWith("WAITING"))
+        assertTrue(es.getValue("baseline_waiting").startsWith("EN ESPERA"))
+        listOf(en, es).forEach { assertTrue(it.getValue("baseline_maturity_hint").contains("5")) }
+        val main = module("src/main/java/com/alexisgordr/icdetector/ui/MainScreen.kt").readText()
+        assertEquals(3, Regex("trustGated = true").findAll(main).count())
+    }
+
+    // v2.10.8 — El cliente de WiGLE no se usaba: se retira para que el código coincida con la
+    // documentación (solo OpenCellID y la prueba de latencia opcional salen a la red).
+    @Test fun `dead wigle client is gone`() {
+        assertFalse(File("src/main/java/com/alexisgordr/icdetector/network/WigleClient.kt").exists())
+        assertFalse(File("app/src/main/java/com/alexisgordr/icdetector/network/WigleClient.kt").exists())
+        val root = module("src/main/java")
+        root.walkTopDown().filter { it.isFile && it.extension == "kt" }.forEach { file ->
+            assertFalse("${file.name} still calls api.wigle.net", file.readText().contains("api.wigle.net"))
+        }
+    }
+
+    // v2.10.8 — Textos que ya no usaba ninguna pantalla.
+    @Test fun `unused strings were removed`() {
+        listOf("geometry_legend", "not_evaluated_explanation", "terminal_technical_event").forEach { key ->
+            assertFalse(key, en.containsKey(key) || es.containsKey(key))
+        }
+    }
 }

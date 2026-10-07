@@ -90,7 +90,7 @@ class CellDbHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME, 
         // interna que nadie ve sería un riesgo sin contrapartida. El identificador Kotlin y la
         // cabecera del export —lo que sí se lee— dicen lo correcto.
         const val COLUMN_ANOMALY_CONFIDENCE = "threat_prob"
-        // v2.1 — Coordenada de la ANTENA devuelta por la API (WiGLE/OpenCellID). Separada de
+        // v2.1 — Coordenada de la ANTENA devuelta por la API (OpenCellID). Separada de
         // lat/lon a propósito: lat/lon es SIEMPRE la posición GPS del dispositivo. Antes la
         // coordenada de la API se escribía encima de lat/lon y contaminaba el historial
         // geográfico (H11/H13) con posiciones a cientos de km.
@@ -2512,8 +2512,8 @@ class CellDbHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME, 
      * ¿Consta esta celda como VERIFICADA **recientemente** en el historial? — v2.1
      *
      * Se usa para una regla simple: una consulta que falla, o que vuelve vacía, **no borra** una
-     * verificación reciente. WiGLE y OpenCellID no dan de baja antenas; si una celda estuvo en sus
-     * bases, lo normal es que siga estándolo, y cuando una reconsulta dice "no encontrada" lo que
+     * verificación reciente. OpenCellID no da de baja antenas; si una celda estuvo en su
+     * base, lo normal es que siga estándolo, y cuando una reconsulta dice "no encontrada" lo que
      * suele haber cambiado es la cuota diaria, el permiso de la cuenta o la cobertura.
      *
      * Con el matiz de "reciente" ([VERIFIED_TTL_MS]): pasado el TTL, una negativa explícita SÍ
@@ -2551,7 +2551,7 @@ class CellDbHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME, 
     }
 
     /**
-     * Última posición conocida de la ANTENA para esta celda, según WiGLE/OpenCellID — v2.1.
+     * Última posición conocida de la ANTENA para esta celda, según OpenCellID — v2.1.
      *
      * Solo lectura de las columnas api_lat/api_lon, que la verificación ya rellenaba pero que
      * nadie volvía a consultar después: `CellData.lat/lon` solo lleva la coordenada durante el

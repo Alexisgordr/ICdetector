@@ -1,14 +1,14 @@
 # ❄️ IMPORTANT — Field Collection Freeze
 
-> **Definitive release:** v2.10.5 (version code 33) · **Database schema:** 19 ·
+> **Dataset baseline:** v2.10.5 (version code 33) · **Database schema:** 19 ·
 > **Duration:** approximately three months
 >
-> **Current maintenance release:** v2.10.7 (version code 35). The alert tone respects silent mode,
-> the confirmed-alarm label no longer claims the device is compromised and the terminal stops
-> repeating the same line during an alarm. Together with
-> v2.10.6 (complete Topology and Geometry, full localization, documented network endpoints), it
-> does **not** change detection, scoring, what triggers an alert or stored data, so the v2.10.5
-> baseline and Day 1 still hold. No reset needed.
+> **Current maintenance release:** v2.10.8 (version code 36). A confirmed alarm now posts a
+> notification once per episode, notifications follow the app language, baselines waiting for a
+> trusted cell show WAITING instead of EMPTY, and unused WiGLE code was removed. Together with
+> v2.10.7 (silent-mode tone, neutral alarm label) and v2.10.6 (complete Topology and Geometry, full
+> localization, documented network endpoints), it does **not** change detection, scoring, what
+> triggers an alarm or stored data, so the v2.10.5 baseline and Day 1 still hold. No reset needed.
 
 ICdetection is now entering a **three-month field-collection and stabilization period**.
 

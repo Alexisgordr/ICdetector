@@ -11,6 +11,7 @@ internal class SecurityAlertController(
     private val log: (String) -> Unit,
     private val requestPreciseLocation: () -> Unit,
     private val persistConfirmedAlarm: (CellData) -> Unit,
+    private val notifyConfirmedAlarm: (CellData) -> Unit,
     private val strongSignalEnabled: () -> Boolean,
     private val strongSignalThreshold: () -> Float,
     private val legacyProtectionEnabled: () -> Boolean
@@ -66,6 +67,8 @@ internal class SecurityAlertController(
             if (confirmed && persistedAlarmCellId != cell.cellId) {
                 persistedAlarmCellId = cell.cellId
                 persistConfirmedAlarm(cell)
+                // v2.10.8 — Aviso visible, una vez por episodio (antes solo tono y registro).
+                notifyConfirmedAlarm(cell)
             }
         } else {
             pingPongLogged = false

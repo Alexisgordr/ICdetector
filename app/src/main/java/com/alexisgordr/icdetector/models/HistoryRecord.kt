@@ -40,7 +40,7 @@ data class HistoryRecord(
      */
     val anomalyConfidence: Float = 0f,
     /**
-     * Coordenada de la ANTENA según WiGLE/OpenCellID. v2.1: vive en su propia columna y NO
+     * Coordenada de la ANTENA según OpenCellID. v2.1: vive en su propia columna y NO
      * se mezcla nunca con [lat]/[lon], que son y solo son la posición GPS del dispositivo en
      * el momento de la observación. Mezclar ambas magnitudes en la misma columna era la causa
      * real de las coordenadas imposibles (~1.100 km) que aparecían en el historial.

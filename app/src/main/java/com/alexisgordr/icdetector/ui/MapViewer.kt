@@ -26,7 +26,8 @@ fun LocationButton(lat: Double?, lon: Double?, cellId: String) {
         onClick = {
             // Abrir OpenStreetMap en el navegador (libre, sin API key)
             val uri = Uri.parse("https://www.openstreetmap.org/?mlat=$lat&mlon=$lon&zoom=15")
-            context.startActivity(Intent(Intent.ACTION_VIEW, uri))
+            // v2.10.8 — Sin navegador instalado, startActivity lanzaba una excepción y cerraba la app.
+            runCatching { context.startActivity(Intent(Intent.ACTION_VIEW, uri)) }
         },
         modifier = Modifier.size(32.dp)
     ) {

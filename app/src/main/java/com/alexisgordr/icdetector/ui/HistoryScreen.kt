@@ -24,6 +24,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
@@ -905,7 +906,13 @@ private fun IncidentList(
                     Text(stringResource(R.string.score_confidence_format, incident.score, String.format(java.util.Locale.ROOT, "%.1f", incident.anomalyConfidence)), color = Color(0xFFAAAAAA), fontFamily = FontFamily.Monospace, fontSize = 9.sp)
                     if (expanded) {
                         HorizontalDivider(color = Color(0xFF222222))
-                        Text(incident.reason, color = Color(0xFFCCCCCC), fontFamily = FontFamily.Monospace, fontSize = 9.sp)
+                        // v2.10.8 — El motivo se guarda en castellano (dato del dataset, incluido el
+                        // prefijo [sub-umbral]); con la interfaz en inglés se traduce solo al mostrarlo.
+                        val englishUi = LocalConfiguration.current.locales[0].language != "es"
+                        Text(
+                            if (englishUi) localizeTerminalLine(incident.reason) else incident.reason,
+                            color = Color(0xFFCCCCCC), fontFamily = FontFamily.Monospace, fontSize = 9.sp
+                        )
                         Text(incident.heuristicSnapshot, color = Color(0xFF777777), fontFamily = FontFamily.Monospace, fontSize = 8.sp)
                         if (incident.endedAt != null) {
                             OutlinedButton(
