@@ -176,6 +176,8 @@ class MiniICService : Service() {
     // v2.3.3 — Vigilancia de la recolección: escrituras fallidas e interrupciones.
     private lateinit var collectionHealthController: CollectionHealthController
     private var toneGenerator: ToneGenerator? = null
+    /** v2.10.7 — Última promoción multiseñal escrita en el terminal (evita repetirla en cada ciclo). */
+    private var lastLoggedPromotion: String? = null
     private var screenReceiver: BroadcastReceiver? = null
     private var isScreenOn = true
     @Volatile private var isUiVisible = false
@@ -430,7 +432,11 @@ class MiniICService : Service() {
         restoreTaSanityEvidence()            // evidencia de TA superviviente a reinicios (v2.5)
 
         try {
-            toneGenerator = ToneGenerator(AudioManager.STREAM_ALARM, 100)
+            // v2.10.7 — Canal de notificaciones, no de alarma. STREAM_ALARM ignora el modo silencio
+            // y los botones de volumen: un tester no tenía forma de callar el pitido durante una
+            // alarma. Con STREAM_NOTIFICATION sigue el volumen de notificaciones y respeta
+            // silencio, vibración y No molestar. Solo cambia cómo suena, no cuándo.
+            toneGenerator = ToneGenerator(AudioManager.STREAM_NOTIFICATION, 100)
         } catch (e: Exception) {
             e.printStackTrace()
         }
@@ -1138,12 +1144,19 @@ class MiniICService : Service() {
                             locationController.requestPreciseFix(force = true)
                             requestFreshCellInfo()
                         }
-                        if (episode.promoted) {
+                        // v2.10.7 — Una línea por episodio, no una por ciclo: durante una alarma
+                        // la misma frase llegaba a repetirse cada segundo y tapaba el resto del
+                        // terminal. Solo afecta al registro; la promoción no cambia.
+                        val promotionLogKey = if (episode.promoted) {
+                            episode.cell.identityKey + "|" + episode.families.joinToString()
+                        } else null
+                        if (promotionLogKey != null && promotionLogKey != lastLoggedPromotion) {
                             appendLog("[SEC]", getString(
                                 R.string.episode_promoted_format,
                                 episode.families.joinToString()
                             ))
                         }
+                        lastLoggedPromotion = promotionLogKey
 
                         val temporalActive = temporalConfidence.apply(
                             episode.cell,
@@ -1496,8 +1509,11 @@ class MiniICService : Service() {
                 // no ha superado los tres ciclos de TemporalConfidence.
                 appendLog("[RADIO]", "Ping-Pong observado (sin confirmar; sin tono).")
             } else if (cellChangeHistory.size >= 3) {
+                // v2.10.7 — Antes afirmaba que la alerta se descartaba, pero esta rama no decide nada: H10 se
+                // evalúa en ThreatAnalyzer y puede confirmarse en los ciclos siguientes. Texto
+                // neutro; la lógica no cambia.
                 val speedKmh = (getCurrentLocation()?.speed ?: 0f) * 3.6f
-                appendLog("[RADIO]", "Ping-Pong detectado a ${String.format(Locale.getDefault(), "%.1f", speedKmh)} km/h. Ignorando alerta.")
+                appendLog("[RADIO]", "Cambios rápidos de celda observados a ${String.format(Locale.getDefault(), "%.1f", speedKmh)} km/h.")
             }
 
             observationPersistence.recordHandover(cell)

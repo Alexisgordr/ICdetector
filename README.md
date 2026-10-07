@@ -9,7 +9,7 @@
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](LICENSE)
 ![Platform](https://img.shields.io/badge/Platform-Android%2010%2B-green.svg)
 ![Root Required](https://img.shields.io/badge/Root-Not%20Required-brightgreen.svg)
-![Release](https://img.shields.io/badge/Release-v2.10.6-brightgreen.svg)
+![Release](https://img.shields.io/badge/Release-v2.10.7-brightgreen.svg)
 ![Baseline](https://img.shields.io/badge/Dataset%20baseline-v2.10.5-blue.svg)
 ![Phase](https://img.shields.io/badge/Phase-Total%20freeze-blue.svg)
 ![Schema](https://img.shields.io/badge/DB%20schema-19-informational.svg)
@@ -66,11 +66,13 @@
 > 📄 Read the full notice in **[IMPORTANT.md](IMPORTANT.md)**.
 
 > [!NOTE]
-> **v2.10.6 is a maintenance release inside the freeze.** Topology and Geometry now show and
-> export **every** stored route (they used to stop at 250 / 400 / 1,000), the History and Geometry
-> screens are fully translated (the delete confirmation word follows the interface language), the
-> export validator is fixed and the forensic exporter gained tests. **Detection, scoring, alerts, stored data and the
-> database schema are unchanged**, so v2.10.5 remains the dataset baseline and no reset is needed.
+> **v2.10.7 is a maintenance release inside the freeze.** The alert tone now follows the
+> notification volume and respects silent mode, a confirmed alarm reads **"Network anomaly
+> confirmed"** instead of "System compromised", and repeated terminal lines during an alarm are
+> written once.
+> v2.10.6 before it made Topology and Geometry show and export **every** stored route and finished
+> the English/Spanish localization. **Detection, scoring, what triggers an alert, stored data and
+> the database schema are unchanged**, so v2.10.5 remains the dataset baseline and no reset is needed.
 
 > [!TIP]
 > **Starting a clean research dataset?** Export anything you want to keep, then use
@@ -179,7 +181,7 @@ campaign; from Day 1 the detector is left untouched so the data can speak for it
 | | |
 |---|---|
 | **Methodology baseline** | v2.10.5 (version code 33) |
-| **Current release** | v2.10.6 (version code 34) — maintenance only, no detection or data change |
+| **Current release** | v2.10.7 (version code 35) — maintenance only, no detection or data change |
 | **Database schema** | 19 (unchanged from v2.10.4) |
 | **Detection baseline** | H1–H16, weights, thresholds, Temporal Confidence, Local Cell Trust and Stable-Site frozen |
 | **Duration** | Approximately three months |
@@ -652,6 +654,11 @@ in [`CHANGELOG.md`](CHANGELOG.md) and [`Status.md`](Status.md).
 <details open>
 <summary><strong>v2.10.x — Stable-Site, route memory, H15, radio context and the definitive freeze</strong></summary>
 
+- **v2.10.7** — Maintenance inside the freeze: the alert tone respects silent mode (notification
+  stream instead of alarm stream), the confirmed-alarm label reads "Network anomaly confirmed",
+  neutral wording for the rapid-cell-change log line, and
+  multi-signal / Ping-Pong confirmation lines logged once per episode. No detection, scoring or
+  data change.
 - **v2.10.6** — Maintenance inside the freeze: uncapped Topology and Geometry (screens and
   exports), History and Geometry fully localized (English/Spanish) including privacy warnings and
   the delete confirmation word, network endpoints documented, validator fixes, forensic exporter

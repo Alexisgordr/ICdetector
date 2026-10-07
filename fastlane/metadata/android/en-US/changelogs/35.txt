@@ -1,0 +1,1 @@
+Maintenance release inside the freeze. The alert tone now follows the notification volume and respects silent mode. A confirmed alarm reads "Network anomaly confirmed" instead of "System compromised". During an alarm, repeated terminal lines are written once. No change to detection, scoring, alert triggers, stored data or schema.

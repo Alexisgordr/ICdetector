@@ -52,6 +52,7 @@ class TerminalLocalizationCoverageTest {
         "[SITE] Protección=OFF, sitio=no disponible, movimiento=UNKNOWN (NO_FIX), vecinos=0 días, capacidad=NO_NEIGHBOUR_DATA, madurez=NO_SITE_DATA, aplicación=NO ACTIVA",
         "[RADIO] Ping-Pong observado (sin confirmar; sin tono).",
         "[RADIO] Ping-Pong detectado a 42.0 km/h. Ignorando alerta.",
+        "[RADIO] Cambios rápidos de celda observados a 0,0 km/h.",
         "🚨 Efecto Ping-Pong confirmado por TemporalConfidence.",
         "N/A: sin handover reciente; esperando el siguiente para comprobar la movilidad.",
         "⚠️ Tope forense superado (25000 muestras) con solo casos abiertos. No se recortan: una captura en curso no se mutila.",

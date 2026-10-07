@@ -290,7 +290,7 @@ fun MainScreenContent(dbHelper: CellDbHelper, service: MiniICService?) {
                     // un veredicto de seguridad: es un dato de contexto, y va en su propia línea.
                     val (statusText, statusColor) = when {
                         active == null -> stringResource(R.string.searching_signal) to Color(0xFF888888)
-                        active.isSuspicious -> stringResource(R.string.system_compromised) to Color(0xFFCF6679)
+                        active.isSuspicious -> stringResource(R.string.network_anomaly_confirmed) to Color(0xFFCF6679)
                         active.securityScore >= SCORE_SAFE -> stringResource(R.string.no_anomalies) to securityScoreColor(active.securityScore)
                         active.securityScore >= SCORE_WATCH -> stringResource(R.string.observing_score, active.securityScore) to securityScoreColor(active.securityScore)
                         else -> stringResource(R.string.unconfirmed_anomaly_score, active.securityScore) to securityScoreColor(active.securityScore)

@@ -3,10 +3,12 @@
 > **Definitive release:** v2.10.5 (version code 33) · **Database schema:** 19 ·
 > **Duration:** approximately three months
 >
-> **Current maintenance release:** v2.10.6 (version code 34). It completes the Topology and
-> Geometry views and exports, finishes the English/Spanish localization of History and Geometry,
-> documents every network endpoint and fixes the export validator. It does **not** change detection,
-> scoring, alerts or stored data, so the v2.10.5 baseline and Day 1 still hold. No reset needed.
+> **Current maintenance release:** v2.10.7 (version code 35). The alert tone respects silent mode,
+> the confirmed-alarm label no longer claims the device is compromised and the terminal stops
+> repeating the same line during an alarm. Together with
+> v2.10.6 (complete Topology and Geometry, full localization, documented network endpoints), it
+> does **not** change detection, scoring, what triggers an alert or stored data, so the v2.10.5
+> baseline and Day 1 still hold. No reset needed.
 
 ICdetection is now entering a **three-month field-collection and stabilization period**.
 

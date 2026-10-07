@@ -19,9 +19,11 @@ internal class SecurityAlertController(
     private var previousDbm: Int? = null
     private var lastStrongSignalAlarm = 0L
     private var persistedAlarmCellId: String? = null
+    private var pingPongLogged = false
 
     fun resetAlarmEpisode() {
         persistedAlarmCellId = null
+        pingPongLogged = false
     }
 
     fun evaluate(cell: CellData, confirmed: Boolean) {
@@ -54,13 +56,19 @@ internal class SecurityAlertController(
             tone()?.startTone(ToneGenerator.TONE_CDMA_SOFT_ERROR_LITE, 200)
             Log.e(TAG, "THREAT DETECTED: ${cell.suspiciousReason}")
             requestPreciseLocation()
-            if (!cell.heuristicReport.pingPongPassed) {
+            // v2.10.7 — Se escribe al confirmarse, no en cada evaluación posterior de la misma
+            // alarma (llegaba dos veces cada pocos segundos). Solo afecta al terminal.
+            val pingPongConfirmed = !cell.heuristicReport.pingPongPassed
+            if (pingPongConfirmed && !pingPongLogged) {
                 log("🚨 Efecto Ping-Pong confirmado por TemporalConfidence.")
             }
+            pingPongLogged = pingPongConfirmed
             if (confirmed && persistedAlarmCellId != cell.cellId) {
                 persistedAlarmCellId = cell.cellId
                 persistConfirmedAlarm(cell)
             }
+        } else {
+            pingPongLogged = false
         }
 
         if (legacyProtectionEnabled() && (network.contains("3G") || network.contains("2G"))) {

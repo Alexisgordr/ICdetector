@@ -1,5 +1,30 @@
 # Changelog
 
+## 2.10.7
+
+### Maintenance release inside the freeze
+
+Bugs found during testing. Detection, scoring, thresholds, what triggers an alert, stored data
+and the database schema are **unchanged**. Safe to ship during the field-collection freeze.
+
+- **Fixed: the alert tone could not be silenced.** It used Android's alarm stream at full volume,
+  which ignores silent mode and the volume buttons. A tester had no way to stop the beeping during
+  an alarm. The tone now uses the notification stream, so it follows the notification volume and
+  respects silent, vibrate and Do Not Disturb. When and how often it sounds is unchanged.
+- **Fixed: the confirmed-alarm label overstated what the app knows.** "SYSTEM COMPROMISED" /
+  "SISTEMA EN COMPROMISO" now reads **"NETWORK ANOMALY CONFIRMED"** / **"ANOMALÍA DE RED
+  CONFIRMADA"**. ICdetection detects anomalous network behaviour; it cannot know that the device
+  itself has been compromised.
+- **Fixed: misleading terminal line.** Rapid cell changes were logged as "Ping-Pong detectado … Ignorando
+  alerta" right before H10 confirmed the same ping-pong. The line now reads "Cambios rápidos de
+  celda observados a … km/h" ("Rapid cell changes observed at … km/h" in English). H10 is unchanged.
+- **Fixed: repeated terminal lines during an alarm.** "Episodio multiseñal" and "Efecto Ping-Pong
+  confirmado" were written on every cycle, up to once per second, burying the rest of the log
+  (seen in a real field capture). Each is now written once per episode. Detection and stored data
+  are unchanged.
+- **Tests:** the alarm label must not claim a compromised device, and the tone must not use the
+  alarm stream.
+
 ## 2.10.6
 
 ### Maintenance release inside the freeze

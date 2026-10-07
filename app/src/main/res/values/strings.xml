@@ -103,7 +103,7 @@
     <string name="security_alerts_channel">Security alerts</string><string name="stop">Stop</string>
     <string name="permissions_required">Android will ask you for these permissions next. This is what each one is used for.</string>
     <string name="monitor">MONITOR</string><string name="history">HISTORY</string>
-    <string name="searching_signal">SEARCHING FOR SIGNAL…</string><string name="system_compromised">SYSTEM COMPROMISED</string><string name="no_anomalies">NO ANOMALIES DETECTED</string>
+    <string name="searching_signal">SEARCHING FOR SIGNAL…</string><string name="network_anomaly_confirmed">NETWORK ANOMALY CONFIRMED</string><string name="no_anomalies">NO ANOMALIES DETECTED</string>
     <string name="observing_score">OBSERVING — %1$d%%</string><string name="unconfirmed_anomaly_score">UNCONFIRMED ANOMALY — %1$d%%</string>
     <string name="public_db_registered">Registered in public database</string><string name="public_db_not_found">Not registered in public database (does not imply a threat)</string><string name="public_db_rejected">Public-database response rejected; retry pending</string><string name="public_db_pending">Querying public database…</string><string name="public_db_error">Public database did not respond</string>
     <string name="csv_exported_format">✅ CSV exported: %1$d rows</string>

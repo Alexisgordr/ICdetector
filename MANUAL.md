@@ -1,4 +1,4 @@
-# ICdetection Field Manual — v2.10.6
+# ICdetection Field Manual — v2.10.7
 
 ICdetection is an open-source Android application for passive cellular-network auditing and anomaly analysis. It observes information exposed by Android, compares each observation with the device's local history and, when configured, cross-checks cells against external tower databases.
 
@@ -56,6 +56,21 @@ threshold or score and keeps schema 19.
 - A cell whose external verification fails unexpectedly is retried after a minute instead of
   remaining `PENDING` until the service restarts.
 
+
+## Version 2.10.7
+
+A maintenance release inside the freeze. Detection, scores, what triggers an alert and stored data
+are unchanged, so v2.10.5 remains the dataset baseline.
+
+- **Alert sound:** the tone now plays on the **notification** volume. It follows the volume
+  buttons and respects silent, vibrate and Do Not Disturb. Earlier versions used the alarm volume,
+  which silent mode does not affect.
+- **Alarm label:** a confirmed alarm now reads **NETWORK ANOMALY CONFIRMED** (Spanish: *ANOMALÍA DE
+  RED CONFIRMADA*). It describes unusual network behaviour, not proof that the phone has been
+  compromised.
+- **Terminal:** during an alarm, the multi-signal and Ping-Pong confirmation lines appear once per
+  episode instead of on every cycle. Rapid cell changes are logged neutrally ("Rapid cell changes
+  observed at … km/h").
 
 ## Version 2.10.6
 

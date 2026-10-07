@@ -115,4 +115,23 @@ class StringResourcesTest {
         val main = module("src/main/java/com/alexisgordr/icdetector/ui/MainScreen.kt").readText()
         assertTrue("MainScreen must show the rationale before the system dialog", main.contains("PermissionRationale("))
     }
+
+    // v2.10.7 — La alarma describe una anomalía de red, no un móvil vulnerado.
+    @Test fun `confirmed alarm label does not claim the device is compromised`() {
+        listOf(en, es).forEach { strings ->
+            assertFalse(strings.containsKey("system_compromised"))
+            val label = strings.getValue("network_anomaly_confirmed")
+            assertFalse(label, Regex("COMPROMIS|COMPROMET", RegexOption.IGNORE_CASE).containsMatchIn(label))
+        }
+        assertEquals("NETWORK ANOMALY CONFIRMED", en.getValue("network_anomaly_confirmed"))
+    }
+
+    // v2.10.7 — El pitido debe poder silenciarse y el terminal no debe afirmar que ignora una
+    // alerta que luego se confirma.
+    @Test fun `alert tone respects silent mode and ping-pong log is neutral`() {
+        val service = module("src/main/java/com/alexisgordr/icdetector/service/MiniICService.kt").readText()
+        assertFalse("tone must not use the alarm stream", service.contains("ToneGenerator(AudioManager.STREAM_ALARM"))
+        assertTrue(service.contains("ToneGenerator(AudioManager.STREAM_NOTIFICATION"))
+        assertFalse(service.contains("Ignorando alerta"))
+    }
 }

@@ -314,6 +314,7 @@ private val replacements = linkedMapOf(
     "Celda ya verificada en DB, sin necesidad de API" to "Cell already verified in DB, no API call needed",
     "Ping-Pong observado (sin confirmar; sin tono)." to "Ping-Pong observed (unconfirmed; no tone).",
     "Ping-Pong detectado a " to "Ping-Pong detected at ",
+    "Cambios rápidos de celda observados a " to "Rapid cell changes observed at ",
     "Efecto Ping-Pong confirmado por TemporalConfidence." to "Ping-Pong effect confirmed by TemporalConfidence.",
     "N/A: sin handover reciente; esperando el siguiente para comprobar la movilidad." to "N/A: no recent handover; waiting for the next one to check mobility.",
     "Tope forense superado (" to "Forensic cap exceeded (",

@@ -1,5 +1,19 @@
 # ICdetection Status
 
+## v2.10.7 — Maintenance inside the freeze (stable)
+
+**Version code:** 35
+**Database schema:** 19 (unchanged)
+**Security effect:** none; H1–H16, weights, thresholds, scoring, alert triggers and stored data unchanged
+**Dataset baseline:** still v2.10.5
+
+Bugs found during testing. The alert tone used Android's alarm stream at full volume, so silent
+mode and the volume buttons could not stop it; it now uses the notification stream. The confirmed
+alarm label "System compromised" overstated what the app can know and now reads "Network anomaly
+confirmed". The rapid-cell-change log line no
+longer says the alert is ignored right before H10 confirms it, and the multi-signal and Ping-Pong
+confirmation lines are written once per episode instead of on every cycle. Terminal and UI text only.
+
 ## v2.10.6 — Maintenance inside the freeze (stable)
 
 **Version code:** 34

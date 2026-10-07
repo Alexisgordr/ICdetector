@@ -1,0 +1,1 @@
+Versión de mantenimiento dentro del freeze. El pitido de alerta sigue el volumen de notificaciones y respeta el modo silencio. Una alarma confirmada muestra "Anomalía de red confirmada" en lugar de "Sistema en compromiso". Durante una alarma, el terminal ya no repite las mismas líneas. Sin cambios en detección, puntuación, disparadores de alarma, datos ni esquema.
