@@ -252,6 +252,24 @@ Heavily customized stacks (OneUI, MIUI, EMUI and similar) may obfuscate radio me
 Timing Advance, alter signal-quality values, limit callback consistency or hide ciphering
 information. The app still works, but some advanced heuristics can be degraded or unavailable.
 
+### Chipset matters (field observations so far)
+
+From the devices tested so far, the **modem chipset** seems to matter more than the brand:
+
+| Device | Chipset | Result |
+|---|---|---|
+| Google Pixel | Google Tensor | ✅ Works well. Main development device |
+| POCO F6 Pro | Qualcomm Snapdragon | ✅ Reported to work well, no false alarms |
+| Honor (model not recorded) | — | ✅ Reported to work well. Neighbour cells reported honestly as `N/A` |
+| Xiaomi Redmi Note 10 5G | MediaTek Dimensity | ⚠️ Not reliable. The modem fills every neighbour cell with placeholder values (TAC `65535`, Cell ID `268435455`), causing permanent false TAC-deviation warnings and occasional false alarms ([#11](https://github.com/alexisgordr/ICdetector/issues/11)) |
+
+In short: **Qualcomm-based phones have behaved well, and at least one MediaTek phone has not.**
+This is based on a handful of devices, so treat it as a trend, not a rule.
+
+**Quick check:** on the main screen, if neighbour cells show as `NEIGHBOR (N/A)`, your modem reports
+honestly. If every neighbour shows the same number (e.g. `268435455`), your device is affected.
+Reports from more devices are welcome in the issues.
+
 ### Android support
 
 | Android | Support |
