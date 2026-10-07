@@ -70,7 +70,7 @@ are unchanged, so v2.10.5 remains the dataset baseline.
   immediately when you switch it, even while monitoring is running.
 - **Sub-threshold label:** in English, `[sub-umbral]` is shown as `[sub-threshold]`. Exports keep
   `[sub-umbral]`.
-- **Baseline maturity:** power, fingerprint and PCI show **WAITING** until the cell is trusted (see
+- **Baseline maturity:** power, fingerprint and PCI show **NEEDS 2 DAYS** until the cell is trusted (see
   section 6).
 - **Fixes:** `98%` under *Local cell trust*; the map and *Support project* links no longer close the
   app on a phone without a browser.
@@ -389,7 +389,7 @@ cell identities and routes can reveal habitual movement patterns; review it befo
 
 Historical rules need repeated observations before they become reliable. The maturity indicators show whether enough local history exists for those checks.
 
-The RSRP power baseline, the RSRQ/SINR fingerprint and PCI identity stability only use a cell once it is **trusted**: at least 5 clean observations (score ≥ 85, no failed rule) on 2 different days within the last 30 days. Power and fingerprint also need 5 samples within 500 m of your current position. Until then these rows show **WAITING · needs 5 clean samples on 2 days**. This is expected, not a fault: observations are stored meanwhile, and once the cell becomes trusted all clean samples from the window count at once. *Local reputation* has no such gate and counts every observation.
+The RSRP power baseline, the RSRQ/SINR fingerprint and PCI identity stability only use a cell once it is **trusted**: at least 5 clean observations (score ≥ 85, no failed rule) on 2 different days within the last 30 days. Power and fingerprint also need 5 samples within 500 m of your current position. Until then these rows show **NEEDS 2 DAYS** (Spanish: *NECESITA 2 DÍAS*). This is expected, not a fault: observations are stored meanwhile, and once the cell becomes trusted all clean samples from the window count at once. *Local reputation* has no such gate and counts every observation.
 
 A new installation will naturally contain immature baselines and several `N/A` results. To improve them:
 

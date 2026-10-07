@@ -5,7 +5,7 @@
 >
 > **Current maintenance release:** v2.10.8 (version code 36). A confirmed alarm now posts a
 > notification once per episode, notifications follow the app language, baselines waiting for a
-> trusted cell show WAITING instead of EMPTY, and unused WiGLE code was removed. Together with
+> trusted cell show NEEDS 2 DAYS instead of EMPTY, and unused WiGLE code was removed. Together with
 > v2.10.7 (silent-mode tone, neutral alarm label) and v2.10.6 (complete Topology and Geometry, full
 > localization, documented network endpoints), it does **not** change detection, scoring, what
 > triggers an alarm or stored data, so the v2.10.5 baseline and Day 1 still hold. No reset needed.

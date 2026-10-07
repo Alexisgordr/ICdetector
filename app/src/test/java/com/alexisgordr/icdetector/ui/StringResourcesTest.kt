@@ -195,9 +195,11 @@ class StringResourcesTest {
     // v2.10.8 — Potencia, huella y PCI muestran un estado de espera mientras la celda no es de
     // confianza, en vez de "EMPTY · 0 muestras".
     @Test fun `trust-gated baselines explain the waiting period`() {
-        assertTrue(en.getValue("baseline_waiting").startsWith("WAITING"))
-        assertTrue(es.getValue("baseline_waiting").startsWith("EN ESPERA"))
-        listOf(en, es).forEach { assertTrue(it.getValue("baseline_maturity_hint").contains("5")) }
+        // Texto corto: tiene que caber en la misma línea donde antes salía "EMPTY · 0 muestras".
+        assertEquals("NEEDS 2 DAYS", en.getValue("baseline_waiting"))
+        assertEquals("NECESITA 2 DÍAS", es.getValue("baseline_waiting"))
+        listOf(en, es).forEach { assertTrue(it.getValue("baseline_waiting").length <= 18) }
+        assertFalse(en.containsKey("baseline_maturity_hint") || es.containsKey("baseline_maturity_hint"))
         val main = module("src/main/java/com/alexisgordr/icdetector/ui/MainScreen.kt").readText()
         assertEquals(3, Regex("trustGated = true").findAll(main).count())
     }

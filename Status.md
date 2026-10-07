@@ -13,7 +13,7 @@ on silent it went unnoticed; it now also posts one notification per episode on t
 Notification titles, actions, channel names and collection notices were hard-coded in Spanish, and
 the service ignored the language chosen in Settings and kept the old one after a change while
 running; both are fixed (#15). `[sub-umbral]` is shown as
-`[sub-threshold]` in English, display only (#13). Trust-gated baselines show WAITING instead of
+`[sub-threshold]` in English, display only (#13). Trust-gated baselines show NEEDS 2 DAYS instead of
 `EMPTY · 0 samples` (#14). Also fixed: `98%%`, a crash when no browser is installed and the Spanish
 launch placeholder (#15). Unused WiGLE code and three unused texts were removed (#16).
 

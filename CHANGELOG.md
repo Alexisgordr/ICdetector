@@ -25,9 +25,8 @@ and the database schema are **unchanged**. Safe to ship during the field-collect
   `[sub-umbral]`, so the dataset is unchanged.
 - **Fixed: "EMPTY · 0 samples" looked like a bug** (#14). The power, RSRQ/SINR fingerprint and PCI
   baselines only count once a cell is trusted (5 clean observations on 2 different days). Until
-  then they now show **"WAITING · needs 5 clean samples on 2 days"** / **"EN ESPERA · necesita 5
-  muestras limpias en 2 días"**, with a short explanation under *Baseline maturity*. The rule
-  itself is unchanged.
+  then they now show **"NEEDS 2 DAYS"** / **"NECESITA 2 DÍAS"** on the same line, instead of
+  "EMPTY". The rule itself is unchanged.
 - **Fixed: "98%%" shown with a double percent sign** (#15) under *Local cell trust*.
 - **Fixed: the app could close when opening a link** (#15). The map button (OpenStreetMap) and
   *Support project* crashed the app on a phone with no browser installed. Now nothing happens.

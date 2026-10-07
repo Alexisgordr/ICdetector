@@ -154,7 +154,7 @@ stored data and the database schema are unchanged.
 | **Alarm notification** | A confirmed alarm now posts a notification once per episode on the *Security alerts* channel ("Network anomaly confirmed", with cell ID, network and main reason). Previously it only played a tone and was recorded, so it went unnoticed with the phone on silent. |
 | **Localization** | Notification titles, actions, channel names and collection notices follow the app language (English or Spanish). The background service now uses the language chosen in Settings and switches immediately when it changes. |
 | **Sub-threshold label** | `[sub-umbral]` is shown as `[sub-threshold]` in the English interface. The stored value and exports are unchanged. |
-| **Baseline maturity** | Power, RSRQ/SINR fingerprint and PCI baselines show **WAITING** instead of `EMPTY · 0 samples` while a cell has not yet earned trust (5 clean observations on 2 different days). |
+| **Baseline maturity** | Power, RSRQ/SINR fingerprint and PCI baselines show **NEEDS 2 DAYS** instead of `EMPTY · 0 samples` while a cell has not yet earned trust (5 clean observations on 2 different days). |
 | **Display fixes** | `98%%` under *Local cell trust* now reads `98%`; the launch placeholder is translated. |
 | **Stability** | Opening the map or the *Support project* link no longer closes the app on a phone without a browser. |
 | **Codebase** | Unused WiGLE code and three unused texts were removed. The only network connections remain OpenCellID and the optional latency check. |
@@ -487,7 +487,7 @@ data.
 The RSRP baseline, the RSRQ/SINR fingerprint and PCI identity stability are only learned from a cell
 once it is trusted: at least **5 clean observations on 2 different days** within the last 30 days
 (power and fingerprint also need 5 samples within 500 m of the current position). Until then they
-show **WAITING**. Observations are stored throughout, and once the cell becomes trusted all clean
+show **NEEDS 2 DAYS**. Observations are stored throughout, and once the cell becomes trusted all clean
 samples from the window count at once. Local reputation has no such gate.
 
 ---
@@ -681,7 +681,7 @@ in [`CHANGELOG.md`](CHANGELOG.md) and [`Status.md`](Status.md).
 <summary><strong>v2.10.x — Stable-Site, route memory, H15, radio context and the field-collection freeze</strong></summary>
 
 - **v2.10.8** — Maintenance inside the freeze: confirmed-alarm notification (once per episode),
-  notifications and service follow the app language, `[sub-threshold]` in English, WAITING state for
+  notifications and service follow the app language, `[sub-threshold]` in English, NEEDS 2 DAYS state for
   trust-gated baselines, `98%` fix, no crash without a browser, unused WiGLE code removed. No
   detection, scoring or data change.
 - **v2.10.7** — Maintenance inside the freeze: the alert tone respects silent mode (notification

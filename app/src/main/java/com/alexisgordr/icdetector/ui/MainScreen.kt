@@ -773,10 +773,9 @@ fun SecurityScorePanel(active: CellData, dbmHistory: List<Int>, geoHistory: List
                             }
                             Spacer(Modifier.height(12.dp))
                             Text(stringResource(R.string.baseline_maturity), color = Color(0xFF555555), fontFamily = FontFamily.Monospace, fontSize = 10.sp, fontWeight = FontWeight.Bold)
-                            // v2.10.8 — Explica por qué potencia, huella y PCI muestran 0 durante los
-                            // primeros días: solo cuentan cuando la celda es de confianza (5 muestras
-                            // limpias en 2 días). Solo texto: el umbral no cambia.
-                            Text(stringResource(R.string.baseline_maturity_hint), color = Color(0xFF666666), fontSize = 9.sp)
+                            // v2.10.8 — Potencia, huella y PCI solo cuentan cuando la celda es de
+                            // confianza (5 muestras limpias en 2 días). Mientras tanto la fila dice
+                            // "NEEDS 2 DAYS" en vez de "EMPTY". Solo texto: el umbral no cambia.
                             val maturity = active.baselineMaturity
                             BaselineMaturityRow(stringResource(R.string.baseline_signal), maturity.signalSamples, maturity.signalLevel, trustGated = true)
                             BaselineMaturityRow(stringResource(R.string.baseline_fingerprint), maturity.fingerprintSamples, maturity.fingerprintLevel, trustGated = true)

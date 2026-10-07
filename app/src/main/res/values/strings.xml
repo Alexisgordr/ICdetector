@@ -293,6 +293,5 @@
     <string name="audit_starting">Starting…</string>
     <string name="alarm_notification_title">Network anomaly confirmed</string>
     <string name="alarm_notification_body_format">CID %1$s · %2$s · %3$s</string>
-    <string name="baseline_waiting">WAITING · needs 5 clean samples on 2 days</string>
-    <string name="baseline_maturity_hint">Power, fingerprint and PCI baselines are only used once a cell has 5 clean observations on 2 different days. Samples are stored meanwhile.</string>
+    <string name="baseline_waiting">NEEDS 2 DAYS</string>
 </resources>
