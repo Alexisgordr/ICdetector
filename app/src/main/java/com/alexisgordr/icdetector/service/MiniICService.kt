@@ -7,6 +7,7 @@ import android.annotation.SuppressLint
 import android.app.*
 import android.content.*
 import android.content.pm.ServiceInfo
+import android.content.res.Resources
 import android.location.Location
 import android.net.ConnectivityManager
 import android.net.NetworkCapabilities
@@ -296,9 +297,36 @@ class MiniICService : Service() {
         super.attachBaseContext(LocaleController.localizedContext(newBase))
     }
 
+    // v2.10.8 — El idioma se fijaba al arrancar el servicio. Al cambiarlo en Ajustes solo se
+    // recreaba la pantalla y el servicio, que sigue en marcha, seguía publicando las notificaciones
+    // en el idioma anterior. Ahora escucha el cambio y cambia sus textos al momento.
+    @Volatile private var languageResources: Resources? = null
+
+    override fun getResources(): Resources = languageResources ?: super.getResources()
+
+    private val languageListener = SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
+        if (key == LocaleController.KEY) applySelectedLanguage()
+    }
+
+    private fun applySelectedLanguage() {
+        languageResources = LocaleController.localizedContext(baseContext).resources
+        if (!::notificationController.isInitialized) return
+        // Mismo ID de canal: Android solo actualiza el nombre y la descripción visibles.
+        notificationController.createChannels()
+        val serving = _cellFlow.value.firstOrNull { it.isRegistered }
+        if (serving != null) {
+            lastNotificationTime = 0L
+            updateNotification(serving)
+        } else {
+            updateNotificationText(getString(R.string.monitoring_active), force = true)
+        }
+    }
+
     override fun onCreate() {
         super.onCreate()
         isServiceRunning = true
+        getSharedPreferences(LocaleController.PREFS, MODE_PRIVATE)
+            .registerOnSharedPreferenceChangeListener(languageListener)
         dbHelper = CellDbHelper.getInstance(this)
         mobilityFamiliarity = com.alexisgordr.icdetector.core.MobilityFamiliarityEngine(dbHelper)
         scope.launch(Dispatchers.IO) {
@@ -711,6 +739,8 @@ class MiniICService : Service() {
     override fun onDestroy() {
         super.onDestroy()
         isServiceRunning = false
+        getSharedPreferences(LocaleController.PREFS, MODE_PRIVATE)
+            .unregisterOnSharedPreferenceChangeListener(languageListener)
         scope.cancel()
         toneGenerator?.release()
         locationController.destroy()

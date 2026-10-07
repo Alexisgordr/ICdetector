@@ -66,7 +66,8 @@ are unchanged, so v2.10.5 remains the dataset baseline.
   confirmed** / *Anomalía de red confirmada*) with the cell ID, network and main reason. It appears
   once per alarm episode on the *Security alerts* channel; tapping it opens the app. It is visible
   even when the phone is on silent.
-- **Language:** all notifications follow the language chosen in Settings (English or Spanish).
+- **Language:** all notifications follow the language chosen in Settings (English or Spanish), and change
+  immediately when you switch it, even while monitoring is running.
 - **Sub-threshold label:** in English, `[sub-umbral]` is shown as `[sub-threshold]`. Exports keep
   `[sub-umbral]`.
 - **Baseline maturity:** power, fingerprint and PCI show **WAITING** until the cell is trusted (see

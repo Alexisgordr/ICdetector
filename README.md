@@ -152,7 +152,7 @@ stored data and the database schema are unchanged.
 | Area | Change |
 |---|---|
 | **Alarm notification** | A confirmed alarm now posts a notification once per episode on the *Security alerts* channel ("Network anomaly confirmed", with cell ID, network and main reason). Previously it only played a tone and was recorded, so it went unnoticed with the phone on silent. |
-| **Localization** | Notification titles, actions, channel names and collection notices follow the app language (English or Spanish). The background service now uses the language chosen in Settings. |
+| **Localization** | Notification titles, actions, channel names and collection notices follow the app language (English or Spanish). The background service now uses the language chosen in Settings and switches immediately when it changes. |
 | **Sub-threshold label** | `[sub-umbral]` is shown as `[sub-threshold]` in the English interface. The stored value and exports are unchanged. |
 | **Baseline maturity** | Power, RSRQ/SINR fingerprint and PCI baselines show **WAITING** instead of `EMPTY · 0 samples` while a cell has not yet earned trust (5 clean observations on 2 different days). |
 | **Display fixes** | `98%%` under *Local cell trust* now reads `98%`; the launch placeholder is translated. |

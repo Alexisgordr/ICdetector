@@ -11,7 +11,8 @@ Bugs found during testing. A confirmed alarm only played a tone and was recorded
 on silent it went unnoticed; it now also posts one notification per episode on the existing
 *Security alerts* channel, following the same once-per-episode rule that saves the alarm (#17).
 Notification titles, actions, channel names and collection notices were hard-coded in Spanish, and
-the service ignored the language chosen in Settings; both are fixed (#15). `[sub-umbral]` is shown as
+the service ignored the language chosen in Settings and kept the old one after a change while
+running; both are fixed (#15). `[sub-umbral]` is shown as
 `[sub-threshold]` in English, display only (#13). Trust-gated baselines show WAITING instead of
 `EMPTY · 0 samples` (#14). Also fixed: `98%%`, a crash when no browser is installed and the Spanish
 launch placeholder (#15). Unused WiGLE code and three unused texts were removed (#16).

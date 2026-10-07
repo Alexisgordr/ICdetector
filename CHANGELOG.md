@@ -17,7 +17,8 @@ and the database schema are **unchanged**. Safe to ship during the field-collect
   2G/3G notification titles, the *Open settings* button, the latency warning, the collection
   interrupted / write failed notices, the notification channel name ("miniIC Channel") and its
   description were hard-coded in Spanish. They are now translated into English and Spanish. The
-  background service also follows the language chosen in Settings (it used the system language).
+  background service also follows the language chosen in Settings (it used the system language)
+  and switches immediately when you change it, without restarting monitoring.
   Channel IDs are unchanged, so your notification settings are kept.
 - **Fixed: "[sub-umbral]" not translated in English** (#13). History and the terminal now show
   `[sub-threshold]` with the interface in English. The stored value and the exports keep

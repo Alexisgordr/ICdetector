@@ -7,8 +7,8 @@ import java.util.Locale
 
 /** Keeps the explicitly selected app language independent from the system language. */
 object LocaleController {
-    private const val PREFS = "miniic_prefs"
-    private const val KEY = "app_language"
+    const val PREFS = "miniic_prefs"
+    const val KEY = "app_language"
 
     /**
      * Idioma elegido en Ajustes o, si nunca se eligió, el del sistema (castellano o, si no lo es,

@@ -174,6 +174,10 @@ class StringResourcesTest {
         }
         val service2 = sources.getValue("$service/MiniICService.kt")
         assertTrue("service must use the app language", service2.contains("LocaleController.localizedContext"))
+        // Cambiar el idioma con el servicio en marcha también cambia sus notificaciones.
+        assertTrue(service2.contains("registerOnSharedPreferenceChangeListener(languageListener)"))
+        assertTrue(service2.contains("unregisterOnSharedPreferenceChangeListener(languageListener)"))
+        assertTrue(service2.contains("override fun getResources()"))
     }
 
     // v2.10.8 — Una alarma confirmada publica un aviso visible, una vez por episodio.
