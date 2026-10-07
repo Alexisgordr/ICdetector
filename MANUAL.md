@@ -1,4 +1,4 @@
-# ICdetection Field Manual — v2.10.8
+# ICdetection Field Manual — v2.10.9
 
 ICdetection is an open-source Android application for passive cellular-network auditing and anomaly analysis. It observes information exposed by Android, compares each observation with the device's local history and, when configured, cross-checks cells against external tower databases.
 
@@ -56,6 +56,27 @@ threshold or score and keeps schema 19.
 - A cell whose external verification fails unexpectedly is retried after a minute instead of
   remaining `PENDING` until the service restarts.
 
+
+## Version 2.10.9
+
+A bug-fix release inside the freeze. Weights, thresholds, rules and stored data are unchanged. The
+H10 fix is a **dataset cut for H10 only**; everything else remains comparable with v2.10.5.
+
+- **Ping-Pong (H10) — major fix:** after three quick cell changes, H10 no longer keeps failing while
+  the phone stays on one cell; only changes within the last 10 s count, as the rule always intended.
+  Without a GPS speed, H10 shows `N/A` instead of assuming you are stationary. When analysing data,
+  treat `Efecto Ping-Pong` results from before v2.10.9 with care. It was fixed during the campaign
+  because leaving it would have distorted the very data being collected.
+- **RF fingerprint:** recalculated after moving 150 m, so a reading is compared with the fingerprint
+  of the area you are in.
+- **Latency (optional):** a measurement that was running when the cell changed no longer shows its
+  result for the new cell.
+- **Baseline maturity:** an empty power, fingerprint or PCI row shows **NEEDS 2 DAYS** (*NECESITA 2
+  DÍAS*) while the cell has not yet earned trust, and **WAITING** (*EN ESPERA*) once it has but the
+  row has no data for another reason, such as no GPS fix or being away from the stored samples (see
+  section 6).
+- **Ciphering (H9):** always `N/A`, as before; Android does not expose the modem's ciphering state
+  to regular apps.
 
 ## Version 2.10.8
 
@@ -389,7 +410,7 @@ cell identities and routes can reveal habitual movement patterns; review it befo
 
 Historical rules need repeated observations before they become reliable. The maturity indicators show whether enough local history exists for those checks.
 
-The RSRP power baseline, the RSRQ/SINR fingerprint and PCI identity stability only use a cell once it is **trusted**: at least 5 clean observations (score ≥ 85, no failed rule) on 2 different days within the last 30 days. Power and fingerprint also need 5 samples within 500 m of your current position. Until then these rows show **NEEDS 2 DAYS** (Spanish: *NECESITA 2 DÍAS*). This is expected, not a fault: observations are stored meanwhile, and once the cell becomes trusted all clean samples from the window count at once. *Local reputation* has no such gate and counts every observation.
+The RSRP power baseline, the RSRQ/SINR fingerprint and PCI identity stability only use a cell once it is **trusted**: at least 5 clean observations (score ≥ 85, no failed rule) on 2 different days within the last 30 days. Power and fingerprint also need 5 samples within 500 m of your current position. Until then these rows show **NEEDS 2 DAYS** (Spanish: *NECESITA 2 DÍAS*). Once the cell is trusted, a row that still has no data (for example without a GPS fix, or away from where the samples were taken) shows **WAITING** (*EN ESPERA*). This is expected, not a fault: observations are stored meanwhile, and once the cell becomes trusted all clean samples from the window count at once. *Local reputation* has no such gate and counts every observation.
 
 A new installation will naturally contain immature baselines and several `N/A` results. To improve them:
 

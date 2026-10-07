@@ -293,5 +293,6 @@
     <string name="audit_starting">Starting…</string>
     <string name="alarm_notification_title">Network anomaly confirmed</string>
     <string name="alarm_notification_body_format">CID %1$s · %2$s · %3$s</string>
-    <string name="baseline_waiting">NEEDS 2 DAYS</string>
+    <string name="baseline_waiting">WAITING</string>
+    <string name="baseline_needs_days">NEEDS 2 DAYS</string>
 </resources>

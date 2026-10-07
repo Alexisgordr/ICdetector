@@ -773,13 +773,14 @@ fun SecurityScorePanel(active: CellData, dbmHistory: List<Int>, geoHistory: List
                             }
                             Spacer(Modifier.height(12.dp))
                             Text(stringResource(R.string.baseline_maturity), color = Color(0xFF555555), fontFamily = FontFamily.Monospace, fontSize = 10.sp, fontWeight = FontWeight.Bold)
-                            // v2.10.8 — Potencia, huella y PCI solo cuentan cuando la celda es de
-                            // confianza (5 muestras limpias en 2 días). Mientras tanto la fila dice
-                            // "NEEDS 2 DAYS" en vez de "EMPTY". Solo texto: el umbral no cambia.
+                            // Potencia, huella y PCI solo cuentan cuando la celda es de confianza (5
+                            // muestras limpias en 2 días); potencia y huella además necesitan GPS y
+                            // muestras a menos de 500 m. En vez de "EMPTY", la fila dice "NEEDS 2 DAYS"
+                            // si faltan días y "WAITING" si falta otra cosa (#18). Solo texto.
                             val maturity = active.baselineMaturity
-                            BaselineMaturityRow(stringResource(R.string.baseline_signal), maturity.signalSamples, maturity.signalLevel, trustGated = true)
-                            BaselineMaturityRow(stringResource(R.string.baseline_fingerprint), maturity.fingerprintSamples, maturity.fingerprintLevel, trustGated = true)
-                            BaselineMaturityRow(stringResource(R.string.baseline_pci), maturity.rfIdentitySamples, maturity.rfIdentityLevel, trustGated = true)
+                            BaselineMaturityRow(stringResource(R.string.baseline_signal), maturity.signalSamples, maturity.signalLevel, trustGated = true, trustGateMet = maturity.trustGateMet)
+                            BaselineMaturityRow(stringResource(R.string.baseline_fingerprint), maturity.fingerprintSamples, maturity.fingerprintLevel, trustGated = true, trustGateMet = maturity.trustGateMet)
+                            BaselineMaturityRow(stringResource(R.string.baseline_pci), maturity.rfIdentitySamples, maturity.rfIdentityLevel, trustGated = true, trustGateMet = maturity.trustGateMet)
                             BaselineMaturityRow(stringResource(R.string.baseline_reputation), maturity.reputationSamples, maturity.reputationLevel)
                         }
                     }
@@ -883,7 +884,13 @@ fun SecurityScorePanel(active: CellData, dbmHistory: List<Int>, geoHistory: List
 }
 
 @Composable
-private fun BaselineMaturityRow(label: String, samples: Int, level: BaselineLevel, trustGated: Boolean = false) {
+private fun BaselineMaturityRow(
+    label: String,
+    samples: Int,
+    level: BaselineLevel,
+    trustGated: Boolean = false,
+    trustGateMet: Boolean? = null
+) {
     val color = when (level) {
         BaselineLevel.EMPTY -> Color(0xFF666666)
         BaselineLevel.LEARNING -> Color(0xFFFFA000)
@@ -893,7 +900,8 @@ private fun BaselineMaturityRow(label: String, samples: Int, level: BaselineLeve
     Row(Modifier.fillMaxWidth().padding(vertical = 2.dp), horizontalArrangement = Arrangement.SpaceBetween) {
         Text(label, color = Color(0xFFAAAAAA), fontFamily = FontFamily.Monospace, fontSize = 9.sp)
         val value = if (trustGated && level == BaselineLevel.EMPTY) {
-            stringResource(R.string.baseline_waiting)
+            if (trustGateMet == false) stringResource(R.string.baseline_needs_days)
+            else stringResource(R.string.baseline_waiting)
         } else {
             stringResource(R.string.samples_format, level.name, samples)
         }

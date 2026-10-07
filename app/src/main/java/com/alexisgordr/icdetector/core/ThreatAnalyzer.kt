@@ -14,6 +14,9 @@ import com.alexisgordr.icdetector.models.VerificationStatus
 import com.alexisgordr.icdetector.models.RadioTech
 
 object ThreatAnalyzer {
+    /** Ventana de H10: cambios de celda considerados "rápidos". */
+    internal const val PING_PONG_WINDOW_MS = PingPongRule.WINDOW_MS
+
 
     /**
      * ¿La señal venía degradándose de forma progresiva en los últimos ciclos?
@@ -138,7 +141,8 @@ object ThreatAnalyzer {
         reputation: CellReputation? = null,
         rfFingerprint: CellRfFingerprint? = null,
         transitionCoherence: TransitionCoherenceResult = TransitionCoherenceResult(),
-        isolatedCellConfirmed: Boolean = true
+        isolatedCellConfirmed: Boolean = true,
+        nowMs: Long = System.currentTimeMillis()
     ): CellData {
         val reasons = mutableListOf<String>()
         var score = 100
@@ -168,7 +172,7 @@ object ThreatAnalyzer {
         var eGhost = false
         var eArfcn = false
         val eCiphering = isHardwareCipheringAvailable
-        val ePingPong = true
+        var ePingPong = true
         var eMobileCellId = false
         var eLatencyCorrelation = false
         var eSignalBaseline = false
@@ -324,10 +328,15 @@ object ThreatAnalyzer {
         }
 
         // 10. Ping-Pong Effect
-        if (cellChangeHistory.size >= 3) {
-            val speedMps = currentLocation?.speed ?: 0f
-            val isMovingFast = speedMps > 8f
-            if (!isMovingFast) {
+        // v2.10.9 — La decisión vive en PingPongRule (probada sin Android). Solo cuentan los
+        // cambios de los últimos 10 s (antes, una ráfaga antigua seguía fallando durante horas
+        // con el móvil quieto) y, sin velocidad GPS, H10 queda N/A en vez de suponer 0 km/h.
+        // La regla no cambia. Corte de dataset solo para H10.
+        val speedMps = currentLocation?.takeIf { it.hasSpeed() }?.speed
+        when (PingPongRule.evaluate(cellChangeHistory.map { it.second }, nowMs, speedMps)) {
+            PingPongRule.Outcome.PASSED, PingPongRule.Outcome.PASSED_MOVING -> Unit
+            PingPongRule.Outcome.NOT_EVALUATED -> ePingPong = false
+            PingPongRule.Outcome.FAILED -> {
                 hPingPong = false
                 reasons.add("Efecto Ping-Pong (Cambios rápidos en parado)")
                 score -= 25

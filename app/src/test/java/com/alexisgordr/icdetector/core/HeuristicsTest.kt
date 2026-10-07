@@ -24,6 +24,8 @@ import org.junit.Test
  * Ejecutar:   ./gradlew testDebugUnitTest
  */
 class HeuristicsTest {
+    private val NOW = 1_700_000_000_000L
+
 
     // Celda servidora "limpia" por defecto. Cada test sobrescribe lo que necesita con copy().
     private fun active(
@@ -78,7 +80,8 @@ class HeuristicsTest {
         cellChangeHistory: List<Pair<String, Long>> = emptyList(),
         isWifiActive: Boolean = false,
         isNetworkLatencyAnomalous: Boolean = false,
-        isNetworkLatencyAvailable: Boolean = true
+        isNetworkLatencyAvailable: Boolean = true,
+        nowMs: Long = NOW
     ) = ThreatAnalyzer.analyzeThreats(
         active = active,
         neighbors = neighbors,
@@ -88,7 +91,8 @@ class HeuristicsTest {
         currentLocation = null,
         isWifiActive = isWifiActive,
         isNetworkLatencyAnomalous = isNetworkLatencyAnomalous,
-        isNetworkLatencyAvailable = isNetworkLatencyAvailable
+        isNetworkLatencyAvailable = isNetworkLatencyAvailable,
+        nowMs = nowMs
     ).heuristicReport
 
     @Test fun `el estado se recalcula de failed a passed en la siguiente lectura`() {
@@ -332,13 +336,25 @@ class HeuristicsTest {
     }
 
     // ---------- H10: Ping-Pong ----------
-    @Test fun `H10 dispara con 3 o mas cambios en parado`() {
-        val history = listOf("A" to 1L, "B" to 2L, "A" to 3L) // currentLocation null -> speed 0 -> parado
-        assertFalse(analyze(active(), cellChangeHistory = history).pingPongPassed)
-    }
+    // La decisión con velocidad conocida se prueba en PingPongRuleTest, sin Android: aquí no se
+    // construye android.location.Location (en los tests JVM de Gradle sus métodos no existen).
     @Test fun `H10 no dispara con menos de 3 cambios`() {
-        val history = listOf("A" to 1L, "B" to 2L)
+        val history = listOf("A" to NOW - 2_000L, "B" to NOW - 1_000L)
         assertTrue(analyze(active(), cellChangeHistory = history).pingPongPassed)
+    }
+    // v2.10.9 — Sin GPS no se sabe si estás parado: N/A, nunca "en parado" por defecto.
+    @Test fun `H10 queda N-A con cambios rapidos y sin GPS`() {
+        val history = listOf("A" to NOW - 3_000L, "B" to NOW - 2_000L, "A" to NOW - 1_000L)
+        val report = analyze(active(), cellChangeHistory = history)
+        assertEquals(HeuristicStatus.NOT_EVALUATED, report.pingPong)
+    }
+    // v2.10.9 — Una ráfaga antigua ya no cuenta: el servicio solo poda el historial al llegar otro
+    // cambio.
+    @Test fun `H10 ignora una rafaga de hace mas de 10 s`() {
+        val burst = listOf("A" to NOW - 4_000L, "B" to NOW - 3_000L, "A" to NOW - 2_000L)
+        assertEquals(HeuristicStatus.NOT_EVALUATED, analyze(active(), cellChangeHistory = burst).pingPong)
+        val later = analyze(active(), cellChangeHistory = burst, nowMs = NOW + 3_600_000L)
+        assertEquals(HeuristicStatus.PASSED, later.pingPong)
     }
 
     // ---------- H11: Geográfica (solo casos "no dispara" en JUnit puro) ----------

@@ -1,5 +1,66 @@
 # Changelog
 
+## 2.10.9
+
+### Bug-fix release inside the freeze — dataset cut for H10
+
+Bugs found during testing. Weights, thresholds, rules, stored data and the database schema are
+**unchanged**. The major fix below changes how H10 (Ping-Pong) is evaluated, so this release is a
+**dataset cut for H10 only**: treat `Efecto Ping-Pong` results recorded before v2.10.9 with care.
+Everything else remains comparable with the v2.10.5 baseline.
+
+#### Major fix
+
+- **H10 (Ping-Pong) stayed failed long after a burst of cell changes.** The service removed old
+  cell changes only when *another* change arrived, and the analyzer counted every stored entry.
+  After three quick changes, a phone that then stayed on one cell kept failing H10 on every cycle
+  until the next handover — possibly for hours. Each of those cycles cost 25 points, was stored as
+  `[sub-umbral] Efecto Ping-Pong`, did not count as a clean observation (so the baselines could not
+  pass their trust gate) and made false alarms easier. In addition, a missing GPS speed was treated
+  as 0 km/h, so normal cell changes while travelling without a fix counted as "stationary".
+
+  H10 now counts only cell changes within the last 10 s and reports `N/A` when the speed is
+  unknown. The rule itself — three changes in 10 s while not moving fast — is unchanged.
+  **Dataset cut for H10 only.**
+
+  Fixing it during the campaign was worth the cut: left in place, it would have biased every H10
+  result, kept baselines from learning and made false alarms easier — exactly what the campaign is
+  meant to measure.
+
+#### Other fixes
+
+- **RSRQ/SINR fingerprint compared against the previous area.** The fingerprint is limited to the
+  current position, but its cache was reused for 60 s based only on the cell. It is now
+  recalculated after moving 150 m, or once GPS appears after it was computed without a fix — the
+  same rule the power baseline already used.
+- **Latency result from the previous cell** (optional feature, off by default). A measurement that
+  was running, or queued, when the cell changed could publish "OK" or "ANOMALOUS" for the new cell.
+  A result is now published only for the active cell and only if the probe was not reset
+  meanwhile. A cell change for latency means any change of the full identity
+  (MCC-MNC-TAC-CID-radio), and the latency baseline is keyed the same way. Handover detection is
+  unchanged.
+- **"NEEDS 2 DAYS" shown after the 2-day period** (#18). An empty power, fingerprint or PCI row now
+  shows **"NEEDS 2 DAYS"** / **"NECESITA 2 DÍAS"** only while the cell has not passed the trust gate,
+  and **"WAITING"** / **"EN ESPERA"** when it has but the row has no data for another reason (no GPS
+  fix, away from the stored samples, cell just recovered). Display only.
+
+#### Removed
+
+- **Empty ciphering callback.** Android does not give a regular app access to the modem's ciphering
+  state, and nothing in the app provided it. An empty telephony callback was still registered,
+  suggesting otherwise. It is removed; H9 stays `N/A`, as before.
+
+#### Tests
+
+- `PingPongRuleTest`: the H10 decision without Android — window, old burst, fast movement, unknown
+  speed, future timestamps. No test builds an `android.location.Location`, which plain JVM unit tests
+  cannot use.
+- `NetworkLatencyMonitorTest`: latency sequences with a controlled measurement — cell change during
+  a measurement, probe reset, check queued for the previous cell, cells sharing a Cell ID. Each guard
+  was verified to make its test fail when removed.
+- `RfFingerprintRefreshTest`, `DiagnosticsTest` (trust gate passed to the display without changing
+  any level) and `StringResourcesTest` (both labels in English and Spanish, one row).
+
 ## 2.10.8
 
 ### Maintenance release inside the freeze

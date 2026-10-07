@@ -572,6 +572,18 @@ class CellDbHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME, 
     }
 
     /**
+     * Solo para mostrar (#18): si la celda ya pasó la puerta de confianza de las líneas base
+     * (5 muestras limpias en 2 días distintos, últimos 30 días). Misma consulta que usan las
+     * líneas base; no cambia qué aprenden ni cuándo.
+     */
+    fun hasTrustedBaselineGate(cellId: String, mnc: String, tac: String, mcc: String, radio: RadioTech): Boolean {
+        val cutoff = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.ROOT).format(
+            Date(System.currentTimeMillis() - 30L * 24 * 60 * 60 * 1000)
+        )
+        return hasMatureTrustedBaseline(cellId, mnc, tac, mcc, radio, cutoff)
+    }
+
+    /**
      * Puerta de promoción de la cuarentena. No crea otra tabla ni modifica filas: el historial
      * completo sigue siendo auditable/exportable y solo cambia qué subconjunto aprende el motor.
      */

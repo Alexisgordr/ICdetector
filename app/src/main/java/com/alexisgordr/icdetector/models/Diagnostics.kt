@@ -25,7 +25,12 @@ data class BaselineMaturity(
     val signalSamples: Int = 0,
     val fingerprintSamples: Int = 0,
     val rfIdentitySamples: Int = 0,
-    val reputationSamples: Int = 0
+    val reputationSamples: Int = 0,
+    /**
+     * Si la celda ya pasó la puerta de confianza (5 muestras limpias en 2 días). null = no se
+     * sabe. Solo para mostrar: distingue "faltan días" de "falta GPS o muestras cerca" (#18).
+     */
+    val trustGateMet: Boolean? = null
 ) {
     private fun level(samples: Int, usableAt: Int, matureAt: Int): BaselineLevel = when {
         samples <= 0 -> BaselineLevel.EMPTY

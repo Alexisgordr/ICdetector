@@ -1,0 +1,8 @@
+Bug-fix release.
+
+• Major fix — Ping-Pong (H10): an old burst of cell changes no longer keeps the rule failed, and without GPS speed it shows N/A instead of assuming you are stationary. Dataset cut for H10 only, worth it to keep the data reliable.
+• RF fingerprint refreshed after moving 150 m.
+• Latency: results from a previous cell are discarded.
+• Baseline maturity shows "NEEDS 2 DAYS" or "WAITING" by the real reason.
+
+Weights, thresholds, stored data and schema unchanged.

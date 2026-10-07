@@ -55,6 +55,8 @@ class TerminalLocalizationCoverageTest {
         "[RADIO] Cambios rápidos de celda observados a 0,0 km/h.",
         "🚨 Efecto Ping-Pong confirmado por TemporalConfidence.",
         "N/A: sin handover reciente; esperando el siguiente para comprobar la movilidad.",
+        "N/A: hay cambios rápidos de celda, pero sin velocidad GPS no se puede saber si estás parado.",
+        "[RADIO] Cambios rápidos de celda observados sin velocidad GPS (H10 en N/A).",
         "⚠️ Tope forense superado (25000 muestras) con solo casos abiertos. No se recortan: una captura en curso no se mutila.",
         "No se pudo registrar el fix GPS preciso: timeout",
         "Fix GPS preciso no disponible en 30 s (timeout)",

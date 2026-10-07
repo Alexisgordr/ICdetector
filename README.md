@@ -9,13 +9,13 @@
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](LICENSE)
 ![Platform](https://img.shields.io/badge/Platform-Android%2010%2B-green.svg)
 ![Root Required](https://img.shields.io/badge/Root-Not%20Required-brightgreen.svg)
-![Release](https://img.shields.io/badge/Release-v2.10.8-brightgreen.svg)
+![Release](https://img.shields.io/badge/Release-v2.10.9-brightgreen.svg)
 ![Baseline](https://img.shields.io/badge/Dataset%20baseline-v2.10.5-blue.svg)
 ![Phase](https://img.shields.io/badge/Phase-Field%20collection%20freeze-blue.svg)
 ![Schema](https://img.shields.io/badge/DB%20schema-19-informational.svg)
 [![Featured in Awesome Telco](https://img.shields.io/badge/Featured%20in-Awesome%20Telco-6f42c1.svg)](https://github.com/ravens/awesome-telco#imsi-catcher-detection)
 
-[**What's new**](#-whats-new-in-v2108) ·
+[**What's new**](#-whats-new-in-v2109) ·
 [**Freeze**](#-the-field-collection-freeze) ·
 [**Detection engine**](#-detection-engine) ·
 [**Exports**](#-forensic-logging--exports) ·
@@ -58,17 +58,22 @@
 > the dataset baseline. No new heuristics, weights, thresholds or detection features will be added
 > during the freeze.
 >
-> Later releases are **maintenance only**: they fix bugs in the interface, localization,
-> notifications and stability. Detection, scoring, what triggers an alarm, stored data and the
-> database schema stay as in v2.10.5, so data collected with any of them is directly comparable and
-> no reset is needed.
+> Later releases are **bug-fix releases** and add no detection features. Most of them leave
+> detection, scoring, stored data and the database schema exactly as in v2.10.5. When a defect in a
+> rule must be corrected, the change is documented as a **dataset cut for that rule only**, so data
+> from before and after remains comparable for everything else. No reset is needed.
+>
+> | Release | Dataset impact |
+> |---|---|
+> | v2.10.6 – v2.10.8 | None — interface, localization, notifications and stability |
+> | v2.10.9 | **Dataset cut for H10 (Ping-Pong) only** |
 >
 > 📄 Read the full notice in **[IMPORTANT.md](IMPORTANT.md)**.
 
 > [!NOTE]
-> **Current release: v2.10.8** (maintenance). A confirmed alarm now posts a notification, all
-> notifications follow the app language, and several display issues were fixed. See
-> [What's new in v2.10.8](#-whats-new-in-v2108).
+> **Current release: v2.10.9** (bug fixes). **Major fix:** H10 (Ping-Pong) could stay failed for hours
+> after a burst of cell changes — a **dataset cut for H10 only**. Also fixes the RF fingerprint cache,
+> the latency check and the baseline maturity labels. See [What's new in v2.10.9](#-whats-new-in-v2109).
 
 > [!TIP]
 > **Starting a clean research dataset?** Export anything you want to keep, then use
@@ -82,7 +87,7 @@
 ## 📑 Table of Contents
 
 - [What ICdetection is — and is not](#-what-icdetection-is--and-is-not)
-- [What's new in v2.10.8](#-whats-new-in-v2108)
+- [What's new in v2.10.9](#-whats-new-in-v2109)
 - [The field-collection freeze](#-the-field-collection-freeze)
 - [Highlights](#-highlights)
 - [Technical limitations](#-technical-limitations)
@@ -144,17 +149,28 @@ technical limits imposed by Android.
 
 ---
 
-## ✨ What's new in v2.10.8
+## ✨ What's new in v2.10.9
 
-A **maintenance release inside the freeze**. Detection, scoring, thresholds, what triggers an alarm,
-stored data and the database schema are unchanged.
+A **bug-fix release inside the freeze**. Weights, thresholds, rules, stored data and the database
+schema are unchanged. The H10 fix changes how that rule is evaluated, so v2.10.9 is a **dataset cut
+for H10 only**; everything else remains comparable with the v2.10.5 baseline.
+
+| Area | Change |
+|---|---|
+| **H10 Ping-Pong** — major fix (dataset cut) | After a burst of three quick cell changes, H10 kept failing on every cycle until the next handover, even with the phone still on one cell, costing 25 points and keeping those observations from counting as clean. It now counts only changes within the last 10 s. Without a GPS speed it no longer assumes 0 km/h: H10 is `N/A`. The rule is unchanged. |
+| **RF fingerprint** | The RSRQ/SINR fingerprint is recalculated after moving 150 m, instead of reusing the previous area's fingerprint for up to 60 s. |
+| **Latency check** (optional) | A result is published only for the active cell and only if the probe was not reset meanwhile, so a measurement started or queued for the previous cell is discarded. Both the reset and the baseline use the full cell identity (MCC, MNC, TAC, Cell ID and radio), not the Cell ID alone. |
+| **Ciphering** | An empty telephony callback that suggested ciphering was monitored was removed. H9 stays `N/A`, as before. |
+| **Baseline maturity** | An empty power, fingerprint or PCI row now shows the real reason: **NEEDS 2 DAYS** while the cell has not yet earned trust (5 clean observations on 2 different days), or **WAITING** once it has but the row has no data for another reason (no GPS fix, away from the stored samples, cell just recovered). v2.10.8 showed "NEEDS 2 DAYS" in both cases. |
+
+### v2.10.8
 
 | Area | Change |
 |---|---|
 | **Alarm notification** | A confirmed alarm now posts a notification once per episode on the *Security alerts* channel ("Network anomaly confirmed", with cell ID, network and main reason). Previously it only played a tone and was recorded, so it went unnoticed with the phone on silent. |
 | **Localization** | Notification titles, actions, channel names and collection notices follow the app language (English or Spanish). The background service now uses the language chosen in Settings and switches immediately when it changes. |
 | **Sub-threshold label** | `[sub-umbral]` is shown as `[sub-threshold]` in the English interface. The stored value and exports are unchanged. |
-| **Baseline maturity** | Power, RSRQ/SINR fingerprint and PCI baselines show **NEEDS 2 DAYS** instead of `EMPTY · 0 samples` while a cell has not yet earned trust (5 clean observations on 2 different days). |
+| **Baseline maturity** | Power, RSRQ/SINR fingerprint and PCI baselines show a short status instead of `EMPTY · 0 samples` while a cell has not yet earned trust. |
 | **Display fixes** | `98%%` under *Local cell trust* now reads `98%`; the launch placeholder is translated. |
 | **Stability** | Opening the map or the *Support project* link no longer closes the app on a phone without a browser. |
 | **Codebase** | Unused WiGLE code and three unused texts were removed. The only network connections remain OpenCellID and the optional latency check. |
@@ -167,13 +183,13 @@ Earlier maintenance releases (v2.10.6, v2.10.7) are summarised in the
 ## ❄️ The field-collection freeze
 
 **ICdetection is in a field-collection freeze.** v2.10.5 defines the methodology baseline: from Day 1
-the detection logic is left untouched so the data can speak for itself. Later releases only fix bugs
-that do not change detection or stored data.
+no detection features are added, so the data can speak for itself. Later releases only fix bugs; a
+fix that changes how a rule is evaluated is recorded as a dataset cut for that rule.
 
 | | |
 |---|---|
 | **Methodology baseline** | v2.10.5 (version code 33) |
-| **Current release** | v2.10.8 (version code 36) — maintenance only, no detection or data change |
+| **Current release** | v2.10.9 (version code 37) — bug fixes; dataset cut for H10 only |
 | **Database schema** | 19 (unchanged from v2.10.4) |
 | **Detection baseline** | H1–H16, weights, thresholds, Temporal Confidence, Local Cell Trust and Stable-Site frozen |
 | **Duration** | Approximately three months |
@@ -185,6 +201,12 @@ detection features or architectural work that alters the dataset semantics.
 **What may still change:** genuine bugs affecting data integrity, collection continuity, database
 safety, privacy, compatibility, exports or crashes. Any fix that must change how data is interpreted
 will be documented explicitly as a new dataset cut.
+
+**Dataset cuts during the freeze**
+
+| Release | Rule | What changed | How to treat earlier data |
+|---|---|---|---|
+| v2.10.9 | H10 Ping-Pong | Only cell changes within the last 10 s count (an old burst no longer keeps H10 failed while the phone stays on one cell), and H10 is `N/A` when the GPS speed is unknown instead of assuming 0 km/h. The rule itself is unchanged. Worth the cut: left in place, the defect would have biased every H10 result, kept baselines from learning and made false alarms easier. | Treat `Efecto Ping-Pong` results recorded before v2.10.9 with care; they may include stale bursts. All other rules are unaffected. |
 
 The full reasoning, the recommended reset and the questions this campaign aims to answer are in
 **[IMPORTANT.md](IMPORTANT.md)**.
@@ -327,12 +349,13 @@ complete regional spectrum validator.
 
 #### Ciphering Integrity Monitoring
 ICdetection does not claim direct null-cipher or IMSI-disclosure detection on standard Android
-installs. Ciphering state is `N/A` unless the operating system exposes a supported and accessible
-signal — never assumed to be `PASSED`.
+installs. Android does not give a regular app access to the modem's ciphering state, so in the
+current version H9 is always `N/A` — never assumed to be `PASSED`.
 
 #### Anti Ping-Pong Analysis
-Detects aggressive reselection loops and repetitive handovers, with mobility-aware filtering during
-vehicular movement.
+Detects aggressive reselection loops and repetitive handovers (three cell changes within 10 s) while
+the phone is not moving fast. Without a GPS speed it cannot tell whether you are stationary, so it
+reports `N/A` instead of assuming you are.
 
 #### Geographic Consistency Analysis
 Validates Cell IDs against a local GPS-based history built from the device's own observations. It can
@@ -486,8 +509,9 @@ data.
 
 The RSRP baseline, the RSRQ/SINR fingerprint and PCI identity stability are only learned from a cell
 once it is trusted: at least **5 clean observations on 2 different days** within the last 30 days
-(power and fingerprint also need 5 samples within 500 m of the current position). Until then they
-show **NEEDS 2 DAYS**. Observations are stored throughout, and once the cell becomes trusted all clean
+(power and fingerprint also need 5 samples within 500 m of the current position). Until the cell is
+trusted these rows show **NEEDS 2 DAYS**; once it is trusted but a row still has no data (no GPS fix,
+away from the stored samples), it shows **WAITING**. Observations are stored throughout, and once the cell becomes trusted all clean
 samples from the window count at once. Local reputation has no such gate.
 
 ---
@@ -680,6 +704,10 @@ in [`CHANGELOG.md`](CHANGELOG.md) and [`Status.md`](Status.md).
 <details open>
 <summary><strong>v2.10.x — Stable-Site, route memory, H15, radio context and the field-collection freeze</strong></summary>
 
+- **v2.10.9** — Bug fixes inside the freeze. **Major fix:** H10 no longer stays failed after a burst
+  of cell changes and is `N/A` without GPS speed (**dataset cut for H10**); RF fingerprint refreshed after moving 150 m; stale latency
+  results discarded; empty ciphering callback removed; baseline maturity shows NEEDS 2 DAYS or
+  WAITING by the real reason.
 - **v2.10.8** — Maintenance inside the freeze: confirmed-alarm notification (once per episode),
   notifications and service follow the app language, `[sub-threshold]` in English, NEEDS 2 DAYS state for
   trust-gated baselines, `98%` fix, no crash without a browser, unused WiGLE code removed. No
@@ -768,8 +796,8 @@ issues. The frequent releases during development were necessary to correct probl
 field.
 
 With the field-collection freeze, v2.10.5 defines the dataset baseline for the next three months.
-The detector will not change during that period; only bugs that do not alter detection or stored
-data are fixed. The time will be used to collect data, observe real behaviour, measure false
+No features will be added during that period. Only genuine bugs are fixed, and any fix that changes
+how a rule is evaluated is documented as a dataset cut for that rule. The time will be used to collect data, observe real behaviour, measure false
 positives and learn from the evidence. After that, the data will decide what — if anything —
 changes next.
 
@@ -783,9 +811,11 @@ Every report is reviewed and addressed where possible.
 
 > **Nota para los usuarios:** gracias por vuestra paciencia con la frecuencia de actualizaciones
 > durante el desarrollo; fueron necesarias para corregir problemas encontrados en pruebas reales.
-> La **v2.10.5 es la base del conjunto de datos** durante los próximos tres meses: el detector no
-> cambia en ese periodo y solo se publican correcciones de errores que no alteran la detección ni
-> los datos guardados (la versión actual es la v2.10.8).
+> La **v2.10.5 es la base del conjunto de datos** durante los próximos tres meses: en ese periodo no
+> se añaden funciones nuevas y solo se corrigen errores reales. Si una corrección cambia cómo se
+> evalúa una regla, se documenta como corte del dataset para esa regla. La v2.10.9 lo hace solo para
+> H10: era un fallo importante y merecía corregirse durante la campaña, porque dejarlo habría
+> distorsionado los datos que se están recogiendo. La versión actual es la v2.10.9.
 
 <div align="center">
 

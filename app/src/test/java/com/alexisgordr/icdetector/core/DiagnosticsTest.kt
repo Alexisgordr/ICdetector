@@ -181,4 +181,23 @@ class DiagnosticsTest {
         assertEquals(BaselineLevel.USABLE, maturity.rfIdentityLevel)
         assertEquals(BaselineLevel.USABLE, maturity.reputationLevel)
     }
+
+    // #18 — La pantalla distingue "faltan días" de "falta GPS o muestras cerca". El dato solo se
+    // pasa a la madurez; los niveles y las líneas base no cambian.
+    @Test
+    fun `maturity carries the trust gate for display only`() {
+        fun inputs(gate: Boolean?) = DiagnosticEngine.Inputs(
+            neighborCount = 0, wifiActive = false, locationAvailable = false,
+            historyWithLocation = 0, latencyAvailable = false,
+            cipheringAvailable = false, previousBandAvailable = false,
+            signalBaseline = null, rfFingerprint = null, rfStability = null, reputation = null,
+            trustGateMet = gate
+        )
+        assertEquals(false, DiagnosticEngine.maturity(inputs(false)).trustGateMet)
+        assertEquals(true, DiagnosticEngine.maturity(inputs(true)).trustGateMet)
+        assertNull(DiagnosticEngine.maturity(inputs(null)).trustGateMet)
+        val waiting = DiagnosticEngine.maturity(inputs(true))
+        assertEquals(BaselineLevel.EMPTY, waiting.signalLevel)
+        assertEquals(DiagnosticEngine.maturity(inputs(false)).copy(trustGateMet = true), waiting)
+    }
 }

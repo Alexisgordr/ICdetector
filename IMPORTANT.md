@@ -3,12 +3,20 @@
 > **Dataset baseline:** v2.10.5 (version code 33) · **Database schema:** 19 ·
 > **Duration:** approximately three months
 >
-> **Current maintenance release:** v2.10.8 (version code 36). A confirmed alarm now posts a
-> notification once per episode, notifications follow the app language, baselines waiting for a
-> trusted cell show NEEDS 2 DAYS instead of EMPTY, and unused WiGLE code was removed. Together with
-> v2.10.7 (silent-mode tone, neutral alarm label) and v2.10.6 (complete Topology and Geometry, full
-> localization, documented network endpoints), it does **not** change detection, scoring, what
-> triggers an alarm or stored data, so the v2.10.5 baseline and Day 1 still hold. No reset needed.
+> **Current release:** v2.10.9 (version code 37).
+>
+> v2.10.9 contains a **major fix** for two defects in H10 (Ping-Pong): an old burst of cell changes kept the rule failed
+> while the phone stayed on one cell, and a missing GPS speed was treated as 0 km/h. This is a
+> **dataset cut for H10 only** — treat `Efecto Ping-Pong` results recorded before v2.10.9 with care.
+> Fixing it during the campaign was worth the cut: left in place, it would have biased every H10
+> result, kept baselines from learning and made false alarms easier — exactly what the campaign is
+> meant to measure.
+> The release also refreshes the RF fingerprint after moving, discards stale latency results, removes
+> an empty ciphering callback and labels baseline maturity by its real reason.
+>
+> v2.10.6 – v2.10.8 changed only the interface, localization, notifications and stability.
+> Weights, thresholds, stored data and the schema are unchanged in every release, so the v2.10.5
+> baseline and Day 1 still hold for everything except H10. No reset is needed.
 
 ICdetection is now entering a **three-month field-collection and stabilization period**.
 
@@ -190,6 +198,12 @@ the collection period.
 
 If a future correction necessarily changes how the dataset must be interpreted, it will be
 documented explicitly as a new dataset cut.
+
+### Dataset cuts so far
+
+| Release | Rule | Change | Earlier data |
+|---|---|---|---|
+| v2.10.9 | H10 Ping-Pong | Only cell changes within the last 10 s count, and H10 is `N/A` without a GPS speed. The rule itself is unchanged. | Treat `Efecto Ping-Pong` results before v2.10.9 with care. All other rules are unaffected. |
 
 ---
 

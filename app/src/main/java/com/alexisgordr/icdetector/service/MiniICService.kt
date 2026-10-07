@@ -186,6 +186,9 @@ class MiniICService : Service() {
     private var collectionPausedForCriticalBattery = false
     private var isServiceRunning = false
     
+    // v2.10.9 — Android no expone a una app normal el estado de cifrado del módem: no hay fuente
+    // que rellene estos valores, así que H9 queda siempre N/A (nunca "superada" por suposición).
+    // Antes se registraba un callback de telefonía vacío que aparentaba lo contrario; se retira.
     private var isHardwareCipheringActive = false
     private var isHardwareCipheringAvailable = false
     private var lastGpsTriggerTime = 0L
@@ -218,6 +221,18 @@ class MiniICService : Service() {
     private var cachedRfStability: CellRfStability? = null
     private var cachedReputation: CellReputation? = null
     private var cachedFingerprint: CellRfFingerprint? = null
+    private var cachedTrustGate: Boolean? = null
+    /** Posición con la que se calculó [cachedFingerprint]; null si se calculó sin GPS. */
+    private var fingerprintLocation: Location? = null
+
+    /** v2.10.9 — Misma regla que el baseline de potencia: recalcular al moverse 150 m. */
+    private fun fingerprintNeedsRefresh(current: Location?): Boolean {
+        val previous = fingerprintLocation
+        return com.alexisgordr.icdetector.core.RfFingerprintRefresh.needed(
+            computedWithFix = previous != null,
+            movedMeters = current?.let { previous?.distanceTo(it) ?: 0f }
+        )
+    }
     private var cachedLocalTrustEvidence = com.alexisgordr.icdetector.models.LocalCellTrustEvidence()
     // v2.1 — Posición de la antena (api_lat/api_lon) para mostrar la distancia. Solo display.
     private val apiLocationCache = ConcurrentHashMap<String, Pair<Double, Double>>()
@@ -631,10 +646,10 @@ class MiniICService : Service() {
         // ARBITRARIA. Por eso EXCLUIMOS la celda activa, para no borrar justo su baseline / estado y
         // forzar una re-verificación innecesaria en viajes largos (>MAX_TRACKED_CELLS celdas).
         // OJO: cada caché usa una CLAVE distinta:
-        //   - latencyHistory   -> clave = cellId pelado
+        //   - latencyHistory   -> clave = identidad completa (v2.10.9; antes, el CID pelado)
         //   - verificationCache -> clave = "mcc-mnc-tac-cellId" (compuesta)
         // por eso se pasan y comparan las dos por separado.
-        latencyMonitor.prune(activeCellId, MAX_TRACKED_CELLS)
+        latencyMonitor.prune(activeCacheKey, MAX_TRACKED_CELLS)
         if (verificationCache.size > MAX_TRACKED_CELLS) {
             verificationCache.keys.filter { it != activeCacheKey }
                 .take(verificationCache.size - MAX_TRACKED_CELLS)
@@ -642,14 +657,33 @@ class MiniICService : Service() {
         }
     }
 
+    /** Identidad completa de la celda para la que vale el estado de latencia publicado. */
+    private var latencyCellIdentity: String? = null
+
+    /**
+     * v2.10.9 — El reset comparaba solo el CID: si cambiaba MCC, MNC, TAC o la tecnología con el
+     * mismo CID, una medición en curso podía publicar su resultado sobre la celda nueva. Ahora
+     * compara la identidad completa, la misma clave que usa el historial de latencia. No cambia
+     * la detección de handover (H10 sigue usando el cambio de CID).
+     */
+    @Synchronized
+    private fun resetLatencyIfCellChanged(cell: CellData) {
+        val identity = cell.identityKey
+        if (identity == latencyCellIdentity) return
+        latencyCellIdentity = identity
+        latencyMonitor.onCellChanged(identity, idleLatencyState())
+    }
+
     private fun checkLatencyAnomaly() {
         if (!isLatencyProbeActive()) {
             latencyMonitor.reset()
             return
         }
-        val activeCellId = _cellFlow.value.firstOrNull { it.isRegistered }?.cellId ?: return
+        // v2.10.9 — Identidad completa: dos celdas con el mismo CID en otra red o tecnología no
+        // comparten la media de latencia.
+        val activeCellKey = _cellFlow.value.firstOrNull { it.isRegistered }?.identityKey ?: return
         if (!latencyMonitor.isDue()) return
-        scope.launch(Dispatchers.IO) { latencyMonitor.check(activeCellId) }
+        scope.launch(Dispatchers.IO) { latencyMonitor.check(activeCellKey) }
     }
 
     private fun showLatencyAlert() {
@@ -893,13 +927,10 @@ class MiniICService : Service() {
             // Milisegundos desde el arranque de la celda registrada aceptada por el parser.
             val observationToken = activeObservationToken ?: 0L
 
-            // Reset del estado de latencia ANTES del análisis si la celda ha cambiado
-            // (prevCid aún tiene el id anterior aquí; checkAlerts lo actualiza después).
+            // Reset del estado de latencia ANTES del análisis si la celda ha cambiado.
             // Esto evita que la heurística 12 lea el veredicto "ANOMALA" de la celda vieja
             // en el primer ciclo de la nueva, antes de que tenga su propio baseline.
-            if (activeRaw != null && activeRaw.cellId != "N/A" && activeRaw.cellId != prevCid) {
-                latencyMonitor.reset(idleLatencyState())
-            }
+            if (activeRaw != null && activeRaw.cellId != "N/A") resetLatencyIfCellChanged(activeRaw)
 
             scope.launch(Dispatchers.IO) {
                 cellProcessingMutex.withLock {
@@ -967,6 +998,18 @@ class MiniICService : Service() {
                     val rfSig = activeRaw.identityKey
                     val nowRf = System.currentTimeMillis()
                     rfStability = if (rfSig == cachedRfSignature && (nowRf - cachedRfTimestamp) < CELL_CACHE_TTL) {
+                        // v2.10.9 — La huella RSRQ/SINR se acota a la posición actual, pero esta
+                        // caché solo miraba la celda y el TTL: tras moverte podía compararse una
+                        // lectura con la huella de la zona anterior hasta 60 s. Igual que el
+                        // baseline de potencia, se recalcula al desplazarse 150 m.
+                        if (fingerprintNeedsRefresh(currentLocation)) {
+                            cachedFingerprint = dbHelper.getCellRfFingerprint(
+                                activeRaw.cellId, activeRaw.mnc, activeRaw.tac, activeRaw.mcc,
+                                radio = activeRaw.radioTech,
+                                nearLocation = currentLocation
+                            )
+                            fingerprintLocation = currentLocation
+                        }
                         cachedRfStability
                     } else {
                         val st = dbHelper.getCellRfStability(
@@ -988,7 +1031,12 @@ class MiniICService : Service() {
                             radio = activeRaw.radioTech,
                             nearLocation = currentLocation
                         )
+                        fingerprintLocation = currentLocation
                         cachedLocalTrustEvidence = dbHelper.getLocalCellTrustEvidence(activeRaw)
+                        // Solo para la pantalla de madurez (#18): misma caché por identidad.
+                        cachedTrustGate = dbHelper.hasTrustedBaselineGate(
+                            activeRaw.cellId, activeRaw.mnc, activeRaw.tac, activeRaw.mcc, activeRaw.radioTech
+                        )
                         // v2.1 — Posición de la antena según las bases públicas, para poder
                         // MOSTRAR la distancia de forma continua (no solo en el ciclo posterior a
                         // la verificación). Misma caché por identidad de celda: una consulta más
@@ -1226,7 +1274,8 @@ class MiniICService : Service() {
                             rfFingerprint = rfFingerprint,
                             rfStability = rfStability,
                             reputation = reputation,
-                            transitionCoherence = transitionCoherence
+                            transitionCoherence = transitionCoherence,
+                            trustGateMet = cachedTrustGate.takeIf { activeRaw != null && activeRaw.cellId != "N/A" }
                         )
                         val confirmedActive = temporalActive.copy(
                             heuristicDiagnostics = com.alexisgordr.icdetector.core.DiagnosticEngine.explain(
@@ -1526,13 +1575,13 @@ class MiniICService : Service() {
         // contestado desde que se escribió. No hace nada si nada ha cambiado.
         auditController.logVerificationOutcome(cell)
 
+        // Reset del estado de latencia al cambiar de celda: el veredicto de la celda anterior NO es
+        // válido para la nueva. Limpiamos "ANOMALA" (icono y heurística 12) y la racha; la celda
+        // nueva volverá a "OK"/"ANOMALA" según sus propias mediciones una vez aprenda su baseline.
+        resetLatencyIfCellChanged(cell)
+
         if (cid != prevCid) {
             telemetryHistory.onHandover()
-            // Reset del estado de latencia en el handover: el veredicto de la celda anterior
-            // NO es válido para la nueva. Limpiamos "ANOMALA" (icono y heurística 12) y la
-            // racha; la celda nueva volverá a "OK"/"ANOMALA" según sus propias mediciones una
-            // vez aprenda su baseline. Evita que la heurística 12 se contamine con datos viejos.
-            latencyMonitor.reset(idleLatencyState())
             securityAlerts.resetAlarmEpisode()
             appendLog("[RADIO]", "Handover celular completado -> Nueva celda CID: $cid ($net)")
             // Esta celda queda pendiente de coordenadas frescas hasta que un fix las rellene.
@@ -1544,7 +1593,7 @@ class MiniICService : Service() {
 
             val currentTime = System.currentTimeMillis()
             cellChangeHistory.add(Pair(cid, currentTime))
-            cellChangeHistory.removeAll { currentTime - it.second > 10000L }
+            cellChangeHistory.removeAll { currentTime - it.second > ThreatAnalyzer.PING_PONG_WINDOW_MS }
 
             // El informe de heurísticas es la observación cruda del ciclo. No debe producir un
             // tono aquí: TemporalConfidence necesita tres ciclos antes de convertirla en alarma.
@@ -1558,8 +1607,13 @@ class MiniICService : Service() {
                 // v2.10.7 — Antes afirmaba que la alerta se descartaba, pero esta rama no decide nada: H10 se
                 // evalúa en ThreatAnalyzer y puede confirmarse en los ciclos siguientes. Texto
                 // neutro; la lógica no cambia.
-                val speedKmh = (getCurrentLocation()?.speed ?: 0f) * 3.6f
-                appendLog("[RADIO]", "Cambios rápidos de celda observados a ${String.format(Locale.getDefault(), "%.1f", speedKmh)} km/h.")
+                val speedMps = getCurrentLocation()?.takeIf { it.hasSpeed() }?.speed
+                if (speedMps == null) {
+                    appendLog("[RADIO]", "Cambios rápidos de celda observados sin velocidad GPS (H10 en N/A).")
+                } else {
+                    val speedKmh = speedMps * 3.6f
+                    appendLog("[RADIO]", "Cambios rápidos de celda observados a ${String.format(Locale.getDefault(), "%.1f", speedKmh)} km/h.")
+                }
             }
 
             observationPersistence.recordHandover(cell)

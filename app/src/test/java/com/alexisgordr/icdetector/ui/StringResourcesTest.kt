@@ -195,13 +195,23 @@ class StringResourcesTest {
     // v2.10.8 — Potencia, huella y PCI muestran un estado de espera mientras la celda no es de
     // confianza, en vez de "EMPTY · 0 muestras".
     @Test fun `trust-gated baselines explain the waiting period`() {
-        // Texto corto: tiene que caber en la misma línea donde antes salía "EMPTY · 0 muestras".
-        assertEquals("NEEDS 2 DAYS", en.getValue("baseline_waiting"))
-        assertEquals("NECESITA 2 DÍAS", es.getValue("baseline_waiting"))
-        listOf(en, es).forEach { assertTrue(it.getValue("baseline_waiting").length <= 18) }
-        assertFalse(en.containsKey("baseline_maturity_hint") || es.containsKey("baseline_maturity_hint"))
         val main = module("src/main/java/com/alexisgordr/icdetector/ui/MainScreen.kt").readText()
-        assertEquals(3, Regex("trustGated = true").findAll(main).count())
+        // Texto corto: tiene que caber en la misma línea donde antes salía "EMPTY · 0 muestras".
+        // Genérico a propósito: la fila también queda vacía sin GPS, lejos de las muestras o con
+        // una celda nueva, no solo durante los 2 primeros días.
+        assertEquals("WAITING", en.getValue("baseline_waiting"))
+        assertEquals("EN ESPERA", es.getValue("baseline_waiting"))
+        // #18 — "2 días" solo cuando de verdad faltan días; si no, "en espera".
+        assertEquals("NEEDS 2 DAYS", en.getValue("baseline_needs_days"))
+        assertEquals("NECESITA 2 DÍAS", es.getValue("baseline_needs_days"))
+        listOf(en, es).forEach {
+            assertTrue(it.getValue("baseline_waiting").length <= 18)
+            assertTrue(it.getValue("baseline_needs_days").length <= 18)
+        }
+        val row = main.substringAfter("private fun BaselineMaturityRow(")
+        assertTrue(row.contains("if (trustGateMet == false) stringResource(R.string.baseline_needs_days)"))
+        assertFalse(en.containsKey("baseline_maturity_hint") || es.containsKey("baseline_maturity_hint"))
+        assertEquals(3, Regex("trustGated = true, trustGateMet = maturity.trustGateMet").findAll(main).count())
     }
 
     // v2.10.8 — El cliente de WiGLE no se usaba: se retira para que el código coincida con la

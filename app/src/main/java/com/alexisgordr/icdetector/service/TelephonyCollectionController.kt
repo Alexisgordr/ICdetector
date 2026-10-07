@@ -12,7 +12,6 @@ import android.telephony.ServiceState
 import android.telephony.TelephonyCallback
 import android.telephony.TelephonyDisplayInfo
 import android.telephony.TelephonyManager
-import android.util.Log
 import androidx.annotation.RequiresApi
 import androidx.core.content.ContextCompat
 import com.alexisgordr.icdetector.models.NetworkTypeNames
@@ -31,7 +30,6 @@ internal class TelephonyCollectionController(
     private var manager = context.getSystemService(TelephonyManager::class.java)
     private var cellCallback: TelephonyCallback? = null
     private var displayCallback: TelephonyCallback? = null
-    private var securityCallback: TelephonyCallback? = null
     private var serviceStateCallback: TelephonyCallback? = null
     private var lastDisplayInfo: TelephonyDisplayInfo? = null
     private var lastRegisteredCallbackAt = 0L
@@ -96,12 +94,11 @@ internal class TelephonyCollectionController(
 
     fun destroy() {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) return
-        listOf(cellCallback, displayCallback, securityCallback, serviceStateCallback).forEach { callback ->
+        listOf(cellCallback, displayCallback, serviceStateCallback).forEach { callback ->
             callback?.let { try { manager.unregisterTelephonyCallback(it) } catch (_: Exception) {} }
         }
         cellCallback = null
         displayCallback = null
-        securityCallback = null
         serviceStateCallback = null
     }
 
@@ -216,7 +213,6 @@ internal class TelephonyCollectionController(
             }
             manager.registerTelephonyCallback(context.mainExecutor, callback)
             cellCallback = callback
-            if (Build.VERSION.SDK_INT >= 34) registerSecurityPlaceholder()
         } catch (_: SecurityException) {}
     }
 
@@ -246,20 +242,6 @@ internal class TelephonyCollectionController(
         start()
     }
 
-    @RequiresApi(Build.VERSION_CODES.S)
-    private fun registerSecurityPlaceholder() {
-        if (securityCallback != null) return
-        try {
-            securityCallback = SecurityPlaceholder().also {
-                manager.registerTelephonyCallback(context.mainExecutor, it)
-            }
-            log("Callback de telefonía registrado (detección de cifrado nulo/IMSI: pendiente API Android 16).")
-        } catch (error: Exception) {
-            securityCallback = null
-            Log.e("MiniIC", "No se pudo registrar el callback de seguridad: ${error.message}")
-        }
-    }
-
     private fun hasPhonePermission() = ContextCompat.checkSelfPermission(
         context, Manifest.permission.READ_PHONE_STATE
     ) == PackageManager.PERMISSION_GRANTED
@@ -267,11 +249,6 @@ internal class TelephonyCollectionController(
     private fun hasLocationPermission() = ContextCompat.checkSelfPermission(
         context, Manifest.permission.ACCESS_FINE_LOCATION
     ) == PackageManager.PERMISSION_GRANTED
-
-    @RequiresApi(Build.VERSION_CODES.S)
-    private class SecurityPlaceholder : TelephonyCallback(), TelephonyCallback.CellInfoListener {
-        override fun onCellInfoChanged(cellInfo: MutableList<CellInfo>) = Unit
-    }
 
     private companion object {
         const val CALLBACK_TIMEOUT_MS = 30_000L

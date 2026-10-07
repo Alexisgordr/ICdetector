@@ -1,5 +1,25 @@
 # ICdetection Status
 
+## v2.10.9 — Bug fixes inside the freeze (stable)
+
+**Version code:** 37
+**Database schema:** 19 (unchanged)
+**Security effect:** H10 no longer stays failed after a burst of cell changes and is `N/A` without GPS speed; weights, thresholds and rules unchanged
+**Dataset baseline:** v2.10.5, with a **dataset cut for H10 only**
+
+**Major fix — H10 (Ping-Pong).** Old cell changes were removed only when another change arrived, so
+after a burst of three a phone that stayed on one cell kept failing H10 on every cycle until the
+next handover, and a missing GPS speed was treated as 0 km/h. H10 now counts only changes within the
+last 10 s and reports `N/A` without a GPS speed. The decision lives in `PingPongRule`, tested without
+Android. Fixing it during the campaign was worth the dataset cut: left in place, it would have
+biased every H10 result, kept baselines from learning and made false alarms easier.
+
+**Other fixes.** The RSRQ/SINR fingerprint cache is refreshed after moving 150 m. Latency results
+(optional feature) are published only for the active cell and the current probe generation; the
+reset and the baseline use the full cell identity. Baseline maturity shows NEEDS 2 DAYS only while
+the cell has not passed the trust gate, and WAITING otherwise (#18). The empty ciphering callback
+was removed; H9 stays `N/A`.
+
 ## v2.10.8 — Maintenance inside the freeze (stable)
 
 **Version code:** 36

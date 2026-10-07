@@ -19,14 +19,16 @@ object DiagnosticEngine {
         val rfFingerprint: CellRfFingerprint?,
         val rfStability: CellRfStability?,
         val reputation: CellReputation?,
-        val transitionCoherence: TransitionCoherenceResult = TransitionCoherenceResult()
+        val transitionCoherence: TransitionCoherenceResult = TransitionCoherenceResult(),
+        val trustGateMet: Boolean? = null
     )
 
     fun maturity(i: Inputs) = BaselineMaturity(
         signalSamples = i.signalBaseline?.sampleCount ?: 0,
         fingerprintSamples = i.rfFingerprint?.sampleCount ?: 0,
         rfIdentitySamples = i.rfStability?.totalObservations ?: 0,
-        reputationSamples = i.reputation?.observations ?: 0
+        reputationSamples = i.reputation?.observations ?: 0,
+        trustGateMet = i.trustGateMet
     )
 
     fun explain(cell: CellData, i: Inputs): List<HeuristicDiagnostic> {
@@ -56,7 +58,7 @@ object DiagnosticEngine {
             HeuristicDiagnostic(9, "Cifrado hardware", r.hardwareCiphering,
                 explanation(r.hardwareCiphering, if (!i.cipheringAvailable) "N/A: Android o el fabricante no exponen el estado de cifrado a esta app." else "N/A: estado de cifrado no disponible.")),
             HeuristicDiagnostic(10, "Anti ping-pong", r.pingPong,
-                explanation(r.pingPong, "N/A: todavía no existe una secuencia temporal utilizable.")),
+                explanation(r.pingPong, "N/A: hay cambios rápidos de celda, pero sin velocidad GPS no se puede saber si estás parado.")),
             HeuristicDiagnostic(11, "Consistencia geográfica", r.mobileCellId,
                 explanation(r.mobileCellId, when {
                     !i.locationAvailable -> "N/A: falta una posición GPS reciente."

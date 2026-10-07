@@ -1,0 +1,8 @@
+Versión de correcciones.
+
+• Fallo importante — Ping-Pong (H10): una ráfaga antigua de cambios de celda ya no deja la regla fallando, y sin velocidad GPS muestra N/A. Corte del dataset solo para H10, necesario para que los datos sean fiables.
+• Huella RF recalculada al moverte 150 m.
+• Latencia: se descartan resultados de la celda anterior.
+• Madurez de líneas base: "NECESITA 2 DÍAS" o "EN ESPERA" según el motivo real.
+
+Pesos, umbrales, datos y esquema sin cambios.
