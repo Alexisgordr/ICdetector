@@ -9,8 +9,15 @@ internal class TelemetryHistoryController(
     private val rsrqHistory: MutableStateFlow<List<Int>>,
     private val geoHistory: MutableStateFlow<List<Float>>
 ) {
+    /**
+     * v2.10.10 — Al cambiar de celda se vacían las tres series. Antes solo la de potencia: la
+     * celda nueva heredaba las curvas de RSRQ y distancia TA de la anterior y, si no entregaba esos
+     * datos, se seguía mostrando la curva antigua como si fuera suya. Solo afecta a las gráficas.
+     */
     fun onHandover() {
         dbmHistory.value = emptyList()
+        rsrqHistory.value = emptyList()
+        geoHistory.value = emptyList()
     }
 
     fun record(cell: CellData) {

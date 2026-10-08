@@ -1,0 +1,10 @@
+Correcciones de una auditoría externa.
+
+• H8: una frecuencia no disponible es ahora N/A, no "sospechosa" (−15). Corte del dataset solo para H8.
+• El GPS ya no se escribe en observaciones antiguas.
+• Cada fila guarda la posición y hora de su observación.
+• Una segunda alarma en la misma celda vuelve a notificarse.
+• Borrar el historial con la monitorización activa es seguro.
+• Interfaz más fluida y exportaciones más fiables.
+
+Pesos, umbrales y esquema sin cambios.

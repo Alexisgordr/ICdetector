@@ -14,6 +14,9 @@ import com.alexisgordr.icdetector.models.VerificationStatus
 import com.alexisgordr.icdetector.models.RadioTech
 
 object ThreatAnalyzer {
+    /** CellInfo.UNAVAILABLE: el módem no entrega la frecuencia. No es una frecuencia. */
+    internal const val ARFCN_UNAVAILABLE = Int.MAX_VALUE
+
     /** Ventana de H10: cambios de celda considerados "rápidos". */
     internal const val PING_PONG_WINDOW_MS = PingPongRule.WINDOW_MS
 
@@ -303,7 +306,12 @@ object ThreatAnalyzer {
         // 8. ARFCN Sanity Check
         // Fix: máximo teórico LTE es 262143, no 70645
         // 70645 es válido para Band 252/255 (CBRS)
-        active.arfcn?.let { arfcn ->
+        //
+        // v2.10.10 — Android entrega CellInfo.UNAVAILABLE (Int.MAX_VALUE) cuando el módem no da la
+        // frecuencia. Antes ese valor entraba como "frecuencia sospechosa" y restaba 15 puntos:
+        // se confundía no tener el dato con tener un dato imposible. Ahora H8 queda N/A. Un valor
+        // medido fuera de rango sigue fallando como antes. Corte de dataset solo para H8.
+        active.arfcn?.takeUnless { it == ARFCN_UNAVAILABLE }?.let { arfcn ->
             if (active.radioTech == RadioTech.NR) {
                 eArfcn = true
                 if (arfcn > 3279165 || arfcn == 0) {

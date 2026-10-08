@@ -183,7 +183,7 @@ class StringResourcesTest {
     // v2.10.8 — Una alarma confirmada publica un aviso visible, una vez por episodio.
     @Test fun `confirmed alarm posts a notification once per episode`() {
         val alerts = module("src/main/java/com/alexisgordr/icdetector/service/SecurityAlertController.kt").readText()
-        val episode = alerts.substringAfter("if (confirmed && persistedAlarmCellId != cell.cellId) {").substringBefore("}")
+        val episode = alerts.substringAfter("if (confirmed && alarmEpisodes.onConfirmedAlarm(cell.identityKey)) {").substringBefore("}")
         assertTrue(episode.contains("persistConfirmedAlarm(cell)"))
         assertTrue(episode.contains("notifyConfirmedAlarm(cell)"))
         val notifications = module("src/main/java/com/alexisgordr/icdetector/service/ServiceNotificationController.kt").readText()

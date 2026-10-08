@@ -335,6 +335,34 @@ class HeuristicsTest {
         assertTrue(r.hardwareCipheringPassed)
     }
 
+    // ---------- H8: ARFCN (v2.10.10) ----------
+    @Test fun `H8 queda N-A si el modem no entrega la frecuencia`() {
+        listOf(RadioTech.LTE, RadioTech.NR).forEach { tech ->
+            val report = analyze(active().copy(radioTech = tech, arfcn = Int.MAX_VALUE))
+            assertEquals("$tech", HeuristicStatus.NOT_EVALUATED, report.arfcnSanity)
+        }
+    }
+    @Test fun `H8 sigue fallando con una frecuencia medida imposible`() {
+        assertEquals(HeuristicStatus.FAILED, analyze(active().copy(radioTech = RadioTech.LTE, arfcn = 262_144)).arfcnSanity)
+        assertEquals(HeuristicStatus.FAILED, analyze(active().copy(radioTech = RadioTech.NR, arfcn = 3_279_166)).arfcnSanity)
+    }
+    @Test fun `H8 acepta EARFCN 0 y frecuencias validas`() {
+        assertEquals(HeuristicStatus.PASSED, analyze(active().copy(radioTech = RadioTech.LTE, arfcn = 0)).arfcnSanity)
+        assertEquals(HeuristicStatus.PASSED, analyze(active().copy(radioTech = RadioTech.LTE, arfcn = 1301)).arfcnSanity)
+        assertEquals(HeuristicStatus.PASSED, analyze(active().copy(radioTech = RadioTech.NR, arfcn = 632_628)).arfcnSanity)
+    }
+    @Test fun `H8 no disponible no resta puntos`() {
+        val unavailable = ThreatAnalyzer.analyzeThreats(
+            active = active().copy(radioTech = RadioTech.LTE, arfcn = Int.MAX_VALUE), neighbors = emptyList(),
+            isHardwareCipheringActive = true, cellChangeHistory = emptyList(), currentLocation = null
+        )
+        val valid = ThreatAnalyzer.analyzeThreats(
+            active = active().copy(radioTech = RadioTech.LTE, arfcn = 1301), neighbors = emptyList(),
+            isHardwareCipheringActive = true, cellChangeHistory = emptyList(), currentLocation = null
+        )
+        assertEquals(valid.securityScore, unavailable.securityScore)
+    }
+
     // ---------- H10: Ping-Pong ----------
     // La decisión con velocidad conocida se prueba en PingPongRuleTest, sin Android: aquí no se
     // construye android.location.Location (en los tests JVM de Gradle sus métodos no existen).

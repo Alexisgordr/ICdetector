@@ -177,7 +177,13 @@ fun RadioPanel(dbHelper: CellDbHelper, service: MiniICService?, modifier: Modifi
         uri?.let {
             scope.launch {
                 val result = withContext(Dispatchers.IO) {
-                    ExportUtils.exportServiceStateCsv(context, it, dbHelper.getServiceStateEvents())
+                    // v2.10.10 — Si la lectura falla, el export falla (antes exportaba una lista
+                    // parcial o vacía y lo daba por bueno).
+                    runCatching { dbHelper.getServiceStateEvents(strict = true) }
+                        .fold(
+                            onSuccess = { events -> ExportUtils.exportServiceStateCsv(context, it, events) },
+                            onFailure = { error -> Result.failure<Int>(error) }
+                        )
                 }
                 result.onSuccess { n ->
                     Toast.makeText(context, context.getString(R.string.radio_export_done, n), Toast.LENGTH_LONG).show()

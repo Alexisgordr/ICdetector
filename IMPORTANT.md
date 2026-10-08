@@ -3,7 +3,14 @@
 > **Dataset baseline:** v2.10.5 (version code 33) · **Database schema:** 19 ·
 > **Duration:** approximately three months
 >
-> **Current release:** v2.10.9 (version code 37).
+> **Current release:** v2.10.10 (version code 38).
+>
+> v2.10.10 applies the fixes from an external static audit. H8 treated an unavailable frequency as
+> suspicious; it is now `N/A` — a **dataset cut for H8 only**. The other fixes protect the data
+> itself: GPS coordinates are no longer written on old rows, each row keeps the context of the moment
+> it was observed, deleting history during a capture no longer leaves the service inconsistent, and
+> a second alarm in the same cell is notified again. Items that would change detection more broadly
+> are deferred to 3.0.
 >
 > v2.10.9 contains a **major fix** for two defects in H10 (Ping-Pong): an old burst of cell changes kept the rule failed
 > while the phone stayed on one cell, and a missing GPS speed was treated as 0 km/h. This is a
@@ -204,6 +211,11 @@ documented explicitly as a new dataset cut.
 | Release | Rule | Change | Earlier data |
 |---|---|---|---|
 | v2.10.9 | H10 Ping-Pong | Only cell changes within the last 10 s count, and H10 is `N/A` without a GPS speed. The rule itself is unchanged. | Treat `Efecto Ping-Pong` results before v2.10.9 with care. All other rules are unaffected. |
+| v2.10.10 | H8 Frequency | An unavailable frequency gives `N/A` instead of failing (−15). A measured out-of-range value still fails. | Treat H8 failures before v2.10.10 with care, especially with `ARFCN` = `2147483647`. All other rules are unaffected. |
+
+Data-integrity note (v2.10.10): coordinates on rows recorded while the GPS was still acquiring may,
+before v2.10.10, belong to a later position; from v2.10.10 only rows from the last 2 minutes are
+filled.
 
 ---
 

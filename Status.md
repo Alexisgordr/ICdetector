@@ -1,5 +1,27 @@
 # ICdetection Status
 
+## v2.10.10 — Bug fixes inside the freeze (stable)
+
+**Version code:** 38
+**Database schema:** 19 (unchanged)
+**Security effect:** H8 is `N/A` when the frequency is unavailable instead of failing; weights, thresholds and rules unchanged
+**Dataset baseline:** v2.10.5, with dataset cuts for **H10** (v2.10.9) and **H8** (v2.10.10)
+
+Fixes from an external static audit of v2.10.9. **Dataset cut — H8:** Android's "unavailable"
+frequency value was counted as an impossible frequency (−15 points); it is now `N/A`. **Data
+integrity:** GPS backfill limited to rows from the last 2 minutes; each row stores the position,
+service state and time of its observation, written through one ordered queue; a second alarm episode
+in the same cell is notified and recorded again (episodes close after 60 s without alarm).
+**Reliability:** history deletion is coordinated by the service (forensic recorder, caches, episodes
+and in-flight verifications); start-up recovery runs before new samples; Stable-Site writes moved off the main
+thread; exports read one consistent snapshot and fail on read errors. **Smaller:** charts cleared on
+a cell change; in-memory VERIFIED re-checked locally against the TTL, with or without credentials;
+stale latency anomaly cleared.
+
+Deferred to 3.0 (GitHub issues #19–#26): full identity for handovers, streak expiry after long
+coverage gaps, Timing Advance borrowed across technologies, EARFCN 0 in learning, UTC timestamps,
+stale analysis cycles, write ordering by observation time, explicit latency learning state.
+
 ## v2.10.9 — Bug fixes inside the freeze (stable)
 
 **Version code:** 37

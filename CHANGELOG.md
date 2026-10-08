@@ -1,5 +1,84 @@
 # Changelog
 
+## 2.10.10
+
+### Bug-fix release inside the freeze — dataset cut for H8
+
+Fixes from an external static audit of v2.10.9. Weights, thresholds, rules and the database schema
+are **unchanged**. One fix changes how H8 (frequency sanity) is evaluated, so this release is a
+**dataset cut for H8 only**. The data-integrity fixes make new rows more accurate without changing
+what any column means. Audit items that would change detection more broadly are deferred to 3.0
+and tracked as GitHub issues #19–#26.
+
+#### Dataset cut
+
+- **H8 treated a missing frequency as suspicious.** When the modem does not report the frequency,
+  Android delivers `CellInfo.UNAVAILABLE` (`2147483647`). H8 counted it as an impossible LTE/NR
+  frequency, subtracted 15 points and fed it to the scorer and the episode tracker. It is now `N/A`.
+  A measured out-of-range value still fails, as before. **Dataset cut for H8 only:** treat
+  `Frecuencia (EARFCN) 4G sospechosa` / `Frecuencia (ARFCN) 5G sospechosa` results before v2.10.10 with
+  care, especially when the exported `ARFCN` is `2147483647`.
+
+#### Data integrity
+
+- **GPS coordinates written on an old row.** The backfill took the latest row of the cell without
+  checking its age. Staying on one cell, moving without GPS and getting a fix minutes later wrote the
+  new position into the old row, with its old time, contaminating H11/H13/H16 geometry. Only a row
+  stored within the last 2 minutes of the fix can now be filled; an older one stays without
+  coordinates.
+- **Rows mixed the context of two moments.** Position, service state and timestamp were read when the
+  background write ran, not when the cell was observed. Each row now takes a snapshot at observation
+  time, and history writes go through one ordered queue. The timestamp format is unchanged.
+- **Second alarm episode in the same cell.** The "already alerted" guard was cleared only on a cell
+  change, so a new episode after a recovery played the tone but was neither notified nor recorded as
+  a confirmed alarm. An episode now closes after 60 s without alarm (the same margin as the forensic
+  post-capture), measured up to the moment the alarm returns, and is keyed by the full cell identity.
+
+#### Reliability
+
+- **Delete history with the service running.** The screen deleted the database directly while the
+  service kept the open forensic case, its pre-buffer, cached baselines and episode state. The next
+  samples failed on the deleted case (a false "forensic capture degraded" warning) and old
+  observations could be flushed into a later case. The service now coordinates the deletion: it
+  pauses analysis, drops pending writes from before the deletion, resets the forensic recorder,
+  deletes, and clears every cache and episode tracker. An OpenCellID verification that started before
+  the deletion no longer writes, caches or shows its result afterwards: every asynchronous result
+  carries the history "epoch" it started in (`HistoryEpoch`) and is applied only if that epoch is
+  still current, checked under the same lock that the deletion uses to invalidate it — including the
+  screen update queued on the main thread. The Incidents and Forensic lists are cleared
+  as well.
+- **Start-up recovery race.** Interrupted cases from the previous run are now closed on the forensic
+  queue before any new sample is accepted, so a case opened by the new service can no longer be
+  marked as interrupted.
+- **SQLite on the main thread.** Stable-Site writes (up to four transactions per cycle) ran inside the
+  main-thread block and could freeze the interface while the database was busy. They now run on the
+  analysis thread, in the same order.
+- **Exports.** Stable-Site and Geometry exports read all their tables in one consistent snapshot. The
+  RADIO export now fails when the read fails, instead of exporting a partial list as complete.
+
+#### Smaller fixes
+
+- Charts clear the RSRQ and Timing Advance series on a cell change, not only the power series.
+- A VERIFIED label kept in memory is re-checked every 6 h against the database, which applies the
+  30-day TTL, even without OpenCellID credentials (the re-check is local). It is a label and never
+  changes the score.
+- A stale "ANOMALOUS" latency state is cleared when the endpoints stop answering (optional feature,
+  off by default).
+
+#### Tests
+
+- `HeuristicsTest`: H8 is `N/A` with an unavailable frequency, fails with a measured impossible one,
+  accepts EARFCN 0, and an unavailable value costs no points.
+- `AlarmEpisodeGateTest`: a new episode after a real recovery notifies again; a short flicker does not.
+- `HistoryEpochTest`: a screen update queued before a deletion is not applied after it; invalidation
+  waits for a result that is being applied, which can apply nothing afterwards.
+- `ForensicRecorderResetTest`: after a reset, no sample goes to the deleted case and no pre-buffer from
+  before the reset is flushed into the next case.
+- `CoordinateBackfillWindowTest` (instrumented): an old row stays without coordinates; a recent one
+  is filled.
+- Source checks for the service wiring (coordinated deletion, start-up order, Stable-Site thread,
+  ordered snapshots, export snapshots).
+
 ## 2.10.9
 
 ### Bug-fix release inside the freeze — dataset cut for H10

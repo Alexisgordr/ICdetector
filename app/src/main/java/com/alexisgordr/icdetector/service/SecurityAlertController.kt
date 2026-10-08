@@ -2,7 +2,9 @@ package com.alexisgordr.icdetector.service
 
 import android.media.ToneGenerator
 import android.util.Log
+import com.alexisgordr.icdetector.core.AlarmEpisodeGate
 import com.alexisgordr.icdetector.models.CellData
+import com.alexisgordr.icdetector.models.identityKey
 
 /** Owns audible and legacy-network alert state after temporal threat confirmation. */
 internal class SecurityAlertController(
@@ -19,11 +21,11 @@ internal class SecurityAlertController(
     private var previousNetworkType: String? = null
     private var previousDbm: Int? = null
     private var lastStrongSignalAlarm = 0L
-    private var persistedAlarmCellId: String? = null
+    private val alarmEpisodes = AlarmEpisodeGate()
     private var pingPongLogged = false
 
     fun resetAlarmEpisode() {
-        persistedAlarmCellId = null
+        alarmEpisodes.reset()
         pingPongLogged = false
     }
 
@@ -64,14 +66,16 @@ internal class SecurityAlertController(
                 log("🚨 Efecto Ping-Pong confirmado por TemporalConfidence.")
             }
             pingPongLogged = pingPongConfirmed
-            if (confirmed && persistedAlarmCellId != cell.cellId) {
-                persistedAlarmCellId = cell.cellId
+            // v2.10.10 — Un episodio por identidad completa que se cierra tras 60 s sin alarma
+            // (ver AlarmEpisodeGate). Antes solo se cerraba al cambiar de celda.
+            if (confirmed && alarmEpisodes.onConfirmedAlarm(cell.identityKey)) {
                 persistConfirmedAlarm(cell)
                 // v2.10.8 — Aviso visible, una vez por episodio (antes solo tono y registro).
                 notifyConfirmedAlarm(cell)
             }
         } else {
             pingPongLogged = false
+            if (confirmed) alarmEpisodes.onClear()
         }
 
         if (legacyProtectionEnabled() && (network.contains("3G") || network.contains("2G"))) {

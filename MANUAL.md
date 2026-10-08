@@ -1,4 +1,4 @@
-# ICdetection Field Manual — v2.10.9
+# ICdetection Field Manual — v2.10.10
 
 ICdetection is an open-source Android application for passive cellular-network auditing and anomaly analysis. It observes information exposed by Android, compares each observation with the device's local history and, when configured, cross-checks cells against external tower databases.
 
@@ -7,55 +7,21 @@ This manual explains how to operate the application, interpret its results, inve
 > **Important:** ICdetection is an anomaly detector, not a device that can prove the presence of an IMSI catcher. A warning means that the observations deserve examination. It does not identify an attacker or establish intent by itself.
 
 
-## Version 2.10.2
+## Version 2.10.10
 
-Stable-Site RF-only neighbour evidence now has deterministic retention matching complete neighbour identities. Exported site maturity is calculated with the same policy used by the application, and export validation applies technology-specific PCI limits. The database schema remains 18 and existing history is retained.
+A bug-fix release from an external code audit. Weights, thresholds, rules and the schema are
+unchanged. The H8 fix is a **dataset cut for H8 only**.
 
-## Version 2.10.3
-
-H15 detects repeated PCI alternation within one ARFCN. Consecutive observations during a single handover count as one episode; the PCI must return after another PCI to establish an independent episode. A stable one-way replacement is handled as historical reconfiguration. H15-only failures remain in H15's own baseline, preventing self-latching. This changes the H15 dataset baseline while preserving schema 18 and the existing database.
-
-## Version 2.10.4
-
-The serving cell is chosen by the modem's `PRIMARY_SERVING` connection status and only that cell is
-analysed. If a declared primary has unusable signal telemetry, that cycle abstains; the first usable
-registered entry is used only when no primary was declared. Secondary carriers from carrier aggregation or
-the NR leg of 5G NSA are listed, not judged against another cell's history.
-
-The new **RADIO** tab (History → RADIO) and the **RADIO CONTEXT** card on the main screen show:
-
-- the serving cell's connection state (PRIMARY / SECONDARY / NONE / UNKNOWN), bandwidth, declared
-  bands, additional PLMNs and closed subscriber group (CSG, a possible femtocell);
-- the secondary carriers the modem reports;
-- the service state: IN SERVICE, EMERGENCY ONLY, OUT OF SERVICE or RADIO OFF, data/voice
-  registration, roaming, network PLMN and SIM PLMN;
-- every visible cell with its connection state, and the recent service-state changes, exportable
-  to CSV.
-
-Everything on this tab is collection only: it never changes the score or triggers an alert. The
-terminal logs `[RADIO]` when the serving cell or its carriers change and `[SERVICIO]` when the
-service state changes. "Not reported" means the modem or Android did not provide the field.
-Service-state changes are displayed only after their database insert succeeds, so an immediate
-RADIO event refresh reads the same event that caused it. Live channel and bandwidth fields still
-follow every current reading. A deduplicated `[RADIO]` line records cycles skipped because a
-declared primary had no usable signal telemetry.
-
-## Version 2.10.5
-
-v2.10.5 is the dataset baseline for the field-collection freeze. It changes no heuristic,
-threshold or score and keeps schema 19.
-
-- **Delete history** now performs a complete reset in a single transaction, including the
-  route-familiarity trips. It is the recommended way to start a clean dataset.
-- The app and the background service share one database connection, and daily retention runs
-  atomically, so a reset or prune can no longer be left half done.
-- H3 (MCC consistency) and H4 (MNC limit) show **N/A** when neighbour cells do not report their
-  identity, which is the normal case on many modems, including Pixel devices. Before v2.10.5 they
-  showed PASS because neighbours were filled with your own operator's values. On phones that do
-  report neighbour identities nothing changes.
-- A cell whose external verification fails unexpectedly is retried after a minute instead of
-  remaining `PENDING` until the service restarts.
-
+- **Frequency (H8):** when the modem does not report the frequency, H8 now shows `N/A` instead of
+  "suspicious frequency". A measured impossible value still fails.
+- **GPS coordinates:** a late fix only fills an observation from the last 2 minutes. Older
+  observations without GPS stay without coordinates, which is the honest value.
+- **Repeated alarms:** if the same cell raises a new alarm after recovering for at least 60 s, you
+  get a new notification and a new "confirmed alarm" record.
+- **Delete history:** safe while monitoring is running, including during a forensic capture. The
+  Incidents and Forensic lists empty immediately.
+- **Exports:** Stable-Site and Geometry exports are consistent snapshots; a RADIO export that cannot
+  read its data now reports an error instead of saving a partial file.
 
 ## Version 2.10.9
 
@@ -123,6 +89,55 @@ so v2.10.5 remains the dataset baseline.
   exist, and it now checks that `TA`, `TAUnit` and `TAMeters` agree.
 - History and Geometry are fully translated, including the export privacy warnings. To confirm a
   deletion, type the word shown in the dialog: `DELETE` in English or `BORRAR` in Spanish.
+
+## Version 2.10.5
+
+v2.10.5 is the dataset baseline for the field-collection freeze. It changes no heuristic,
+threshold or score and keeps schema 19.
+
+- **Delete history** now performs a complete reset in a single transaction, including the
+  route-familiarity trips. It is the recommended way to start a clean dataset.
+- The app and the background service share one database connection, and daily retention runs
+  atomically, so a reset or prune can no longer be left half done.
+- H3 (MCC consistency) and H4 (MNC limit) show **N/A** when neighbour cells do not report their
+  identity, which is the normal case on many modems, including Pixel devices. Before v2.10.5 they
+  showed PASS because neighbours were filled with your own operator's values. On phones that do
+  report neighbour identities nothing changes.
+- A cell whose external verification fails unexpectedly is retried after a minute instead of
+  remaining `PENDING` until the service restarts.
+
+## Version 2.10.4
+
+The serving cell is chosen by the modem's `PRIMARY_SERVING` connection status and only that cell is
+analysed. If a declared primary has unusable signal telemetry, that cycle abstains; the first usable
+registered entry is used only when no primary was declared. Secondary carriers from carrier aggregation or
+the NR leg of 5G NSA are listed, not judged against another cell's history.
+
+The new **RADIO** tab (History → RADIO) and the **RADIO CONTEXT** card on the main screen show:
+
+- the serving cell's connection state (PRIMARY / SECONDARY / NONE / UNKNOWN), bandwidth, declared
+  bands, additional PLMNs and closed subscriber group (CSG, a possible femtocell);
+- the secondary carriers the modem reports;
+- the service state: IN SERVICE, EMERGENCY ONLY, OUT OF SERVICE or RADIO OFF, data/voice
+  registration, roaming, network PLMN and SIM PLMN;
+- every visible cell with its connection state, and the recent service-state changes, exportable
+  to CSV.
+
+Everything on this tab is collection only: it never changes the score or triggers an alert. The
+terminal logs `[RADIO]` when the serving cell or its carriers change and `[SERVICIO]` when the
+service state changes. "Not reported" means the modem or Android did not provide the field.
+Service-state changes are displayed only after their database insert succeeds, so an immediate
+RADIO event refresh reads the same event that caused it. Live channel and bandwidth fields still
+follow every current reading. A deduplicated `[RADIO]` line records cycles skipped because a
+declared primary had no usable signal telemetry.
+
+## Version 2.10.3
+
+H15 detects repeated PCI alternation within one ARFCN. Consecutive observations during a single handover count as one episode; the PCI must return after another PCI to establish an independent episode. A stable one-way replacement is handled as historical reconfiguration. H15-only failures remain in H15's own baseline, preventing self-latching. This changes the H15 dataset baseline while preserving schema 18 and the existing database.
+
+## Version 2.10.2
+
+Stable-Site RF-only neighbour evidence now has deterministic retention matching complete neighbour identities. Exported site maturity is calculated with the same policy used by the application, and export validation applies technology-specific PCI limits. The database schema remains 18 and existing history is retained.
 
 ---
 
@@ -525,7 +540,9 @@ Routine history may be pruned according to the configured retention policy to pr
 **Delete history** (type `DELETE`, or `BORRAR` in the Spanish interface, to confirm) removes antenna history, incidents, forensic cases,
 transitions, service-state events, Stable-Site learning and route-familiarity trips in one
 all-or-nothing operation. Since v2.10.5 it is a complete reset; export first anything you want to
-keep.
+keep. Since v2.10.10 it is also safe while monitoring is running: the service closes the open
+forensic case, discards pending writes and in-flight verifications, and restarts its baselines and
+episode tracking from a clean state.
 
 Retention and the forensic-sample cap are enforced when monitoring starts and then approximately
 once every 24 hours while the service remains active. The History screen loads the 2,000 most recent

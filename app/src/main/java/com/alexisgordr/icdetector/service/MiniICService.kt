@@ -161,6 +161,10 @@ class MiniICService : Service() {
     private var lastStableSiteLog: String? = null
     private var stableSiteIntensiveActive = false
     private val forensicDispatcher = Dispatchers.IO.limitedParallelism(1)
+    /** v2.10.10 — Escrituras del historial en orden, en una sola cola. */
+    private val historyWriteDispatcher = Dispatchers.IO.limitedParallelism(1)
+    /** v2.10.10 — Cambia con cada "Borrar historial"; ver [clearHistory] y [HistoryEpoch]. */
+    private val historyEpoch = com.alexisgordr.icdetector.core.HistoryEpoch()
     private lateinit var notificationController: ServiceNotificationController
     private lateinit var databaseMaintenance: DatabaseMaintenance
     private lateinit var latencyMonitor: NetworkLatencyMonitor
@@ -419,10 +423,11 @@ class MiniICService : Service() {
             notFoundTimes = lastNotFoundTime,
             rejectedTimes = lastRejectedTime,
             log = { appendLog("[API]", it) },
-            publish = ::updateFlowWithStatus,
+            publish = { cell, status, epoch -> updateFlowWithStatus(cell, status, epoch) },
             cacheApiLocation = { key, lat, lon -> apiLocationCache[key] = lat to lon },
             onVerified = { auditController.logVerificationOutcome(it) },
-            requestFreshCellInfo = ::requestFreshCellInfo
+            requestFreshCellInfo = ::requestFreshCellInfo,
+            historyEpoch = historyEpoch
         )
         observationPersistence = ObservationPersistenceController(
             scope = scope,
@@ -433,7 +438,9 @@ class MiniICService : Service() {
             onPeriodicMissingLocation = { timestamp ->
                 locationController.markCoordinatesPending(timestamp)
                 requestHighAccuracyFix()
-            }
+            },
+            writeDispatcher = historyWriteDispatcher,
+            historyGeneration = { historyEpoch.current() }
         )
         securityAlerts = SecurityAlertController(
             tone = { toneGenerator },
@@ -455,15 +462,20 @@ class MiniICService : Service() {
         // DEFAULT_RETENTION_DAYS (120) — antes 60, que se quedaban CORTOS para una campaña de 90
         // días y borraban el primer mes justo al abrir la app para exportar.
         databaseMaintenance.claimRun(force = true)
-        scope.launch(Dispatchers.IO) {
-            // Si el proceso anterior terminó durante un episodio, no puede quedar marcado
-            // eternamente como "en curso". Se conserva y se cierra como interrumpido.
+        // Si el proceso anterior terminó durante un episodio, no puede quedar marcado
+        // eternamente como "en curso". Se conserva y se cierra como interrumpido.
+        //
+        // v2.10.10 — Va por la misma cola de un solo hilo que la captura forense y los incidentes,
+        // y se encola antes de que llegue ningún ciclo: así se ejecuta siempre ANTES de la primera
+        // muestra nueva. Antes iba por su cuenta en IO y, si se retrasaba, podía marcar como
+        // interrumpido un caso que el servicio nuevo acababa de abrir.
+        scope.launch(forensicDispatcher) {
             try {
                 dbHelper.closeOpenIncidents(activeIdentity = null, interrupted = true)
                 dbHelper.interruptOpenForensicCases()
             } catch (_: Exception) {}
-            databaseMaintenance.run()
         }
+        scope.launch(Dispatchers.IO) { databaseMaintenance.run() }
         
         val prefs = getSharedPreferences("miniic_prefs", MODE_PRIVATE)
         collectionHealthController = CollectionHealthController(
@@ -657,6 +669,59 @@ class MiniICService : Service() {
         }
     }
 
+    /**
+     * v2.10.10 — "Borrar historial" coordinado con el servicio. Antes la pantalla borraba la base
+     * directamente y el servicio seguía con su estado: el caso forense abierto apuntaba a un caso
+     * borrado, el prebúfer guardaba observaciones anteriores y las cachés de líneas base, confianza
+     * y episodios seguían usando el historial borrado.
+     *
+     * Orden: se detiene el análisis (mutex de ciclos), se descartan las escrituras pendientes de
+     * antes del borrado (generación), se vacía la cola forense e incidentes, se borra la base en
+     * esas mismas colas y, por último, se olvida todo el estado derivado del historial.
+     */
+    suspend fun clearHistory() {
+        cellProcessingMutex.withLock {
+            // Bajo el cerrojo de la época: ningún resultado empezado antes se aplica después.
+            historyEpoch.invalidate()
+            withContext(forensicDispatcher) {
+                forensicRecorder.reset()
+                withContext(historyWriteDispatcher) { dbHelper.clear() }
+            }
+            withContext(Dispatchers.Main) { forgetHistoryDerivedState() }
+        }
+        appendLog("[SYS]", "Historial borrado: captura forense, episodios y cachés reiniciados.")
+    }
+
+    private fun forgetHistoryDerivedState() {
+        // Cachés de líneas base, reputación, huella, confianza local y puerta de confianza.
+        cachedCellSignature = ""
+        cacheTimestamp = 0L
+        cachedHistory = emptyList()
+        cachedBaseline = null
+        cachedRfSignature = ""
+        cachedRfTimestamp = 0L
+        cachedRfStability = null
+        cachedReputation = null
+        cachedFingerprint = null
+        cachedTrustGate = null
+        fingerprintLocation = null
+        cachedLocalTrustEvidence = com.alexisgordr.icdetector.models.LocalCellTrustEvidence()
+        apiLocationCache.clear()
+        // Verificaciones: su resultado vivía también en las filas borradas.
+        verificationCache.clear()
+        lastVerificationErrorTime.clear()
+        lastNotFoundTime.clear()
+        lastRejectedTime.clear()
+        // Episodios en curso: empiezan de cero, como en un arranque limpio.
+        temporalConfidence.reset()
+        threatEpisodeTracker.reset()
+        isolatedCellConfidence.reset()
+        lastIncidentIdentity = null
+        lastLoggedPromotion = null
+        securityAlerts.resetAlarmEpisode()
+        cellChangeHistory.clear()
+    }
+
     /** Identidad completa de la celda para la que vale el estado de latencia publicado. */
     private var latencyCellIdentity: String? = null
 
@@ -738,7 +803,8 @@ class MiniICService : Service() {
         scope.launch(Dispatchers.IO) {
             val updated = dbHelper.updateNullCoordinates(
                 cell.cellId, cell.mnc, cell.tac, cell.mcc, cell.radioTech,
-                location.latitude, location.longitude
+                location.latitude, location.longitude,
+                fixTimeMs = location.time
             )
             appendLog(
                 "[GPS]",
@@ -1175,6 +1241,24 @@ class MiniICService : Service() {
                     }
                 }
 
+                // v2.10.10 — Escritura de Stable-Site fuera del hilo principal. Se hacía dentro del
+                // bloque Main: hasta cuatro transacciones SQLite por ciclo que, con la base ocupada
+                // (poda, borrado), congelaban la interfaz. Sigue dentro del mutex de ciclos, así que
+                // el orden de las escrituras no cambia, y escribe exactamente lo mismo.
+                analyzedList.firstOrNull()?.takeIf { it.isRegistered }?.let { servingForSite ->
+                    siteKeys.forEach { key ->
+                        dbHelper.recordStableSiteContext(
+                            // One aggregate contribution per identity and minute. The PK also
+                            // makes retries/restarts idempotent without retaining raw snapshots.
+                            eventKey = "${System.currentTimeMillis() / 60_000L}:$key",
+                            siteKey = key,
+                            serving = activeRaw ?: servingForSite,
+                            neighbours = neighbors,
+                            motion = motionEvidence
+                        )
+                    }
+                }
+
                 withContext(Dispatchers.Main) {
                     // v2.10.4 — La servidora va siempre primero; nunca se reordena por potencia.
                     val analyzedServing = analyzedList.firstOrNull()?.takeIf { it.isRegistered }
@@ -1188,17 +1272,6 @@ class MiniICService : Service() {
                     if (active != null) {
                         val stableSiteStartedWatching = stableSiteDecision.enforced && !stableSiteIntensiveActive
                         stableSiteIntensiveActive = stableSiteDecision.enforced
-                        siteKeys.forEach { key ->
-                            dbHelper.recordStableSiteContext(
-                                // One aggregate contribution per identity and minute. The PK also
-                                // makes retries/restarts idempotent without retaining raw snapshots.
-                                eventKey = "${System.currentTimeMillis() / 60_000L}:$key",
-                                siteKey = key,
-                                serving = activeRaw ?: active,
-                                neighbours = neighbors,
-                                motion = motionEvidence
-                            )
-                        }
                         stableSitePreviousIdentity = active.identityKey
                         val siteEvidence = stableSiteDecision.evidence
                         val neighbourDiagnostic = com.alexisgordr.icdetector.core.StableSiteNeighbourEvidence.diagnostic(neighbors)
@@ -1509,7 +1582,8 @@ class MiniICService : Service() {
                         currentCell.mcc,
                         currentCell.radioTech,
                         loc.latitude,
-                        loc.longitude
+                        loc.longitude,
+                        fixTimeMs = loc.time
                     )
                     if (updated > 0) {
                         appendLog("[GPS]", "Coordenadas frescas rellenadas en $updated registro(s)")
@@ -1528,6 +1602,7 @@ class MiniICService : Service() {
                                       cachedStatus == VerificationStatus.ERROR
             if (!needsReverification) return@launch
 
+            val generationAtStart = historyEpoch.current()
             val dbStatus = withContext(Dispatchers.IO) {
                 dbHelper.getKnownStatus(
                     currentCell.mnc, currentCell.tac, currentCell.cellId,
@@ -1536,10 +1611,14 @@ class MiniICService : Service() {
             }
 
             if (dbStatus == VerificationStatus.VERIFIED) {
+                // v2.10.10 — Si se borró el historial durante la consulta, el resultado ya no vale.
+                val stillCurrent = historyEpoch.ifCurrent(generationAtStart) {
+                    verificationCache[cacheKey] = VerificationStatus.VERIFIED
+                }
+                if (!stillCurrent) return@launch
                 appendLog("[GPS]", "Celda ya verificada en DB, sin necesidad de API")
-                verificationCache[cacheKey] = VerificationStatus.VERIFIED
                 // Forzar actualización de la UI con el estado recuperado
-                updateFlowWithStatus(currentCell, VerificationStatus.VERIFIED)
+                updateFlowWithStatus(currentCell, VerificationStatus.VERIFIED, generationAtStart)
                 return@launch
             }
 
@@ -1557,11 +1636,18 @@ class MiniICService : Service() {
      * color con ella. En una app cuyo trabajo es distinguir antenas, la identidad parcial no vale
      * en ningún sitio, y menos en el que la persona mira.
      */
-    private fun updateFlowWithStatus(cell: CellData, status: VerificationStatus) {
+    /**
+     * @param epoch v2.10.10 — Época del historial en la que empezó la consulta. La publicación se
+     *   encola en Main; la época se vuelve a comprobar ahí, justo antes de tocar la pantalla, para
+     *   que un resultado de antes de un "Borrar historial" no se aplique después.
+     */
+    private fun updateFlowWithStatus(cell: CellData, status: VerificationStatus, epoch: Long) {
         val clave = cell.identityKey
         scope.launch(Dispatchers.Main) {
-            _cellFlow.value = _cellFlow.value.map {
-                if (it.identityKey == clave) it.copy(verified = status) else it
+            historyEpoch.ifCurrent(epoch) {
+                _cellFlow.value = _cellFlow.value.map {
+                    if (it.identityKey == clave) it.copy(verified = status) else it
+                }
             }
         }
     }

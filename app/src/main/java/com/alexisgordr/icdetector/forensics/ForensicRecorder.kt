@@ -81,6 +81,22 @@ class ForensicRecorder(
     // v2.3.3 — Identidad cuyo caso se cerró por tiempo agotado. Ver ForensicCasePolicy.
     private var lockedIdentity: String? = null
 
+    /**
+     * v2.10.10 — "Borrar historial" con el servicio activo. Sin esto el grabador conservaba el ID
+     * de un caso ya borrado (las muestras siguientes fallaban por la clave ajena y acababa
+     * avisando de "captura forense degradada") y el prebúfer podía volcar observaciones de antes
+     * del borrado en un caso posterior. Se olvida todo el estado del episodio.
+     */
+    suspend fun reset() = mutex.withLock {
+        buffer.clear()
+        caseId = null
+        caseStartedElapsed = 0L
+        postCaptureUntil = 0L
+        lastPhase = 0
+        activeOrigin = null
+        lockedIdentity = null
+    }
+
     suspend fun observe(
         active: CellData,
         neighbors: List<CellData>,

@@ -194,6 +194,13 @@ class CellDbHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME, 
          * entonces sus observaciones se conservan, pero permanecen en cuarentena.
          */
         const val TRUSTED_BASELINE_MIN_SCORE = 85
+        /**
+         * v2.10.10 — Antigüedad máxima de una fila sin coordenadas para rellenarla con un fix.
+         * Cubre la espera del fix preciso (30 s) con margen; una fila más antigua se deja sin GPS.
+         */
+        const val COORDINATE_BACKFILL_WINDOW_MS = 2L * 60_000L
+        /** Tolerancia por redondeo a segundos y relojes ligeramente desfasados. */
+        const val COORDINATE_BACKFILL_FUTURE_TOLERANCE_MS = 5_000L
         const val TRUSTED_BASELINE_MIN_SAMPLES = 5
         const val TRUSTED_BASELINE_MIN_DAYS = 2
 
@@ -435,7 +442,28 @@ class CellDbHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME, 
     }
 
     /** Eventos de servicio, del más reciente al más antiguo. [limit] nulo = todos. */
-    fun getServiceStateEvents(limit: Int? = null): List<ServiceStateSnapshot> {
+    /**
+     * v2.10.10 — Lee varias consultas como una sola instantánea. La app usa una única conexión,
+     * así que mientras dura la transacción ninguna escritura se cuela entre consultas: un export
+     * de varias tablas no mezcla datos de antes y de después de una escritura o una poda.
+     */
+    fun <T> readConsistently(block: () -> T): T {
+        val db = writableDatabase
+        db.beginTransactionNonExclusive()
+        try {
+            val result = block()
+            db.setTransactionSuccessful()
+            return result
+        } finally {
+            db.endTransaction()
+        }
+    }
+
+    /**
+     * @param strict v2.10.10 — true en exportaciones: un error de lectura se propaga en vez de
+     *   devolver una lista parcial que después se exportaba como si estuviera completa.
+     */
+    fun getServiceStateEvents(limit: Int? = null, strict: Boolean = false): List<ServiceStateSnapshot> {
         val events = mutableListOf<ServiceStateSnapshot>()
         try {
             val sql = "SELECT * FROM $TABLE_SERVICE_STATE_EVENTS ORDER BY ts_ms DESC, id DESC" +
@@ -466,8 +494,9 @@ class CellDbHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME, 
                     )
                 }
             }
-        } catch (_: Exception) {
-            // Lectura best-effort para la UI y el export: una tabla ausente devuelve lista vacía.
+        } catch (error: Exception) {
+            // Lectura best-effort para la pantalla: una tabla ausente devuelve lista vacía.
+            if (strict) throw error
         }
         return events
     }
@@ -1390,6 +1419,8 @@ class CellDbHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME, 
     }
 
     fun logConnection(
+        /** v2.10.10 — Momento de la observación (antes, el de la escritura). Mismo formato. */
+        observedAtMs: Long = System.currentTimeMillis(),
         netType: String,
         cid: String,
         mnc: String,
@@ -1424,7 +1455,7 @@ class CellDbHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME, 
         val db = this.writableDatabase
         val values = ContentValues().apply {
             val sdf = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.ROOT)
-            put(COLUMN_TIMESTAMP, sdf.format(Date()))
+            put(COLUMN_TIMESTAMP, sdf.format(Date(observedAtMs)))
             put(COLUMN_NET_TYPE, netType)
             put(COLUMN_CID, cid)
             put(COLUMN_MNC, mnc)
@@ -1921,7 +1952,9 @@ class CellDbHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME, 
     fun updateNullCoordinates(
         cellId: String, mnc: String, tac: String, mcc: String,
         radio: RadioTech,
-        lat: Double, lon: Double
+        lat: Double, lon: Double,
+        /** Momento del fix GPS (Location.time). */
+        fixTimeMs: Long = System.currentTimeMillis()
     ): Int {
         val db = this.writableDatabase
         return try {
@@ -1943,14 +1976,24 @@ class CellDbHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME, 
             // fila que quedó sin GPS en su momento se queda sin coordenadas (dato "desconocido"),
             // que es lo honesto; las observaciones siguientes ya se guardan con coords por el
             // camino normal mientras haya GPS.
+            //
+            // v2.10.10 — Además, la fila tiene que ser CERCANA en el tiempo al fix. Antes solo se
+            // miraba que fuera la última de la celda: si te quedabas en la misma celda, te movías
+            // sin GPS y el fix llegaba minutos después, la posición nueva se estampaba en una fila
+            // antigua con su hora antigua, y eso contaminaba la geometría de H11/H13/H16. Fuera
+            // de la ventana la fila se queda sin coordenadas, que es lo honesto.
+            val sdf = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.ROOT)
+            val earliest = sdf.format(Date(fixTimeMs - COORDINATE_BACKFILL_WINDOW_MS))
+            val latest = sdf.format(Date(fixTimeMs + COORDINATE_BACKFILL_FUTURE_TOLERANCE_MS))
             db.update(
                 TABLE_HISTORY,
                 values,
                 "$COLUMN_ID = (SELECT MAX($COLUMN_ID) FROM $TABLE_HISTORY " +
                     "WHERE $COLUMN_CID = ? AND $COLUMN_MNC = ? AND $COLUMN_TAC = ? AND $COLUMN_MCC = ? " +
                     "AND $COLUMN_RADIO = ?) " +
-                    "AND $COLUMN_LAT IS NULL AND $COLUMN_LON IS NULL",
-                arrayOf(cellId, mnc, tac, mcc, radio.name)
+                    "AND $COLUMN_LAT IS NULL AND $COLUMN_LON IS NULL " +
+                    "AND $COLUMN_TIMESTAMP >= ? AND $COLUMN_TIMESTAMP <= ?",
+                arrayOf(cellId, mnc, tac, mcc, radio.name, earliest, latest)
             )
         } catch (_: Exception) {
             0

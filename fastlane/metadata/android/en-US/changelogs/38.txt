@@ -1,0 +1,10 @@
+Bug fixes from an external code audit.
+
+• H8: an unavailable frequency is now N/A instead of "suspicious" (−15). Dataset cut for H8 only.
+• GPS coordinates are no longer written on old observations.
+• Each row keeps the position and time of the moment it was observed.
+• A second alarm in the same cell is notified again.
+• Deleting history while monitoring is now safe.
+• Smoother interface, more reliable exports.
+
+Weights, thresholds and schema unchanged.

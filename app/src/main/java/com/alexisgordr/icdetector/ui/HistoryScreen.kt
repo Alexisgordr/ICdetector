@@ -140,10 +140,16 @@ fun HistoryPanel(
                     enabled = deleteArmed,
                     onClick = {
                         scope.launch(Dispatchers.IO) {
-                            dbHelper.clear()
+                            // v2.10.10 — Con el servicio activo, el borrado lo coordina el servicio
+                            // para que su captura forense, episodios y cachés empiecen de cero.
+                            val running = service
+                            if (running != null) running.clearHistory() else dbHelper.clear()
                             withContext(Dispatchers.Main) {
                                 items = emptyList()
                                 totalRecordCount = 0
+                                // v2.10.10 — También las listas de incidentes y casos forenses.
+                                incidents = emptyList()
+                                forensicCases = emptyList()
                                 showDeleteConfirm.value = false
                                 deleteConfirmText = ""
                             }

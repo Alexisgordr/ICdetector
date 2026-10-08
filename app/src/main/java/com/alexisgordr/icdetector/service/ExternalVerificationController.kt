@@ -1,5 +1,7 @@
 package com.alexisgordr.icdetector.service
 
+import com.alexisgordr.icdetector.core.HistoryEpoch
+
 import android.location.Location
 import com.alexisgordr.icdetector.core.VerificationDecision
 import com.alexisgordr.icdetector.models.CellData
@@ -27,20 +29,36 @@ internal class ExternalVerificationController(
     private val notFoundTimes: ConcurrentHashMap<String, Long>,
     private val rejectedTimes: ConcurrentHashMap<String, Long>,
     private val log: (String) -> Unit,
-    private val publish: (CellData, VerificationStatus) -> Unit,
+    /** Publica en pantalla; recibe la época en la que empezó la consulta (v2.10.10). */
+    private val publish: (CellData, VerificationStatus, Long) -> Unit,
     private val cacheApiLocation: (String, Double, Double) -> Unit,
     private val onVerified: (CellData) -> Unit,
-    private val requestFreshCellInfo: () -> Unit
+    private val requestFreshCellInfo: () -> Unit,
+    /**
+     * v2.10.10 — Cambia con cada "Borrar historial". Una consulta que empezó antes del borrado no
+     * escribe ni publica nada al terminar: antes podía repoblar las cachés y actualizar filas nuevas
+     * con el resultado de una verificación de antes del borrado.
+     */
+    private val historyEpoch: HistoryEpoch = HistoryEpoch()
 ) {
+    /** Ejecuta [block] solo si el historial no se ha borrado desde que empezó la consulta. */
+    private fun ifCurrent(generation: Long, block: () -> Unit): Boolean =
+        historyEpoch.ifCurrent(generation, block)
+
     private var loggedMissingCredentials = false
 
     fun verify(cell: CellData) {
         if (!isQueryable(cell)) return
         val key = cell.identityKey
         if (!mayAttempt(key, cache[key])) return
+        val generation = historyEpoch.current()
 
         val token = apiKey().trim()
         if (token.isBlank() || token.startsWith("pk.YOUR")) {
+            // v2.10.10 — La re-comprobación de un VERIFIED en memoria es local (base de datos y su
+            // TTL) y no necesita OpenCellID: antes, sin credenciales, se salía aquí y la etiqueta
+            // podía seguir caducada indefinidamente.
+            if (cache[key] == VerificationStatus.VERIFIED) recheckVerifiedLocally(cell, key, generation)
             if (!loggedMissingCredentials) {
                 log("⚠ Sin credenciales configuradas. Ve a Ajustes para añadir OpenCellID.")
                 loggedMissingCredentials = true
@@ -51,35 +69,66 @@ internal class ExternalVerificationController(
 
         synchronized(cache) {
             if (!mayAttempt(key, cache[key])) return
-            cache[key] = VerificationStatus.PENDING
+            if (cache[key] == VerificationStatus.VERIFIED) {
+                // Re-comprobación periódica (v2.10.10): la etiqueta sigue siendo VERIFIED mientras
+                // se consulta, para no guardar filas como PENDING durante ese instante.
+                verifiedCheckedAt[key] = now()
+            } else {
+                cache[key] = VerificationStatus.PENDING
+            }
         }
 
         scope.launch(Dispatchers.IO) {
             try {
-                verifyNow(cell, key, token)
+                verifyNow(cell, key, token, generation)
             } catch (e: Exception) {
                 // Sin esto la antena se quedaba en PENDING en la caché y mayAttempt() no la
                 // volvía a intentar hasta reiniciar el servicio. Como ERROR se reintenta sola.
-                if (cache[key] == VerificationStatus.PENDING) {
-                    cache[key] = VerificationStatus.ERROR
-                    errorTimes[key] = now()
+                ifCurrent(generation) {
+                    if (cache[key] == VerificationStatus.PENDING) {
+                        cache[key] = VerificationStatus.ERROR
+                        errorTimes[key] = now()
+                    }
                 }
                 log("Error al verificar (${e.javaClass.simpleName}). Se reintentará más tarde.")
             }
         }
     }
 
-    private fun verifyNow(cell: CellData, key: String, token: String) {
+    /** Re-comprobación local de un VERIFIED en memoria: solo base de datos, sin red. */
+    private fun recheckVerifiedLocally(cell: CellData, key: String, generation: Long) {
+        verifiedCheckedAt[key] = now()
+        scope.launch(Dispatchers.IO) {
+            val loc = currentLocation()
+            val stored = db.getKnownStatus(
+                cell.mnc, cell.tac, cell.cellId, cell.mcc,
+                loc?.latitude, loc?.longitude, cell.radioTech
+            )
+            if (stored == VerificationStatus.VERIFIED) return@launch
+            // Caducada (TTL) o ya no compatible: deja de mostrarse como VERIFIED. Sin credenciales
+            // no se puede volver a consultar, así que queda pendiente.
+            ifCurrent(generation) {
+                cache.remove(key)
+                verifiedCheckedAt.remove(key)
+                publish(cell, VerificationStatus.PENDING, generation)
+            }
+        }
+    }
+
+    private fun verifyNow(cell: CellData, key: String, token: String, generation: Long) {
         val loc = currentLocation()
         val stored = db.getKnownStatus(
             cell.mnc, cell.tac, cell.cellId, cell.mcc,
             loc?.latitude, loc?.longitude, cell.radioTech
         )
         if (stored != VerificationStatus.PENDING) {
-            cache[key] = stored
-            if (stored == VerificationStatus.NOT_FOUND) notFoundTimes[key] = now()
-            publish(cell, stored)
-            persist(cell, stored)
+            ifCurrent(generation) {
+                cache[key] = stored
+                if (stored == VerificationStatus.VERIFIED) verifiedCheckedAt[key] = now()
+                if (stored == VerificationStatus.NOT_FOUND) notFoundTimes[key] = now()
+                publish(cell, stored, generation)
+                persist(cell, stored)
+            }
             return
         }
 
@@ -95,7 +144,7 @@ internal class ExternalVerificationController(
             val lon = data.optDouble("lon", Double.NaN)
             val hasCoordinates = !lat.isNaN() && !lon.isNaN()
             if (hasCoordinates && coordinateValidator.isValid(lat, lon, cell)) {
-                completeVerified(cell, key, lat, lon)
+                completeVerified(cell, key, lat, lon, generation)
                 return
             }
             status = VerificationDecision.combine(VerificationStatus.PENDING, VerificationStatus.REJECTED)
@@ -108,16 +157,23 @@ internal class ExternalVerificationController(
 
         if (status != VerificationStatus.VERIFIED &&
             db.hasRecentVerifiedRecord(cell.cellId, cell.mnc, cell.tac, cell.mcc, cell.radioTech)) {
-            cache[key] = VerificationStatus.VERIFIED
-            log("Esta antena ya constaba verificada; una consulta vacía o fallida no borra esa evidencia.")
-            persist(cell, VerificationStatus.VERIFIED)
-            publish(cell, VerificationStatus.VERIFIED)
+            ifCurrent(generation) {
+                cache[key] = VerificationStatus.VERIFIED
+                verifiedCheckedAt[key] = now()
+                log("Esta antena ya constaba verificada; una consulta vacía o fallida no borra esa evidencia.")
+                persist(cell, VerificationStatus.VERIFIED)
+                publish(cell, VerificationStatus.VERIFIED, generation)
+            }
             return
         }
-        complete(cell, key, status)
+        complete(cell, key, status, generation)
     }
 
-    private fun complete(cell: CellData, key: String, requested: VerificationStatus) {
+    private fun complete(cell: CellData, key: String, requested: VerificationStatus, generation: Long) {
+        ifCurrent(generation) { completeCurrent(cell, key, requested, generation) }
+    }
+
+    private fun completeCurrent(cell: CellData, key: String, requested: VerificationStatus, generation: Long) {
         val status = if (requested == VerificationStatus.PENDING) VerificationStatus.ERROR else requested
         cache[key] = status
         when (status) {
@@ -138,19 +194,24 @@ internal class ExternalVerificationController(
             VerificationStatus.VERIFIED -> persist(cell, status)
             VerificationStatus.PENDING -> Unit
         }
-        publish(cell, status)
+        publish(cell, status, generation)
         if (status == VerificationStatus.NOT_FOUND) requestFreshCellInfo()
     }
 
-    private fun completeVerified(cell: CellData, key: String, lat: Double, lon: Double) {
+    private fun completeVerified(cell: CellData, key: String, lat: Double, lon: Double, generation: Long) {
+        ifCurrent(generation) { completeVerifiedCurrent(cell, key, lat, lon, generation) }
+    }
+
+    private fun completeVerifiedCurrent(cell: CellData, key: String, lat: Double, lon: Double, generation: Long) {
         cache[key] = VerificationStatus.VERIFIED
+        verifiedCheckedAt[key] = now()
         cacheApiLocation(key, lat, lon)
         db.updateVerificationStatus(
             cell.mnc, cell.tac, cell.cellId, VerificationStatus.VERIFIED,
             lat, lon, cell.mcc, cell.radioTech
         )
         log("Validación OK (OpenCellID). Firmas geográficas obtenidas.")
-        publish(cell, VerificationStatus.VERIFIED)
+        publish(cell, VerificationStatus.VERIFIED, generation)
         onVerified(cell.copy(verified = VerificationStatus.VERIFIED))
         requestFreshCellInfo()
     }
@@ -167,6 +228,13 @@ internal class ExternalVerificationController(
         VerificationStatus.ERROR -> now() - (errorTimes[key] ?: 0L) >= ERROR_RETRY_MS
         VerificationStatus.NOT_FOUND -> now() - (notFoundTimes[key] ?: 0L) >= RECHECK_MS
         VerificationStatus.REJECTED -> now() - (rejectedTimes[key] ?: 0L) >= RECHECK_MS
+        // v2.10.10 — Antes VERIFIED no caducaba nunca dentro de una sesión: con el servicio en
+        // marcha se conservaba más allá del TTL de 30 días que aplica la base de datos. Ahora se
+        // vuelve a comprobar cada pocas horas; verifyNow() mira primero la base (que aplica el TTL
+        // y la distancia) y solo pregunta a OpenCellID si la verificación guardada ya no vale.
+        // Es una etiqueta: no cambia la puntuación.
+        VerificationStatus.VERIFIED ->
+            now() - verifiedCheckedAt.getOrPut(key) { now() } >= VERIFIED_RECHECK_MS
         else -> false
     }
 
@@ -177,8 +245,12 @@ internal class ExternalVerificationController(
 
     private fun now() = System.currentTimeMillis()
 
+    /** Última vez que se comprobó que una celda VERIFIED sigue siéndolo. */
+    private val verifiedCheckedAt = ConcurrentHashMap<String, Long>()
+
     private companion object {
         const val ERROR_RETRY_MS = 60_000L
         const val RECHECK_MS = 60L * 60L * 1000L
+        const val VERIFIED_RECHECK_MS = 6L * 60L * 60L * 1000L
     }
 }

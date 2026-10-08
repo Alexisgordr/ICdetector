@@ -9,13 +9,13 @@
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](LICENSE)
 ![Platform](https://img.shields.io/badge/Platform-Android%2010%2B-green.svg)
 ![Root Required](https://img.shields.io/badge/Root-Not%20Required-brightgreen.svg)
-![Release](https://img.shields.io/badge/Release-v2.10.9-brightgreen.svg)
+![Release](https://img.shields.io/badge/Release-v2.10.10-brightgreen.svg)
 ![Baseline](https://img.shields.io/badge/Dataset%20baseline-v2.10.5-blue.svg)
 ![Phase](https://img.shields.io/badge/Phase-Field%20collection%20freeze-blue.svg)
 ![Schema](https://img.shields.io/badge/DB%20schema-19-informational.svg)
 [![Featured in Awesome Telco](https://img.shields.io/badge/Featured%20in-Awesome%20Telco-6f42c1.svg)](https://github.com/ravens/awesome-telco#imsi-catcher-detection)
 
-[**What's new**](#-whats-new-in-v2109) ·
+[**What's new**](#-whats-new-in-v21010) ·
 [**Freeze**](#-the-field-collection-freeze) ·
 [**Detection engine**](#-detection-engine) ·
 [**Exports**](#-forensic-logging--exports) ·
@@ -67,13 +67,15 @@
 > |---|---|
 > | v2.10.6 – v2.10.8 | None — interface, localization, notifications and stability |
 > | v2.10.9 | **Dataset cut for H10 (Ping-Pong) only** |
+> | v2.10.10 | **Dataset cut for H8 (frequency) only**, plus data-integrity fixes (GPS backfill, timestamps, repeated alarms) |
 >
 > 📄 Read the full notice in **[IMPORTANT.md](IMPORTANT.md)**.
 
 > [!NOTE]
-> **Current release: v2.10.9** (bug fixes). **Major fix:** H10 (Ping-Pong) could stay failed for hours
-> after a burst of cell changes — a **dataset cut for H10 only**. Also fixes the RF fingerprint cache,
-> the latency check and the baseline maturity labels. See [What's new in v2.10.9](#-whats-new-in-v2109).
+> **Current release: v2.10.10** (bug fixes from an external code audit). Fixes data-integrity
+> issues — GPS coordinates written on the wrong row, deleting history during a forensic capture,
+> repeated alarms not notified — and H8 treating a missing frequency as suspicious (**dataset cut
+> for H8 only**). See [What's new in v2.10.10](#-whats-new-in-v21010).
 
 > [!TIP]
 > **Starting a clean research dataset?** Export anything you want to keep, then use
@@ -87,7 +89,7 @@
 ## 📑 Table of Contents
 
 - [What ICdetection is — and is not](#-what-icdetection-is--and-is-not)
-- [What's new in v2.10.9](#-whats-new-in-v2109)
+- [What's new in v2.10.10](#-whats-new-in-v21010)
 - [The field-collection freeze](#-the-field-collection-freeze)
 - [Highlights](#-highlights)
 - [Technical limitations](#-technical-limitations)
@@ -149,7 +151,25 @@ technical limits imposed by Android.
 
 ---
 
-## ✨ What's new in v2.10.9
+## ✨ What's new in v2.10.10
+
+A **bug-fix release inside the freeze**, from an external static audit of v2.10.9. Weights,
+thresholds, rules and the database schema are unchanged. One fix changes how H8 is evaluated, so
+v2.10.10 is a **dataset cut for H8 only**; the data-integrity fixes make new rows more accurate
+without changing what any column means.
+
+| Area | Change |
+|---|---|
+| **H8 frequency** (dataset cut) | When the modem does not report the frequency, Android delivers an "unavailable" value. H8 treated it as a suspicious frequency and subtracted 15 points; it is now `N/A`. A measured out-of-range value still fails, as before. |
+| **GPS coordinates** (data integrity) | A late GPS fix could be written into an old observation of the same cell, with its old time, contaminating H11/H13/H16 geometry. Only a row stored within the last 2 minutes can now receive the fix; an older one stays without coordinates. |
+| **Observation context** (data integrity) | Each history row now stores the position, service state and time of the moment it was observed, not of the moment it was written. Writes go through one ordered queue. |
+| **Repeated alarms** | A second alarm episode in the same cell was not notified or recorded as "confirmed alarm" until the cell changed. An episode now closes after 60 s without alarm, and the next one is notified again. |
+| **Delete history** | With the service running, deleting history left the open forensic case, its pre-buffer and the cached baselines alive, causing a false "forensic capture degraded" warning. The service now coordinates the deletion and starts from a clean state. The Incidents and Forensic lists are emptied too. |
+| **Stability** | Stable-Site writes moved off the main thread (risk of freezes). At start-up, interrupted cases are closed before any new sample is accepted. |
+| **Exports** | Stable-Site and Geometry exports read one consistent snapshot; the RADIO export fails instead of exporting a partial list when the read fails. |
+| **Smaller fixes** | Charts clear RSRQ and TA on a cell change; a VERIFIED label in memory is re-checked against the 30-day TTL; a stale "ANOMALOUS" latency state is cleared when the endpoints fail. |
+
+### v2.10.9
 
 A **bug-fix release inside the freeze**. Weights, thresholds, rules, stored data and the database
 schema are unchanged. The H10 fix changes how that rule is evaluated, so v2.10.9 is a **dataset cut
@@ -189,7 +209,7 @@ fix that changes how a rule is evaluated is recorded as a dataset cut for that r
 | | |
 |---|---|
 | **Methodology baseline** | v2.10.5 (version code 33) |
-| **Current release** | v2.10.9 (version code 37) — bug fixes; dataset cut for H10 only |
+| **Current release** | v2.10.10 (version code 38) — bug fixes; dataset cuts for H10 (v2.10.9) and H8 (v2.10.10) |
 | **Database schema** | 19 (unchanged from v2.10.4) |
 | **Detection baseline** | H1–H16, weights, thresholds, Temporal Confidence, Local Cell Trust and Stable-Site frozen |
 | **Duration** | Approximately three months |
@@ -206,7 +226,18 @@ will be documented explicitly as a new dataset cut.
 
 | Release | Rule | What changed | How to treat earlier data |
 |---|---|---|---|
+| v2.10.10 | H8 Frequency | An unavailable frequency (Android's "unavailable" value) gives `N/A` instead of failing and subtracting 15 points. A measured out-of-range value still fails. | Treat `Frecuencia (EARFCN) 4G sospechosa` / `Frecuencia (ARFCN) 5G sospechosa` results before v2.10.10 with care, especially with `ARFCN` = `2147483647` in the export. All other rules are unaffected. |
 | v2.10.9 | H10 Ping-Pong | Only cell changes within the last 10 s count (an old burst no longer keeps H10 failed while the phone stays on one cell), and H10 is `N/A` when the GPS speed is unknown instead of assuming 0 km/h. The rule itself is unchanged. Worth the cut: left in place, the defect would have biased every H10 result, kept baselines from learning and made false alarms easier. | Treat `Efecto Ping-Pong` results recorded before v2.10.9 with care; they may include stale bursts. All other rules are unaffected. |
+
+**Data-integrity notes (v2.10.10)** — no rule changes, but useful when comparing data:
+
+- **Coordinates:** before v2.10.10, a late GPS fix could be written into an older row of the same
+  cell. Coordinates on rows recorded while the GPS was still acquiring may therefore belong to a
+  later position. From v2.10.10 only rows from the last 2 minutes are filled.
+- **Timestamps:** rows now carry the time of the observation instead of the time of the write. The
+  format is the same; the difference was normally under a second.
+- **Confirmed alarms:** a second alarm episode in the same cell now gets its own "confirmed alarm"
+  row, which earlier versions skipped.
 
 The full reasoning, the recommended reset and the questions this campaign aims to answer are in
 **[IMPORTANT.md](IMPORTANT.md)**.
@@ -345,7 +376,8 @@ artificially controlled RF environment, or simply difficult radio conditions.
 
 #### ARFCN / Frequency Sanity Validation
 Guards against impossible or malformed channel values using technology-specific limits. It is not a
-complete regional spectrum validator.
+complete regional spectrum validator. When the modem does not report the frequency at all, the rule
+is `N/A` rather than failed (since v2.10.10): a missing value is not an impossible one.
 
 #### Ciphering Integrity Monitoring
 ICdetection does not claim direct null-cipher or IMSI-disclosure detection on standard Android
@@ -561,7 +593,8 @@ telemetry and no user tracking. All history stays on the device unless you expor
 
 **Complete local reset.** *Delete history* removes antenna history, incidents, forensic cases,
 transitions, service-state events, Stable-Site learning and route-familiarity trips in a single
-transaction.
+transaction. It is safe while monitoring is running: the service resets its forensic capture,
+caches and episode state so nothing from before the deletion is written afterwards.
 
 **Optional SOCKS5 routing.** Verification requests can be routed through a SOCKS5 proxy, including
 Tor / Orbot-style local setups.
@@ -626,7 +659,8 @@ the radio context and flags legacy `LTE_INDEX` / `TA=0` stub patterns.
 Key points for analysis:
 
 - **`Lat` / `Lon` are always the device's own GPS position.** The OpenCellID antenna position lives
-  in `ApiLat` / `ApiLon`.
+  in `ApiLat` / `ApiLon`. A row saved without GPS is filled later only if the fix arrives within
+  2 minutes (since v2.10.10); otherwise it stays empty rather than receiving a later position.
 - **`[sub-umbral]` entries** in `FailedHeuristics` failed without reaching the alarm threshold. They
   are observations kept on purpose so false positives can be studied. The English interface displays
   them as `[sub-threshold]`; the stored value is always `[sub-umbral]`.
@@ -704,6 +738,10 @@ in [`CHANGELOG.md`](CHANGELOG.md) and [`Status.md`](Status.md).
 <details open>
 <summary><strong>v2.10.x — Stable-Site, route memory, H15, radio context and the field-collection freeze</strong></summary>
 
+- **v2.10.10** — Bug fixes from an external audit. H8 is `N/A` when the frequency is unavailable
+  (**dataset cut for H8**); GPS backfill limited to recent rows; rows store the context of the
+  moment they were observed; repeated alarms notified again; coordinated history deletion; Stable-Site
+  writes off the main thread; consistent exports.
 - **v2.10.9** — Bug fixes inside the freeze. **Major fix:** H10 no longer stays failed after a burst
   of cell changes and is `N/A` without GPS speed (**dataset cut for H10**); RF fingerprint refreshed after moving 150 m; stale latency
   results discarded; empty ciphering callback removed; baseline maturity shows NEEDS 2 DAYS or
@@ -815,7 +853,8 @@ Every report is reviewed and addressed where possible.
 > se añaden funciones nuevas y solo se corrigen errores reales. Si una corrección cambia cómo se
 > evalúa una regla, se documenta como corte del dataset para esa regla. La v2.10.9 lo hace solo para
 > H10: era un fallo importante y merecía corregirse durante la campaña, porque dejarlo habría
-> distorsionado los datos que se están recogiendo. La versión actual es la v2.10.9.
+> distorsionado los datos que se están recogiendo. La v2.10.10 hace lo mismo para H8, que trataba una
+> frecuencia no disponible como sospechosa. La versión actual es la v2.10.10.
 
 <div align="center">
 

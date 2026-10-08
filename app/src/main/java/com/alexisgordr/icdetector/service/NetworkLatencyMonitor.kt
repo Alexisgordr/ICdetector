@@ -41,10 +41,18 @@ internal class NetworkLatencyMonitor(
         reset(state)
     }
 
+    /** Último estado publicado por este monitor. */
+    private var lastPublished: String? = null
+
+    private fun publish(state: String) {
+        lastPublished = state
+        publishState(state)
+    }
+
     @Synchronized
     fun reset(state: String = "N/A") {
         generation++
-        publishState(state)
+        publish(state)
         anomalyStreak = 0
     }
 
@@ -79,6 +87,10 @@ internal class NetworkLatencyMonitor(
         if (startedGeneration != generation || cellKey != activeCellKey) return
         if (latencies.size < 2) {
             log("Latencia: sin suficientes endpoints disponibles")
+            // v2.10.10 — Sin medición válida no se mantiene un "ANOMALA" anterior ni su racha:
+            // antes se quedaban tal cual mientras fallaran los servidores, sin fecha de validez.
+            if (lastPublished == "ANOMALA") publish("N/A")
+            anomalyStreak = 0
             return
         }
         val average = latencies.average().toLong()
@@ -86,7 +98,7 @@ internal class NetworkLatencyMonitor(
         if (history.size >= MIN_BASELINE_SAMPLES) {
             val baseline = history.average()
             if (average > baseline * ANOMALY_MULTIPLIER) {
-                publishState("ANOMALA")
+                publish("ANOMALA")
                 anomalyStreak++
                 log("⚠ Latencia anómala [$anomalyStreak/$CONFIRMATION_CYCLES]: ${average}ms (media: ${baseline.toInt()}ms) — 3 endpoints")
                 if (anomalyStreak >= CONFIRMATION_CYCLES) {
@@ -95,7 +107,7 @@ internal class NetworkLatencyMonitor(
                     anomalyStreak = 0
                 }
             } else {
-                publishState("OK")
+                publish("OK")
                 if (anomalyStreak > 0) log("✅ Latencia normalizada: ${average}ms")
                 anomalyStreak = 0
                 log("Latencia OK: ${average}ms (media: ${baseline.toInt()}ms)")
