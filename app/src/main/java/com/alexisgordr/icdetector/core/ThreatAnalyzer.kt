@@ -139,6 +139,8 @@ object ThreatAnalyzer {
         signalBaseline: SignalBaseline? = null,
         previousBand: Int? = null,
         previousDbm: Int? = null,
+        /** 3.0 (#10) — Estación base ([LteSite.key]) de la celda en la que se midió [previousBand]. */
+        previousBandSite: String? = null,
         recentRegisteredDbm: List<Int> = emptyList(),
         rfStability: CellRfStability? = null,
         reputation: CellReputation? = null,
@@ -479,7 +481,12 @@ object ThreatAnalyzer {
                 val newStrong = active.dbm >= -95
                 val notCoverageFallback = previousDbm != null && active.dbm >= previousDbm
 
-                if (prevStrong && newStrong && notCoverageFallback && !degrading) {
+                // 3.0 (#10) — Mismo eNodeB: la propia estación base pasa el móvil a otra de sus
+                // portadoras. En los primeros datos de campo, los 9 avisos de H14 fueron así
+                // (79360544 -> 79360545, eNB 310002). No es un downgrade forzado: no se penaliza.
+                val sameSite = previousBandSite != null && previousBandSite == LteSite.key(active)
+
+                if (prevStrong && newStrong && notCoverageFallback && !degrading && !sameSite) {
                     hBandDowngrade = false
                     val from = BandPlan.approxFreqMhz(previousBand) ?: 0
                     val to = BandPlan.approxFreqMhz(curBand) ?: 0

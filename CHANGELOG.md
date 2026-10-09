@@ -19,6 +19,13 @@ evidence is confirmed and how some rules behave. Same separate app, *ICdetection
   forensic black box. Independently, two accepted observations more than 2 minutes apart are no
   longer consecutive. A normal handover or a manual refresh does not count as a gap. **Methodology
   cut:** affects when any alarm is confirmed.
+- **H14 flagged band changes inside the same base station (#10).** In the first week of field data,
+  all 9 sub-threshold "Band downgrade" warnings were carrier changes inside one site: the eNodeB
+  (`Cell ID >> 8`) was the same before and after, e.g. `79360544 → 79360545` (eNB `310002`). That is
+  the base station moving the phone to another of its carriers, not a forced downgrade. H14 no longer
+  penalises a change between cells of the same eNodeB in the same network (known MCC and MNC);
+  without a known network the exception does not apply. A loss of signal also clears the stored
+  site. **Dataset cut for H14.**
 
 ## 3.0.0-beta2 (local beta, not released)
 

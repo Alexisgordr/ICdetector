@@ -291,6 +291,8 @@ class MiniICService : Service() {
     // REGISTRADA analizada; el buffer de tendencia sobrevive al handover para detectar si
     // la señal venía degradándose progresivamente (excepción del garaje/sótano).
     private var prevBand: Int? = null
+    /** 3.0 (#10) — eNodeB de la celda en la que se midió [prevBand]. */
+    private var prevBandSite: String? = null
     /** 3.0 (#20) — Pérdidas de señal ya tenidas en cuenta; ver CollectionGeneration.losses. */
     @Volatile private var acknowledgedSignalLosses = 0L
     private var prevRegisteredDbm: Int? = null
@@ -1020,6 +1022,7 @@ class MiniICService : Service() {
                 val continuityBroken = signalLosses != acknowledgedSignalLosses
                 if (continuityBroken) {
                     prevBand = null
+                    prevBandSite = null
                     prevRegisteredDbm = null
                     recentRegisteredDbmTrend.clear()
                 }
@@ -1245,6 +1248,7 @@ class MiniICService : Service() {
                             signalBaseline = signalBaseline,
                             previousBand = prevBand,
                             previousDbm = prevRegisteredDbm,
+                            previousBandSite = prevBandSite,
                             recentRegisteredDbm = recentRegisteredDbmTrend.toList(),
                             rfStability = rfStability,
                             reputation = reputation,
@@ -1446,6 +1450,7 @@ class MiniICService : Service() {
                         prevBand = if (isLteActive) {
                             active.band ?: active.arfcn?.let { com.alexisgordr.icdetector.core.BandPlan.earfcnToBandLte(it) }
                         } else null
+                        prevBandSite = com.alexisgordr.icdetector.core.LteSite.key(active)
                         prevRegisteredDbm = active.dbm
                         if (active.dbm != Int.MAX_VALUE && active.dbm != -999) {
                             recentRegisteredDbmTrend.add(active.dbm)
