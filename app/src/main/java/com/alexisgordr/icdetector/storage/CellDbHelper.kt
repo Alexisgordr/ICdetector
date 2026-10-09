@@ -106,6 +106,12 @@ class CellDbHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME, 
         const val COLUMN_RADIO = "radio"
         /** 3.0 (#23) — Instante de la observación (epoch ms, UTC). NULL en filas anteriores. */
         const val COLUMN_OBSERVED_AT_MS = SchemaV20.COLUMN_OBSERVED_AT_MS
+        /**
+         * 3.0 (#25) — "La fila más reciente" es la última OBSERVADA, no la última escrita: con
+         * varios escritores el id y el momento de observación pueden no coincidir. Ver
+         * [ObservationTime.orderDescending].
+         */
+        private const val NEWEST_FIRST = "$COLUMN_OBSERVED_AT_MS DESC, $COLUMN_ID DESC"
         /** 3.0 (#29) — Reglas no evaluadas (`H1;H9` o `NONE`). NULL en filas anteriores. */
         const val COLUMN_NOT_EVALUATED = SchemaV20.COLUMN_NOT_EVALUATED
         /** 3.0 (#29) — Precisión del fix GPS de la fila, en metros. NULL sin fix o en filas anteriores. */
@@ -606,7 +612,7 @@ class CellDbHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME, 
                 "WHERE $COLUMN_CID=? AND $COLUMN_MNC=? AND $COLUMN_TAC=? AND $COLUMN_MCC=? " +
                 "AND $COLUMN_RADIO=? AND $COLUMN_LAT IS NOT NULL AND $COLUMN_LON IS NOT NULL " +
                 "AND $COLUMN_SCORE>=? AND ($COLUMN_FAILED_H IS NULL OR TRIM($COLUMN_FAILED_H)='' OR $COLUMN_FAILED_H='OK') " +
-                "AND ${observedSince()} ORDER BY $COLUMN_ID DESC LIMIT ?",
+                "AND ${observedSince()} ORDER BY $NEWEST_FIRST LIMIT ?",
             arrayOf(
                 cell.cellId, cell.mnc, cell.tac, cell.mcc, cell.radioTech.name,
                 TRUSTED_BASELINE_MIN_SCORE.toString(), *since(cutoff), limit.toString()
@@ -683,7 +689,7 @@ class CellDbHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME, 
                 "WHERE $COLUMN_LAT IS NOT NULL AND $COLUMN_LON IS NOT NULL " +
                 "AND $COLUMN_SCORE>=? " +
                 "AND ($COLUMN_FAILED_H IS NULL OR TRIM($COLUMN_FAILED_H)='' OR $COLUMN_FAILED_H='OK') " +
-                "AND ${observedSince()} ORDER BY $COLUMN_ID DESC",
+                "AND ${observedSince()} ORDER BY $NEWEST_FIRST",
             arrayOf(TRUSTED_BASELINE_MIN_SCORE.toString(), *since(cutoff))
         ).use { cursor ->
             while (cursor.moveToNext()) {
@@ -1592,7 +1598,7 @@ class CellDbHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME, 
                     "AND $COLUMN_RADIO=? " +
                     "AND $COLUMN_VERIFIED='VERIFIED' " +
                     "AND $COLUMN_API_LAT IS NOT NULL AND $COLUMN_API_LON IS NOT NULL " +
-                    "ORDER BY $COLUMN_ID DESC LIMIT 1"
+                    "ORDER BY $NEWEST_FIRST LIMIT 1"
 
         val cursor = db.rawQuery(query, arrayOf(cid, mnc, tac, mcc, radio.name))
         var status = VerificationStatus.PENDING
@@ -1682,7 +1688,7 @@ class CellDbHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME, 
         // consulta anterior. Limitar el UPDATE a PENDING hacía que una verificación posterior no
         // persistiera coordenadas ni estado. Solo se reescribe la última fila: las respuestas
         // históricas anteriores conservan su significado forense.
-        val latestWhere = "$COLUMN_ID=(SELECT MAX($COLUMN_ID) FROM $TABLE_HISTORY WHERE $identityWhere)"
+        val latestWhere = "$COLUMN_ID=(SELECT $COLUMN_ID FROM $TABLE_HISTORY WHERE $identityWhere ORDER BY $NEWEST_FIRST LIMIT 1)"
         return db.update(TABLE_HISTORY, values, latestWhere, args)
     }
 
@@ -1792,7 +1798,7 @@ class CellDbHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME, 
         try {
         val db = this.readableDatabase
         val boundedLimit = limit?.coerceAtLeast(1)
-        val query = "SELECT * FROM $TABLE_HISTORY ORDER BY $COLUMN_ID DESC" +
+        val query = "SELECT * FROM $TABLE_HISTORY ORDER BY $NEWEST_FIRST" +
             (boundedLimit?.let { " LIMIT $it" } ?: "")
         val cursor: Cursor = db.rawQuery(query, null)
         try {
@@ -1991,7 +1997,7 @@ class CellDbHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME, 
             val expected = db.rawQuery("SELECT COUNT(*) FROM $TABLE_HISTORY", null).use { c ->
                 if (c.moveToFirst()) c.getInt(0) else 0
             }
-            db.rawQuery("SELECT * FROM $TABLE_HISTORY ORDER BY $COLUMN_ID DESC", null).use { cursor ->
+            db.rawQuery("SELECT * FROM $TABLE_HISTORY ORDER BY $NEWEST_FIRST", null).use { cursor ->
                 if (cursor.moveToFirst()) {
                     do {
                         action(readRecord(cursor))
@@ -2022,7 +2028,7 @@ class CellDbHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME, 
                 if (accuracyM != null) put(COLUMN_GPS_ACCURACY_M, accuracyM.toDouble())
             }
             // Rellena SOLO la observación actual, y solo si de verdad le faltan coordenadas:
-            // toma la fila MÁS RECIENTE de la celda actual (el id más alto, la que sea) y la
+            // toma la fila MÁS RECIENTE de la celda actual (la última observada, 3.0 #25) y la
             // rellena únicamente si esa fila no tiene lat/lon. Esta función se llama justo cuando
             // llega un fix fresco mientras se esperaban coordenadas, así que la última fila es la
             // de "ahora mismo" -> se le estampa la posición que SÍ acabas de medir.
@@ -2046,9 +2052,9 @@ class CellDbHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME, 
             db.update(
                 TABLE_HISTORY,
                 values,
-                "$COLUMN_ID = (SELECT MAX($COLUMN_ID) FROM $TABLE_HISTORY " +
+                "$COLUMN_ID = (SELECT $COLUMN_ID FROM $TABLE_HISTORY " +
                     "WHERE $COLUMN_CID = ? AND $COLUMN_MNC = ? AND $COLUMN_TAC = ? AND $COLUMN_MCC = ? " +
-                    "AND $COLUMN_RADIO = ?) " +
+                    "AND $COLUMN_RADIO = ? ORDER BY $NEWEST_FIRST LIMIT 1) " +
                     "AND $COLUMN_LAT IS NULL AND $COLUMN_LON IS NULL " +
                     "AND ${observedSince()} AND ${ObservationTime.untilClause(COLUMN_OBSERVED_AT_MS, COLUMN_TIMESTAMP)}",
                 arrayOf(cellId, mnc, tac, mcc, radio.name, *since(earliest), *since(latest))
@@ -2104,7 +2110,7 @@ class CellDbHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME, 
               AND ($COLUMN_FAILED_H IS NULL OR TRIM($COLUMN_FAILED_H) = '' OR $COLUMN_FAILED_H = 'OK')
               AND ${observedBefore()}
               AND ${observedSince(strict = true)}
-            ORDER BY $COLUMN_ID DESC
+            ORDER BY $NEWEST_FIRST
             LIMIT 300
         """.trimIndent()
 
@@ -2203,7 +2209,7 @@ class CellDbHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME, 
               AND $COLUMN_SCORE >= ?
               AND ($COLUMN_FAILED_H IS NULL OR TRIM($COLUMN_FAILED_H) = '' OR $COLUMN_FAILED_H = 'OK')
               AND ${observedSince(strict = true)}
-            ORDER BY $COLUMN_ID DESC
+            ORDER BY $NEWEST_FIRST
             LIMIT 200
         """.trimIndent()
 
@@ -2278,7 +2284,7 @@ class CellDbHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME, 
               AND $COLUMN_MCC = ?
               AND $COLUMN_RADIO = ?
               AND ${observedSince(strict = true)}
-            ORDER BY $COLUMN_ID DESC
+            ORDER BY $NEWEST_FIRST
             LIMIT 500
         """.trimIndent()
 
@@ -2347,7 +2353,7 @@ class CellDbHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME, 
         val recentCutoff = nowMs - 48L * 60 * 60 * 1000
         readableDatabase.rawQuery(
             "SELECT $COLUMN_TIMESTAMP,$COLUMN_LAT,$COLUMN_LON,$COLUMN_PCI,$COLUMN_ARFCN,$COLUMN_OBSERVED_AT_MS " +
-                "FROM $TABLE_HISTORY WHERE $cleanWhere ORDER BY $COLUMN_ID DESC LIMIT 500",
+                "FROM $TABLE_HISTORY WHERE $cleanWhere ORDER BY $NEWEST_FIRST LIMIT 500",
             args
         ).use { c ->
             while (c.moveToNext()) {
@@ -2398,7 +2404,7 @@ class CellDbHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME, 
             val candidateTemporal = getDailyEvidenceSummary(candidateWhere, candidateArgs)
             readableDatabase.rawQuery(
                 "SELECT $COLUMN_LAT,$COLUMN_LON FROM $TABLE_HISTORY WHERE $candidateWhere " +
-                    "ORDER BY $COLUMN_ID DESC LIMIT 500",
+                    "ORDER BY $NEWEST_FIRST LIMIT 500",
                 candidateArgs
             ).use { c ->
                 while (c.moveToNext()) {
@@ -2499,7 +2505,7 @@ class CellDbHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME, 
               AND $COLUMN_SCORE >= ?
               AND ($COLUMN_FAILED_H IS NULL OR TRIM($COLUMN_FAILED_H) = '' OR $COLUMN_FAILED_H = 'OK')
               AND ${observedSince(strict = true)}
-            ORDER BY $COLUMN_ID DESC
+            ORDER BY $NEWEST_FIRST
             LIMIT 200
         """.trimIndent()
 
@@ -2652,7 +2658,7 @@ class CellDbHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME, 
                     "AND $COLUMN_RADIO=? " +
                     "AND $COLUMN_VERIFIED='VERIFIED' " +
                     "AND $COLUMN_API_LAT IS NOT NULL AND $COLUMN_API_LON IS NOT NULL " +
-                    "ORDER BY $COLUMN_ID DESC LIMIT 1",
+                    "ORDER BY $NEWEST_FIRST LIMIT 1",
                 arrayOf(cid, mnc, tac, mcc, radio.name)
             ).use { c ->
                 if (!c.moveToFirst()) return@use false
@@ -2685,7 +2691,7 @@ class CellDbHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME, 
                 WHERE $COLUMN_CID = ? AND $COLUMN_MNC = ? AND $COLUMN_TAC = ? AND $COLUMN_MCC = ?
                   AND $COLUMN_RADIO = ?
                   AND $COLUMN_API_LAT IS NOT NULL AND $COLUMN_API_LON IS NOT NULL
-                ORDER BY $COLUMN_ID DESC
+                ORDER BY $NEWEST_FIRST
                 LIMIT 1
             """.trimIndent()
             db.rawQuery(query, arrayOf(cellId, mnc, tac, mcc, radio.name)).use { c ->

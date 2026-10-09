@@ -83,6 +83,34 @@ class SchemaV20MigrationTest {
         assertEquals(listOf("2026-10-09 12:00:00"), query("SELECT timestamp FROM history", emptyArray()))
     }
 
+    @Test fun `the latest row is the last observed one, not the last written one (#25)`() {
+        // La fila 3 se escribe después pero se observó antes (otra cola, un reintento...).
+        insertNew("2026-10-09 12:00:02", 1_791_540_002_000L, cid = "1")
+        insertNew("2026-10-09 12:00:01", 1_791_540_001_000L, cid = "1")
+        val latest = query(
+            "SELECT timestamp FROM history WHERE cid='1' ORDER BY " +
+                ObservationTime.orderDescending("observed_at_ms", "id") + " LIMIT 1",
+            emptyArray()
+        )
+        assertEquals(listOf("2026-10-09 12:00:02"), latest)
+        // Y la fila anterior a 3.0, sin instante, queda la última.
+        val all = query(
+            "SELECT timestamp FROM history ORDER BY " + ObservationTime.orderDescending("observed_at_ms", "id"),
+            emptyArray()
+        )
+        assertEquals("2026-09-01 10:00:00", all.last())
+    }
+
+    @Test fun `CellDbHelper never uses the row id as the observation order`() {
+        val helper = listOf(
+            File("src/main/java/com/alexisgordr/icdetector/storage/CellDbHelper.kt"),
+            File("app/src/main/java/com/alexisgordr/icdetector/storage/CellDbHelper.kt")
+        ).first { it.exists() }.readText()
+        assertTrue(!helper.contains("MAX(\$COLUMN_ID)"))
+        assertTrue(!helper.contains("ORDER BY \$COLUMN_ID DESC"))
+        assertTrue(helper.contains("NEWEST_FIRST = \"\$COLUMN_OBSERVED_AT_MS DESC, \$COLUMN_ID DESC\""))
+    }
+
     @Test fun `table names match the ones used by CellDbHelper`() {
         val helper = listOf(
             File("src/main/java/com/alexisgordr/icdetector/storage/CellDbHelper.kt"),

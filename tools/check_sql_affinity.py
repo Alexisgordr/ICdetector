@@ -15,7 +15,8 @@ def require_source_guards() -> None:
     required = (
         "ABS($COLUMN_API_LAT - CAST(? AS REAL)) <= CAST(? AS REAL)",
         "ABS($COLUMN_API_LON - CAST(? AS REAL)) <= CAST(? AS REAL)",
-        '"$COLUMN_ID=(SELECT MAX($COLUMN_ID) FROM $TABLE_HISTORY WHERE $identityWhere)"',
+        # 3.0 (#25): la última fila es la última observada, no la de id más alto.
+        '"$COLUMN_ID=(SELECT $COLUMN_ID FROM $TABLE_HISTORY WHERE $identityWhere ORDER BY $NEWEST_FIRST LIMIT 1)"',
     )
     missing = [fragment for fragment in required if fragment not in source]
     if missing:
@@ -46,28 +47,33 @@ def check_numeric_affinity(db: sqlite3.Connection) -> None:
 
 
 def check_latest_observation_update(db: sqlite3.Connection) -> None:
+    # 3.0 (#25): con varios escritores, la fila escrita en último lugar puede ser una observación
+    # anterior. La respuesta se adjunta a la última OBSERVADA; las filas sin instante (anteriores
+    # a 3.0) quedan detrás.
     db.execute(
         "CREATE TABLE history("
         "id INTEGER PRIMARY KEY, verified TEXT, api_lat REAL, api_lon REAL, "
-        "cid TEXT, mnc TEXT, tac TEXT, mcc TEXT, radio TEXT)"
+        "cid TEXT, mnc TEXT, tac TEXT, mcc TEXT, radio TEXT, observed_at_ms INTEGER)"
     )
     db.executemany(
-        "INSERT INTO history VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        "INSERT INTO history VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
         (
-            (1, "NOT_FOUND", None, None, "10", "07", "42", "214", "LTE"),
-            (2, "NOT_FOUND", None, None, "10", "07", "42", "214", "LTE"),
+            (1, "NOT_FOUND", None, None, "10", "07", "42", "214", "LTE", None),
+            (2, "NOT_FOUND", None, None, "10", "07", "42", "214", "LTE", 2000),
+            (3, "NOT_FOUND", None, None, "10", "07", "42", "214", "LTE", 1000),
         ),
     )
     db.execute(
         "UPDATE history SET verified=?, api_lat=?, api_lon=? "
-        "WHERE id=(SELECT MAX(id) FROM history "
-        "WHERE cid=? AND mnc=? AND tac=? AND mcc=? AND radio=?)",
+        "WHERE id=(SELECT id FROM history "
+        "WHERE cid=? AND mnc=? AND tac=? AND mcc=? AND radio=? "
+        "ORDER BY observed_at_ms DESC, id DESC LIMIT 1)",
         ("VERIFIED", 40.1, -3.2, "10", "07", "42", "214", "LTE"),
     )
     rows = db.execute(
         "SELECT id, verified, api_lat FROM history ORDER BY id"
     ).fetchall()
-    assert rows == [(1, "NOT_FOUND", None), (2, "VERIFIED", 40.1)], rows
+    assert rows == [(1, "NOT_FOUND", None), (2, "VERIFIED", 40.1), (3, "NOT_FOUND", None)], rows
 
 
 def main() -> int:

@@ -64,6 +64,7 @@ class ObservationTimeTest {
             "(observed_at_ms<? OR (observed_at_ms IS NULL AND timestamp<?))",
             ObservationTime.beforeClause("observed_at_ms", "timestamp")
         )
+        assertEquals("observed_at_ms DESC, id DESC", ObservationTime.orderDescending("observed_at_ms", "id"))
         val args = ObservationTime.cutoffArgs(firstHalfPast2, madrid)
         assertEquals(listOf(firstHalfPast2.toString(), "2026-10-25 02:30:00"), args.toList())
     }

@@ -48,6 +48,15 @@ value.
   `tools/check_export.py` lists the rows per app version, shows which dataset cuts the file crosses
   and warns when a file joins exports from several phones.
 
+- **"Most recent row" meant "last row written" (#25).** Since 2.10.10 each row keeps the
+  context of the moment it was observed, but the app still picked "the latest row" by its row id
+  (`MAX(id)`, `ORDER BY id DESC`). With several writers the last row written can be an earlier
+  observation, so a verification result or a GPS backfill could land on the wrong row and the
+  recent-sample windows of H11, H13, H15 and the local baselines could take an older sample as the
+  newest. Every "most recent" choice now uses the observation instant (#23); rows before 3.0, which
+  have no instant, come after all newer rows and keep their previous order by id. The history screen
+  and the CSV are listed in the same order.
+
 
 ### Bug-fix release inside the freeze — dataset cut for H8
 

@@ -84,6 +84,14 @@ object ObservationTime {
         "($msColumn IS NOT NULL) ASC, $msColumn ASC, $textColumn ASC, $idColumn ASC"
 
     /**
+     * 3.0 (#25) — Orden "más reciente primero" por momento de observación, no por orden de
+     * escritura. SQLite ordena NULL como el valor más pequeño, así que con `DESC` las filas
+     * nuevas van primero por su instante y las anteriores a 3.0 (sin instante) detrás, por id,
+     * como antes. Sin expresiones: el índice del instante sigue siendo utilizable.
+     */
+    fun orderDescending(msColumn: String, idColumn: String): String = "$msColumn DESC, $idColumn DESC"
+
+    /**
      * Mejor estimación disponible del instante de una fila: el instante guardado si existe; si
      * no, la lectura aproximada del texto antiguo, igual que antes de 3.0. Null si no hay nada.
      */
