@@ -300,4 +300,9 @@
     <string name="latency_state_anomalous">● NET ANOMALOUS</string>
     <string name="latency_state_learning">● NET LEARNING</string>
     <string name="latency_state_not_measured">● NET N/A</string>
+    <!-- 3.0 (#35) — Alarmas silenciadas -->
+    <string name="alarm_muted_title">⚠ ALARMS ARE MUTED</string>
+    <string name="alarm_muted_body_silenced">The Security alerts channel is silent, so a confirmed network anomaly will not make a sound. Turn it back on: ICdetection only makes a sound when a network anomaly is confirmed, and the monitoring notification is always silent.</string>
+    <string name="alarm_muted_body_blocked">ICdetection notifications are turned off, so you will not see or hear a confirmed network anomaly. Turn them back on: ICdetection only makes a sound when a network anomaly is confirmed, and the monitoring notification is always silent.</string>
+    <string name="alarm_muted_action">OPEN ALERT SETTINGS</string>
 </resources>

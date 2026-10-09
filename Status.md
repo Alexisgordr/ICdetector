@@ -34,7 +34,8 @@ receive and how evidence is confirmed.
 **Latest fixes on the branch** (found during testing after the roadmap was complete): schema 20 migration
 creates missing tables; time, GPS and service state captured when the reading arrives (A03); a gap
 of more than 2 minutes without readings breaks continuity like a signal loss (#20); one constant for
-that gap, kept distinct from the 30 s stalled-modem gate and guarded by a test.
+that gap, kept distinct from the 30 s stalled-modem gate and guarded by a test; the monitoring
+notification is always silent and the app warns when alarms are muted (#35).
 
 ## Dataset cuts in 3.0
 

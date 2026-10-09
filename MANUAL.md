@@ -116,6 +116,21 @@ app does not request the privileged battery-optimization exemption itself.
 - **After a phone restart,** collection resumes when you open the app again. The gap is reported as
   an interrupted-collection notice, never silently hidden.
 
+### Notifications and sound
+
+ICdetection uses two notification channels, which you can configure separately in
+**Settings → Apps → ICdetection → Notifications**:
+
+| Channel | What it shows | Sound |
+|---|---|---|
+| **Monitoring** | The persistent notification (cell, signal, verification), updated every few seconds | Always silent, whatever the channel setting |
+| **Security alerts** | A confirmed network anomaly, once per episode | Keep it alerting so you hear an alarm |
+
+Only a confirmed network anomaly makes a sound, so there is no need to silence the app. If
+notifications are off or *Security alerts* is silenced, the main screen shows **ALARMS ARE MUTED**
+with a button that opens the alert settings. The alert tone itself plays at notification volume and
+respects silent, vibrate and Do Not Disturb.
+
 ### External verification
 
 OpenCellID is optional. Enter your own API token in Settings to enable cross-referencing. Without

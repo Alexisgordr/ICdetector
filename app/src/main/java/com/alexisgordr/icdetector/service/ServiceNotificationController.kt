@@ -11,6 +11,7 @@ import android.content.Intent
 import android.provider.Settings
 import androidx.core.app.NotificationCompat
 import com.alexisgordr.icdetector.MainActivity
+import com.alexisgordr.icdetector.core.AlarmAudibility
 import com.alexisgordr.icdetector.models.CellData
 import com.alexisgordr.icdetector.ui.localizeTerminalLine
 import com.alexisgordr.icdetector.util.AppLanguage
@@ -58,6 +59,11 @@ internal class ServiceNotificationController(
             .setSmallIcon(android.R.drawable.ic_menu_info_details)
             .setContentIntent(openApp)
             .setOngoing(true)
+            // 3.0 (#35) — Se repinta cada ~2 s: nunca debe sonar ni vibrar, aunque el usuario
+            // haya dado sonido al canal. Si pitaba, la salida lógica era silenciar la app entera,
+            // y con ella las alarmas confirmadas.
+            .setOnlyAlertOnce(true)
+            .setSilent(true)
             .addAction(android.R.drawable.ic_menu_close_clear_cancel, context.getString(R.string.stop), stopService)
             .build()
     }
@@ -128,5 +134,31 @@ internal class ServiceNotificationController(
         const val NOTIFICATION_ID = 202
         const val AIRPLANE_ACTION_NOTIFICATION_ID = 204
         const val CONFIRMED_ALARM_NOTIFICATION_ID = 205
+
+        /** 3.0 (#35) — ¿Sonaría ahora la notificación de una alarma confirmada? */
+        fun alarmAudibility(context: Context): AlarmAudibility.AlarmSound {
+            val manager = context.getSystemService(NotificationManager::class.java)
+            return AlarmAudibility.evaluate(
+                notificationsEnabled = manager.areNotificationsEnabled(),
+                alertChannelImportance = manager.getNotificationChannel(ALERT_CHANNEL_ID)?.importance
+            )
+        }
+
+        /**
+         * 3.0 (#35) — Ajustes del canal de alertas; si las notificaciones de la app están
+         * desactivadas, los ajustes de notificaciones de la app (el canal no se puede tocar).
+         */
+        fun alarmSettingsIntent(context: Context): Intent {
+            val manager = context.getSystemService(NotificationManager::class.java)
+            val intent = if (manager.areNotificationsEnabled()) {
+                Intent(Settings.ACTION_CHANNEL_NOTIFICATION_SETTINGS)
+                    .putExtra(Settings.EXTRA_CHANNEL_ID, ALERT_CHANNEL_ID)
+            } else {
+                Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS)
+            }
+            return intent
+                .putExtra(Settings.EXTRA_APP_PACKAGE, context.packageName)
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        }
     }
 }

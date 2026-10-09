@@ -20,6 +20,7 @@ import androidx.compose.material.pullrefresh.rememberPullRefreshState
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -307,6 +308,9 @@ fun MainScreenContent(dbHelper: CellDbHelper, service: MiniICService?) {
                         VerificationStatus.ERROR -> stringResource(R.string.public_db_error)
                         null -> null
                     }
+
+                    // 3.0 (#35) — Si las alarmas están silenciadas, decirlo antes que nada.
+                    AlarmMutedWarning()
 
                     // STICKY: Card de estado
                     Card(
@@ -910,5 +914,56 @@ private fun BaselineMaturityRow(
             stringResource(R.string.samples_format, level.name, samples)
         }
         Text(value, color = color, fontFamily = FontFamily.Monospace, fontSize = 9.sp)
+    }
+}
+
+/**
+ * 3.0 (#35) — Aviso cuando una alarma confirmada no sonaría: notificaciones de la app desactivadas o
+ * canal de alertas silenciado. La app no puede reactivar el sonido; abre los ajustes del canal. Se
+ * vuelve a comprobar cada vez que la pantalla vuelve al primer plano.
+ */
+@Composable
+private fun AlarmMutedWarning() {
+    val context = LocalContext.current
+    var state by remember {
+        mutableStateOf(com.alexisgordr.icdetector.service.ServiceNotificationController.alarmAudibility(context))
+    }
+    LifecycleResumeEffect(Unit) {
+        state = com.alexisgordr.icdetector.service.ServiceNotificationController.alarmAudibility(context)
+        onPauseOrDispose { }
+    }
+    if (state == com.alexisgordr.icdetector.core.AlarmAudibility.AlarmSound.AUDIBLE) return
+    val warning = Color(0xFFFFB74D)
+    Card(
+        modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
+        colors = CardDefaults.cardColors(containerColor = warning.copy(alpha = 0.08f)),
+        border = BorderStroke(1.dp, warning.copy(alpha = 0.4f)),
+        shape = RoundedCornerShape(4.dp)
+    ) {
+        Column(modifier = Modifier.padding(12.dp)) {
+            Text(
+                stringResource(R.string.alarm_muted_title),
+                color = warning, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Bold, fontSize = 12.sp
+            )
+            Text(
+                stringResource(
+                    if (state == com.alexisgordr.icdetector.core.AlarmAudibility.AlarmSound.BLOCKED) R.string.alarm_muted_body_blocked
+                    else R.string.alarm_muted_body_silenced
+                ),
+                color = Color(0xFFBBBBBB), fontFamily = FontFamily.Monospace, fontSize = 11.sp
+            )
+            TextButton(
+                onClick = {
+                    runCatching {
+                        context.startActivity(
+                            com.alexisgordr.icdetector.service.ServiceNotificationController.alarmSettingsIntent(context)
+                        )
+                    }
+                },
+                colors = ButtonDefaults.textButtonColors(contentColor = warning)
+            ) {
+                Text(stringResource(R.string.alarm_muted_action), fontFamily = FontFamily.Monospace, fontSize = 11.sp)
+            }
+        }
     }
 }

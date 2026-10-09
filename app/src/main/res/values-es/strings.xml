@@ -300,4 +300,9 @@
     <string name="latency_state_anomalous">● RED ANÓMALA</string>
     <string name="latency_state_learning">● RED APRENDIENDO</string>
     <string name="latency_state_not_measured">● RED N/A</string>
+    <!-- 3.0 (#35) — Alarmas silenciadas -->
+    <string name="alarm_muted_title">⚠ ALARMAS SILENCIADAS</string>
+    <string name="alarm_muted_body_silenced">El canal Alertas de seguridad está en silencio, así que una anomalía de red confirmada no sonará. Vuelve a activarlo: ICdetection solo suena cuando se confirma una anomalía de red, y la notificación de monitorización es siempre silenciosa.</string>
+    <string name="alarm_muted_body_blocked">Las notificaciones de ICdetection están desactivadas, así que no verás ni oirás una anomalía de red confirmada. Vuelve a activarlas: ICdetection solo suena cuando se confirma una anomalía de red, y la notificación de monitorización es siempre silenciosa.</string>
+    <string name="alarm_muted_action">ABRIR AJUSTES DE ALERTAS</string>
 </resources>
