@@ -20,10 +20,10 @@ package com.alexisgordr.icdetector.core
  *    módem declarase tampoco se podía clasificar, porque alta/baja salía de la misma tabla.
  *  - El tope de la B71 era 69465 (el de la B74): EARFCN de las bandas 72-74 se daban por B71
  *    (600 MHz, baja) aunque la B74 es de 1475 MHz. Corregido a 68935.
- *  - Una sola fuente para banda y clasificación: [BANDS]. Las bandas 72 en adelante solo
- *    llevan frecuencia: sirven para clasificar la banda que declare el módem (getBands), pero
- *    sus EARFCN no se resuelven por tabla.
- *  - Contrastada con TS 36.101 y con una implementación independiente; ver BandPlanTest.
+ *  - Una sola fuente para banda y clasificación: [BANDS]. Las bandas LAA 252/255 solo llevan
+ *    frecuencia: sirven para clasificar la banda que declare el módem (getBands).
+ *  - Contrastada con la Tabla 5.7.3-1 de TS 36.104 V19.2.0 (rangos EARFCN y F_DL_low de todas
+ *    las bandas resolubles); ver BandPlanTest.
  */
 object BandPlan {
 
@@ -84,6 +84,8 @@ object BandPlan {
         LteBand(50, 1432.0, 58240, 59089),
         LteBand(51, 1427.0, 59090, 59139),
         LteBand(52, 3300.0, 59140, 60139),
+        LteBand(53, 2483.5, 60140, 60254),
+        LteBand(54, 1670.0, 60255, 60304),
         // FDD/SDL de numeración extendida
         LteBand(65, 2110.0, 65536, 66435),
         LteBand(66, 2110.0, 66436, 67335),
@@ -92,15 +94,22 @@ object BandPlan {
         LteBand(69, 2570.0, 67836, 68335), // SDL
         LteBand(70, 1995.0, 68336, 68585),
         LteBand(71, 617.0, 68586, 68935),
+        LteBand(72, 461.0, 68936, 68985),
+        LteBand(73, 460.0, 68986, 69035),
+        LteBand(74, 1475.0, 69036, 69465),
+        LteBand(75, 1432.0, 69466, 70315), // SDL
+        LteBand(76, 1427.0, 70316, 70365), // SDL
+        LteBand(85, 728.0, 70366, 70545),
+        LteBand(87, 420.0, 70546, 70595),
+        LteBand(88, 422.0, 70596, 70645),
+        LteBand(103, 757.0, 70646, 70655),
+        LteBand(106, 935.0, 70656, 70705),
+        LteBand(107, 612.0, 70706, 71105),
+        LteBand(108, 470.0, 71106, 73385),
+        LteBand(111, 1820.0, 73386, 73485),
+        LteBand(112, 470.0, 73486, 74865),
+        LteBand(113, 606.0, 74866, 75785),
         // Solo clasificación (la banda llega por getBands; sus EARFCN no se resuelven por tabla)
-        LteBand(72, 461.0),
-        LteBand(73, 460.0),
-        LteBand(74, 1475.0),
-        LteBand(75, 1432.0),
-        LteBand(76, 1427.0),
-        LteBand(85, 728.0),
-        LteBand(87, 420.0),
-        LteBand(88, 422.0),
         LteBand(252, 5150.0),
         LteBand(255, 5725.0),
     )

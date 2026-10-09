@@ -98,8 +98,8 @@ class BandPlanTest {
     @Test
     fun `la B71 ya no se come los EARFCN de las bandas 72 a 74`() {
         assertEquals(71, BandPlan.earfcnToBandLte(68_935))
-        assertNull(BandPlan.earfcnToBandLte(68_936))   // B72 (450 MHz): no se resuelve por tabla
-        assertNull(BandPlan.earfcnToBandLte(69_465))   // B74 (1475 MHz): antes se daba por B71, baja
+        assertEquals(72, BandPlan.earfcnToBandLte(68_936))   // B72 (450 MHz)
+        assertEquals(74, BandPlan.earfcnToBandLte(69_465))   // B74 (1475 MHz): antes se daba por B71, baja
         assertTrue(BandPlan.isHighBand(74))
     }
 
@@ -121,9 +121,9 @@ class BandPlanTest {
 
     @Test
     fun `fuera de tabla se usa la banda declarada`() {
-        assertEquals(74, BandPlan.resolveLteBand(69_100, listOf(74)))
+        assertEquals(252, BandPlan.resolveLteBand(255_500, listOf(252)))   // LAA: fuera de tabla
         assertEquals(74, BandPlan.resolveLteBand(null, listOf(74)))
-        assertNull(BandPlan.resolveLteBand(69_100, emptyList()))
+        assertNull(BandPlan.resolveLteBand(255_500, emptyList()))
         assertNull(BandPlan.resolveLteBand(null, listOf(0, -1)))
     }
 
@@ -131,6 +131,7 @@ class BandPlanTest {
     fun `varias bandas declaradas solo valen si son de la misma clase`() {
         assertEquals(72, BandPlan.resolveLteBand(null, listOf(73, 72)))   // las dos bajas
         assertNull(BandPlan.resolveLteBand(null, listOf(72, 74)))         // baja y alta: N/A
+        assertEquals(252, BandPlan.resolveLteBand(null, listOf(255, 252))) // las dos altas
         assertNull(BandPlan.resolveLteBand(null, listOf(74, 999)))        // una desconocida: N/A
     }
 

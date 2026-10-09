@@ -193,13 +193,13 @@ class LteBandTableTest(unittest.TestCase):
     def test_rows_with_declared_bands_outside_the_table_are_counted(self):
         rows = [
             {"Radio": "LTE", "Bands": "3", "ARFCN": "1500"},
-            {"Radio": "LTE", "Bands": "74", "ARFCN": "69100"},
-            {"Radio": "LTE", "Bands": "", "ARFCN": "69100"},
+            {"Radio": "LTE", "Bands": "252", "ARFCN": "255500"},
+            {"Radio": "LTE", "Bands": "", "ARFCN": "255500"},
             {"Radio": "NR", "Bands": "78", "ARFCN": "632448"},
         ]
         with_bands, outside, declared = bands_outside_table(rows)
         self.assertEqual((2, 1), (with_bands, outside))
-        self.assertEqual(1, declared["74"])
+        self.assertEqual(1, declared["252"])
 
 if __name__ == "__main__":
     unittest.main()
