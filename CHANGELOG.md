@@ -35,6 +35,15 @@ separate app, *ICdetection β*; schema 20.
   the only extra cost is sorting those rows. No limit was added on purpose: it would change which
   history H15 sees. The trust-contradiction eviction (B5) and this review close the open items of #7.
 
+#### Documentation (#31)
+
+- **The limits of the campaign are now written down.** README (new section *What the field campaign
+  can and cannot show*), IMPORTANT and MANUAL state that there is no ground truth (false positives
+  can be measured, true positives cannot), no negative control (one phone cannot tell a network
+  anomaly from a detector fault) and limited coverage (one phone, one operator, mostly one area), and
+  what the campaign is for: recalibrating on benign data, measuring false positives and, with the 3.0
+  coverage columns, how long each rule was evaluable.
+
 ## 3.0.0-beta3 (local beta, not released)
 
 ### Phase 3 — Confirmation and rule behaviour

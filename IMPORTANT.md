@@ -261,6 +261,22 @@ current design behaves when it is finally left alone long enough to accumulate m
 
 ---
 
+## What the campaign can and cannot prove
+
+Before drawing any conclusion from this data, keep its limits in mind. They are design limits, not
+bugs:
+
+- **No ground truth.** No real attack was recorded. The campaign can measure false positives on
+  ordinary networks; it cannot measure whether the app catches a real IMSI catcher. The synthetic
+  `ScenarioTest` is not field evidence.
+- **No negative control.** One phone observes at a time. When a rule fires, the data alone cannot
+  tell a network anomaly from a detector or modem fault.
+- **Limited coverage.** Mostly one phone, one operator and one area. Thresholds are not validated for
+  rural areas, roaming, borders or other modem vendors.
+
+What it **is** for: recalibrating weights and thresholds on benign data, measuring each rule's
+false-positive rate and, with the 3.0 coverage columns, how long each rule was really evaluable.
+
 ## The next three months
 
 From now on, my focus will be:

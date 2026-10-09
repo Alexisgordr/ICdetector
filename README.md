@@ -107,6 +107,7 @@
 - [The field-collection freeze](#-the-field-collection-freeze)
 - [Highlights](#-highlights)
 - [Technical limitations](#-technical-limitations)
+- [What the field campaign can and cannot show](#-what-the-field-campaign-can-and-cannot-show)
 - [Device & hardware compatibility](#-device--hardware-compatibility)
 - [Detection engine](#-detection-engine)
 - [Statistical and historical hardening](#-statistical-and-historical-hardening)
@@ -352,6 +353,23 @@ infrastructure and remain difficult — or impossible — to distinguish from re
 Android-only telemetry.
 
 ---
+
+## 🔬 What the field campaign can and cannot show
+
+The campaign measures how the detector behaves on real, ordinary networks. Its limits are design
+limits, not bugs, and they apply to any conclusion drawn from the data:
+
+| Limit | What it means |
+|---|---|
+| **No ground truth** | No real attack was recorded. False positives can be measured on benign data; true positives — whether the app catches a real IMSI catcher — cannot. `ScenarioTest` is synthetic and says so. |
+| **No negative control** | One phone observes at a time. When a rule fires, nothing in the data can tell a network anomaly from a detector or modem fault; a second phone at the same place would be needed. |
+| **Limited coverage** | Mostly one phone, one operator and one area. Thresholds are not validated for rural areas, roaming, borders or other modem vendors (MediaTek modems already behave differently). |
+| **Self-collected** | The person running the app chose where and when to collect. The data describes those routes, not a representative sample. |
+
+**What the campaign is for:** recalibrating likelihood ratios and thresholds on benign data,
+measuring the false-positive rate of each rule, and — from 3.0, with the per-row coverage columns —
+measuring how long each rule was actually evaluable on this network. A rule that "passes" most of
+the time because it is `N/A` most of the time is not shown to work.
 
 ## 📱 Device & hardware compatibility
 

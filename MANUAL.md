@@ -790,6 +790,18 @@ Because ICdetection runs in Android user space without root:
 
 ICdetection is a transparent multi-signal anomaly auditor. It provides leads, historical context, and structured evidence about behaviour visible to Android; it cannot guarantee detection.
 
+### What your own data can and cannot show
+
+- **No ground truth:** unless you know an attack happened, your history measures false positives,
+  not detection. A clean history does not prove that nothing happened; an alert does not prove that
+  something did.
+- **No negative control:** with one phone you cannot tell a network anomaly from a modem fault.
+  Comparing with a second phone at the same place is the strongest check you can make.
+- **Your coverage only:** results describe your phone, your operator and your routes. Thresholds may
+  behave differently elsewhere.
+- **Coverage matters:** from 3.0 the CSV column `NotEvaluatedHeuristics` shows when each rule could
+  not run. Read a rule's "passed" rate together with how often it was evaluated.
+
 ---
 
 ## 16. Troubleshooting
