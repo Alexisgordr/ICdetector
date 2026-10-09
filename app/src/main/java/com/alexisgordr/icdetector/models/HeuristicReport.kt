@@ -62,14 +62,31 @@ data class HeuristicReport(
     val totalCount: Int
         get() = statuses.size
 
-    fun snapshot(): String = listOf(
-        "H1" to isolatedCell, "H2" to powerJump, "H3" to mccConsistency,
-        "H4" to mncCount, "H5" to tacDeviation, "H6" to taDistance,
-        "H7" to ghostNeighbors, "H8" to arfcnSanity, "H9" to hardwareCiphering,
-        "H10" to pingPong, "H11" to mobileCellId, "H12" to latencyCorrelation,
-        "H13" to signalBaseline, "H14" to bandDowngrade, "H15" to rfStability,
-        "H16" to transitionCoherence
-    ).joinToString(";") { (id, status) -> "$id=${status.name}" }
+    private val byId: List<Pair<String, HeuristicStatus>>
+        get() = listOf(
+            "H1" to isolatedCell, "H2" to powerJump, "H3" to mccConsistency,
+            "H4" to mncCount, "H5" to tacDeviation, "H6" to taDistance,
+            "H7" to ghostNeighbors, "H8" to arfcnSanity, "H9" to hardwareCiphering,
+            "H10" to pingPong, "H11" to mobileCellId, "H12" to latencyCorrelation,
+            "H13" to signalBaseline, "H14" to bandDowngrade, "H15" to rfStability,
+            "H16" to transitionCoherence
+        )
+
+    fun snapshot(): String = byId.joinToString(";") { (id, status) -> "$id=${status.name}" }
+
+    /**
+     * 3.0 (#29) — Reglas que se abstuvieron en este ciclo, separadas por `;` (`H1;H6;H9`), o
+     * [NONE_NOT_EVALUATED] si todas se evaluaron. Se guarda en cada fila del historial para poder
+     * medir cuánto tiempo fue evaluable cada regla. Nunca coincide con una regla que falló.
+     */
+    fun notEvaluatedIds(): String =
+        byId.filter { it.second == HeuristicStatus.NOT_EVALUATED }.joinToString(";") { it.first }
+            .ifEmpty { NONE_NOT_EVALUATED }
+
+    companion object {
+        /** Valor explícito de "todas evaluadas", distinto del vacío de las filas anteriores a 3.0. */
+        const val NONE_NOT_EVALUATED = "NONE"
+    }
 
     private val statuses: List<HeuristicStatus>
         get() = listOf(

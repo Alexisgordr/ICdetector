@@ -68,9 +68,10 @@ class ObservationTimeTest {
         assertEquals(listOf(firstHalfPast2.toString(), "2026-10-25 02:30:00"), args.toList())
     }
 
-    @Test fun `the csv exports the instant at the end and leaves it empty for legacy rows`() {
+    @Test fun `the csv exports the instant and leaves it empty for legacy rows`() {
         val header = ExportUtils.CSV_HEADER.split(",")
-        assertEquals("ObservedAtUtc", header.last())
+        val column = header.indexOf("ObservedAtUtc")
+        assertTrue(column > header.indexOf("NetworkRoaming"))
         val base = HistoryRecord(
             timestamp = "2026-10-25 02:30:00", netType = "4G", cid = "1", mnc = "07",
             tac = "1", mcc = "214", dbm = -90
@@ -79,7 +80,7 @@ class ObservationTimeTest {
         val legacy = ExportUtils.csvRow(base).split(",")
         assertEquals(header.size, withInstant.size)
         assertEquals(header.size, legacy.size)
-        assertEquals("2026-10-25T01:30:00.000Z", withInstant.last())
-        assertEquals("", legacy.last())
+        assertEquals("2026-10-25T01:30:00.000Z", withInstant[column])
+        assertEquals("", legacy[column])
     }
 }

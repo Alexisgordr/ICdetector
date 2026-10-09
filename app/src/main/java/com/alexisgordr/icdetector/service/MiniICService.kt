@@ -804,7 +804,8 @@ class MiniICService : Service() {
             val updated = dbHelper.updateNullCoordinates(
                 cell.cellId, cell.mnc, cell.tac, cell.mcc, cell.radioTech,
                 location.latitude, location.longitude,
-                fixTimeMs = location.time
+                fixTimeMs = location.time,
+                accuracyM = location.takeIf { it.hasAccuracy() }?.accuracy
             )
             appendLog(
                 "[GPS]",
@@ -1583,7 +1584,8 @@ class MiniICService : Service() {
                         currentCell.radioTech,
                         loc.latitude,
                         loc.longitude,
-                        fixTimeMs = loc.time
+                        fixTimeMs = loc.time,
+                        accuracyM = loc.takeIf { it.hasAccuracy() }?.accuracy
                     )
                     if (updated > 0) {
                         appendLog("[GPS]", "Coordenadas frescas rellenadas en $updated registro(s)")

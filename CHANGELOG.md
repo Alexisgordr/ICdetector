@@ -25,6 +25,19 @@ value.
   time. **Methodology cut:** age and ordering are exact from 3.0 on; before 3.0 they remain
   approximate around clock changes and zone changes.
 
+- **The history could not tell "passed" from "not evaluated" (#29).** Each row stored only the
+  failed rules, so a rule that never had the data it needs looked the same as a rule that passed,
+  and after the campaign it was impossible to say how long each rule was actually evaluable. Rows
+  also kept the position without its GPS accuracy, so precise fixes could not be separated from
+  vague ones in the analysis. Each new row now stores `not_evaluated_heuristics` (the rules that
+  abstained, e.g. `H1;H6;H9`, or `NONE` when every rule was evaluated) and `gps_accuracy_m` (the
+  accuracy of the fix used for that row, also when the position is filled in later). Both are
+  exported at the end of the history CSV as `NotEvaluatedHeuristics` and `GpsAccuracyM`, empty for
+  rows before 3.0 (unknown, never "evaluated"). `tools/check_export.py` now prints the evaluation
+  coverage of each rule and checks that every 3.0 position has an accuracy below 100 m; positions
+  worse than 50 m are reported so they can be filtered. Detection is unchanged: the app already
+  discarded fixes worse than 100 m, H16 requires 75 m or better and Stable-Site 50 m or better.
+
 
 ### Bug-fix release inside the freeze — dataset cut for H8
 

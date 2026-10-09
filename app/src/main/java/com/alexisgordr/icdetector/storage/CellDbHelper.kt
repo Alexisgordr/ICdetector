@@ -106,6 +106,10 @@ class CellDbHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME, 
         const val COLUMN_RADIO = "radio"
         /** 3.0 (#23) — Instante de la observación (epoch ms, UTC). NULL en filas anteriores. */
         const val COLUMN_OBSERVED_AT_MS = SchemaV20.COLUMN_OBSERVED_AT_MS
+        /** 3.0 (#29) — Reglas no evaluadas (`H1;H9` o `NONE`). NULL en filas anteriores. */
+        const val COLUMN_NOT_EVALUATED = SchemaV20.COLUMN_NOT_EVALUATED
+        /** 3.0 (#29) — Precisión del fix GPS de la fila, en metros. NULL sin fix o en filas anteriores. */
+        const val COLUMN_GPS_ACCURACY_M = SchemaV20.COLUMN_GPS_ACCURACY_M
         // v2.10.4 — Contexto de radio (schema 19). Solo recolección: ninguna consulta de
         // detección lee estas columnas. NULL en filas anteriores = "no se recogía", no "no había".
         const val COLUMN_CONN_STATUS = "conn_status"
@@ -1475,7 +1479,11 @@ class CellDbHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME, 
         serviceState: ServiceRegistrationState? = null,
         networkOperator: String? = null,
         simOperator: String? = null,
-        networkRoaming: Boolean? = null
+        networkRoaming: Boolean? = null,
+        /** 3.0 (#29) — [com.alexisgordr.icdetector.models.HeuristicReport.notEvaluatedIds]. */
+        notEvaluatedHeuristics: String? = null,
+        /** 3.0 (#29) — Precisión del fix de [lat]/[lon], en metros. */
+        gpsAccuracyM: Float? = null
     ): Long {
         val db = this.writableDatabase
         val values = ContentValues().apply {
@@ -1520,6 +1528,9 @@ class CellDbHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME, 
             if (networkOperator != null) put(COLUMN_NETWORK_OPERATOR, networkOperator)
             if (simOperator != null) put(COLUMN_SIM_OPERATOR, simOperator)
             if (networkRoaming != null) put(COLUMN_NETWORK_ROAMING, if (networkRoaming) 1 else 0)
+            if (notEvaluatedHeuristics != null) put(COLUMN_NOT_EVALUATED, notEvaluatedHeuristics)
+            // La precisión solo tiene sentido con una posición: sin lat/lon no se guarda.
+            if (gpsAccuracyM != null && lat != null && lon != null) put(COLUMN_GPS_ACCURACY_M, gpsAccuracyM.toDouble())
         }
         return db.insert(TABLE_HISTORY, null, values)
     }
@@ -1714,8 +1725,12 @@ class CellDbHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME, 
         } else RadioTech.UNKNOWN
 
         val observedIdx = cursor.getColumnIndex(COLUMN_OBSERVED_AT_MS)
+        val notEvaluatedIdx = cursor.getColumnIndex(COLUMN_NOT_EVALUATED)
+        val accuracyIdx = cursor.getColumnIndex(COLUMN_GPS_ACCURACY_M)
         return HistoryRecord(
             observedAtMs = if (observedIdx >= 0 && !cursor.isNull(observedIdx)) cursor.getLong(observedIdx) else null,
+            notEvaluatedHeuristics = if (notEvaluatedIdx >= 0 && !cursor.isNull(notEvaluatedIdx)) cursor.getString(notEvaluatedIdx) else null,
+            gpsAccuracyM = if (accuracyIdx >= 0 && !cursor.isNull(accuracyIdx)) cursor.getFloat(accuracyIdx) else null,
             timestamp = cursor.getString(cursor.getColumnIndexOrThrow(COLUMN_TIMESTAMP)),
             netType = cursor.getString(cursor.getColumnIndexOrThrow(COLUMN_NET_TYPE)),
             cid = cursor.getString(cursor.getColumnIndexOrThrow(COLUMN_CID)),
@@ -1988,13 +2003,16 @@ class CellDbHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME, 
         radio: RadioTech,
         lat: Double, lon: Double,
         /** Momento del fix GPS (Location.time). */
-        fixTimeMs: Long = System.currentTimeMillis()
+        fixTimeMs: Long = System.currentTimeMillis(),
+        /** 3.0 (#29) — Precisión del fix, en metros; se guarda junto a la posición rellenada. */
+        accuracyM: Float? = null
     ): Int {
         val db = this.writableDatabase
         return try {
             val values = ContentValues().apply {
                 put(COLUMN_LAT, lat)
                 put(COLUMN_LON, lon)
+                if (accuracyM != null) put(COLUMN_GPS_ACCURACY_M, accuracyM.toDouble())
             }
             // Rellena SOLO la observación actual, y solo si de verdad le faltan coordenadas:
             // toma la fila MÁS RECIENTE de la celda actual (el id más alto, la que sea) y la

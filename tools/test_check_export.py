@@ -5,7 +5,8 @@ import sys
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from check_export import (
-    calendar_period_stats, instant_issues, radio_context_summary, row_instant,
+    calendar_period_stats, evaluation_coverage, gps_accuracy_issues, instant_issues,
+    radio_context_summary, row_instant,
     ta_consistency_issues, ta_unit_diagnostic
 )
 
@@ -117,5 +118,46 @@ class ObservedInstantTest(unittest.TestCase):
         row = {"Timestamp": "2026-10-09 17:30:00", "ObservedAtUtc": "2026-10-09T12:00:00.250Z"}
         self.assertEqual([], instant_issues([row]))
 
+
+class EvaluationCoverageTest(unittest.TestCase):
+    """3.0 (#29) — Cuánto tiempo fue evaluable cada regla, sin contar las filas antiguas."""
+
+    def test_coverage_counts_only_rows_that_recorded_it(self):
+        rows = [
+            {"NotEvaluatedHeuristics": "H1;H9"},
+            {"NotEvaluatedHeuristics": "H9"},
+            {"NotEvaluatedHeuristics": "NONE"},
+            {"NotEvaluatedHeuristics": ""},          # anterior a 3.0: desconocido
+        ]
+        coverage = evaluation_coverage(rows)
+        self.assertEqual((2, 3), coverage["H1"])
+        self.assertEqual((1, 3), coverage["H9"])
+        self.assertEqual((3, 3), coverage["H5"])
+
+    def test_no_rows_with_the_column_means_unknown_not_evaluated(self):
+        coverage = evaluation_coverage([{"NotEvaluatedHeuristics": ""}, {}])
+        self.assertEqual((0, 0), coverage["H1"])
+
+
+class GpsAccuracyTest(unittest.TestCase):
+    NEW = "2026-10-09T10:00:00.000Z"
+
+    def test_accepted_fixes_and_rows_without_position_pass(self):
+        rows = [
+            {"ObservedAtUtc": self.NEW, "Lat": "40.4", "Lon": "-3.7", "GpsAccuracyM": "12.0"},
+            {"ObservedAtUtc": self.NEW, "Lat": "", "Lon": "", "GpsAccuracyM": ""},
+            {"ObservedAtUtc": "", "Lat": "40.4", "Lon": "-3.7", "GpsAccuracyM": ""},  # anterior a 3.0
+        ]
+        self.assertEqual([], gps_accuracy_issues(rows))
+
+    def test_missing_or_impossible_accuracy_is_flagged(self):
+        rows = [
+            {"ObservedAtUtc": self.NEW, "Lat": "40.4", "Lon": "-3.7", "GpsAccuracyM": ""},
+            {"ObservedAtUtc": self.NEW, "Lat": "40.4", "Lon": "-3.7", "GpsAccuracyM": "150.0"},
+            {"ObservedAtUtc": self.NEW, "Lat": "", "Lon": "", "GpsAccuracyM": "10.0"},
+        ]
+        self.assertEqual(3, len(gps_accuracy_issues(rows)))
+
 if __name__ == "__main__":
     unittest.main()
+

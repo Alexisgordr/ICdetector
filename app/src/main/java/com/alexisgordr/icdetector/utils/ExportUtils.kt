@@ -17,7 +17,10 @@ object ExportUtils {
         "ServingConnection,BandwidthKHz,Bands,AdditionalPlmns,CsgIndicator,CsgIdentity,CsgName," +
         "SecondaryCarriers,ServiceState,NetworkOperator,SimOperator,NetworkRoaming," +
         // 3.0 (#23) — Instante inequívoco en UTC (ISO-8601). Vacío en filas anteriores a 3.0.
-        "ObservedAtUtc"
+        "ObservedAtUtc," +
+        // 3.0 (#29) — Reglas no evaluadas (`H1;H9`, `NONE` si todas) y precisión del GPS en metros.
+        // Vacías en filas anteriores a 3.0: desconocido.
+        "NotEvaluatedHeuristics,GpsAccuracyM"
 
     /** Cabecera del CSV de eventos de servicio (pestaña Radio). */
     const val SERVICE_STATE_CSV_HEADER = "TimestampUtc,State,DataRegistered,VoiceRegistered,Searching," +
@@ -109,7 +112,9 @@ object ExportUtils {
         item.networkOperator ?: "",
         item.simOperator ?: "",
         item.networkRoaming?.let { if (it) 1 else 0 } ?: "",
-        item.observedAtMs?.let { ObservationTime.utcIso(it) } ?: ""
+        item.observedAtMs?.let { ObservationTime.utcIso(it) } ?: "",
+        item.notEvaluatedHeuristics ?: "",
+        item.gpsAccuracyM?.let { String.format(java.util.Locale.ROOT, "%.1f", it) } ?: ""
     ).joinToString(",") { csvEscape(it) }
 
     /** Una fila del CSV de eventos de servicio. Pura: se puede probar sin Android. */

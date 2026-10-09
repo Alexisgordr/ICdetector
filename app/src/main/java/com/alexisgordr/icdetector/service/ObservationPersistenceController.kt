@@ -123,7 +123,9 @@ internal class ObservationPersistenceController(
         serviceState = service?.state,
         networkOperator = service?.operatorNumeric,
         simOperator = service?.simOperator,
-        networkRoaming = service?.roaming
+        networkRoaming = service?.roaming,
+        notEvaluatedHeuristics = cell.heuristicReport.notEvaluatedIds(),
+        gpsAccuracyM = fix?.takeIf { it.hasAccuracy() }?.accuracy
         )
     }
 

@@ -43,7 +43,11 @@ RADIO_CONTEXT_COLUMNS_V2104 = [
 ]
 EXPECTED_COLUMNS_V2104 = EXPECTED_COLUMNS_V21 + RADIO_CONTEXT_COLUMNS_V2104
 # 3.0 (#23) — Instante inequívoco en UTC. Vacío en filas anteriores a 3.0 (desconocido).
-EXPECTED_COLUMNS_V30 = EXPECTED_COLUMNS_V2104 + ["ObservedAtUtc"]
+EXPECTED_COLUMNS_V30 = EXPECTED_COLUMNS_V2104 + ["ObservedAtUtc", "NotEvaluatedHeuristics", "GpsAccuracyM"]
+HEURISTIC_IDS = [f"H{i}" for i in range(1, 17)]
+# La app no acepta fixes con una precisión peor que esta (LocationCollectionController).
+MAX_ACCEPTED_ACCURACY_M = 100.0
+VAGUE_ACCURACY_M = 50.0
 UTC_FORMAT = "%Y-%m-%dT%H:%M:%S.%fZ"
 SERVING_CONNECTION_VALUES = {"PRIMARY_SERVING", "SECONDARY_SERVING", "NONE", "UNKNOWN"}
 SERVICE_STATE_VALUES = {"IN_SERVICE", "OUT_OF_SERVICE", "EMERGENCY_ONLY", "POWER_OFF", "UNKNOWN"}
@@ -129,6 +133,47 @@ def instant_issues(rows):
             continue
         offset_s = (local - utc.replace(microsecond=0)).total_seconds()
         if abs(offset_s) > 14 * 3600 or round(offset_s) % 900 != 0:
+            issues.append(r)
+    return issues
+
+
+def evaluation_coverage(rows):
+    """
+    3.0 (#29) — Por regla: (filas en que se evaluó, filas con el dato). Solo cuentan las filas
+    con NotEvaluatedHeuristics informado; las anteriores a 3.0 lo tienen vacío y son
+    desconocidas, no "evaluadas". `NONE` significa que se evaluaron todas.
+    """
+    known = 0
+    evaluated = {h: 0 for h in HEURISTIC_IDS}
+    for r in rows:
+        raw = (r.get("NotEvaluatedHeuristics") or "").strip()
+        if not raw:
+            continue
+        known += 1
+        skipped = set() if raw == "NONE" else {x.strip() for x in raw.split(";") if x.strip()}
+        for h in HEURISTIC_IDS:
+            if h not in skipped:
+                evaluated[h] += 1
+    return {h: (evaluated[h], known) for h in HEURISTIC_IDS}
+
+
+def gps_accuracy_issues(rows):
+    """
+    3.0 (#29) — Filas 3.0 con posición pero sin precisión, o con una precisión que la app nunca
+    acepta (>= 100 m, negativa o ilegible). Las filas anteriores a 3.0 no se juzgan.
+    """
+    issues = []
+    for r in rows:
+        if not (r.get("ObservedAtUtc") or "").strip():
+            continue
+        has_fix = fnum(r, "Lat") is not None and fnum(r, "Lon") is not None
+        raw = (r.get("GpsAccuracyM") or "").strip()
+        if not raw:
+            if has_fix:
+                issues.append(r)
+            continue
+        acc = fnum(r, "GpsAccuracyM")
+        if not has_fix or acc is None or acc < 0 or acc >= MAX_ACCEPTED_ACCURACY_M:
             issues.append(r)
     return issues
 
@@ -398,6 +443,37 @@ def main(path):
           f"{len(na_identity)} filas")
 
     # ---- Resumen de madurez -----------------------------------------------------------------
+    if "NotEvaluatedHeuristics" in columns:
+        bad_acc = gps_accuracy_issues(rows)
+        check(
+            "GpsAccuracyM presente con cada posición 3.0 y por debajo de 100 m",
+            not bad_acc,
+            f"{len(bad_acc)} filas (p. ej. {bad_acc[0].get('Timestamp')} "
+            f"GpsAccuracyM={bad_acc[0].get('GpsAccuracyM')!r})" if bad_acc else "",
+        )
+
+        coverage = evaluation_coverage(rows)
+        known = next(iter(coverage.values()))[1]
+        print("\nCOBERTURA DE EVALUACIÓN (3.0)")
+        if known == 0:
+            print("  Ninguna fila con NotEvaluatedHeuristics: todas son anteriores a 3.0.")
+        else:
+            print(f"  Filas con el dato: {known} de {len(rows)} (el resto es anterior a 3.0: desconocido)")
+            for h in HEURISTIC_IDS:
+                ev, total = coverage[h]
+                print(f"    {h:>3}: evaluada en {100 * ev / total:5.1f} % ({ev}/{total})")
+        accuracies = [fnum(r, "GpsAccuracyM") for r in rows if fnum(r, "GpsAccuracyM") is not None]
+        if accuracies:
+            vague = sum(1 for a in accuracies if a > VAGUE_ACCURACY_M)
+            print(f"  Precisión GPS: {len(accuracies)} filas; > {VAGUE_ACCURACY_M:.0f} m: {vague} "
+                  f"({100 * vague / len(accuracies):.1f} %)")
+            if vague:
+                notes.append(
+                    f"{vague} posiciones con precisión peor que {VAGUE_ACCURACY_M:.0f} m. La detección "
+                    "ya las limita (H16 exige <= 75 m y Stable-Site <= 50 m), pero conviene filtrarlas "
+                    "al analizar la geometría."
+                )
+
     print("\nMADUREZ DEL HISTORIAL")
     per_cell = Counter((r["CID"], r["MNC"], r["TAC"], r["MCC"]) for r in rows)
     counts = sorted(per_cell.values())

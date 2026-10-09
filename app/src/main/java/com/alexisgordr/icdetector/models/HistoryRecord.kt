@@ -89,7 +89,15 @@ data class HistoryRecord(
      * texto local sin zona y se repite en el cambio de hora de otoño; este valor no. Null en las
      * filas anteriores a 3.0: su zona nunca se guardó y no se reconstruye.
      */
-    val observedAtMs: Long? = null
+    val observedAtMs: Long? = null,
+    /**
+     * 3.0 (#29) — Reglas que se abstuvieron en esta observación (`H1;H6;H9`), o `NONE` si todas se
+     * evaluaron. Null en filas anteriores a 3.0: entonces no se guardaba y es desconocido, nunca
+     * "evaluada".
+     */
+    val notEvaluatedHeuristics: String? = null,
+    /** 3.0 (#29) — Precisión en metros del fix de [lat]/[lon]. Null sin fix o en filas anteriores. */
+    val gpsAccuracyM: Float? = null
 )
 
 /** Misma identidad completa que [CellData.identityKey], aplicada a una fila histórica. */
