@@ -1,5 +1,10 @@
 # Changelog
 
+Every notable change to ICdetection, newest first. Releases inside the field-collection freeze only
+fix bugs; a fix that changes how a rule is evaluated is marked as a **dataset cut** for that rule.
+Version numbers follow the app's `versionName`; the Android `versionCode` is given where it matters.
+The 3.0 betas are documented on the `ICdetection-v3.0.0-beta` branch.
+
 ## 2.10.10
 
 ### Bug-fix release inside the freeze — dataset cut for H8
@@ -370,8 +375,6 @@ No heuristic, weight, threshold, scoring rule or database schema changed. Schema
 - Geometry presents route familiarity separately from LocalCellTrust and keeps accumulated transitions, confirmed historical trips and the pending trip contribution distinct.
 - EXPORT GEOMETRY creates a ZIP with cell/edge CSV, retained trip summaries, GraphML and metadata. It contains cellular identities and route relationships but no GPS coordinates.
 - Schema-16 databases migrate additively to schema 17 without deleting existing history.
-
-## Released
 
 ## 2.9.1
 
