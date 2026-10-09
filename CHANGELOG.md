@@ -14,6 +14,11 @@ separate app, *ICdetection β*; schema 20.
   had no translation, unlike every other stored prefix. It is now stored in Spanish
   (`[sitio-sin-verificar]`, like `[sub-umbral]`) and shown as `[site-unverified]` in the English
   interface. Stable-Site enforcement is still off (shadow mode), so no stored row is affected.
+- **A cell seen every day could be forgotten first (B5).** The trust-contradiction tracker keeps the
+  last state of up to 500 identities and evicted them in insertion order, so the home cell — among
+  the first to enter — could be evicted on a busy day even if it had just been seen, and a later
+  change was then recorded as `ON_START` instead of `TRANSITION`. It now evicts the identity unseen
+  for longest (LRU).
 
 ## 3.0.0-beta3 (local beta, not released)
 
