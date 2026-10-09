@@ -33,7 +33,8 @@ object RadioChannels {
             RadioTech.LTE -> value in 0..503
             RadioTech.NR -> value in 0..1_007
             RadioTech.UMTS -> value in 0..511
-            RadioTech.GSM, RadioTech.UNKNOWN -> false
+            RadioTech.GSM -> false
+            RadioTech.UNKNOWN -> false
         }
 
     /** La frecuencia si es válida para esa tecnología; null si no. */

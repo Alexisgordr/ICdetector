@@ -13,7 +13,7 @@
 ![Baseline](https://img.shields.io/badge/Dataset%20baseline-v2.10.5-blue.svg)
 ![Phase](https://img.shields.io/badge/Phase-Field%20collection%20freeze-blue.svg)
 ![Schema](https://img.shields.io/badge/DB%20schema-19%20(beta%3A%2020)-informational.svg)
-![Beta](https://img.shields.io/badge/Beta-3.0.0--beta1%20(local)-orange.svg)
+![Beta](https://img.shields.io/badge/Beta-3.0.0--beta2%20(local)-orange.svg)
 [![Featured in Awesome Telco](https://img.shields.io/badge/Featured%20in-Awesome%20Telco-6f42c1.svg)](https://github.com/ravens/awesome-telco#imsi-catcher-detection)
 
 [**What's new**](#-whats-new-in-v21010) ·
@@ -79,10 +79,10 @@
 > for H8 only**). See [What's new in v2.10.10](#-whats-new-in-v21010).
 
 > [!WARNING]
-> **3.0.0-beta1 (phase 1 of the 3.0 roadmap) is a local development beta, not a release.** It
+> **3.0.0-beta2 (phases 1 and 2 of the 3.0 roadmap) is a local development beta, not a release.** It
 > lives on a separate branch, is not published and is not part of the field campaign. It changes
-> the database schema to **20** and adds columns to the history CSV; see
-> [What's new in 3.0.0-beta1](#-whats-new-in-300-beta1-local-beta). Keep using v2.10.10 for the
+> the database schema to **20**, adds columns to the history CSV and corrects the inputs of several
+> rules; see [What's new in 3.0.0-beta2](#-whats-new-in-300-beta2-local-beta). Keep using v2.10.10 for the
 > campaign. A beta build installs as a **separate app**, *ICdetection β*
 > (`com.alexisgordr.icdetector.beta`), next to the stable one: it never updates v2.10.10 or touches
 > its database, and it starts with its own empty history and settings.
@@ -99,6 +99,7 @@
 ## 📑 Table of Contents
 
 - [What ICdetection is — and is not](#-what-icdetection-is--and-is-not)
+- [What's new in 3.0.0-beta2 (local beta)](#-whats-new-in-300-beta2-local-beta)
 - [What's new in 3.0.0-beta1 (local beta)](#-whats-new-in-300-beta1-local-beta)
 - [What's new in v2.10.10](#-whats-new-in-v21010)
 - [The field-collection freeze](#-the-field-collection-freeze)
@@ -159,6 +160,23 @@ built on heuristic correlation, anomaly scoring, infrastructure consistency vali
 analysis, local telemetry verification, behavioral pattern analysis and historical baseline
 learning. The goal is visibility, anomaly awareness and local evidence for later review — within the
 technical limits imposed by Android.
+
+---
+
+## 🧪 What's new in 3.0.0-beta2 (local beta)
+
+Phase 2 of the 3.0 roadmap (GitHub issue #27): **correct inputs to the rules**. Every rule now
+receives true data before any rule is tuned. No schema change (still 20). Several rules change what
+they see, so each item is a **dataset cut** for the rule named.
+
+| Area | Change | Dataset cut |
+|---|---|---|
+| **Handovers** (#19) | A handover is a change of the full serving identity (MCC, MNC, TAC, Cell ID, technology), not only of the Cell ID. A field the modem leaves empty does not count as a change. | H10, handover rows |
+| **Placeholder neighbours** (#11) | TAC `65535` and Cell ID `268435455` in LTE neighbours (seen on MediaTek modems) are read as unavailable. H5 no longer fails on every cycle on those phones. | H5 |
+| **Frequency validator** (#22) | One validator per technology for frequency and PCI. EARFCN 0 (Band 1) is learnt like any other carrier; impossible LTE PCIs are no longer learnt. | Local trust, H15 |
+| **LTE bands** (#32) | Every 3GPP band is known (17 before); Band 71's range is fixed. The band declared by the modem is used when the frequency is outside the table. | H14 |
+| **Timing Advance borrowing** (#21) | A missing TA is copied only from a duplicate of the same cell (same technology and physical cell), never from another transmitter. | H6 |
+| **Timing Advance stub zero** (#33) | The "always 0" evidence is kept per technology: a real LTE TA no longer hides a GSM or NR path that always reports 0. | H6, `TAUnit` |
 
 ---
 
@@ -354,7 +372,9 @@ phone has not.**
 This is based on a handful of devices, so treat it as a trend, not a rule.
 
 **Quick check:** on the main screen, if neighbour cells show as `NEIGHBOR (N/A)`, your modem reports
-honestly. If every neighbour shows the same number (e.g. `268435455`), your device is affected.
+honestly. If every neighbour shows the same number (e.g. `268435455`), your device is affected. From
+3.0.0-beta2 those LTE placeholder values are read as unavailable (H5 shows `N/A` instead of failing),
+but these devices remain outside the supported set.
 Reports from more devices are welcome in the issues.
 
 ### Android support
@@ -783,6 +803,11 @@ in [`CHANGELOG.md`](CHANGELOG.md) and [`Status.md`](Status.md).
 <details open>
 <summary><strong>3.0 — post-freeze roadmap (local beta)</strong></summary>
 
+- **3.0.0-beta2** (local, not released) — Phase 2, correct inputs to the rules: full-identity
+  handovers (#19), LTE neighbour placeholders as unavailable (#11), one frequency/PCI validator with
+  EARFCN 0 learnt (#22), complete LTE band table and band resolution (#32), Timing Advance borrowed
+  only from the same transmitter (#21) and stub-zero evidence per technology (#33). Dataset cuts for
+  H5, H6, H10, H14, H15 and local trust.
 - **3.0.0-beta1** (local, not released) — Phase 1, data foundations: schema 20 with the observation
   instant in UTC (#23), evaluation coverage and GPS accuracy per row (#29), app version per row and
   exporting device in the CSV (#30), most-recent row by observation time (#25), stale analysis cycles

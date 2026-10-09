@@ -25,9 +25,11 @@
 > Weights, thresholds, stored data and the schema are unchanged in every release, so the v2.10.5
 > baseline and Day 1 still hold for everything except H10. No reset is needed.
 >
-> **3.0.0-beta1 is not part of the campaign.** Work on 3.0 (roadmap in GitHub issue #27) has started
-> as a local development beta on a separate branch. It upgrades the database to schema 20 and adds
-> history columns (UTC instant, evaluation coverage, GPS accuracy, app version). It installs as a
+> **The 3.0 betas are not part of the campaign.** Work on 3.0 (roadmap in GitHub issue #27) is a
+> local development beta on a separate branch, now 3.0.0-beta2. It upgrades the database to schema
+> 20, adds history columns (UTC instant, evaluation coverage, GPS accuracy, app version) and corrects
+> the inputs of H5, H6, H10, H14, H15 and local trust, so its data is not comparable with the
+> campaign for those rules. It installs as a
 > separate app, *ICdetection β* (`com.alexisgordr.icdetector.beta`): it cannot update v2.10.10 or
 > migrate the campaign database, and it starts with its own empty history and settings. The campaign
 > keeps running on v2.10.10. Running both at once doubles the battery and network use.

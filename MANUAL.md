@@ -1,4 +1,4 @@
-# ICdetection Field Manual — v2.10.10 (3.0.0-beta1 notes included)
+# ICdetection Field Manual — v2.10.10 (3.0 beta notes included)
 
 ICdetection is an open-source Android application for passive cellular-network auditing and anomaly analysis. It observes information exposed by Android, compares each observation with the device's local history and, when configured, cross-checks cells against external tower databases.
 
@@ -6,6 +6,24 @@ This manual explains how to operate the application, interpret its results, inve
 
 > **Important:** ICdetection is an anomaly detector, not a device that can prove the presence of an IMSI catcher. A warning means that the observations deserve examination. It does not identify an attacker or establish intent by itself.
 
+
+## Version 3.0.0-beta2 (local beta, not released)
+
+Phase 2 of the 3.0 roadmap: the rules receive corrected data. Same separate app, *ICdetection β*;
+same database (schema 20). Weights and thresholds are unchanged, but several rules now see different
+inputs, so their results are not comparable with the campaign (dataset cuts):
+
+- **Handovers (H10):** a change of operator, tracking area or technology with the same Cell ID is
+  now a handover. A field your modem leaves empty is not.
+- **Neighbour placeholders (H5):** on modems that fill LTE neighbours with TAC `65535` and Cell ID
+  `268435455`, those values show as `N/A` and H5 no longer fails on every cycle.
+- **Frequencies (local trust, H15):** a cell on EARFCN 0 (Band 1) learns its usual PCIs like any
+  other; impossible LTE PCIs are ignored.
+- **Bands (H14):** every LTE band is known, so H14 can evaluate more cells. When the frequency is
+  outside the table, the band declared by the phone (Android 11+) is used.
+- **Timing Advance (H6):** a missing TA is only taken from a duplicate of the same cell, never from
+  another transmitter or technology. The "always 0" check is done per technology; after updating, it
+  is learnt again within a few minutes.
 
 ## Version 3.0.0-beta1 (local beta, not released)
 

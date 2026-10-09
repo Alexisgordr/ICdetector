@@ -1,5 +1,22 @@
 # ICdetection Status
 
+## 3.0.0-beta2 — Phase 2: correct inputs to the rules (local beta, not released)
+
+**Version code:** 40
+**Database schema:** 20 (unchanged from beta1)
+**Security effect:** rules receive corrected inputs; weights and thresholds unchanged
+**Dataset cuts:** H5 (#11), H6 (#21, #33), H10 and handover rows (#19), H14 (#32), H15 and local trust (#22)
+**Install:** separate app *ICdetection β* (`com.alexisgordr.icdetector.beta`)
+
+**#19** — handovers by full serving identity (MCC, MNC, TAC, Cell ID, technology); unknown fields
+are not a change. **#11** — LTE neighbour TAC 65535 / Cell ID 268435455 read as unavailable.
+**#22** — `RadioChannels`: one per-technology frequency/PCI validator for local trust, H15,
+Stable-Site and H8; EARFCN 0 learnt. **#32** — complete TS 36.101 band table (Band 71 fixed),
+EARFCN-first band resolution with `getBands()` fallback; validator counts declared bands outside the
+table. **#21** — TA borrowed only from a duplicate of the same transmitter. **#33** — TA stub-zero
+evidence per declared unit, saved per unit; old global evidence not read. Tests for each, including
+an instrumented EARFCN 0 learning test.
+
 ## 3.0.0-beta1 — Phase 1: data foundations (local beta, not released)
 
 **Version code:** 39

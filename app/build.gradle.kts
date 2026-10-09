@@ -36,8 +36,8 @@ android {
         minSdk = 29
         targetSdk = 37
 
-        versionCode = 39
-        versionName = "3.0.0-beta1"
+        versionCode = 40
+        versionName = "3.0.0-beta2"
 
         // 3.0 — Una versión beta es OTRA app en el móvil: identificador `.beta` y nombre visible
         // "ICdetection β". Así se instala junto a la estable sin actualizarla (y sin migrar su base

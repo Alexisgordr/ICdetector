@@ -1,0 +1,9 @@
+3.0.0-beta2 — beta, phase 2: correct inputs to the rules.
+
+• Handovers use the full cell identity, not just the Cell ID (H10).
+• Placeholder neighbours (TAC 65535) no longer fail H5.
+• EARFCN 0 (Band 1) is learnt; one frequency/PCI check for all rules.
+• Every LTE band is known; Band 71 fixed (H14).
+• Timing Advance only from the same transmitter, checked per technology (H6).
+
+Weights and thresholds unchanged; dataset cuts per rule.
