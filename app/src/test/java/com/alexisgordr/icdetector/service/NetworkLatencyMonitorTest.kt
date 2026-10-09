@@ -134,5 +134,26 @@ class NetworkLatencyMonitorTest {
         assertTrue(!NetworkLatencyMonitor.isMeasured("APRENDIENDO"))
         assertTrue(!NetworkLatencyMonitor.isMeasured("N/A"))
     }
+
+    @Test fun `a result expires even when no check can run`() = runBlocking {
+        val now = learnBaseline("214-07-100-1-LTE", 30_000L)
+        published.clear()
+        // Sin llamar a check(): modo avión o sin celda registrada. El ciclo periódico solo caduca.
+        monitor.expireIfStale(now)
+        assertTrue(published.isEmpty())
+        monitor.expireIfStale(now + NetworkLatencyMonitor.MEASUREMENT_TTL_MS + 1)
+        assertEquals(listOf(NetworkLatencyMonitor.STATE_NOT_MEASURED), published)
+    }
+
+    @Test fun `the service expires latency every cycle and resets it on signal loss`() {
+        val service = listOf(
+            java.io.File("src/main/java/com/alexisgordr/icdetector/service/MiniICService.kt"),
+            java.io.File("app/src/main/java/com/alexisgordr/icdetector/service/MiniICService.kt")
+        ).first { it.exists() }.readText()
+        val check = service.substringAfter("private fun checkLatencyAnomaly() {").substringBefore("\n    }\n")
+        assertTrue(check.indexOf("latencyMonitor.expireIfStale()") in 0 until check.indexOf("?: return"))
+        val lost = service.substringAfter("private fun onSignalLost() {").substringBefore("\n    }\n")
+        assertTrue(lost.contains("latencyMonitor.reset()"))
+    }
 }
 

@@ -14,9 +14,10 @@ makes bands 53–113 resolvable by EARFCN (follow-up to #32).
 - **A confirmation could span a coverage gap (#20).** When the serving cell was lost (empty list,
   abstention, airplane mode) the screen was cleared, but the confirmation streak survived. Two
   suspicious cycles, ten minutes without signal and one more suspicious cycle of the same cell could
-  complete a confirmation as if they were consecutive; the multi-signal episode window and H14's
-  previous band also survived the gap. A signal loss now restarts the confirmation streak and the
-  episode correlation and clears the band context (H14 is `N/A` until a new previous band exists),
+  complete a confirmation as if they were consecutive; the multi-signal episode window, H1's
+  "no neighbours" streak and H14's previous band also survived the gap. A signal loss now restarts
+  the confirmation streak, the episode correlation and H1's isolation streak and clears the band
+  context (H14 is `N/A` until a new previous band exists),
   and the terminal records "Continuity interrupted by signal loss" so the gap is visible in the
   forensic black box. Independently, two accepted observations more than 2 minutes apart are no
   longer consecutive. A normal handover or a manual refresh does not count as a gap. **Methodology
@@ -34,7 +35,8 @@ makes bands 53–113 resolvable by EARFCN (follow-up to #32).
   available measurement. The latency state now has four explicit values: not measured (`N/A`),
   learning (`APRENDIENDO`, fewer than 5 samples for this cell), OK and anomalous. A measured result is
   valid for 90 s; with no new measurement it returns to not measured (an isolated failed probe does not
-  make it flicker). H12 is evaluated only with OK or anomalous; while learning it is `N/A` with its own
+  make it flicker). The expiry runs on every periodic cycle, even when no check can run (airplane
+  mode, no registered cell), and a signal loss resets the latency to not measured. H12 is evaluated only with OK or anomalous; while learning it is `N/A` with its own
   explanation. The network indicator on the main screen shows the learning state (amber) and is now
   translated (`NET` in English, `RED` in Spanish). The optional latency feature is off by default.
   **Dataset cut for H12.**
