@@ -1,5 +1,22 @@
 # ICdetection Status
 
+## 3.0.0-beta3 — Phase 3: confirmation and rule behaviour (local beta, not released)
+
+**Version code:** 41
+**Database schema:** 20 (unchanged)
+**Security effect:** confirmation restarts after a coverage gap; weights and thresholds unchanged
+**Dataset cuts:** confirmation methodology (#20), H14 (#10, #8, band table), H12 (#26), H1 status (#28)
+**Install:** separate app *ICdetection β* (`com.alexisgordr.icdetector.beta`)
+
+**#20** — `CollectionGeneration.losses` counts signal losses (not handovers or manual refreshes); a
+loss clears H14's band context before analysis and interrupts `TemporalConfidence` and
+`ThreatEpisodeTracker` at publication, with a terminal line for the black box; accepted observations
+more than 2 min apart are not consecutive. **#10** — `LteSite` (MCC-MNC-eNB); no H14 penalty within
+one eNodeB. **#26** — latency states N/A / APRENDIENDO / OK / ANOMALA, 90 s validity, H12 only on a
+measurement, indicator strings EN/ES. **#28** — H1 `N/A` while `IsolatedCellConfidence` is pending,
+with progress in the diagnostic. **#8** — `NrFrequency` (TS 38.104 raster) and H14 NR → NR; H6 on NR
+remains `N/A` by decision. Band table checked against TS 36.104 V19.2.0 (bands 53–113 resolvable).
+
 ## 3.0.0-beta2 — Phase 2: correct inputs to the rules (local beta, not released)
 
 **Version code:** 40

@@ -7,6 +7,24 @@ This manual explains how to operate the application, interpret its results, inve
 > **Important:** ICdetection is an anomaly detector, not a device that can prove the presence of an IMSI catcher. A warning means that the observations deserve examination. It does not identify an attacker or establish intent by itself.
 
 
+## Version 3.0.0-beta3 (local beta, not released)
+
+Phase 3 of the 3.0 roadmap: how evidence is confirmed and how some rules behave. Same separate app
+and database. Weights and thresholds are unchanged.
+
+- **After losing signal**, confirmation starts again: the `1/3`, `2/3` phases do not carry over a
+  gap without coverage, and the terminal shows "Continuity interrupted by signal loss". Two
+  observations more than 2 minutes apart are not consecutive either. A normal handover or the
+  refresh button does not interrupt anything.
+- **Band changes inside one base station** (same LTE eNodeB) no longer count as a band downgrade.
+- **Network indicator** (only with latency detection enabled): `NET N/A` (not measured), `NET
+  LEARNING` (amber, learning this cell's reference), `NET OK` or `NET ANOMALOUS`. A result is valid
+  for 90 seconds. H12 is `N/A` while learning.
+- **Isolated cell (H1):** with no neighbours and strong signal, the panel shows "pending
+  confirmation (1/3 deliveries)" until three deliveries confirm it; only then can H1 fail.
+- **5G SA:** H14 can now evaluate band downgrades between 5G cells. Timing Advance on 5G (H6) is
+  still not converted to distance.
+
 ## Version 3.0.0-beta2 (local beta, not released)
 
 Phase 2 of the 3.0 roadmap: the rules receive corrected data. Same separate app, *ICdetection β*;
@@ -327,7 +345,8 @@ If required by your threat model, configure the supported proxy and a compatible
 
 ### Latency detection (experimental)
 
-Off by default. When you enable it in Settings, and only while traffic leaves over mobile data (not over Wi-Fi, a VPN or the SOCKS5 proxy), the app sends an HTTPS `HEAD` request roughly every 30 seconds to three third-party endpoints: `www.google.com/generate_204` (Google), `one.one.one.one` (Cloudflare) and `dns.quad9.net` (Quad9). The requests carry no cell or location data, but they reveal your IP address to those services. Together with optional OpenCellID verification, these are the only network connections the app makes.
+Off by default. From 3.0.0-beta3 the network indicator on the main screen shows four states: not
+measured, learning (amber), OK and anomalous; see the 3.0.0-beta3 notes above. When you enable it in Settings, and only while traffic leaves over mobile data (not over Wi-Fi, a VPN or the SOCKS5 proxy), the app sends an HTTPS `HEAD` request roughly every 30 seconds to three third-party endpoints: `www.google.com/generate_204` (Google), `one.one.one.one` (Cloudflare) and `dns.quad9.net` (Quad9). The requests carry no cell or location data, but they reveal your IP address to those services. Together with optional OpenCellID verification, these are the only network connections the app makes.
 
 ---
 

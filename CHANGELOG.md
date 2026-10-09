@@ -6,6 +6,8 @@
 
 Third beta of 3.0 (roadmap: GitHub issue #27). With correct inputs in place, this phase adjusts how
 evidence is confirmed and how some rules behave. Same separate app, *ICdetection β*; schema 20.
+The LTE band table was also checked against 3GPP TS 36.104 V19.2.0, which confirms every band and
+makes bands 53–113 resolvable by EARFCN (follow-up to #32).
 
 #### Bugs found during testing
 

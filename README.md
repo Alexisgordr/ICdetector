@@ -13,7 +13,7 @@
 ![Baseline](https://img.shields.io/badge/Dataset%20baseline-v2.10.5-blue.svg)
 ![Phase](https://img.shields.io/badge/Phase-Field%20collection%20freeze-blue.svg)
 ![Schema](https://img.shields.io/badge/DB%20schema-19%20(beta%3A%2020)-informational.svg)
-![Beta](https://img.shields.io/badge/Beta-3.0.0--beta2%20(local)-orange.svg)
+![Beta](https://img.shields.io/badge/Beta-3.0.0--beta3%20(local)-orange.svg)
 [![Featured in Awesome Telco](https://img.shields.io/badge/Featured%20in-Awesome%20Telco-6f42c1.svg)](https://github.com/ravens/awesome-telco#imsi-catcher-detection)
 
 [**What's new**](#-whats-new-in-v21010) ·
@@ -79,10 +79,11 @@
 > for H8 only**). See [What's new in v2.10.10](#-whats-new-in-v21010).
 
 > [!WARNING]
-> **3.0.0-beta2 (phases 1 and 2 of the 3.0 roadmap) is a local development beta, not a release.** It
+> **3.0.0-beta3 (phases 1–3 of the 3.0 roadmap) is a local development beta, not a release.** It
 > lives on a separate branch, is not published and is not part of the field campaign. It changes
-> the database schema to **20**, adds columns to the history CSV and corrects the inputs of several
-> rules; see [What's new in 3.0.0-beta2](#-whats-new-in-300-beta2-local-beta). Keep using v2.10.10 for the
+> the database schema to **20**, adds columns to the history CSV, corrects the inputs of several
+> rules and changes how evidence is confirmed; see
+> [What's new in 3.0.0-beta3](#-whats-new-in-300-beta3-local-beta). Keep using v2.10.10 for the
 > campaign. A beta build installs as a **separate app**, *ICdetection β*
 > (`com.alexisgordr.icdetector.beta`), next to the stable one: it never updates v2.10.10 or touches
 > its database, and it starts with its own empty history and settings.
@@ -99,6 +100,7 @@
 ## 📑 Table of Contents
 
 - [What ICdetection is — and is not](#-what-icdetection-is--and-is-not)
+- [What's new in 3.0.0-beta3 (local beta)](#-whats-new-in-300-beta3-local-beta)
 - [What's new in 3.0.0-beta2 (local beta)](#-whats-new-in-300-beta2-local-beta)
 - [What's new in 3.0.0-beta1 (local beta)](#-whats-new-in-300-beta1-local-beta)
 - [What's new in v2.10.10](#-whats-new-in-v21010)
@@ -160,6 +162,22 @@ built on heuristic correlation, anomaly scoring, infrastructure consistency vali
 analysis, local telemetry verification, behavioral pattern analysis and historical baseline
 learning. The goal is visibility, anomaly awareness and local evidence for later review — within the
 technical limits imposed by Android.
+
+---
+
+## 🧪 What's new in 3.0.0-beta3 (local beta)
+
+Phase 3 of the 3.0 roadmap (GitHub issue #27): **confirmation and rule behaviour**. Same separate
+app and schema 20. Weights and thresholds are unchanged.
+
+| Area | Change | Dataset cut |
+|---|---|---|
+| **Coverage gaps** (#20) | A signal loss (empty list, abstention, airplane mode) restarts the confirmation streak, the multi-signal episode and H14's previous band. Observations more than 2 minutes apart are no longer consecutive. The terminal records the interruption. | All alarms (methodology) |
+| **Same base station** (#10) | H14 no longer penalises a band change between cells of the same LTE eNodeB (`Cell ID >> 8`) in the same network — the field week-1 pattern. | H14 |
+| **Latency states** (#26) | The optional latency check shows *not measured*, *learning* (amber), *OK* or *anomalous*; a result expires after 90 s. H12 is `N/A` while learning. The indicator is now translated (NET / RED). | H12 |
+| **H1 pending** (#28) | With no neighbours and strong signal, H1 is `N/A` ("pending confirmation x/3") until the isolation is confirmed, instead of "passed". | H1 status |
+| **5G SA** (#8) | H14 evaluates NR → NR band downgrades using the exact NR-ARFCN frequency. H6 on NR stays `N/A`: Android's NR Timing Advance has no defensible conversion yet. | H14 on 5G SA |
+| **LTE bands** | The band table was checked against 3GPP TS 36.104 V19.2.0; bands 53–113 are now resolvable by EARFCN. | H14 |
 
 ---
 
@@ -803,6 +821,10 @@ in [`CHANGELOG.md`](CHANGELOG.md) and [`Status.md`](Status.md).
 <details open>
 <summary><strong>3.0 — post-freeze roadmap (local beta)</strong></summary>
 
+- **3.0.0-beta3** (local, not released) — Phase 3, confirmation and rule behaviour: a coverage gap
+  restarts confirmation (#20), same-eNodeB band changes not penalised (#10), explicit latency states
+  with expiry (#26), H1 `N/A` while isolation is pending (#28), H14 on 5G SA (#8), LTE band table
+  checked against TS 36.104 V19.2.0. Methodology cut for confirmation; dataset cuts for H1, H12, H14.
 - **3.0.0-beta2** (local, not released) — Phase 2, correct inputs to the rules: full-identity
   handovers (#19), LTE neighbour placeholders as unavailable (#11), one frequency/PCI validator with
   EARFCN 0 learnt (#22), complete LTE band table and band resolution (#32), Timing Advance borrowed
