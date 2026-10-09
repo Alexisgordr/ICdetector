@@ -55,6 +55,8 @@ private val replacements = linkedMapOf(
     // 3.0 (#20)
     "Continuidad interrumpida por pérdida de señal: la confirmación vuelve a empezar." to
         "Continuity interrupted by signal loss: confirmation starts again.",
+    "Continuidad interrumpida por un hueco sin lecturas: la confirmación vuelve a empezar." to
+        "Continuity interrupted by a gap without readings: confirmation starts again.",
     "Nueva celda" to "New cell",
     "Ping-Pong observado" to "Ping-pong observed",
     "Sin credenciales configuradas" to "No credentials configured",

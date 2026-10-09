@@ -199,7 +199,7 @@ app and schema 20. Weights and thresholds are unchanged.
 
 | Area | Change | Dataset cut |
 |---|---|---|
-| **Coverage gaps** (#20) | A signal loss (empty list, abstention, airplane mode) restarts the confirmation streak, the multi-signal episode and H14's previous band. Observations more than 2 minutes apart are no longer consecutive. The terminal records the interruption. | All alarms (methodology) |
+| **Coverage gaps** (#20) | A signal loss (empty list, abstention, airplane mode) restarts the confirmation streak, the multi-signal episode, H1's isolation streak and H14's previous band. From beta4, so does a gap of more than 2 minutes without readings even when no loss was reported (measured with a clock that counts deep sleep). The terminal records the interruption and its cause. | All alarms (methodology) |
 | **Same base station** (#10) | H14 no longer penalises a band change between cells of the same LTE eNodeB (`Cell ID >> 8`) in the same network — the field week-1 pattern. | H14 |
 | **Latency states** (#26) | The optional latency check shows *not measured*, *learning* (amber), *OK* or *anomalous*; a result expires after 90 s. H12 is `N/A` while learning. The indicator is now translated (NET / RED). | H12 |
 | **H1 pending** (#28) | With no neighbours and strong signal, H1 is `N/A` ("pending confirmation x/3") until the isolation is confirmed, instead of "passed". | H1 status |

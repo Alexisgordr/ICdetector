@@ -198,7 +198,11 @@ class MiniICService : Service() {
 
     // v2.1: la confirmación temporal vive en core/TemporalConfidence para poder testearla de
     // extremo a extremo (ver ScenarioTest). El servicio solo la usa.
-    private val temporalConfidence = com.alexisgordr.icdetector.core.TemporalConfidence(CONFIRMATION_CYCLES)
+    // 3.0 (#20) — Reloj que cuenta el tiempo dormido: un hueco en Doze no puede parecer de 0 s.
+    private val temporalConfidence = com.alexisgordr.icdetector.core.TemporalConfidence(
+        CONFIRMATION_CYCLES,
+        elapsedRealtimeMs = SystemClock::elapsedRealtime
+    )
     private val threatEpisodeTracker = com.alexisgordr.icdetector.core.ThreatEpisodeTracker()
     private val isolatedCellConfidence = com.alexisgordr.icdetector.core.IsolatedCellConfidence()
     @Volatile private var intensiveMonitoringUntilMs = 0L
@@ -295,8 +299,8 @@ class MiniICService : Service() {
     private var prevBandSite: String? = null
     /** 3.0 (#8) — NR-ARFCN de la servidora anterior si era NR (H14 en 5G SA). */
     private var prevNrArfcn: Int? = null
-    /** 3.0 (#20) — Pérdidas de señal ya tenidas en cuenta; ver CollectionGeneration.losses. */
-    @Volatile private var acknowledgedSignalLosses = 0L
+    /** 3.0 (#20) — Continuidad de cobertura: pérdidas de señal y huecos sin lecturas. */
+    private val coverageContinuity = com.alexisgordr.icdetector.core.CoverageContinuity()
     private var prevRegisteredDbm: Int? = null
     private val recentRegisteredDbmTrend = CopyOnWriteArrayList<Int>()
     private val cellChangeHistory = CopyOnWriteArrayList<Pair<String, Long>>()
@@ -979,6 +983,8 @@ class MiniICService : Service() {
             // sondeado al principio de esta entrega.
             val deliveryLocation = getCurrentLocation()
             val observationContext = observationPersistence.capture(deliveryLocation?.toObservedFix())
+            // 3.0 (#20) — Instante monotónico de la entrega, para medir huecos sin lecturas.
+            val deliveredAtElapsedMs = SystemClock.elapsedRealtime()
 
             // v2.1 — EL TIMING ADVANCE NO SE COMPARTE ENTRE CELDAS.
             //
@@ -1041,7 +1047,9 @@ class MiniICService : Service() {
                 // 3.0 (#20) — Tras una pérdida de señal, el contexto de banda de antes del hueco no
                 // sirve para comparar: H14 queda N/A hasta tener una banda previa nueva.
                 val signalLosses = collectionGeneration.losses
-                val continuityBroken = signalLosses != acknowledgedSignalLosses
+                // También un hueco de más de 2 min sin lecturas, aunque no llegara una lista vacía.
+                val continuityBreak = coverageContinuity.check(signalLosses, deliveredAtElapsedMs)
+                val continuityBroken = continuityBreak != com.alexisgordr.icdetector.core.CoverageContinuity.Break.NONE
                 if (continuityBroken) {
                     // 3.0 (#20) — La racha de "sin vecinas" de H1 tampoco cruza el hueco: dos
                     // muestras antes y una después no confirman el aislamiento.
@@ -1322,11 +1330,18 @@ class MiniICService : Service() {
                     if (!collectionGeneration.mayPublish(cycleTicket)) return@withContext
                     // 3.0 (#20) — La confirmación temporal y los episodios empiezan de nuevo después
                     // de un hueco de cobertura. La línea del terminal deja constancia en la caja negra.
+                    coverageContinuity.acknowledge(signalLosses, deliveredAtElapsedMs)
                     if (continuityBroken) {
-                        acknowledgedSignalLosses = signalLosses
                         temporalConfidence.interrupt()
                         threatEpisodeTracker.interrupt()
-                        appendLog("[SEC]", "Continuidad interrumpida por pérdida de señal: la confirmación vuelve a empezar.")
+                        appendLog(
+                            "[SEC]",
+                            if (continuityBreak == com.alexisgordr.icdetector.core.CoverageContinuity.Break.GAP) {
+                                "Continuidad interrumpida por un hueco sin lecturas: la confirmación vuelve a empezar."
+                            } else {
+                                "Continuidad interrumpida por pérdida de señal: la confirmación vuelve a empezar."
+                            }
+                        )
                     }
                     // v2.10.4 — La servidora va siempre primero; nunca se reordena por potencia.
                     val analyzedServing = analyzedList.firstOrNull()?.takeIf { it.isRegistered }

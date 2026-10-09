@@ -31,6 +31,15 @@ schema 20.
   with it to the history row; the analysis uses the same position. Rows written by earlier 3.0
   betas may carry a context up to one analysis cycle late (**dataset cut** for `ObservedAtMs`,
   position, `GpsAccuracyM` and service-state columns).
+- **A long gap without readings did not break continuity (#20 follow-up).** Only a reported
+  signal loss (empty list, abstention) reset H1's isolation streak and H14's previous band. If no
+  readings arrived for several minutes (Doze, sleeping modem) and the same cell came back with no
+  empty list in between, H1 kept its streak and H14 compared with a band from before the gap. A gap
+  of more than 2 minutes between published observations now breaks continuity like a signal loss
+  (`CoverageContinuity`), and the terminal says which one happened. The confirmation streak
+  (`TemporalConfidence`) now measures its 2-minute gap with `SystemClock.elapsedRealtime()`: the
+  previous clock stops in deep sleep, so a long Doze gap could look like zero seconds
+  (**dataset cut** for H1, H14 and confirmation methodology).
 - **Schema 20 migration failed on a database missing a table.** The migration altered `history`,
   `incidents` and `forensic_cases` without checking they existed. A partial or damaged database
   without one of them stopped with `no such table` and the app could not open; the instrumented

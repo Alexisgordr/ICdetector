@@ -75,7 +75,7 @@ class ContinuityGapTest {
             File("src/main/java/com/alexisgordr/icdetector/service/MiniICService.kt"),
             File("app/src/main/java/com/alexisgordr/icdetector/service/MiniICService.kt")
         ).first { it.exists() }.readText()
-        assertTrue(service.contains("val continuityBroken = signalLosses != acknowledgedSignalLosses"))
+        assertTrue(service.contains("coverageContinuity.check(signalLosses, deliveredAtElapsedMs)"))
         assertTrue(service.contains("temporalConfidence.interrupt()"))
         assertTrue(service.contains("threatEpisodeTracker.interrupt()"))
         assertTrue(service.contains("prevBand = null"))
