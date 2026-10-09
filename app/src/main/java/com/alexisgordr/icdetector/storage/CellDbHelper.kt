@@ -1236,7 +1236,8 @@ class CellDbHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME, 
         writableDatabase.execSQL(
             "UPDATE $TABLE_FORENSIC_CASES SET updated_at=?, ${SchemaV20.UPDATED_AT_MS}=?, " +
                 "highest_phase=MAX(highest_phase, ?), confirmed=MAX(confirmed, ?) WHERE id=?",
-            arrayOf(ObservationTime.localText(nowMs), nowMs, cell.temporalProgress.phase,
+            // Tipo explícito: mezcla texto y números, y sin él Kotlin infiere un tipo intersección.
+            arrayOf<Any>(ObservationTime.localText(nowMs), nowMs, cell.temporalProgress.phase,
                 if (cell.temporalProgress.confirmed) 1 else 0, caseId)
         )
     }

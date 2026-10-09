@@ -83,6 +83,13 @@ android {
     }
 
     packaging {
+        // 3.0 — libandroidx.graphics.path.so viene de Compose (androidx.graphics:graphics-path) ya
+        // compilada. Sin NDK instalado, Gradle no puede quitarle los símbolos, avisa en cada build y
+        // la empaqueta tal cual; con NDK la quitaría. Se deja SIEMPRE tal cual para que el APK sea
+        // el mismo en cualquier máquina (y para la compilación reproducible de F-Droid).
+        jniLibs {
+            keepDebugSymbols += "**/libandroidx.graphics.path.so"
+        }
         resources {
             excludes += "/META-INF/{AL2.0,LGPL2.1}"
             excludes += "/META-INF/DEPENDENCIES"
