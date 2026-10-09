@@ -38,7 +38,6 @@ import java.text.SimpleDateFormat
 import java.util.*
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.CopyOnWriteArrayList
-import java.util.concurrent.atomic.AtomicLong
 import java.util.concurrent.TimeUnit
 
 class MiniICService : Service() {
@@ -207,7 +206,8 @@ class MiniICService : Service() {
     // Todas las lecturas comparten cachés, transición y confirmación temporal. Serializarlas evita
     // que dos callbacks publiquen la firma de una celda con el historial calculado para otra.
     private val cellProcessingMutex = Mutex()
-    private val enqueuedCellProcessing = AtomicLong(0L)
+    /** 3.0 (#24) — Entregas, pérdidas de señal y ciclos en curso. Ver CollectionGeneration. */
+    private val collectionGeneration = com.alexisgordr.icdetector.core.CollectionGeneration()
     private var lastIncidentIdentity: String? = null
     // v2.1 — ¿el TA de este módem es una medida o un campo sin rellenar? Ver TimingAdvanceSanity.
     private val taSanity = com.alexisgordr.icdetector.core.TimingAdvanceSanity()
@@ -906,6 +906,8 @@ class MiniICService : Service() {
             }
 
             if (list.isEmpty()) {
+                // 3.0 (#24) — Una pérdida de señal invalida el ciclo que aún esté analizando.
+                collectionGeneration.lose()
                 _cellFlow.value = emptyList()
                 updateNotificationText(getString(R.string.no_signal_airplane))
                 return
@@ -922,6 +924,7 @@ class MiniICService : Service() {
                 // Si el módem declaró una primaria pero no proporcionó una señal utilizable,
                 // abstenerse: una secundaria nunca puede heredar el historial de la primaria.
                 val declaredPrimary = com.alexisgordr.icdetector.core.ServingCellSelection.hasDeclaredPrimary(list)
+                collectionGeneration.lose()
                 _cellFlow.value = com.alexisgordr.icdetector.core.ServingCellSelection.abstentionPublication()
                 if (declaredPrimary) logUnusablePrimaryAbstention()
                 updateNotificationText(getString(R.string.searching_network))
@@ -937,9 +940,13 @@ class MiniICService : Service() {
             list.addAll(servingFirst)
             logRadioContext(list.firstOrNull()?.takeIf { it.isRegistered }, list.count { it.isRegistered })
 
-            // Solo una entrega con trabajo real puede invalidar otra que esté esperando el mutex.
-            // Un callback vacío ya no crea una secuencia fantasma que haga perder el ciclo válido.
-            val processingSequence = enqueuedCellProcessing.incrementAndGet()
+            // Una entrega con trabajo real invalida a otra que esté esperando el mutex. 3.0 (#24):
+            // la lista vacía y la abstención también invalidan, pero solo a la hora de PUBLICAR
+            // (ver collectionGeneration.lose() arriba): un ciclo en curso no puede pintar ni
+            // alertar sobre una celda que ya se perdió.
+            val cycleTicket = collectionGeneration.deliver(
+                list.firstOrNull { it.isRegistered }?.identityKey ?: "N/A"
+            )
 
             // v2.1 — EL TIMING ADVANCE NO SE COMPARTE ENTRE CELDAS.
             //
@@ -1002,7 +1009,7 @@ class MiniICService : Service() {
 
             scope.launch(Dispatchers.IO) {
                 cellProcessingMutex.withLock {
-                if (processingSequence < enqueuedCellProcessing.get()) return@withLock
+                if (!collectionGeneration.isLatest(cycleTicket)) return@withLock
                 val currentLocation = getCurrentLocation()
                 // Cellular polling only reads motion. New evidence enters from real Location
                 // callbacks, so a repeated lastKnownLocation cannot manufacture static time.
@@ -1262,6 +1269,12 @@ class MiniICService : Service() {
                 }
 
                 withContext(Dispatchers.Main) {
+                    // 3.0 (#24) — Tras analizar: si mientras tanto se perdió la señal o cambió la
+                    // servidora, este resultado ya no describe el presente. No se publica, no
+                    // alerta, no se guarda en historial/incidentes/caja negra ni alimenta los
+                    // contadores de confirmación. Las entregas llegan por el hilo principal, así
+                    // que nada puede cambiar entre esta comprobación y el resto del bloque.
+                    if (!collectionGeneration.mayPublish(cycleTicket)) return@withContext
                     // v2.10.4 — La servidora va siempre primero; nunca se reordena por potencia.
                     val analyzedServing = analyzedList.firstOrNull()?.takeIf { it.isRegistered }
                     val sorted = listOfNotNull(analyzedServing) +

@@ -66,7 +66,7 @@ class ServiceRegressionTest {
 
     @Test fun `stable-site writes are not on the main thread`() {
         val service = source("service/MiniICService.kt")
-        val mainBlock = service.substringAfter("withContext(Dispatchers.Main) {\n                    // v2.10.4 — La servidora va siempre primero")
+        val mainBlock = service.substringAfter("if (!collectionGeneration.mayPublish(cycleTicket)) return@withContext")
             .substringBefore("stableSitePreviousIdentity = active.identityKey")
         assertFalse(mainBlock.contains("recordStableSiteContext"))
         assertTrue(service.contains("dbHelper.recordStableSiteContext("))

@@ -57,6 +57,16 @@ value.
   have no instant, come after all newer rows and keep their previous order by id. The history screen
   and the CSV are listed in the same order.
 
+- **A slow analysis cycle could publish after the signal was lost (#24).** A cycle was only
+  checked when it started; an empty cell list or an abstention did not even count as something
+  newer. A cycle still analysing in the background could therefore show a cell, alert, write
+  history, incidents and black-box samples, and feed the confirmation counters after the signal had
+  been lost or the serving cell had changed. Each cycle now carries a ticket (`CollectionGeneration`)
+  that is checked again just before it publishes; an empty list or abstention invalidates it. A
+  newer delivery of the **same** cell does not invalidate it, so the app cannot stop publishing when
+  deliveries arrive faster than they are analysed. Observations the cycle already recorded (Timing
+  Advance evidence, the per-minute Stable-Site context) are kept: they describe a real moment.
+
 
 ### Bug-fix release inside the freeze — dataset cut for H8
 
