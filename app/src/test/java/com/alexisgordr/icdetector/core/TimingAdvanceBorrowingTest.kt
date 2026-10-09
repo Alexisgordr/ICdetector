@@ -46,4 +46,20 @@ class TimingAdvanceBorrowingTest {
         assertNull(TimingAdvanceBorrowing.source(serving, listOf(entry(ta = -1))))
         assertNull(TimingAdvanceBorrowing.source(serving.copy(radioTech = RadioTech.UNKNOWN), listOf(entry(radio = RadioTech.UNKNOWN))))
     }
+
+    @Test fun `android unavailable on both sides is not a physical match`() {
+        val unavailable = Int.MAX_VALUE
+        val servingUnknown = serving.copy(pci = unavailable, arfcn = unavailable)
+        assertNull(TimingAdvanceBorrowing.source(servingUnknown, listOf(entry(pci = unavailable, arfcn = unavailable))))
+    }
+
+    @Test fun `an unavailable field is ignored but a valid matching one still lends the TA`() {
+        val unavailable = Int.MAX_VALUE
+        // PCI no disponible en ambas, frecuencia válida e igual: misma celda.
+        val servingNoPci = serving.copy(pci = unavailable)
+        assertEquals(3, TimingAdvanceBorrowing.source(servingNoPci, listOf(entry(pci = unavailable)))?.timingAdvance)
+        // Un PCI imposible para LTE (> 503) tampoco cuenta como coincidencia.
+        assertNull(TimingAdvanceBorrowing.source(serving.copy(pci = 900, arfcn = null), listOf(entry(pci = 900, arfcn = null))))
+    }
 }
+

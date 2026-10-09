@@ -16,9 +16,11 @@ import com.alexisgordr.icdetector.models.RadioTech
  * Ahora la entrada tiene que ser la misma celda en todo lo que se pueda comprobar:
  *  - misma tecnología (conocida);
  *  - mismo Cell ID y TAC; MCC/MNC iguales o no informados en la entrada duplicada;
- *  - al menos un dato físico (PCI o frecuencia) informado en ambas y todos los informados en
- *    ambas, iguales. Un dato que un módem omite no se exige, pero sin ninguno no hay forma de
- *    saber que es el mismo emisor y se abstiene.
+ *  - al menos un dato físico (PCI o frecuencia) VÁLIDO en ambas y todos los válidos en ambas,
+ *    iguales. Se valida con [RadioChannels]: el "no disponible" de Android (Int.MAX_VALUE) o un
+ *    valor fuera de rango cuenta como no informado, nunca como coincidencia. Un dato que un
+ *    módem omite no se exige, pero sin ninguno válido no hay forma de saber que es el mismo
+ *    emisor y se abstiene.
  */
 internal object TimingAdvanceBorrowing {
 
@@ -34,11 +36,16 @@ internal object TimingAdvanceBorrowing {
         if (other.cellId != active.cellId || other.tac != active.tac) return false
         if (other.mcc != active.mcc && other.mcc != "N/A") return false
         if (other.mnc != active.mnc && other.mnc != "N/A") return false
-        val pciKnown = active.pci != null && other.pci != null
-        val channelKnown = active.arfcn != null && other.arfcn != null
+        val radio = active.radioTech
+        val activePci = RadioChannels.physicalIdOrNull(radio, active.pci)
+        val otherPci = RadioChannels.physicalIdOrNull(radio, other.pci)
+        val activeChannel = RadioChannels.channelOrNull(radio, active.arfcn)
+        val otherChannel = RadioChannels.channelOrNull(radio, other.arfcn)
+        val pciKnown = activePci != null && otherPci != null
+        val channelKnown = activeChannel != null && otherChannel != null
         if (!pciKnown && !channelKnown) return false
-        if (pciKnown && active.pci != other.pci) return false
-        if (channelKnown && active.arfcn != other.arfcn) return false
+        if (pciKnown && activePci != otherPci) return false
+        if (channelKnown && activeChannel != otherChannel) return false
         return true
     }
 }

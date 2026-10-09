@@ -55,8 +55,9 @@ change (still 20).
   the unit was copied, but the value belonged to another transmitter and fed H6, the highest penalty
   in the system. The TA is now copied only from a duplicate of the same cell: same technology, same
   Cell ID and TAC, matching or unreported MCC/MNC, and at least one physical field (PCI or frequency)
-  reported by both and equal. A field the modem omits is not required; with none to compare, the app
-  abstains. **Dataset cut for H6.**
+  valid in both and equal. PCI and frequency are checked with the shared validator first, so
+  Android's "unavailable" value (or an out-of-range value) on both sides is never taken as a match.
+  A field the modem omits is not required; with none valid to compare, the app abstains. **Dataset cut for H6.**
 - **One technology's Timing Advance hid another's stub zero (#33).** The evidence that decides whether
   a TA of 0 is a measurement or an unfilled field was one latch for the whole phone: the first
   non-zero TA of any technology set it for good. A modem whose LTE path reports real values could
