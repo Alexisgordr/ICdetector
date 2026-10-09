@@ -283,7 +283,8 @@ class MiniICService : Service() {
     var isProxyEnabled = false
     var isLatencyDetectionEnabled: Boolean = false
 
-    private var prevCid: String? = null
+    /** 3.0 (#19) — Identidad completa de la última servidora; ver ServingIdentityChange. */
+    private var prevServingIdentity: com.alexisgordr.icdetector.core.ServingIdentityChange.Identity? = null
     // Fix #1: guarda el cellId cuya alarma ya se ha persistido en el episodio actual, para no
     // registrar la misma evidencia en cada ciclo. Se resetea en cada cambio de celda (handover).
     // Estado para heurística 14 (band downgrade intra-LTE). Guardan la última celda
@@ -1686,7 +1687,10 @@ class MiniICService : Service() {
         // nueva volverá a "OK"/"ANOMALA" según sus propias mediciones una vez aprenda su baseline.
         resetLatencyIfCellChanged(cell)
 
-        if (cid != prevCid) {
+        // 3.0 (#19) — Handover = cambia la identidad completa (MCC, MNC, TAC, CID o tecnología),
+        // no solo el CID. Un campo desconocido en un lado no cuenta como cambio.
+        val servingIdentity = com.alexisgordr.icdetector.core.ServingIdentityChange.of(cell)
+        if (com.alexisgordr.icdetector.core.ServingIdentityChange.isHandover(prevServingIdentity, servingIdentity)) {
             telemetryHistory.onHandover()
             securityAlerts.resetAlarmEpisode()
             appendLog("[RADIO]", "Handover celular completado -> Nueva celda CID: $cid ($net)")
@@ -1698,7 +1702,7 @@ class MiniICService : Service() {
             auditController.generate(cell)
 
             val currentTime = System.currentTimeMillis()
-            cellChangeHistory.add(Pair(cid, currentTime))
+            cellChangeHistory.add(Pair(servingIdentity.key, currentTime))
             cellChangeHistory.removeAll { currentTime - it.second > ThreatAnalyzer.PING_PONG_WINDOW_MS }
 
             // El informe de heurísticas es la observación cruda del ciclo. No debe producir un
@@ -1724,7 +1728,7 @@ class MiniICService : Service() {
 
             observationPersistence.recordHandover(cell)
 
-            prevCid = cid
+            prevServingIdentity = servingIdentity
         } else if (confirmed) {
             // Misma celda que en el ciclo anterior: muestreo periódico (ver más abajo). Solo en la
             // ruta del bucle principal (confirmed = true), nunca en la de re-análisis tras la API,

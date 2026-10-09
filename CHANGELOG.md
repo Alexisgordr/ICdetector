@@ -1,5 +1,25 @@
 # Changelog
 
+## 3.0.0-beta2 (local beta, not released)
+
+### Phase 2 — Correct inputs to the rules
+
+Second beta of 3.0 (roadmap: GitHub issue #27). It makes sure each rule receives true data before
+any rule is tuned. Like beta1 it installs as the separate app *ICdetection β*. No database schema
+change (still 20).
+
+#### Bugs found during testing
+
+- **A handover was detected by Cell ID only (#19).** Two cells with the same number on another
+  operator, another tracking area or another technology (LTE/NR) were treated as the same cell: the
+  handover row was not written, the state of the previous cell was not reset and H10 (Ping-Pong) did
+  not count the change. A handover is now a change of the full serving identity (MCC, MNC, TAC, Cell
+  ID and technology), and that one definition is used for the handover row, the alarm episode and
+  H10. A field the modem did not fill in (`N/A`) on one side does not count as a change, so a modem
+  that briefly drops MCC/MNC does not create handovers that never happened. **Dataset cut for H10
+  and handover rows:** from 3.0.0-beta2 they also include changes of operator, tracking area or
+  technology with the same Cell ID.
+
 ## 3.0.0-beta1 (local beta, not released)
 
 ### Phase 1 — Data foundations
