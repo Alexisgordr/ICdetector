@@ -30,6 +30,10 @@ separate app, *ICdetection β*; schema 20.
   them failed, keeping the GPS on for nothing. After each consecutive failure the minimum interval
   between normal attempts now doubles (30 s, 1, 2, 4, 8 min, capped at 10 min) and returns to 30 s
   with the first accepted fix. Forced requests (suspicious episode, leaving airplane mode) never wait.
+- **H15's history scan reviewed (O1).** The query reads only the rows of the current cell for 30 days
+  through the identity index (now checked with `EXPLAIN QUERY PLAN` in `tools/check_sql_affinity.py`);
+  the only extra cost is sorting those rows. No limit was added on purpose: it would change which
+  history H15 sees. The trust-contradiction eviction (B5) and this review close the open items of #7.
 
 ## 3.0.0-beta3 (local beta, not released)
 

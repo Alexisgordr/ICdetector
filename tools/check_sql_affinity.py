@@ -76,11 +76,34 @@ def check_latest_observation_update(db: sqlite3.Connection) -> None:
     assert rows == [(1, "NOT_FOUND", None), (2, "VERIFIED", 40.1), (3, "NOT_FOUND", None)], rows
 
 
+def check_rf_stability_uses_identity_index(db: sqlite3.Connection) -> None:
+    """3.0 (#7, O1): la consulta de H15 busca por el índice de identidad, no recorre la tabla."""
+    db.execute(
+        "CREATE TABLE h15(id INTEGER PRIMARY KEY AUTOINCREMENT, timestamp TEXT, cid TEXT, mnc TEXT, "
+        "tac TEXT, mcc TEXT, radio TEXT, score INTEGER, failed_heuristics TEXT, pci INTEGER, "
+        "arfcn INTEGER, observed_at_ms INTEGER)"
+    )
+    db.execute("CREATE INDEX idx_h15_identity ON h15(cid, mnc, tac, mcc, radio)")
+    db.execute("CREATE INDEX idx_h15_observed ON h15(observed_at_ms)")
+    db.execute("CREATE INDEX idx_h15_timestamp ON h15(timestamp)")
+    plan = " ".join(
+        row[3] for row in db.execute(
+            "EXPLAIN QUERY PLAN SELECT pci, arfcn, timestamp, observed_at_ms FROM h15 "
+            "WHERE cid=? AND mnc=? AND tac=? AND mcc=? AND radio=? "
+            "AND (observed_at_ms>? OR (observed_at_ms IS NULL AND timestamp>?)) "
+            "ORDER BY (observed_at_ms IS NOT NULL) ASC, observed_at_ms ASC, timestamp ASC, id ASC",
+            (1,) * 7,
+        )
+    )
+    assert "USING INDEX idx_h15_identity" in plan, plan
+
+
 def main() -> int:
     require_source_guards()
     with sqlite3.connect(":memory:") as db:
         check_numeric_affinity(db)
         check_latest_observation_update(db)
+        check_rf_stability_uses_identity_index(db)
     print("SQL verification regressions: OK")
     return 0
 

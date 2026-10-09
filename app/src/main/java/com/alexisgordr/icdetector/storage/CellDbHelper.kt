@@ -2715,6 +2715,10 @@ class CellDbHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME, 
      * interesa all el historial de la celda (incluidas reapariciones recientes y en el sitio
      * actual). Solo lectura; no toca esquema ni escritura.
      */
+    // 3.0 (#7, O1) — Revisado: la consulta recorre solo las filas de ESTA celda en 30 días, por
+    // el índice idx_cell_identity_radio (comprobado con EXPLAIN QUERY PLAN en
+    // tools/check_sql_affinity.py); el único coste extra es ordenar esas filas. No se le pone un
+    // LIMIT a propósito: cambiaría qué historia ve H15 y sería un corte de dataset sin necesidad.
     fun getCellRfStability(cellId: String, mnc: String, tac: String, mcc: String, radio: RadioTech): CellRfStability {
         val pciCounts = HashMap<Int, Int>()
         val arfcnCounts = HashMap<Int, Int>()
