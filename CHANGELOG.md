@@ -6,7 +6,16 @@
 
 Fourth and last beta of the 3.0 roadmap (GitHub issue #27): the maintenance items from the
 post-freeze review (#7) and the documentation of the campaign's validation limits (#31). Same
-separate app, *ICdetection β*; schema 20.
+schema 20.
+
+#### Installation
+
+- **Same app for betas and release, clean install for 3.0.** Betas build the same app as the
+  release (`com.alexisgordr.icdetector`, *ICdetection*), so a beta updates to the final 3.0. An
+  earlier beta setting (a separate `.beta` app called *ICdetection β*) was removed before any
+  release. **3.0 requires a clean install:** export your data, uninstall v2.10.x, then install 3.0.
+  Installing over v2.10.x still upgrades the database safely, but mixing data from both sides of
+  the methodology cuts is not supported. From 3.0 on, every version updates the previous one.
 
 #### Maintenance (#7)
 
@@ -51,7 +60,7 @@ separate app, *ICdetection β*; schema 20.
 ### Phase 3 — Confirmation and rule behaviour
 
 Third beta of 3.0 (roadmap: GitHub issue #27). With correct inputs in place, this phase adjusts how
-evidence is confirmed and how some rules behave. Same separate app, *ICdetection β*; schema 20.
+evidence is confirmed and how some rules behave. Schema 20.
 The LTE band table was also checked against 3GPP TS 36.104 V19.2.0, which confirms every band and
 makes bands 53–113 resolvable by EARFCN (follow-up to #32).
 
@@ -111,7 +120,7 @@ makes bands 53–113 resolvable by EARFCN (follow-up to #32).
 ### Phase 2 — Correct inputs to the rules
 
 Second beta of 3.0 (roadmap: GitHub issue #27). It makes sure each rule receives true data before
-any rule is tuned. Like beta1 it installs as the separate app *ICdetection β*. No database schema
+any rule is tuned. No database schema
 change (still 20).
 
 #### Bugs found during testing
@@ -180,9 +189,7 @@ change (still 20).
 ### Phase 1 — Data foundations
 
 First beta of 3.0, built after the field-collection freeze. It follows the ordered roadmap in
-GitHub issue #27. A beta version name (`-beta`) builds a separate app, *ICdetection β*
-(`com.alexisgordr.icdetector.beta`), so it installs next to the stable release without updating it
-or migrating its database; removing `-beta` restores the stable identifier and name. Database schema **20**: the migration only adds columns, and every row recorded
+GitHub issue #27. Database schema **20**: the migration only adds columns, and every row recorded
 before 3.0 keeps the new columns empty, meaning **unknown** — nothing is filled in with an assumed
 value.
 

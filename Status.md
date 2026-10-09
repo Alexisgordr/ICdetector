@@ -5,7 +5,7 @@
 **Version code:** 42
 **Database schema:** 20 (unchanged)
 **Security effect:** none; no rule, weight or threshold change
-**Install:** separate app *ICdetection β* (`com.alexisgordr.icdetector.beta`)
+**Install:** same app id `com.alexisgordr.icdetector`; updates from earlier 3.0 betas install normally
 
 **#31** — validation limits documented in README, IMPORTANT and MANUAL. **#7** — B4: Stable-Site
 prefix stored in Spanish (`[sitio-sin-verificar]`) and translated; B5: LRU eviction in
@@ -20,7 +20,7 @@ requests. Every item of the 3.0 roadmap (#27) is now implemented.
 **Database schema:** 20 (unchanged)
 **Security effect:** confirmation restarts after a coverage gap; weights and thresholds unchanged
 **Dataset cuts:** confirmation methodology (#20), H14 (#10, #8, band table), H12 (#26), H1 status (#28)
-**Install:** separate app *ICdetection β* (`com.alexisgordr.icdetector.beta`)
+**Install:** same app id `com.alexisgordr.icdetector`; updates from earlier 3.0 betas install normally
 
 **#20** — `CollectionGeneration.losses` counts signal losses (not handovers or manual refreshes); a
 loss clears H14's band context before analysis and interrupts `TemporalConfidence` and
@@ -37,7 +37,7 @@ remains `N/A` by decision. Band table checked against TS 36.104 V19.2.0 (bands 5
 **Database schema:** 20 (unchanged from beta1)
 **Security effect:** rules receive corrected inputs; weights and thresholds unchanged
 **Dataset cuts:** H5 (#11), H6 (#21, #33), H10 and handover rows (#19), H14 (#32), H15 and local trust (#22)
-**Install:** separate app *ICdetection β* (`com.alexisgordr.icdetector.beta`)
+**Install:** same app id `com.alexisgordr.icdetector`; updates from earlier 3.0 betas install normally
 
 **#19** — handovers by full serving identity (MCC, MNC, TAC, Cell ID, technology); unknown fields
 are not a change. **#11** — LTE neighbour TAC 65535 / Cell ID 268435455 read as unavailable.
@@ -54,7 +54,7 @@ an instrumented EARFCN 0 learning test.
 **Database schema:** 20 (additive migration; rows before 3.0 keep the new columns empty = unknown)
 **Security effect:** none on rules, weights or thresholds; stale analysis cycles no longer publish or alert
 **Dataset:** methodology cut for ages and ordering (exact UTC instant from 3.0); not part of the v2.10.5 campaign
-**Install:** separate app *ICdetection β* (`com.alexisgordr.icdetector.beta`), next to v2.10.10; own database and settings
+**Install:** clean install of 3.0 (export, uninstall v2.10.x, install); same app id `com.alexisgordr.icdetector`, later 3.0 versions update normally
 
 Phase 1 of the ordered 3.0 roadmap (GitHub issue #27), developed on a separate branch and not
 published. **#23** — each row stores the observation instant in UTC; windows, verification TTL,

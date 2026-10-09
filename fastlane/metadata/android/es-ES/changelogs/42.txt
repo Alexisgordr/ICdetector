@@ -5,4 +5,4 @@
 • Una lista única une cada regla con su peso y su familia.
 • La celda de casa ya no se olvida la primera en días con muchas celdas.
 
-Sin cambios en la detección. Completa la hoja de ruta 3.0.
+La 3.0 requiere instalación limpia. Sin cambios en la detección.

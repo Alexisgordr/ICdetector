@@ -30,10 +30,11 @@
 > 20, adds history columns (UTC instant, evaluation coverage, GPS accuracy, app version), corrects
 > the inputs of H5, H6, H10, H14, H15 and local trust, and changes how alarms are confirmed after a
 > coverage gap and how H1, H12 and H14 behave, so its data is not comparable with the campaign for
-> those rules. It installs as a
-> separate app, *ICdetection β* (`com.alexisgordr.icdetector.beta`): it cannot update v2.10.10 or
-> migrate the campaign database, and it starts with its own empty history and settings. The campaign
-> keeps running on v2.10.10. Running both at once doubles the battery and network use.
+> those rules. It is
+> the same app as the stable release (`com.alexisgordr.icdetector`, *ICdetection*), so installing it
+> updates v2.10.x and migrates its database — **do not install it on the phone that collects the
+> campaign data.** 3.0 needs a clean install: export your data, uninstall v2.10.x, then install
+> 3.0. From 3.0 on, every version updates the previous one normally.
 
 ICdetection is now entering a **three-month field-collection and stabilization period**.
 

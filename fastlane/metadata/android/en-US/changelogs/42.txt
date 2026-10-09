@@ -5,4 +5,4 @@
 • One canonical list ties each rule to its weight and family.
 • The home cell is no longer forgotten first on busy days.
 
-No detection changes. Completes the 3.0 roadmap.
+3.0 needs a clean install. No detection changes.

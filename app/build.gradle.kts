@@ -39,14 +39,9 @@ android {
         versionCode = 42
         versionName = "3.0.0-beta4"
 
-        // 3.0 — Una versión beta es OTRA app en el móvil: identificador `.beta` y nombre visible
-        // "ICdetection β". Así se instala junto a la estable sin actualizarla (y sin migrar su base
-        // de datos) y sin chocar con su firma. Al quitar "-beta" del versionName, la app vuelve
-        // sola al identificador y al nombre de la estable.
-        val isBeta = versionName.orEmpty().contains("-beta")
-        if (isBeta) applicationIdSuffix = ".beta"
-        manifestPlaceholders["appLabel"] = if (isBeta) "ICdetection β" else "ICdetection"
-
+        // 3.0 — Las betas usan el mismo identificador y nombre que la versión final, para poder
+        // actualizar de beta a release. La 3.0 requiere instalación limpia (ver README/IMPORTANT);
+        // de ahí en adelante cada versión actualiza a la anterior.
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables {

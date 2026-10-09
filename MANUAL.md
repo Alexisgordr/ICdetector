@@ -9,8 +9,8 @@ This manual explains how to operate the application, interpret its results, inve
 
 ## Version 3.0.0-beta4 (local beta, not released)
 
-Phase 4, the last of the 3.0 roadmap: maintenance and documentation. Same separate app and database;
-detection is unchanged.
+Phase 4, the last of the 3.0 roadmap: maintenance and documentation. Same database; detection is
+unchanged. Updates from earlier 3.0 betas install normally.
 
 - **Battery where GPS does not reach:** if precise GPS fixes keep failing, the app waits longer
   between normal attempts (from 30 seconds up to 10 minutes). A suspicious episode still requests a
@@ -21,8 +21,7 @@ detection is unchanged.
 
 ## Version 3.0.0-beta3 (local beta, not released)
 
-Phase 3 of the 3.0 roadmap: how evidence is confirmed and how some rules behave. Same separate app
-and database. Weights and thresholds are unchanged.
+Phase 3 of the 3.0 roadmap: how evidence is confirmed and how some rules behave. Same database. Weights and thresholds are unchanged.
 
 - **After losing signal**, confirmation starts again: the `1/3`, `2/3` phases do not carry over a
   gap without coverage, and the terminal shows "Continuity interrupted by signal loss". Two
@@ -39,8 +38,7 @@ and database. Weights and thresholds are unchanged.
 
 ## Version 3.0.0-beta2 (local beta, not released)
 
-Phase 2 of the 3.0 roadmap: the rules receive corrected data. Same separate app, *ICdetection β*;
-same database (schema 20). Weights and thresholds are unchanged, but several rules now see different
+Phase 2 of the 3.0 roadmap: the rules receive corrected data. Same database (schema 20). Weights and thresholds are unchanged, but several rules now see different
 inputs, so their results are not comparable with the campaign (dataset cuts):
 
 - **Handovers (H10):** a change of operator, tracking area or technology with the same Cell ID is
@@ -60,12 +58,13 @@ inputs, so their results are not comparable with the campaign (dataset cuts):
 Phase 1 of the 3.0 roadmap: data foundations. A development build on a separate branch; for the
 field campaign keep using v2.10.10. Detection rules, weights and thresholds are unchanged.
 
-The beta installs as a **separate app** called *ICdetection β*. It does not replace or update
-v2.10.10 and never opens its database: it starts with an empty history, its own settings and no
-OpenCellID key (enter it again if you want verification). Both apps can run at the same time, at
-the cost of roughly double battery and network use. When an existing schema-19 database is opened
-by a 3.0 build, it is upgraded to schema 20; existing history is kept, and rows recorded before
-3.0 show the new fields as empty (unknown).
+**Installing 3.0 (clean install required).** The betas and the final 3.0 are the same app as
+before (*ICdetection*, `com.alexisgordr.icdetector`), so a beta updates to the release later. To
+start 3.0, export anything you want to keep (history CSV, forensic cases), **uninstall v2.10.x**
+and then install 3.0: the history, settings and OpenCellID key start empty. Installing 3.0 over
+v2.10.x would upgrade the old database to schema 20 (old rows are kept with the new fields empty),
+but mixing 2.10.x and 3.0 data across the methodology cuts is not supported. From 3.0 on, every
+version — beta or release — updates the previous one normally.
 
 - **Exact time:** each new observation stores its instant in UTC. Travelling across time zones or
   the repeated hour at the autumn clock change no longer shifts ages, windows or ordering. The

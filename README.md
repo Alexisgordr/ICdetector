@@ -84,9 +84,9 @@
 > the database schema to **20**, adds columns to the history CSV, corrects the inputs of several
 > rules and changes how evidence is confirmed; see
 > [What's new in 3.0.0-beta4](#-whats-new-in-300-beta4-local-beta). Keep using v2.10.10 for the
-> campaign. A beta build installs as a **separate app**, *ICdetection β*
-> (`com.alexisgordr.icdetector.beta`), next to the stable one: it never updates v2.10.10 or touches
-> its database, and it starts with its own empty history and settings.
+> campaign. Betas and the final 3.0 are the same app (`com.alexisgordr.icdetector`, *ICdetection*),
+> so a beta updates to the release. **3.0 needs a clean install**: export your data, uninstall
+> v2.10.x, then install 3.0. From 3.0 on, updates install normally.
 
 > [!TIP]
 > **Starting a clean research dataset?** Export anything you want to keep, then use
@@ -169,8 +169,14 @@ technical limits imposed by Android.
 
 ## 🧪 What's new in 3.0.0-beta4 (local beta)
 
-Phase 4, the last of the 3.0 roadmap (GitHub issue #27): **maintenance and documentation**. Same
-separate app and schema 20. No detection rule, weight or threshold changes.
+Phase 4, the last of the 3.0 roadmap (GitHub issue #27): **maintenance and documentation**. Schema
+20. No detection rule, weight or threshold changes.
+
+**3.0 needs a clean install.** Export anything you want to keep, uninstall v2.10.x, then install
+3.0 (beta or release). Rows recorded by 2.10.x have no UTC instant, coverage or app version, and the
+3.0 methodology cuts make them hard to compare; starting clean keeps the 3.0 dataset consistent.
+From 3.0 on, every version — beta or release — updates the previous one normally
+(`com.alexisgordr.icdetector`, same name *ICdetection*).
 
 | Area | Change |
 |---|---|
