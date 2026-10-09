@@ -10,9 +10,14 @@ This manual explains how to operate the application, interpret its results, inve
 ## Version 3.0.0-beta1 (local beta, not released)
 
 Phase 1 of the 3.0 roadmap: data foundations. A development build on a separate branch; for the
-field campaign keep using v2.10.10. Detection rules, weights and thresholds are unchanged. The
-database is upgraded to schema 20 on first start; existing history is kept, and rows recorded
-before 3.0 show the new fields as empty (unknown).
+field campaign keep using v2.10.10. Detection rules, weights and thresholds are unchanged.
+
+The beta installs as a **separate app** called *ICdetection β*. It does not replace or update
+v2.10.10 and never opens its database: it starts with an empty history, its own settings and no
+OpenCellID key (enter it again if you want verification). Both apps can run at the same time, at
+the cost of roughly double battery and network use. When an existing schema-19 database is opened
+by a 3.0 build, it is upgraded to schema 20; existing history is kept, and rows recorded before
+3.0 show the new fields as empty (unknown).
 
 - **Exact time:** each new observation stores its instant in UTC. Travelling across time zones or
   the repeated hour at the autumn clock change no longer shifts ages, windows or ordering. The

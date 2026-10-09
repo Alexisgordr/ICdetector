@@ -6,6 +6,7 @@
 **Database schema:** 20 (additive migration; rows before 3.0 keep the new columns empty = unknown)
 **Security effect:** none on rules, weights or thresholds; stale analysis cycles no longer publish or alert
 **Dataset:** methodology cut for ages and ordering (exact UTC instant from 3.0); not part of the v2.10.5 campaign
+**Install:** separate app *ICdetection β* (`com.alexisgordr.icdetector.beta`), next to v2.10.10; own database and settings
 
 Phase 1 of the ordered 3.0 roadmap (GitHub issue #27), developed on a separate branch and not
 published. **#23** — each row stores the observation instant in UTC; windows, verification TTL,

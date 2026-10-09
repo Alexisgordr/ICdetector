@@ -5,7 +5,9 @@
 ### Phase 1 — Data foundations
 
 First beta of 3.0, built after the field-collection freeze. It follows the ordered roadmap in
-GitHub issue #27. Database schema **20**: the migration only adds columns, and every row recorded
+GitHub issue #27. A beta version name (`-beta`) builds a separate app, *ICdetection β*
+(`com.alexisgordr.icdetector.beta`), so it installs next to the stable release without updating it
+or migrating its database; removing `-beta` restores the stable identifier and name. Database schema **20**: the migration only adds columns, and every row recorded
 before 3.0 keeps the new columns empty, meaning **unknown** — nothing is filled in with an assumed
 value.
 

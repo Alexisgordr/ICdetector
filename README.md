@@ -83,7 +83,9 @@
 > lives on a separate branch, is not published and is not part of the field campaign. It changes
 > the database schema to **20** and adds columns to the history CSV; see
 > [What's new in 3.0.0-beta1](#-whats-new-in-300-beta1-local-beta). Keep using v2.10.10 for the
-> campaign.
+> campaign. A beta build installs as a **separate app**, *ICdetection β*
+> (`com.alexisgordr.icdetector.beta`), next to the stable one: it never updates v2.10.10 or touches
+> its database, and it starts with its own empty history and settings.
 
 > [!TIP]
 > **Starting a clean research dataset?** Export anything you want to keep, then use

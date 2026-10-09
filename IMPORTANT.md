@@ -27,8 +27,10 @@
 >
 > **3.0.0-beta1 is not part of the campaign.** Work on 3.0 (roadmap in GitHub issue #27) has started
 > as a local development beta on a separate branch. It upgrades the database to schema 20 and adds
-> history columns (UTC instant, evaluation coverage, GPS accuracy, app version). Do not install it on
-> the phone that collects the campaign data: the campaign runs on v2.10.10.
+> history columns (UTC instant, evaluation coverage, GPS accuracy, app version). It installs as a
+> separate app, *ICdetection β* (`com.alexisgordr.icdetector.beta`): it cannot update v2.10.10 or
+> migrate the campaign database, and it starts with its own empty history and settings. The campaign
+> keeps running on v2.10.10. Running both at once doubles the battery and network use.
 
 ICdetection is now entering a **three-month field-collection and stabilization period**.
 
