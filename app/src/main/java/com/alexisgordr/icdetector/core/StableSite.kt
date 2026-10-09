@@ -30,23 +30,13 @@ data class NeighbourDiagnostic(
 }
 
 object StableSiteNeighbourEvidence {
-    private const val ANDROID_UNAVAILABLE = Int.MAX_VALUE
-
+    // 3.0 (#22) — Mismos rangos que el resto de la app (RadioChannels). GSM tiene ARFCN pero no
+    // identificador físico en la API, así que no puede formar una huella RF.
     fun isValidArfcn(radio: com.alexisgordr.icdetector.models.RadioTech, value: Int): Boolean =
-        value != ANDROID_UNAVAILABLE && when (radio) {
-            com.alexisgordr.icdetector.models.RadioTech.LTE -> value in 0..262_143
-            com.alexisgordr.icdetector.models.RadioTech.NR -> value in 0..3_279_165
-            com.alexisgordr.icdetector.models.RadioTech.UMTS -> value in 0..16_383
-            else -> false // GSM has ARFCN but this model receives no BSIC/PCI counterpart.
-        }
+        radio != com.alexisgordr.icdetector.models.RadioTech.GSM && RadioChannels.isValidChannel(radio, value)
 
     fun isValidPhysicalId(radio: com.alexisgordr.icdetector.models.RadioTech, value: Int): Boolean =
-        value != ANDROID_UNAVAILABLE && when (radio) {
-            com.alexisgordr.icdetector.models.RadioTech.LTE -> value in 0..503
-            com.alexisgordr.icdetector.models.RadioTech.NR -> value in 0..1007
-            com.alexisgordr.icdetector.models.RadioTech.UMTS -> value in 0..511
-            else -> false
-        }
+        RadioChannels.isValidPhysicalId(radio, value)
 
     fun rfFingerprint(cell: com.alexisgordr.icdetector.models.CellData): RfNeighbourFingerprint? {
         if (cell.cellId != "N/A") return null

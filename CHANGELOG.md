@@ -28,6 +28,15 @@ change (still 20).
   TAC, and those neighbours count as RF-only. The serving cell keeps what the modem reports, and NR is
   unchanged (65535 is a valid NR TAC). Rows already stored are not changed. **Dataset cut for H5**
   on affected devices. These devices remain outside the supported AOSP-like set.
+- **EARFCN 0 was dropped from learning (#22).** H8 accepted EARFCN 0 as a valid LTE frequency
+  (lowest Band 1 channel), but the history learning used `> 0`, so a real Band 1 carrier on channel
+  0 could not learn its known PCIs for local trust, and H15 grouped it with rows that really have no
+  frequency. Learning also accepted any PCI up to 1007 for every technology. There is now one
+  validator per technology (`RadioChannels`): EARFCN 0..262143, NR-ARFCN 0..3279165, UARFCN
+  0..16383, GSM 0..1023; PCI LTE 0..503, NR 0..1007, PSC UMTS 0..511; Android's "unavailable" value
+  is never valid. Local trust, H15, Stable-Site and H8 use it. **Dataset cut for local trust and H15**
+  on carriers using EARFCN 0, and for LTE rows with an impossible PCI (504..1007), which no longer
+  count as learnt values. H8's results are unchanged for every value Android can report.
 
 ## 3.0.0-beta1 (local beta, not released)
 

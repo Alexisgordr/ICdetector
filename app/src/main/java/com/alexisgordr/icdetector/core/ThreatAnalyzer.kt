@@ -311,17 +311,20 @@ object ThreatAnalyzer {
         // frecuencia. Antes ese valor entraba como "frecuencia sospechosa" y restaba 15 puntos:
         // se confundía no tener el dato con tener un dato imposible. Ahora H8 queda N/A. Un valor
         // medido fuera de rango sigue fallando como antes. Corte de dataset solo para H8.
+        //
+        // 3.0 (#22) — Los rangos vienen de RadioChannels, el mismo validador que usa el
+        // aprendizaje. El NR-ARFCN 0 no lo usa ninguna banda y H8 lo sigue tratando como sospechoso.
         active.arfcn?.takeUnless { it == ARFCN_UNAVAILABLE }?.let { arfcn ->
             if (active.radioTech == RadioTech.NR) {
                 eArfcn = true
-                if (arfcn > 3279165 || arfcn == 0) {
+                if (!RadioChannels.isValidChannel(RadioTech.NR, arfcn) || arfcn == 0) {
                     hArfcn = false
                     reasons.add("Frecuencia (ARFCN) 5G sospechosa")
                     score -= 15
                 }
             } else if (active.radioTech == RadioTech.LTE) {
                 eArfcn = true
-                if (arfcn > 262143) {  // EARFCN 0 es válido (Banda 1, 2110 MHz); el "no disponible" llega como > 262143
+                if (!RadioChannels.isValidChannel(RadioTech.LTE, arfcn)) {  // EARFCN 0 es válido (Banda 1, 2110 MHz)
                     hArfcn = false
                     reasons.add("Frecuencia (EARFCN) 4G sospechosa")
                     score -= 15

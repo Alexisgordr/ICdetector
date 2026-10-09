@@ -22,6 +22,7 @@ import com.alexisgordr.icdetector.models.ForensicCaseState
 import com.alexisgordr.icdetector.models.ForensicCaseOrigin
 import com.alexisgordr.icdetector.models.ForensicPruneResult
 import com.alexisgordr.icdetector.core.ForensicRetentionPolicy
+import com.alexisgordr.icdetector.core.RadioChannels
 import com.alexisgordr.icdetector.forensics.ForensicStore
 import com.alexisgordr.icdetector.models.ForensicSample
 import com.alexisgordr.icdetector.models.identityKey
@@ -2360,8 +2361,9 @@ class CellDbHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME, 
                 val ts = c.getString(0).orEmpty()
                 detailedClean++
                 if (!c.isNull(1) && !c.isNull(2)) located++
-                val pci = if (!c.isNull(3)) c.getInt(3).takeIf { it in 0..1007 } else null
-                val arfcn = if (!c.isNull(4)) c.getInt(4).takeIf { it > 0 } else null
+                // 3.0 (#22) — Validador por tecnología: el EARFCN 0 (Banda 1) es una portadora real.
+                val pci = if (!c.isNull(3)) RadioChannels.physicalIdOrNull(cell.radioTech, c.getInt(3)) else null
+                val arfcn = if (!c.isNull(4)) RadioChannels.channelOrNull(cell.radioTech, c.getInt(4)) else null
                 if (pci != null) { pciCounts[pci] = (pciCounts[pci] ?: 0) + 1; rf++ }
                 if (arfcn != null) arfcnCounts[arfcn] = (arfcnCounts[arfcn] ?: 0) + 1
                 if (pci != null && arfcn != null) {
@@ -2785,9 +2787,10 @@ class CellDbHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME, 
                     val observedAt = if (cursor.isNull(observedIdx)) null else cursor.getLong(observedIdx)
                     val isRecent = ObservationTime.isAfter(observedAt, ts, recentWindow)
 
-                    // PCI válido LTE/NR: 0..1007. Ignorar valores fuera de rango (lecturas basura).
-                    val pci = if (!cursor.isNull(pciIdx)) cursor.getInt(pciIdx).takeIf { it in 0..1007 } else null
-                    val arfcn = if (!cursor.isNull(arfcnIdx)) cursor.getInt(arfcnIdx).takeIf { it > 0 } else null
+                    // 3.0 (#22) — Validador por tecnología. Antes `> 0` mezclaba el EARFCN 0 (Banda 1)
+                    // con las filas sin frecuencia (UNKNOWN_ARFCN), y cualquier PCI hasta 1007 valía en LTE.
+                    val pci = if (!cursor.isNull(pciIdx)) RadioChannels.physicalIdOrNull(radio, cursor.getInt(pciIdx)) else null
+                    val arfcn = if (!cursor.isNull(arfcnIdx)) RadioChannels.channelOrNull(radio, cursor.getInt(arfcnIdx)) else null
 
                     if (pci != null) {
                         pciCounts[pci] = (pciCounts[pci] ?: 0) + 1
