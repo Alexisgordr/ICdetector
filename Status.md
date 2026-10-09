@@ -1,5 +1,19 @@
 # ICdetection Status
 
+## 3.0.0-beta4 — Phase 4: maintenance and documentation (local beta, not released)
+
+**Version code:** 42
+**Database schema:** 20 (unchanged)
+**Security effect:** none; no rule, weight or threshold change
+**Install:** separate app *ICdetection β* (`com.alexisgordr.icdetector.beta`)
+
+**#31** — validation limits documented in README, IMPORTANT and MANUAL. **#7** — B4: Stable-Site
+prefix stored in Spanish (`[sitio-sin-verificar]`) and translated; B5: LRU eviction in
+`TrustContradictionTransitionTracker`; O1: H15 history scan reviewed, no limit, query plan guarded in
+`check_sql_affinity.py`; O2: `HeuristicCatalog` as the canonical list of the 16 rules (ids, scorer
+keys, episode families) with a consistency test; O5: `PreciseFixBackoff` for normal precise-fix
+requests. Every item of the 3.0 roadmap (#27) is now implemented.
+
 ## 3.0.0-beta3 — Phase 3: confirmation and rule behaviour (local beta, not released)
 
 **Version code:** 41

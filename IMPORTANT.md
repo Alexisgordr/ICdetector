@@ -26,7 +26,7 @@
 > baseline and Day 1 still hold for everything except H10. No reset is needed.
 >
 > **The 3.0 betas are not part of the campaign.** Work on 3.0 (roadmap in GitHub issue #27) is a
-> local development beta on a separate branch, now 3.0.0-beta3. It upgrades the database to schema
+> local development beta on a separate branch, now 3.0.0-beta4 (every roadmap item implemented). It upgrades the database to schema
 > 20, adds history columns (UTC instant, evaluation coverage, GPS accuracy, app version), corrects
 > the inputs of H5, H6, H10, H14, H15 and local trust, and changes how alarms are confirmed after a
 > coverage gap and how H1, H12 and H14 behave, so its data is not comparable with the campaign for

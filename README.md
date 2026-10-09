@@ -13,7 +13,7 @@
 ![Baseline](https://img.shields.io/badge/Dataset%20baseline-v2.10.5-blue.svg)
 ![Phase](https://img.shields.io/badge/Phase-Field%20collection%20freeze-blue.svg)
 ![Schema](https://img.shields.io/badge/DB%20schema-19%20(beta%3A%2020)-informational.svg)
-![Beta](https://img.shields.io/badge/Beta-3.0.0--beta3%20(local)-orange.svg)
+![Beta](https://img.shields.io/badge/Beta-3.0.0--beta4%20(local)-orange.svg)
 [![Featured in Awesome Telco](https://img.shields.io/badge/Featured%20in-Awesome%20Telco-6f42c1.svg)](https://github.com/ravens/awesome-telco#imsi-catcher-detection)
 
 [**What's new**](#-whats-new-in-v21010) ·
@@ -79,11 +79,11 @@
 > for H8 only**). See [What's new in v2.10.10](#-whats-new-in-v21010).
 
 > [!WARNING]
-> **3.0.0-beta3 (phases 1–3 of the 3.0 roadmap) is a local development beta, not a release.** It
+> **3.0.0-beta4 (all four phases of the 3.0 roadmap) is a local development beta, not a release.** It
 > lives on a separate branch, is not published and is not part of the field campaign. It changes
 > the database schema to **20**, adds columns to the history CSV, corrects the inputs of several
 > rules and changes how evidence is confirmed; see
-> [What's new in 3.0.0-beta3](#-whats-new-in-300-beta3-local-beta). Keep using v2.10.10 for the
+> [What's new in 3.0.0-beta4](#-whats-new-in-300-beta4-local-beta). Keep using v2.10.10 for the
 > campaign. A beta build installs as a **separate app**, *ICdetection β*
 > (`com.alexisgordr.icdetector.beta`), next to the stable one: it never updates v2.10.10 or touches
 > its database, and it starts with its own empty history and settings.
@@ -100,6 +100,7 @@
 ## 📑 Table of Contents
 
 - [What ICdetection is — and is not](#-what-icdetection-is--and-is-not)
+- [What's new in 3.0.0-beta4 (local beta)](#-whats-new-in-300-beta4-local-beta)
 - [What's new in 3.0.0-beta3 (local beta)](#-whats-new-in-300-beta3-local-beta)
 - [What's new in 3.0.0-beta2 (local beta)](#-whats-new-in-300-beta2-local-beta)
 - [What's new in 3.0.0-beta1 (local beta)](#-whats-new-in-300-beta1-local-beta)
@@ -163,6 +164,24 @@ built on heuristic correlation, anomaly scoring, infrastructure consistency vali
 analysis, local telemetry verification, behavioral pattern analysis and historical baseline
 learning. The goal is visibility, anomaly awareness and local evidence for later review — within the
 technical limits imposed by Android.
+
+---
+
+## 🧪 What's new in 3.0.0-beta4 (local beta)
+
+Phase 4, the last of the 3.0 roadmap (GitHub issue #27): **maintenance and documentation**. Same
+separate app and schema 20. No detection rule, weight or threshold changes.
+
+| Area | Change |
+|---|---|
+| **Campaign limits** (#31) | New section [What the field campaign can and cannot show](#-what-the-field-campaign-can-and-cannot-show): no ground truth, no negative control, limited coverage. |
+| **Rule catalogue** (#7) | One canonical list of the 16 rules ties together their id, scorer weight and episode family; a test keeps them in sync. |
+| **GPS battery** (#7) | Precise GPS fixes that keep failing are retried less often (30 s up to 10 min); forced requests never wait. |
+| **Trust contradictions** (#7) | The home cell is no longer forgotten first on a busy day (least-recently-seen eviction). |
+| **Translation** (#7) | The Stable-Site prefix is stored in Spanish and shown as `[site-unverified]` in English. |
+
+With this beta every item of the 3.0 roadmap is implemented. The next step is testing it on a
+device before deciding on the 3.0 release.
 
 ---
 
@@ -839,6 +858,9 @@ in [`CHANGELOG.md`](CHANGELOG.md) and [`Status.md`](Status.md).
 <details open>
 <summary><strong>3.0 — post-freeze roadmap (local beta)</strong></summary>
 
+- **3.0.0-beta4** (local, not released) — Phase 4, maintenance and documentation: campaign limits
+  documented (#31); canonical rule list, GPS fix back-off, LRU trust-contradiction tracker, Stable-Site
+  prefix translation and H15 query plan check (#7). No detection change. Completes the 3.0 roadmap.
 - **3.0.0-beta3** (local, not released) — Phase 3, confirmation and rule behaviour: a coverage gap
   restarts confirmation (#20), same-eNodeB band changes not penalised (#10), explicit latency states
   with expiry (#26), H1 `N/A` while isolation is pending (#28), H14 on 5G SA (#8), LTE band table

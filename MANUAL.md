@@ -7,6 +7,18 @@ This manual explains how to operate the application, interpret its results, inve
 > **Important:** ICdetection is an anomaly detector, not a device that can prove the presence of an IMSI catcher. A warning means that the observations deserve examination. It does not identify an attacker or establish intent by itself.
 
 
+## Version 3.0.0-beta4 (local beta, not released)
+
+Phase 4, the last of the 3.0 roadmap: maintenance and documentation. Same separate app and database;
+detection is unchanged.
+
+- **Battery where GPS does not reach:** if precise GPS fixes keep failing, the app waits longer
+  between normal attempts (from 30 seconds up to 10 minutes). A suspicious episode still requests a
+  fix immediately.
+- **New section** in *Technical limitations*: what your own data can and cannot show.
+- The Stable-Site prefix shows as `[site-unverified]` in English and `[sitio-sin-verificar]` in
+  Spanish (only relevant once Stable-Site enforcement is enabled).
+
 ## Version 3.0.0-beta3 (local beta, not released)
 
 Phase 3 of the 3.0 roadmap: how evidence is confirmed and how some rules behave. Same separate app
