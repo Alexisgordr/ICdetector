@@ -11,8 +11,13 @@ package com.alexisgordr.icdetector.core
  * Bug found during testing: solo contaba la pérdida. Si el sistema dejaba de entregar lecturas
  * varios minutos (Doze, módem dormido) y después volvía la misma celda sin una lista vacía de por
  * medio, la racha de aislamiento de H1 seguía contando y H14 comparaba con una banda de antes del
- * hueco. [TemporalConfidence] ya caducaba su racha a los 120 s; ahora el resto del estado que
- * depende de la continuidad usa el mismo límite.
+ * hueco. La racha de confirmación de [TemporalConfidence] ya caducaba tras un hueco
+ * (`maxContinuityGapMs`); ahora el resto del estado que depende de la continuidad usa el mismo
+ * límite, [MAX_GAP_MS], que es la única definición del valor para los dos.
+ *
+ * [TemporalConfidence] tiene además `maxObservationStallMs` (30 s). No es un límite de
+ * continuidad: es la salida de emergencia para aceptar una lectura cuando el módem repite un
+ * timestamp congelado, y no rompe ninguna racha.
  *
  * Los tiempos son de un reloj monotónico que cuenta el tiempo dormido
  * (`SystemClock.elapsedRealtime()`): con un reloj que se para en reposo profundo, un hueco largo
@@ -44,7 +49,12 @@ class CoverageContinuity(private val maxGapMs: Long = MAX_GAP_MS) {
     }
 
     companion object {
-        /** El mismo hueco máximo que [TemporalConfidence]: con pantalla apagada se sondea cada 10 s. */
+        /**
+         * Hueco máximo sin lecturas para seguir considerando seguidas dos observaciones, también
+         * para la racha de [TemporalConfidence]. Con la pantalla apagada se lee cada 10 s: 2
+         * minutos son doce lecturas perdidas seguidas, mucho más que un fallo puntual del módem,
+         * y bastante menos que un reposo de Doze, que es justo lo que hay que detectar.
+         */
         const val MAX_GAP_MS = 120_000L
     }
 }

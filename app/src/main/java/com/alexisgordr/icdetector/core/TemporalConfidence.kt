@@ -26,10 +26,14 @@ class TemporalConfidence(
     private val maxObservationStallMs: Long = 30_000L,
     /**
      * 3.0 (#20) — Hueco máximo entre dos observaciones aceptadas para seguir contándolas como
-     * consecutivas. Con la pantalla apagada se sondea cada 10 s; 2 minutos son más de diez
-     * sondeos perdidos. Pasado el hueco, la racha vuelve a empezar.
+     * consecutivas. Pasado el hueco, la racha vuelve a empezar. Es el mismo valor que usa
+     * [CoverageContinuity] para H1 y el contexto de bandas: una sola constante,
+     * [CoverageContinuity.MAX_GAP_MS] (120 s; ahí está su porqué).
+     *
+     * No confundir con [maxObservationStallMs] (30 s), que es otra cosa: la salida de emergencia
+     * para aceptar una lectura nueva cuando el módem repite un timestamp congelado.
      */
-    private val maxContinuityGapMs: Long = 120_000L,
+    private val maxContinuityGapMs: Long = CoverageContinuity.MAX_GAP_MS,
     private val elapsedRealtimeMs: () -> Long = { System.nanoTime() / 1_000_000L }
 ) {
 

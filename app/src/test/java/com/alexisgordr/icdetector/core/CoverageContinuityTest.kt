@@ -67,6 +67,26 @@ class CoverageContinuityTest {
         assertEquals(Break.NONE, continuity.check(0L, 306_000L))
     }
 
+    @Test fun `TemporalConfidence and CoverageContinuity break at the same gap`() {
+        val suspicious = com.alexisgordr.icdetector.models.CellData(
+            isRegistered = true, networkType = "4G LTE", cellId = "100", mnc = "07", tac = "1", dbm = -70,
+            mcc = "214", radioTech = com.alexisgordr.icdetector.models.RadioTech.LTE, isSuspicious = true,
+            suspiciousReason = "Desviación TAC"
+        )
+        fun streakAfterGap(gapMs: Long): Int {
+            var now = 0L
+            val t = TemporalConfidence(confirmationCycles = 3, elapsedRealtimeMs = { now })
+            t.apply(suspicious, 10_000L)
+            now += gapMs
+            return t.apply(suspicious, 10_000L + gapMs).temporalProgress.phase
+        }
+        // Justo en el límite la racha sigue; un milisegundo más y empieza de nuevo, igual que H1.
+        assertEquals(2, streakAfterGap(CoverageContinuity.MAX_GAP_MS))
+        assertEquals(1, streakAfterGap(CoverageContinuity.MAX_GAP_MS + 1))
+        // Y no es el límite de 30 s del timestamp congelado: 31 s no rompen la racha.
+        assertEquals(2, streakAfterGap(31_000L))
+    }
+
     @Test fun `the first observation ever is not a gap`() {
         assertEquals(Break.NONE, CoverageContinuity().check(0L, 999_999_999L))
     }
