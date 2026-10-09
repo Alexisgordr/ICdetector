@@ -1,6 +1,13 @@
 # Changelog
 
-## 3.0.0-beta4 (local beta, not released)
+Every notable change to ICdetection, newest first. Releases inside the field-collection freeze only
+fix bugs; a fix that changes how a rule is evaluated is marked as a **dataset cut** for that rule.
+Version numbers follow the app's `versionName`; the Android `versionCode` is given where it matters.
+
+## 3.0.0-beta4 (development beta, source only)
+
+Available as source on the `ICdetection-v3.0.0-beta` branch; no APK is published. A short-lived
+GitHub pre-release of an earlier build was withdrawn.
 
 ### Phase 4 — Maintenance backlog and documentation
 
@@ -16,8 +23,8 @@ schema 20.
   release. **3.0 requires a clean install:** export your data, uninstall v2.10.x, then install 3.0.
   Installing over v2.10.x still upgrades the database safely, but mixing data from both sides of
   the methodology cuts is not supported. From 3.0 on, every version updates the previous one.
-- **Version code 39 for every 3.0 beta.** The betas used 39, 40, 41 and 42, but they are local
-  builds and none is published, so the 3.0 release would have skipped from 38 to 43. All betas now
+- **Version code 39 for every 3.0 beta.** The betas used 39, 40, 41 and 42, but none is published
+  on F-Droid, so the 3.0 release would have skipped from 38 to 43. All betas now
   use 39, the next after v2.10.10 (38), and the release keeps it. The four store notes are merged
   into `fastlane/.../changelogs/39.txt` (EN/ES); 40–42 are removed so a later 3.0.x cannot pick up a
   beta note. A test phone with a local beta built as 40–42 must uninstall it first.
@@ -86,7 +93,7 @@ schema 20.
   false positives and, with the 3.0 coverage columns, how long each rule was evaluable. The likelihood
   ratios are not recalibrated from benign data alone.
 
-## 3.0.0-beta3 (local beta, not released)
+## 3.0.0-beta3 (development beta, not published)
 
 ### Phase 3 — Confirmation and rule behaviour
 
@@ -146,7 +153,7 @@ makes bands 53–113 resolvable by EARFCN (follow-up to #32).
   Regression tests cover an NR serving cell (H8 passes, H14 evaluated or `N/A`, H6 `N/A`). The H14
   diagnostic now mentions LTE or 5G. **Dataset cut for H14 on 5G SA.**
 
-## 3.0.0-beta2 (local beta, not released)
+## 3.0.0-beta2 (development beta, not published)
 
 ### Phase 2 — Correct inputs to the rules
 
@@ -215,7 +222,7 @@ change (still 20).
   gives no evidence. Found by reading the code, not yet seen in the field. **Dataset cut for H6 and
   `TAUnit`.**
 
-## 3.0.0-beta1 (local beta, not released)
+## 3.0.0-beta1 (development beta, not published)
 
 ### Phase 1 — Data foundations
 
@@ -284,6 +291,8 @@ value.
   cycle for good, even if the same cell comes back (A → loss → A, A → B → A). Observations the cycle already recorded (Timing
   Advance evidence, the per-minute Stable-Site context) are kept: they describe a real moment.
 
+
+## 2.10.10
 
 ### Bug-fix release inside the freeze — dataset cut for H8
 
@@ -653,8 +662,6 @@ No heuristic, weight, threshold, scoring rule or database schema changed. Schema
 - Geometry presents route familiarity separately from LocalCellTrust and keeps accumulated transitions, confirmed historical trips and the pending trip contribution distinct.
 - EXPORT GEOMETRY creates a ZIP with cell/edge CSV, retained trip summaries, GraphML and metadata. It contains cellular identities and route relationships but no GPS coordinates.
 - Schema-16 databases migrate additively to schema 17 without deleting existing history.
-
-## Released
 
 ## 2.9.1
 
