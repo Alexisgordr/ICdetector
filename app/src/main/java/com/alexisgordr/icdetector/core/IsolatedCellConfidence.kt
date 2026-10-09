@@ -14,6 +14,12 @@ class IsolatedCellConfidence(
     private var lastToken: Long? = null
     private var consecutive = 0
 
+    /** 3.0 (#28) — Entregas seguidas sin vecinas ya vistas para la celda actual. */
+    val progress: Int get() = consecutive
+
+    /** 3.0 (#28) — Entregas necesarias para confirmar el aislamiento. */
+    val required: Int get() = requiredFreshObservations
+
     fun observe(identity: String, candidate: Boolean, observationToken: Long?): Boolean {
         if (this.identity != identity) {
             this.identity = identity

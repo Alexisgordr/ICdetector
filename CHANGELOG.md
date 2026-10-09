@@ -36,6 +36,14 @@ evidence is confirmed and how some rules behave. Same separate app, *ICdetection
   explanation. The network indicator on the main screen shows the learning state (amber) and is now
   translated (`NET` in English, `RED` in Spanish). The optional latency feature is off by default.
   **Dataset cut for H12.**
+- **H1 said "passed" while isolation was still unconfirmed (#28).** With no neighbours, strong signal
+  and Wi-Fi off, H1 only fails after 3 consecutive fresh deliveries confirm the isolation. During the
+  first 1–2 deliveries it reported PASSED, claiming "not isolated" when the app did not know yet. It is
+  now `N/A`, and the diagnostics panel explains "no neighbours, pending confirmation (1/3 deliveries)".
+  With no neighbours and a weak signal (worse than −80 dBm) H1 stays evaluated and passed: the data is
+  there and the condition the rule looks for — a strong lone cell — is absent. Score and alarms are
+  unchanged (only failures add points); the H1 status in diagnostics, coverage counts and forensic
+  snapshots changes. **Dataset cut for H1 status.**
 
 ## 3.0.0-beta2 (local beta, not released)
 

@@ -1380,6 +1380,7 @@ class MiniICService : Service() {
                         val diagnosticInputs = com.alexisgordr.icdetector.core.DiagnosticEngine.Inputs(
                             neighborCount = neighbors.size,
                             wifiActive = isWifiConnected(),
+                            isolationProgress = isolatedCellConfidence.progress to isolatedCellConfidence.required,
                             locationAvailable = currentLocation != null,
                             historyWithLocation = preloadedHistory.count { it.lat != null && it.lon != null },
                             latencyAvailable = NetworkLatencyMonitor.isMeasured(networkLatencyState.value),

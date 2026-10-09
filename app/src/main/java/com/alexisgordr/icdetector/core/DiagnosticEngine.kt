@@ -13,6 +13,8 @@ object DiagnosticEngine {
         val locationAvailable: Boolean,
         val historyWithLocation: Int,
         val latencyAvailable: Boolean,
+        /** 3.0 (#28) — Entregas sin vecinas ya vistas / necesarias, mientras H1 está pendiente. */
+        val isolationProgress: Pair<Int, Int>? = null,
         /** 3.0 (#26) — La sonda mide, pero aún aprende la referencia de esta celda. */
         val latencyLearning: Boolean = false,
         val cipheringAvailable: Boolean,
@@ -42,7 +44,12 @@ object DiagnosticEngine {
         }
         return listOf(
             HeuristicDiagnostic(1, "Celda aislada", r.isolatedCell,
-                explanation(r.isolatedCell, if (i.wifiActive) "N/A: Wi-Fi activo; se evita atribuir el contexto de red al enlace celular." else "N/A: sin lectura celular válida.")),
+                explanation(r.isolatedCell, when {
+                    i.wifiActive -> "N/A: Wi-Fi activo; se evita atribuir el contexto de red al enlace celular."
+                    i.neighborCount == 0 && i.isolationProgress != null ->
+                        "N/A: sin vecinas, pendiente de confirmar (${i.isolationProgress.first}/${i.isolationProgress.second} entregas)."
+                    else -> "N/A: sin lectura celular válida."
+                })),
             HeuristicDiagnostic(2, "Estabilidad de potencia", r.powerJump,
                 explanation(r.powerJump, "N/A: hacen falta celdas vecinas con potencia para comparar.")),
             HeuristicDiagnostic(3, "Consistencia MCC", r.mccConsistency,

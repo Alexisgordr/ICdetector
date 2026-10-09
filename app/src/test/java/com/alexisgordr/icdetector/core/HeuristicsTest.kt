@@ -103,6 +103,49 @@ class HeuristicsTest {
         assertEquals(HeuristicStatus.PASSED, passedFiveSecondsLater.isolatedCell)
     }
 
+    // ---------- 3.0 (#28): H1 pendiente de confirmar ----------
+    private fun analyzeIsolation(dbm: Int, confirmed: Boolean, neighbors: List<CellData> = emptyList(), wifi: Boolean = false) =
+        ThreatAnalyzer.analyzeThreats(
+            active = active(dbm = dbm), neighbors = neighbors, isHardwareCipheringActive = true,
+            cellChangeHistory = emptyList(), currentLocation = null, isWifiActive = wifi,
+            isolatedCellConfirmed = confirmed, nowMs = NOW
+        ).heuristicReport.isolatedCell
+
+    @Test fun `H1 sin vecinas y senal fuerte queda N-A mientras no se confirma`() {
+        assertEquals(HeuristicStatus.NOT_EVALUATED, analyzeIsolation(-70, confirmed = false))
+    }
+
+    @Test fun `H1 falla en la tercera entrega confirmada`() {
+        assertEquals(HeuristicStatus.FAILED, analyzeIsolation(-70, confirmed = true))
+    }
+
+    @Test fun `H1 con vecinas se supera y con Wi-Fi sigue N-A`() {
+        assertEquals(HeuristicStatus.PASSED, analyzeIsolation(-70, confirmed = false, neighbors = listOf(neighbor(-85))))
+        assertEquals(HeuristicStatus.NOT_EVALUATED, analyzeIsolation(-70, confirmed = true, wifi = true))
+    }
+
+    @Test fun `H1 sin vecinas y senal debil se evalua y se supera`() {
+        // La condición que busca la regla es una celda FUERTE y sola; débil y sola es normal en zona rural.
+        assertEquals(HeuristicStatus.PASSED, analyzeIsolation(-100, confirmed = false))
+    }
+
+    @Test fun `el diagnostico explica el progreso de la confirmacion`() {
+        val confidence = IsolatedCellConfidence()
+        confidence.observe("214-01-100-1000-LTE", candidate = true, observationToken = 1L)
+        val report = ThreatAnalyzer.analyzeThreats(
+            active = active(dbm = -70), neighbors = emptyList(), isHardwareCipheringActive = true,
+            cellChangeHistory = emptyList(), currentLocation = null, isolatedCellConfirmed = false, nowMs = NOW
+        )
+        val diagnostics = DiagnosticEngine.explain(report, DiagnosticEngine.Inputs(
+            neighborCount = 0, wifiActive = false, locationAvailable = false, historyWithLocation = 0,
+            latencyAvailable = false, isolationProgress = confidence.progress to confidence.required,
+            cipheringAvailable = false, previousBandAvailable = false, signalBaseline = null,
+            rfFingerprint = null, rfStability = null, reputation = null
+        ))
+        val h1 = diagnostics.first { it.id == 1 }
+        assertEquals("N/A: sin vecinas, pendiente de confirmar (1/3 entregas).", h1.explanation)
+    }
+
     @Test fun `una regla sin datos figura como no evaluada y no como passed`() {
         val report = analyze(active(), neighbors = emptyList())
 

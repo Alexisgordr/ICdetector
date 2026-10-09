@@ -186,10 +186,19 @@ object ThreatAnalyzer {
         val eTransitionCoherence = transitionCoherence.status != HeuristicStatus.NOT_EVALUATED
 
         // 1. Neighbor analysis
-        if (!isWifiActive && neighbors.isEmpty() && active.dbm >= -80 && isolatedCellConfirmed) {
-            hIsolated = false
-            reasons.add("Celda aislada")
-            score -= 15
+        //
+        // 3.0 (#28) — Sin vecinas y con señal fuerte, mientras IsolatedCellConfidence no haya
+        // confirmado 3 entregas seguidas, la regla todavía no sabe: N/A, no "superada".
+        // Sin vecinas y con señal débil sí se evalúa: los datos están y la condición (celda
+        // FUERTE y sola) no se da; una celda débil y sola es normal en zona rural.
+        if (!isWifiActive && neighbors.isEmpty() && active.dbm >= -80) {
+            if (isolatedCellConfirmed) {
+                hIsolated = false
+                reasons.add("Celda aislada")
+                score -= 15
+            } else {
+                eIsolated = false
+            }
         }
 
         // 2. Signal Gap analysis

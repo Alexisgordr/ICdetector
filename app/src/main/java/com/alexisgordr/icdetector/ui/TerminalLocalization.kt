@@ -255,6 +255,9 @@ private val replacements = linkedMapOf(
     "identidad celular insuficiente para comparar" to "insufficient cell identity for comparison",
     "Wi-Fi/VPN impide atribuir la latencia al enlace celular" to "Wi-Fi/VPN prevents attributing latency to the cellular link",
     "la sonda de latencia todavía no tiene una medición válida" to "the latency probe does not yet have a valid measurement",
+    // 3.0 (#28)
+    "sin vecinas, pendiente de confirmar" to "no neighbours, pending confirmation",
+    " entregas)" to " deliveries)",
     // 3.0 (#26)
     "la sonda de latencia aún aprende la referencia de esta celda" to "the latency probe is still learning this cell's reference",
     "el módem no entrega RSRQ ni SINR" to "the modem provides neither RSRQ nor SINR",
