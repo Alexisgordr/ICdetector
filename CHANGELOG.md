@@ -38,11 +38,13 @@ separate app, *ICdetection β*; schema 20.
 #### Documentation (#31)
 
 - **The limits of the campaign are now written down.** README (new section *What the field campaign
-  can and cannot show*), IMPORTANT and MANUAL state that there is no ground truth (false positives
-  can be measured, true positives cannot), no negative control (one phone cannot tell a network
-  anomaly from a detector fault) and limited coverage (one phone, one operator, mostly one area), and
-  what the campaign is for: recalibrating on benign data, measuring false positives and, with the 3.0
-  coverage columns, how long each rule was evaluable.
+  can and cannot show*), IMPORTANT and MANUAL state that there is no ground truth (the warning rate
+  can be measured and possible false positives studied, but the absence of a known attack does not
+  make every warning false, and detection cannot be measured), no negative control (one phone cannot
+  tell a network anomaly from a detector fault) and limited coverage (one phone, one operator, mostly
+  one area), and what the campaign is for: measuring how often each rule warns, studying possible
+  false positives and, with the 3.0 coverage columns, how long each rule was evaluable. The likelihood
+  ratios are not recalibrated from benign data alone.
 
 ## 3.0.0-beta3 (local beta, not released)
 

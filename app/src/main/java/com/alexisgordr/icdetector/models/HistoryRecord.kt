@@ -42,7 +42,8 @@ data class HistoryRecord(
     /**
      * Confianza de anomalía calculada por BayesianScorer en el momento de la observación (0..95).
      *
-     * Se persiste y se exporta para poder RECALIBRAR los likelihood ratios con datos reales —
+     * Se persiste y se exporta para poder REVISAR los likelihood ratios con datos reales (3.0:
+     * con datos solo benignos no basta para recalibrarlos; hacen falta también ataques reales) —
      * antes se calculaba en cada ciclo y se perdía al salir de la UI, así que no había nada que
      * calibrar (roadmap #7). No es una probabilidad medida: ver [CellData.anomalyConfidence].
      */

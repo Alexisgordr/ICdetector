@@ -804,9 +804,10 @@ ICdetection is a transparent multi-signal anomaly auditor. It provides leads, hi
 
 ### What your own data can and cannot show
 
-- **No ground truth:** unless you know an attack happened, your history measures false positives,
-  not detection. A clean history does not prove that nothing happened; an alert does not prove that
-  something did.
+- **No ground truth:** your history lets you measure how often warnings appear and study possible
+  false positives, not detection. Not knowing of an attack does not make every warning false; a
+  clean history does not prove that nothing happened, and an alert does not prove that something
+  did.
 - **No negative control:** with one phone you cannot tell a network anomaly from a modem fault.
   Comparing with a second phone at the same place is the strongest check you can make.
 - **Your coverage only:** results describe your phone, your operator and your routes. Thresholds may

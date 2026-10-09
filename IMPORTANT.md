@@ -40,8 +40,8 @@ ICdetection is now entering a **three-month field-collection and stabilization p
 After the work completed through **v2.10.5**, I consider the project sufficiently mature for a
 sustained real-world data collection campaign. The priority is no longer adding features,
 heuristics, screens or new detection ideas. The priority is now to **leave the methodology stable,
-collect data, observe real behavior, measure false positives, and validate the current design over
-time**.
+collect data, observe real behavior, measure how often each rule warns, study possible false
+positives, and validate the current design over time**.
 
 v2.10.4 was originally announced as the freeze release. A final review before the campaign found a
 few data-integrity and stability bugs, so they were fixed first. **v2.10.5 is the real starting
@@ -266,16 +266,19 @@ current design behaves when it is finally left alone long enough to accumulate m
 Before drawing any conclusion from this data, keep its limits in mind. They are design limits, not
 bugs:
 
-- **No ground truth.** No real attack was recorded. The campaign can measure false positives on
-  ordinary networks; it cannot measure whether the app catches a real IMSI catcher. The synthetic
-  `ScenarioTest` is not field evidence.
+- **No ground truth.** No attack is known to have been recorded, which does not prove that none
+  happened. The campaign can measure how often each rule warns and lets possible false positives be
+  studied; it cannot measure whether the app catches a real IMSI catcher, nor prove that every
+  warning was false. The synthetic `ScenarioTest` is not field evidence.
 - **No negative control.** One phone observes at a time. When a rule fires, the data alone cannot
   tell a network anomaly from a detector or modem fault.
 - **Limited coverage.** Mostly one phone, one operator and one area. Thresholds are not validated for
   rural areas, roaming, borders or other modem vendors.
 
-What it **is** for: recalibrating weights and thresholds on benign data, measuring each rule's
-false-positive rate and, with the 3.0 coverage columns, how long each rule was really evaluable.
+What it **is** for: measuring how often each rule warns, studying possible false positives and,
+with the 3.0 coverage columns, how long each rule was really evaluable. This can inform later
+reviews of thresholds and weights; it is not enough on its own to recalibrate the likelihood ratios,
+which would also need data from real attacks.
 
 ## The next three months
 
