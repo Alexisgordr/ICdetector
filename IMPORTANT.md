@@ -24,6 +24,11 @@
 > v2.10.6 – v2.10.8 changed only the interface, localization, notifications and stability.
 > Weights, thresholds, stored data and the schema are unchanged in every release, so the v2.10.5
 > baseline and Day 1 still hold for everything except H10. No reset is needed.
+>
+> **3.0.0-beta1 is not part of the campaign.** Work on 3.0 (roadmap in GitHub issue #27) has started
+> as a local development beta on a separate branch. It upgrades the database to schema 20 and adds
+> history columns (UTC instant, evaluation coverage, GPS accuracy, app version). Do not install it on
+> the phone that collects the campaign data: the campaign runs on v2.10.10.
 
 ICdetection is now entering a **three-month field-collection and stabilization period**.
 

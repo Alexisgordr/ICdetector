@@ -1,0 +1,9 @@
+3.0.0-beta1 — beta, fase 1: base de datos.
+
+• Cada observación guarda su hora exacta (UTC): sin errores con el cambio de hora o de zona.
+• Cada fila indica qué reglas no se pudieron evaluar y la precisión del GPS.
+• Versión de la app por fila; el CSV indica qué móvil hizo el export.
+• Los resultados tardíos van a la última fila observada.
+• Un análisis desfasado ya no se muestra ni alerta tras perder la señal.
+
+Esquema de base de datos 20. Reglas sin cambios.

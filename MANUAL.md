@@ -1,4 +1,4 @@
-# ICdetection Field Manual — v2.10.10
+# ICdetection Field Manual — v2.10.10 (3.0.0-beta1 notes included)
 
 ICdetection is an open-source Android application for passive cellular-network auditing and anomaly analysis. It observes information exposed by Android, compares each observation with the device's local history and, when configured, cross-checks cells against external tower databases.
 
@@ -6,6 +6,25 @@ This manual explains how to operate the application, interpret its results, inve
 
 > **Important:** ICdetection is an anomaly detector, not a device that can prove the presence of an IMSI catcher. A warning means that the observations deserve examination. It does not identify an attacker or establish intent by itself.
 
+
+## Version 3.0.0-beta1 (local beta, not released)
+
+Phase 1 of the 3.0 roadmap: data foundations. A development build on a separate branch; for the
+field campaign keep using v2.10.10. Detection rules, weights and thresholds are unchanged. The
+database is upgraded to schema 20 on first start; existing history is kept, and rows recorded
+before 3.0 show the new fields as empty (unknown).
+
+- **Exact time:** each new observation stores its instant in UTC. Travelling across time zones or
+  the repeated hour at the autumn clock change no longer shifts ages, windows or ordering. The
+  screens still show local time.
+- **Rule coverage:** each new row records which rules could not be evaluated and the accuracy of
+  its GPS fix, so you can later measure how long each rule was really active.
+- **Version and device:** each new row records the app version; the CSV says which phone and
+  Android version made the export.
+- **Latest observation:** verification results and late GPS fixes are attached to the latest
+  *observed* row.
+- **No stale results:** if the signal is lost or the serving cell changes while an analysis is
+  still running, its result is discarded instead of being shown or alerting.
 
 ## Version 2.10.10
 
@@ -652,6 +671,20 @@ Use **EXPORT CSV** for long-term observations rather than one incident:
 - `Radio` comes from Android cellular information, not only the status-bar label.
 - `AnomalyConfidence` is analytical output, not an independently measured probability.
 - Sub-threshold failures are observations, not confirmed alerts.
+
+From 3.0.0-beta1 the CSV ends with six more columns, empty in rows recorded before 3.0 (unknown):
+
+- `ObservedAtUtc` is the observation instant in UTC (ISO-8601). `Timestamp` stays in local time.
+- `NotEvaluatedHeuristics` lists the rules that could not be evaluated (`H1;H6;H9`), or `NONE`.
+  A rule listed here neither passed nor failed.
+- `GpsAccuracyM` is the accuracy of the row's GPS fix in metres. Filter large values before
+  analysing geometry.
+- `AppVersion` is the app version that recorded the row; use it to apply dataset cuts per row.
+- `ExportDevice` and `ExportAndroid` describe the phone that made the export (manufacturer, model,
+  Android version). They contain no personal or hardware identifier.
+
+The validator prints the evaluation coverage of each rule, the GPS accuracy, the app versions and
+the dataset cuts the file crosses.
 
 Validate a CSV from the project directory with:
 

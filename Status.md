@@ -1,5 +1,21 @@
 # ICdetection Status
 
+## 3.0.0-beta1 — Phase 1: data foundations (local beta, not released)
+
+**Version code:** 39
+**Database schema:** 20 (additive migration; rows before 3.0 keep the new columns empty = unknown)
+**Security effect:** none on rules, weights or thresholds; stale analysis cycles no longer publish or alert
+**Dataset:** methodology cut for ages and ordering (exact UTC instant from 3.0); not part of the v2.10.5 campaign
+
+Phase 1 of the ordered 3.0 roadmap (GitHub issue #27), developed on a separate branch and not
+published. **#23** — each row stores the observation instant in UTC; windows, verification TTL,
+retention and H15 ordering use it (rows before 3.0 keep the previous comparison on local text).
+**#29** — rules not evaluated and GPS accuracy per row. **#30** — app version per row; the CSV adds
+the exporting phone and Android version. **#25** — "latest row" means latest observed, not latest
+written. **#24** — a cycle invalidated by signal loss or a serving-cell change no longer publishes.
+Validator: UTC/local coherence, evaluation coverage, GPS accuracy, versions and dataset cuts.
+Tests: JVM migration test (SQLite via sqlite-jdbc, test-only), instrumented 19→20 upgrade test.
+
 ## v2.10.10 — Bug fixes inside the freeze (stable)
 
 **Version code:** 38

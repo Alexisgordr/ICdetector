@@ -1,6 +1,6 @@
 # Changelog
 
-## 3.0.0-beta1 (in progress, not released)
+## 3.0.0-beta1 (local beta, not released)
 
 ### Phase 1 — Data foundations
 

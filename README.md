@@ -12,7 +12,8 @@
 ![Release](https://img.shields.io/badge/Release-v2.10.10-brightgreen.svg)
 ![Baseline](https://img.shields.io/badge/Dataset%20baseline-v2.10.5-blue.svg)
 ![Phase](https://img.shields.io/badge/Phase-Field%20collection%20freeze-blue.svg)
-![Schema](https://img.shields.io/badge/DB%20schema-19-informational.svg)
+![Schema](https://img.shields.io/badge/DB%20schema-19%20(beta%3A%2020)-informational.svg)
+![Beta](https://img.shields.io/badge/Beta-3.0.0--beta1%20(local)-orange.svg)
 [![Featured in Awesome Telco](https://img.shields.io/badge/Featured%20in-Awesome%20Telco-6f42c1.svg)](https://github.com/ravens/awesome-telco#imsi-catcher-detection)
 
 [**What's new**](#-whats-new-in-v21010) ·
@@ -77,6 +78,13 @@
 > repeated alarms not notified — and H8 treating a missing frequency as suspicious (**dataset cut
 > for H8 only**). See [What's new in v2.10.10](#-whats-new-in-v21010).
 
+> [!WARNING]
+> **3.0.0-beta1 (phase 1 of the 3.0 roadmap) is a local development beta, not a release.** It
+> lives on a separate branch, is not published and is not part of the field campaign. It changes
+> the database schema to **20** and adds columns to the history CSV; see
+> [What's new in 3.0.0-beta1](#-whats-new-in-300-beta1-local-beta). Keep using v2.10.10 for the
+> campaign.
+
 > [!TIP]
 > **Starting a clean research dataset?** Export anything you want to keep, then use
 > **History → Delete history** and type the confirmation word (`DELETE` in English, `BORRAR`
@@ -89,6 +97,7 @@
 ## 📑 Table of Contents
 
 - [What ICdetection is — and is not](#-what-icdetection-is--and-is-not)
+- [What's new in 3.0.0-beta1 (local beta)](#-whats-new-in-300-beta1-local-beta)
 - [What's new in v2.10.10](#-whats-new-in-v21010)
 - [The field-collection freeze](#-the-field-collection-freeze)
 - [Highlights](#-highlights)
@@ -148,6 +157,28 @@ built on heuristic correlation, anomaly scoring, infrastructure consistency vali
 analysis, local telemetry verification, behavioral pattern analysis and historical baseline
 learning. The goal is visibility, anomaly awareness and local evidence for later review — within the
 technical limits imposed by Android.
+
+---
+
+## 🧪 What's new in 3.0.0-beta1 (local beta)
+
+First beta of **3.0**, phase 1 of the ordered roadmap (GitHub issue #27): **data foundations**. It
+is a local development build on a separate branch, not a release. Database schema **20**: the
+migration only adds columns, and every row recorded before 3.0 keeps them empty — **unknown**, never
+filled with an assumed value. Detection rules, weights and thresholds are unchanged.
+
+| Area | Change |
+|---|---|
+| **Unambiguous time** (#23) | Each row also stores the instant of the observation (UTC). Windows, the verification TTL, retention and H15's ordering use it, so a zone change or the repeated hour of the autumn clock change no longer shifts ages or ordering. Rows before 3.0 keep the previous approximate comparison on their local time. CSV: `ObservedAtUtc`. |
+| **Evaluation coverage** (#29) | Each row records which rules could not be evaluated (`H1;H6;H9`, or `NONE`) and the accuracy of its GPS fix. After the campaign you can measure how long each rule was actually evaluable, and filter vague positions. CSV: `NotEvaluatedHeuristics`, `GpsAccuracyM`. |
+| **App version and device** (#30) | Each row stores the app version that observed it, so dataset cuts apply per row. The CSV also says which phone and Android version made the export (no personal or hardware identifier). CSV: `AppVersion`, `ExportDevice`, `ExportAndroid`. |
+| **Most recent row** (#25) | "The latest row" is the last one observed, not the last one written. Verification results and GPS backfill land on the right row. |
+| **Stale cycles** (#24) | A slow analysis cycle no longer shows a cell, alerts or writes after the signal was lost or the serving cell changed. |
+| **Validator** | `tools/check_export.py` checks the UTC instant against the local time, prints the evaluation coverage of each rule, checks GPS accuracy, lists app versions and the dataset cuts a file crosses, and warns when a file joins several phones. |
+
+**Methodology cut (3.0):** ages and ordering are exact from 3.0 on; before 3.0 they remain
+approximate around clock and zone changes. Coverage, GPS accuracy and app version exist only for
+rows recorded by 3.0.
 
 ---
 
@@ -646,6 +677,18 @@ ServingConnection, BandwidthKHz, Bands, AdditionalPlmns, CsgIndicator, CsgIdenti
 SecondaryCarriers, ServiceState, NetworkOperator, SimOperator, NetworkRoaming
 ```
 
+From 3.0.0-beta1 six columns follow, in this order. They are empty in rows recorded before 3.0
+(unknown):
+
+```text
+ObservedAtUtc, NotEvaluatedHeuristics, GpsAccuracyM, AppVersion, ExportDevice, ExportAndroid
+```
+
+`ObservedAtUtc` is the observation instant (ISO-8601, UTC). `NotEvaluatedHeuristics` lists the
+rules that abstained (`NONE` when all were evaluated). `GpsAccuracyM` is the accuracy of the row's
+fix in metres. `AppVersion` is the version that observed the row. `ExportDevice` and `ExportAndroid`
+describe the phone that made the export and are the same on every row of a file.
+
 Validate any export with:
 
 ```bash
@@ -734,6 +777,16 @@ Every heuristic and detection decision is something I aim to understand, explain
 
 Every release that changes detection behavior is recorded as a **dataset cut**. The full detail lives
 in [`CHANGELOG.md`](CHANGELOG.md) and [`Status.md`](Status.md).
+
+<details open>
+<summary><strong>3.0 — post-freeze roadmap (local beta)</strong></summary>
+
+- **3.0.0-beta1** (local, not released) — Phase 1, data foundations: schema 20 with the observation
+  instant in UTC (#23), evaluation coverage and GPS accuracy per row (#29), app version per row and
+  exporting device in the CSV (#30), most-recent row by observation time (#25), stale analysis cycles
+  no longer publish (#24). Methodology cut for ages and ordering.
+
+</details>
 
 <details open>
 <summary><strong>v2.10.x — Stable-Site, route memory, H15, radio context and the field-collection freeze</strong></summary>

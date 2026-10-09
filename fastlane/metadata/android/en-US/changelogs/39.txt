@@ -1,0 +1,9 @@
+3.0.0-beta1 — beta, phase 1: data foundations.
+
+• Each observation stores its exact time (UTC): no errors at clock or time-zone changes.
+• Each row records which rules could not be evaluated and the GPS accuracy.
+• App version per row; the CSV says which phone made the export.
+• Late results are attached to the latest observed row.
+• An outdated analysis no longer shows or alerts after signal loss.
+
+Database schema 20. Detection rules unchanged.
