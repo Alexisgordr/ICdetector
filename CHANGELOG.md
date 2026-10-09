@@ -19,6 +19,15 @@ change (still 20).
   that briefly drops MCC/MNC does not create handovers that never happened. **Dataset cut for H10
   and handover rows:** from 3.0.0-beta2 they also include changes of operator, tracking area or
   technology with the same Cell ID.
+- **Placeholder neighbour values counted as real (#11).** Some modems (seen on Xiaomi/Redmi/POCO
+  phones with a MediaTek modem) fill every LTE neighbour with TAC 65535 and Cell ID 268435455 instead
+  of leaving them empty. H5 compared the serving TAC with 65535, never matched and failed on every
+  cycle; in one field case that false signal helped confirm a false alarm. Stable-Site also counted
+  those neighbours as full identities. Both values are now read as unavailable (`N/A`) in LTE
+  neighbours, as v2.10.5 already did for neighbour MCC/MNC: H5 is `N/A` when no neighbour has a real
+  TAC, and those neighbours count as RF-only. The serving cell keeps what the modem reports, and NR is
+  unchanged (65535 is a valid NR TAC). Rows already stored are not changed. **Dataset cut for H5**
+  on affected devices. These devices remain outside the supported AOSP-like set.
 
 ## 3.0.0-beta1 (local beta, not released)
 

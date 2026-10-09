@@ -209,6 +209,13 @@ class HeuristicsTest {
         assertTrue(analyze(active(tac = "100"), neighbors = listOf(neighbor(-90, tac = "100"))).tacDeviationPassed)
     }
 
+    // 3.0 (#11) — Caso de campo (Redmi/MediaTek): todas las vecinas con TAC 65535 de relleno.
+    @Test fun `H5 queda N-A si todas las vecinas traen el TAC de relleno`() {
+        val placeholder = NeighbourPlaceholders.lteTac(65_535, registered = false)
+        val report = analyze(active(tac = "16486"), neighbors = List(3) { neighbor(-100, tac = placeholder) })
+        assertEquals(HeuristicStatus.NOT_EVALUATED, report.tacDeviation)
+    }
+
     // ---------- H6: Timing Advance (rama de proximidad, sin tower coords) ----------
     @Test fun `H6 dispara por proximidad anomala (TA bajo, senal muy fuerte, no verificada)`() {
         assertFalse(

@@ -9,6 +9,7 @@ import com.alexisgordr.icdetector.models.CsgInfo
 import com.alexisgordr.icdetector.models.RadioTech
 import com.alexisgordr.icdetector.models.TimingAdvanceUnit
 import com.alexisgordr.icdetector.core.BandPlan
+import com.alexisgordr.icdetector.core.NeighbourPlaceholders
 
 object CellParser {
 
@@ -64,7 +65,8 @@ object CellParser {
                         }
                     } catch (_: Exception) {}
                 }
-                CellData(reg, networkTypeString, id.ci.valOrNa(), cellMnc, id.tac.valOrNa(), dbm, cellMcc, timingAdvance = ta, timingAdvanceUnit = TimingAdvanceUnit.LTE_INDEX, radioTech = radioTechOf(info), arfcn = id.earfcn, pci = id.pci, rsrq = rsrq, sinr = sinr, band = BandPlan.earfcnToBandLte(id.earfcn))
+                // 3.0 (#11) — En vecinas LTE, TAC 65535 y Cell ID 268435455 son relleno: N/A.
+                CellData(reg, networkTypeString, NeighbourPlaceholders.lteCellId(id.ci, reg), cellMnc, NeighbourPlaceholders.lteTac(id.tac, reg), dbm, cellMcc, timingAdvance = ta, timingAdvanceUnit = TimingAdvanceUnit.LTE_INDEX, radioTech = radioTechOf(info), arfcn = id.earfcn, pci = id.pci, rsrq = rsrq, sinr = sinr, band = BandPlan.earfcnToBandLte(id.earfcn))
                     .withRadioContext(connectionOf(info), validBandwidth(id.bandwidth), extrasLte(id))
             }
             is CellInfoNr -> {
