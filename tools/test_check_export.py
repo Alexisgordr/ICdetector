@@ -5,7 +5,7 @@ import sys
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from check_export import (
-    calendar_period_stats, dataset_cut_summary, evaluation_coverage, gps_accuracy_issues,
+    LTE_EARFCN_RANGES, bands_outside_table, calendar_period_stats, dataset_cut_summary, evaluation_coverage, gps_accuracy_issues,
     instant_issues, radio_context_summary, row_instant, version_key,
     ta_consistency_issues, ta_unit_diagnostic
 )
@@ -178,7 +178,31 @@ class DatasetCutTest(unittest.TestCase):
         self.assertEqual((0, 3), by_cut["3.0.0"])
         self.assertEqual((0, 3), by_cut["2.10.10"])
 
+
+class LteBandTableTest(unittest.TestCase):
+    """3.0 (#32) — La tabla del validador es la misma que la de la app."""
+
+    def test_python_table_matches_bandplan_kt(self):
+        import re
+        source = (Path(__file__).resolve().parent.parent /
+                  "app/src/main/java/com/alexisgordr/icdetector/core/BandPlan.kt").read_text(encoding="utf-8")
+        kotlin = {int(b): (int(lo), int(hi))
+                  for b, lo, hi in re.findall(r"LteBand\((\d+), [\d.]+, (\d+), (\d+)\)", source)}
+        self.assertEqual(kotlin, LTE_EARFCN_RANGES)
+
+    def test_rows_with_declared_bands_outside_the_table_are_counted(self):
+        rows = [
+            {"Radio": "LTE", "Bands": "3", "ARFCN": "1500"},
+            {"Radio": "LTE", "Bands": "74", "ARFCN": "69100"},
+            {"Radio": "LTE", "Bands": "", "ARFCN": "69100"},
+            {"Radio": "NR", "Bands": "78", "ARFCN": "632448"},
+        ]
+        with_bands, outside, declared = bands_outside_table(rows)
+        self.assertEqual((2, 1), (with_bands, outside))
+        self.assertEqual(1, declared["74"])
+
 if __name__ == "__main__":
     unittest.main()
+
 
 

@@ -65,9 +65,11 @@ object CellParser {
                         }
                     } catch (_: Exception) {}
                 }
+                val extras = extrasLte(id)
                 // 3.0 (#11) — En vecinas LTE, TAC 65535 y Cell ID 268435455 son relleno: N/A.
-                CellData(reg, networkTypeString, NeighbourPlaceholders.lteCellId(id.ci, reg), cellMnc, NeighbourPlaceholders.lteTac(id.tac, reg), dbm, cellMcc, timingAdvance = ta, timingAdvanceUnit = TimingAdvanceUnit.LTE_INDEX, radioTech = radioTechOf(info), arfcn = id.earfcn, pci = id.pci, rsrq = rsrq, sinr = sinr, band = BandPlan.earfcnToBandLte(id.earfcn))
-                    .withRadioContext(connectionOf(info), validBandwidth(id.bandwidth), extrasLte(id))
+                // 3.0 (#32) — Banda: el EARFCN si está en la tabla; si no, la que declare el módem.
+                CellData(reg, networkTypeString, NeighbourPlaceholders.lteCellId(id.ci, reg), cellMnc, NeighbourPlaceholders.lteTac(id.tac, reg), dbm, cellMcc, timingAdvance = ta, timingAdvanceUnit = TimingAdvanceUnit.LTE_INDEX, radioTech = radioTechOf(info), arfcn = id.earfcn, pci = id.pci, rsrq = rsrq, sinr = sinr, band = BandPlan.resolveLteBand(id.earfcn.takeIf { it != Int.MAX_VALUE }, extras.bands))
+                    .withRadioContext(connectionOf(info), validBandwidth(id.bandwidth), extras)
             }
             is CellInfoNr -> {
                 val id = info.cellIdentity as CellIdentityNr

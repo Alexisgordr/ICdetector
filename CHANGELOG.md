@@ -37,6 +37,18 @@ change (still 20).
   is never valid. Local trust, H15, Stable-Site and H8 use it. **Dataset cut for local trust and H15**
   on carriers using EARFCN 0, and for LTE rows with an impossible PCI (504..1007), which no longer
   count as learnt values. H8's results are unchanged for every value Android can report.
+- **H14 could not see most LTE bands (#32).** The band table had 17 bands. A cell on any other band
+  left H14 (band downgrade) as `N/A`, and the band the modem declared could not be used either,
+  because the high/low classification came from the same table. The table also gave Band 71 the
+  upper limit of Band 74, so EARFCNs of bands 72–74 were taken as Band 71 (600 MHz, low) although
+  Band 74 is at 1475 MHz. The table now has every band of 3GPP TS 36.101 (1–71 resolvable by EARFCN,
+  72–255 for classification only), checked against an independent implementation, with one
+  definition for band and high/low class. The band is resolved from the EARFCN when it is in the table
+  (each EARFCN belongs to one band, so the measurement wins over what the modem declares); otherwise
+  from `CellIdentityLte.getBands()` (Android 11+): one declared band is used as is, several only when
+  they are all of the same class. Same-eNodeB band changes stay a separate issue (#10).
+  `tools/check_export.py` counts LTE rows whose declared band is outside the table. **Dataset cut for
+  H14.**
 
 ## 3.0.0-beta1 (local beta, not released)
 

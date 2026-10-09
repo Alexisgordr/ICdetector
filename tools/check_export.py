@@ -53,6 +53,64 @@ DATASET_CUTS = [
     ("3.0.0", "instante UTC y cobertura por fila (metodología)"),
 ]
 HEURISTIC_IDS = [f"H{i}" for i in range(1, 17)]
+# 3.0 (#32) — Rangos EARFCN de bajada por banda, iguales que BandPlan.kt (lo comprueba un test).
+LTE_EARFCN_RANGES = {
+    1: (0, 599),
+    2: (600, 1199),
+    3: (1200, 1949),
+    4: (1950, 2399),
+    5: (2400, 2649),
+    7: (2750, 3449),
+    8: (3450, 3799),
+    9: (3800, 4149),
+    10: (4150, 4749),
+    11: (4750, 4949),
+    12: (5010, 5179),
+    13: (5180, 5279),
+    14: (5280, 5379),
+    17: (5730, 5849),
+    18: (5850, 5999),
+    19: (6000, 6149),
+    20: (6150, 6449),
+    21: (6450, 6599),
+    22: (6600, 7399),
+    24: (7700, 8039),
+    25: (8040, 8689),
+    26: (8690, 9039),
+    27: (9040, 9209),
+    28: (9210, 9659),
+    29: (9660, 9769),
+    30: (9770, 9869),
+    31: (9870, 9919),
+    32: (9920, 10359),
+    33: (36000, 36199),
+    34: (36200, 36349),
+    35: (36350, 36949),
+    36: (36950, 37549),
+    37: (37550, 37749),
+    38: (37750, 38249),
+    39: (38250, 38649),
+    40: (38650, 39649),
+    41: (39650, 41589),
+    42: (41590, 43589),
+    43: (43590, 45589),
+    44: (45590, 46589),
+    45: (46590, 46789),
+    46: (46790, 54539),
+    47: (54540, 55239),
+    48: (55240, 56739),
+    49: (56740, 58239),
+    50: (58240, 59089),
+    51: (59090, 59139),
+    52: (59140, 60139),
+    65: (65536, 66435),
+    66: (66436, 67335),
+    67: (67336, 67535),
+    68: (67536, 67835),
+    69: (67836, 68335),
+    70: (68336, 68585),
+    71: (68586, 68935),
+}
 # La app no acepta fixes con una precisión peor que esta (LocationCollectionController).
 MAX_ACCEPTED_ACCURACY_M = 100.0
 VAGUE_ACCURACY_M = 50.0
@@ -143,6 +201,31 @@ def instant_issues(rows):
         if abs(offset_s) > 14 * 3600 or round(offset_s) % 900 != 0:
             issues.append(r)
     return issues
+
+
+def lte_band_of(earfcn):
+    for band, (lo, hi) in LTE_EARFCN_RANGES.items():
+        if lo <= earfcn <= hi:
+            return band
+    return None
+
+
+def bands_outside_table(rows):
+    """
+    3.0 (#32) — Filas LTE con `Bands` informado por el módem pero cuyo EARFCN no está en la tabla
+    de la app. Antes de 3.0 esas filas dejaban H14 en N/A; desde 3.0 se usa la banda declarada.
+    Devuelve (filas LTE con Bands, de ellas fuera de tabla, Counter de bandas declaradas fuera).
+    """
+    with_bands, outside, declared = 0, 0, Counter()
+    for r in rows:
+        if (r.get("Radio") or "") != "LTE" or not (r.get("Bands") or "").strip():
+            continue
+        with_bands += 1
+        earfcn = fnum(r, "ARFCN")
+        if earfcn is None or lte_band_of(int(earfcn)) is None:
+            outside += 1
+            declared[(r.get("Bands") or "").strip()] += 1
+    return with_bands, outside, declared
 
 
 def evaluation_coverage(rows):
@@ -529,6 +612,14 @@ def main(path):
                 + "; ".join(f"{d or '?'} {a}".strip() for d, a in devices)
                 + ". Analízalos por separado."
             )
+
+    if "Bands" in columns:
+        with_bands, outside, declared = bands_outside_table(rows)
+        if with_bands:
+            print("\nBANDAS LTE (3.0)")
+            print(f"  Filas LTE con Bands del módem: {with_bands}; con EARFCN fuera de la tabla: {outside}")
+            for b, n in declared.most_common(5):
+                print(f"    Bands={b}: {n} filas")
 
     print("\nMADUREZ DEL HISTORIAL")
     per_cell = Counter((r["CID"], r["MNC"], r["TAC"], r["MCC"]) for r in rows)
