@@ -44,77 +44,98 @@ import com.alexisgordr.icdetector.models.TimingAdvanceUnit
  * reportó alguna vez, y las identidades vistas con cero), nunca la conclusión. [isStub] se sigue
  * derivando de la evidencia en cada consulta, así que un cambio futuro de [MIN_DISTINCT_CELLS]
  * reevalúa el pasado en lugar de heredar un veredicto congelado.
+ *
+ * ── 3.0 (#33): LA EVIDENCIA ES POR TECNOLOGÍA / UNIDAD ─────────────────────────────────────
+ *
+ * Hasta 2.10.x el latch era uno para todo el teléfono: el primer TA distinto de cero de CUALQUIER
+ * tecnología lo fijaba para siempre. Un LTE que reporta de verdad impedía detectar que el camino
+ * GSM (o NR) del mismo módem devuelve 0 siempre, y ese 0 entraba en la rama de proximidad de H6
+ * como una medida real. Ahora cada unidad declarada por el parser (LTE_INDEX, GSM_INDEX, NR_RAW,
+ * UNKNOWN) tiene su propio latch y su propia lista de celdas a cero.
+ *
+ * La evidencia guardada por versiones anteriores no dice de qué tecnología vino, así que NO se
+ * atribuye a ninguna: cada unidad empieza vacía y se rederiva en unos minutos de uso. Igual que
+ * antes, un TA 0 aislado sigue siendo legítimo, un TA nulo no aporta evidencia y distintas
+ * identidades no se dan por emplazamientos distintos más allá del umbral [MIN_DISTINCT_CELLS].
  */
 class TimingAdvanceSanity {
 
-    private val zeroOnlyCells = HashSet<String>()
+    /** Evidencia de una unidad: el latch de "reporta de verdad" y las celdas vistas solo a 0. */
+    private class Evidence {
+        var hasSeenRealValue = false
+        val zeroOnlyCells = HashSet<String>()
+        val isStub: Boolean get() = !hasSeenRealValue && zeroOnlyCells.size >= MIN_DISTINCT_CELLS
+    }
 
-    /** Latched: en cuanto el módem demuestra que reporta de verdad, deja de estar bajo sospecha. */
-    var hasSeenRealValue: Boolean = false
-        private set
+    private val evidence = HashMap<TimingAdvanceUnit, Evidence>()
 
-    /** ¿Concluimos que el TA de este teléfono es un campo sin rellenar? */
-    val isStub: Boolean
-        get() = !hasSeenRealValue && zeroOnlyCells.size >= MIN_DISTINCT_CELLS
+    private fun of(unit: TimingAdvanceUnit): Evidence = evidence.getOrPut(unit) { Evidence() }
 
-    /** Nº de celdas distintas vistas hasta ahora reportando solo 0 (diagnóstico). */
-    val zeroOnlyCellCount: Int
-        get() = zeroOnlyCells.size
+    /** Latched por unidad: en cuanto esa unidad demuestra que reporta de verdad, deja de estar bajo sospecha. */
+    fun hasSeenRealValue(unit: TimingAdvanceUnit): Boolean = evidence[unit]?.hasSeenRealValue == true
 
-    /** Evidencia acumulada, para que quien llama la guarde entre arranques. Copia defensiva. */
-    val zeroOnlyCellKeys: Set<String>
-        get() = zeroOnlyCells.toSet()
+    /** ¿Concluimos que el TA de esta unidad es un campo sin rellenar? */
+    fun isStub(unit: TimingAdvanceUnit): Boolean = evidence[unit]?.isStub == true
+
+    /** ¿Alguna unidad es un campo sin rellenar? (diagnóstico) */
+    val anyStub: Boolean get() = evidence.values.any { it.isStub }
+
+    /** Nº de celdas distintas vistas reportando solo 0 en esta unidad (diagnóstico). */
+    fun zeroOnlyCellCount(unit: TimingAdvanceUnit): Int = evidence[unit]?.zeroOnlyCells?.size ?: 0
+
+    /** El mayor recuento entre unidades, para el diagnóstico general del terminal. */
+    val zeroOnlyCellCount: Int get() = evidence.values.maxOfOrNull { it.zeroOnlyCells.size } ?: 0
+
+    /** Evidencia de una unidad, para que quien llama la guarde entre arranques. Copia defensiva. */
+    fun zeroOnlyCellKeys(unit: TimingAdvanceUnit): Set<String> = evidence[unit]?.zeroOnlyCells?.toSet().orEmpty()
 
     /**
-     * Restaura la evidencia de un arranque anterior. Devuelve true si el estado visible cambió,
-     * para que quien llama sepa si merece la pena repintar el diagnóstico.
-     *
-     * No restaura un veredicto: [isStub] se recalcula igual que siempre a partir de lo restaurado.
-     * Un latch [hasSeenRealValue] a true descarta la lista de ceros, porque ya no aporta nada.
+     * Restaura la evidencia de una unidad de un arranque anterior. Devuelve true si su estado
+     * visible cambió. No restaura un veredicto: [isStub] se recalcula a partir de lo restaurado.
      */
-    fun restore(hasSeenRealValue: Boolean, zeroOnlyCellKeys: Set<String>): Boolean {
-        val before = isStub
+    fun restore(unit: TimingAdvanceUnit, hasSeenRealValue: Boolean, zeroOnlyCellKeys: Set<String>): Boolean {
+        if (unit !in EVIDENCE_UNITS) return false
+        val e = of(unit)
+        val before = e.isStub
         if (hasSeenRealValue) {
-            this.hasSeenRealValue = true
-            zeroOnlyCells.clear()
+            e.hasSeenRealValue = true
+            e.zeroOnlyCells.clear()
         } else {
-            zeroOnlyCells.addAll(zeroOnlyCellKeys.take(MAX_PERSISTED_CELLS))
+            e.zeroOnlyCells.addAll(zeroOnlyCellKeys.take(MAX_PERSISTED_CELLS))
         }
-        return before != isStub
+        return before != e.isStub
     }
 
     /**
-     * Registra una observación. [cellKey] debe ser la identidad completa de la celda
-     * (`MCC-MNC-TAC-CID`); un TA null (el módem declaró honestamente que no hay dato) no aporta
-     * evidencia en ninguna dirección y se ignora.
+     * Registra una observación con la unidad que declaró el parser. [cellKey] debe ser la
+     * identidad completa de la celda; un TA null no aporta evidencia y se ignora.
      *
-     * Devuelve true si la EVIDENCIA cambió y conviene volver a guardarla en disco. Así el
-     * servicio escribe en preferencias solo cuando hay algo nuevo, y no en cada muestra.
+     * Devuelve true si la EVIDENCIA cambió y conviene volver a guardarla en disco.
      */
-    fun observe(cellKey: String, timingAdvance: Int?): Boolean {
-        if (timingAdvance == null) return false
+    fun observe(unit: TimingAdvanceUnit, cellKey: String, timingAdvance: Int?): Boolean {
+        if (timingAdvance == null || unit !in EVIDENCE_UNITS) return false
+        val e = of(unit)
         if (timingAdvance != 0) {
-            if (hasSeenRealValue) return false
-            hasSeenRealValue = true
-            zeroOnlyCells.clear()
+            if (e.hasSeenRealValue) return false
+            e.hasSeenRealValue = true
+            e.zeroOnlyCells.clear()
             return true
         }
-        if (hasSeenRealValue) return false
-        if (zeroOnlyCells.size >= MAX_PERSISTED_CELLS) return false
-        return zeroOnlyCells.add(cellKey)
+        if (e.hasSeenRealValue) return false
+        if (e.zeroOnlyCells.size >= MAX_PERSISTED_CELLS) return false
+        return e.zeroOnlyCells.add(cellKey)
     }
 
     /**
-     * Unidad efectiva para esta observación: la declarada por el parser, salvo que hayamos
-     * concluido que el módem no reporta de verdad — en cuyo caso pasa a [TimingAdvanceUnit.STUB_ZERO]
-     * y deja de producir geometría por el camino de siempre.
+     * Unidad efectiva para esta observación: la declarada por el parser, salvo que esa misma
+     * unidad se haya concluido como campo sin rellenar, en cuyo caso pasa a
+     * [TimingAdvanceUnit.STUB_ZERO] y deja de producir geometría.
      */
     fun effectiveUnit(declared: TimingAdvanceUnit, timingAdvance: Int?): TimingAdvanceUnit =
-        if (timingAdvance == 0 && isStub) TimingAdvanceUnit.STUB_ZERO else declared
+        if (timingAdvance == 0 && isStub(declared)) TimingAdvanceUnit.STUB_ZERO else declared
 
     fun reset() {
-        zeroOnlyCells.clear()
-        hasSeenRealValue = false
+        evidence.clear()
     }
 
     companion object {
@@ -127,11 +148,13 @@ class TimingAdvanceSanity {
         const val MIN_DISTINCT_CELLS = 3
 
         /**
-         * Tope de identidades guardadas en disco. La conclusión queda fijada a las
+         * Tope de identidades guardadas en disco por unidad. La conclusión queda fijada a las
          * [MIN_DISTINCT_CELLS], así que acumular más no cambia nada: solo hincharía las
-         * preferencias durante una campaña larga. Se mantiene holgado para que el diagnóstico
-         * ("N celdas distintas comprobadas") siga siendo informativo.
+         * preferencias durante una campaña larga.
          */
         const val MAX_PERSISTED_CELLS = 64
+
+        /** 3.0 (#33) — Unidades con evidencia propia. STUB_ZERO es un resultado, no una unidad declarada. */
+        val EVIDENCE_UNITS: List<TimingAdvanceUnit> = TimingAdvanceUnit.values().filter { it != TimingAdvanceUnit.STUB_ZERO }
     }
 }

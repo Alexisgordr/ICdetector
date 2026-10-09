@@ -57,6 +57,16 @@ change (still 20).
   Cell ID and TAC, matching or unreported MCC/MNC, and at least one physical field (PCI or frequency)
   reported by both and equal. A field the modem omits is not required; with none to compare, the app
   abstains. **Dataset cut for H6.**
+- **One technology's Timing Advance hid another's stub zero (#33).** The evidence that decides whether
+  a TA of 0 is a measurement or an unfilled field was one latch for the whole phone: the first
+  non-zero TA of any technology set it for good. A modem whose LTE path reports real values could
+  never be detected returning a constant 0 on GSM or NR, and that 0 reached H6's proximity branch as a
+  real distance. The evidence is now kept per declared unit (LTE, GSM, NR, unknown), each with its own
+  latch and its own list of cells seen at 0, and is saved per unit. The evidence saved by earlier
+  versions does not say which technology it came from, so it is not read: every unit starts empty
+  and is re-derived within minutes of use. A single TA of 0 is still legitimate and a missing TA still
+  gives no evidence. Found by reading the code, not yet seen in the field. **Dataset cut for H6 and
+  `TAUnit`.**
 
 ## 3.0.0-beta1 (local beta, not released)
 

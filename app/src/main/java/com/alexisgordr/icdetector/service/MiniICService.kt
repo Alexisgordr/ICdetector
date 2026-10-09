@@ -990,7 +990,8 @@ class MiniICService : Service() {
                 // v2.5 — La evidencia sobrevive a los reinicios del servicio; sin esto, la misma
                 // lectura de TA=0 se etiquetaba LTE_INDEX o STUB_ZERO según cuánto llevara vivo el
                 // proceso, y el historial dejaba de ser autoconsistente (medido: 319 vs 394 filas).
-                if (taSanity.observe(taKey, current.timingAdvance)) persistTaSanityEvidence()
+                // 3.0 (#33) — Evidencia por unidad: un LTE que reporta no oculta un GSM/NR a cero.
+                if (taSanity.observe(current.timingAdvanceUnit, taKey, current.timingAdvance)) persistTaSanityEvidence()
                 val effectiveUnit = taSanity.effectiveUnit(current.timingAdvanceUnit, current.timingAdvance)
                 if (effectiveUnit != current.timingAdvanceUnit) {
                     list[activeIndex] = current.copy(timingAdvanceUnit = effectiveUnit)
@@ -1454,11 +1455,15 @@ class MiniICService : Service() {
     private fun restoreTaSanityEvidence() {
         try {
             val p = getSharedPreferences("miniic_prefs", MODE_PRIVATE)
-            val seenReal = p.getBoolean(KEY_TA_SEEN_REAL, false)
-            val cells = p.getStringSet(KEY_TA_ZERO_CELLS, emptySet()).orEmpty()
-            if (!seenReal && cells.isEmpty()) return
-            taSanity.restore(seenReal, cells)
-            if (taSanity.isStub) {
+            // 3.0 (#33) — Una clave por unidad. Las claves globales de versiones anteriores
+            // (ta_seen_real_value, ta_zero_only_cells) no dicen de qué tecnología vinieron y NO se
+            // leen: cada unidad empieza vacía y se rederiva en unos minutos de uso.
+            com.alexisgordr.icdetector.core.TimingAdvanceSanity.EVIDENCE_UNITS.forEach { unit ->
+                val seenReal = p.getBoolean(KEY_TA_SEEN_REAL_PREFIX + unit.name, false)
+                val cells = p.getStringSet(KEY_TA_ZERO_CELLS_PREFIX + unit.name, emptySet()).orEmpty()
+                if (seenReal || cells.isNotEmpty()) taSanity.restore(unit, seenReal, cells)
+            }
+            if (taSanity.anyStub) {
                 appendLog(
                     "[TA]",
                     "Diagnóstico de TA recuperado del arranque anterior: el módem no rellena el campo " +
@@ -1471,10 +1476,12 @@ class MiniICService : Service() {
     /** Guarda la evidencia de TA. Se llama solo cuando [TimingAdvanceSanity.observe] dice que cambió. */
     private fun persistTaSanityEvidence() {
         try {
-            getSharedPreferences("miniic_prefs", MODE_PRIVATE).edit()
-                .putBoolean(KEY_TA_SEEN_REAL, taSanity.hasSeenRealValue)
-                .putStringSet(KEY_TA_ZERO_CELLS, taSanity.zeroOnlyCellKeys)
-                .apply()
+            val editor = getSharedPreferences("miniic_prefs", MODE_PRIVATE).edit()
+            com.alexisgordr.icdetector.core.TimingAdvanceSanity.EVIDENCE_UNITS.forEach { unit ->
+                editor.putBoolean(KEY_TA_SEEN_REAL_PREFIX + unit.name, taSanity.hasSeenRealValue(unit))
+                    .putStringSet(KEY_TA_ZERO_CELLS_PREFIX + unit.name, taSanity.zeroOnlyCellKeys(unit))
+            }
+            editor.apply()
         } catch (_: Exception) {}
     }
 
@@ -1823,8 +1830,9 @@ class MiniICService : Service() {
         const val MAX_TRACKED_CELLS = 500
         // v2.5 — Evidencia del diagnóstico de Timing Advance, superviviente a reinicios del
         // servicio. Ver TimingAdvanceSanity: se guarda la evidencia, nunca el veredicto.
-        private const val KEY_TA_SEEN_REAL = "ta_seen_real_value"
-        private const val KEY_TA_ZERO_CELLS = "ta_zero_only_cells"
+        // 3.0 (#33) — Por unidad: ta_seen_real_LTE_INDEX, ta_zero_cells_GSM_INDEX, …
+        private const val KEY_TA_SEEN_REAL_PREFIX = "ta_seen_real_"
+        private const val KEY_TA_ZERO_CELLS_PREFIX = "ta_zero_cells_"
         // Ciclos consecutivos de sospecha necesarios para confirmar una alarma.
         private const val CONFIRMATION_CYCLES = 3
         private const val INTENSIVE_MONITORING_TAIL_MS = 60_000L
