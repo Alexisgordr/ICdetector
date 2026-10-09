@@ -89,12 +89,23 @@ class CollectionGenerationTest {
         assertTrue(firstCode, firstCode == "if (!collectionGeneration.mayPublish(cycleTicket)) return@withContext")
         assertTrue(publish.indexOf("checkAlerts(") > 0)
         // Lista vacía, abstención, modo avión y refresco forzado invalidan los ciclos en curso.
-        assertTrue(Regex("collectionGeneration\\.lose\\(\\)").findAll(service).count() >= 4)
+        assertTrue(Regex("collectionGeneration\\.lose\\(").findAll(service).count() >= 4)
         // Cada vez que la pantalla se vacía fuera del propio ciclo, antes se invalida.
         Regex("\\n( *)_cellFlow\\.value = emptyList\\(\\)").findAll(service).forEach { match ->
             val before = service.substring(0, match.range.first).trimEnd().lines().takeLast(3).joinToString("\n")
             val insideCycle = before.contains("stableSiteIntensiveActive = false")
-            assertTrue("sin invalidar: ...$before", insideCycle || before.contains("collectionGeneration.lose()"))
+            assertTrue("sin invalidar: ...$before", insideCycle || before.contains("collectionGeneration.lose("))
         }
     }
+
+    @Test fun `only a signal loss counts as a coverage gap, not a handover or a manual refresh`() {
+        generation.deliver("214-07-1-100-LTE")
+        generation.deliver("214-07-1-200-LTE")          // handover
+        assertTrue(generation.losses == 0L)
+        generation.lose(signalLost = false)              // refresco manual
+        assertTrue(generation.losses == 0L)
+        generation.lose()                                // lista vacía / abstención / modo avión
+        assertTrue(generation.losses == 1L)
+    }
 }
+

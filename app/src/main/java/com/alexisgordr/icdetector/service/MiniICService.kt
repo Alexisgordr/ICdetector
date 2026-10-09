@@ -291,6 +291,8 @@ class MiniICService : Service() {
     // REGISTRADA analizada; el buffer de tendencia sobrevive al handover para detectar si
     // la señal venía degradándose progresivamente (excepción del garaje/sótano).
     private var prevBand: Int? = null
+    /** 3.0 (#20) — Pérdidas de señal ya tenidas en cuenta; ver CollectionGeneration.losses. */
+    @Volatile private var acknowledgedSignalLosses = 0L
     private var prevRegisteredDbm: Int? = null
     private val recentRegisteredDbmTrend = CopyOnWriteArrayList<Int>()
     private val cellChangeHistory = CopyOnWriteArrayList<Pair<String, Long>>()
@@ -300,8 +302,9 @@ class MiniICService : Service() {
     }
 
     fun forceRefresh() {
-        // 3.0 (#24) — La pantalla se vacía: un ciclo en curso no puede volver a pintarla.
-        collectionGeneration.lose()
+        // 3.0 (#24) — La pantalla se vacía: un ciclo en curso no puede volver a pintarla. No es una
+        // pérdida de señal (#20): la confirmación en curso no vuelve a empezar.
+        collectionGeneration.lose(signalLost = false)
         _cellFlow.value = emptyList()
         requestFreshCellInfo()
     }
@@ -1011,6 +1014,15 @@ class MiniICService : Service() {
             scope.launch(Dispatchers.IO) {
                 cellProcessingMutex.withLock {
                 if (!collectionGeneration.isLatest(cycleTicket)) return@withLock
+                // 3.0 (#20) — Tras una pérdida de señal, el contexto de banda de antes del hueco no
+                // sirve para comparar: H14 queda N/A hasta tener una banda previa nueva.
+                val signalLosses = collectionGeneration.losses
+                val continuityBroken = signalLosses != acknowledgedSignalLosses
+                if (continuityBroken) {
+                    prevBand = null
+                    prevRegisteredDbm = null
+                    recentRegisteredDbmTrend.clear()
+                }
                 val currentLocation = getCurrentLocation()
                 // Cellular polling only reads motion. New evidence enters from real Location
                 // callbacks, so a repeated lastKnownLocation cannot manufacture static time.
@@ -1276,6 +1288,14 @@ class MiniICService : Service() {
                     // contadores de confirmación. Las entregas llegan por el hilo principal, así
                     // que nada puede cambiar entre esta comprobación y el resto del bloque.
                     if (!collectionGeneration.mayPublish(cycleTicket)) return@withContext
+                    // 3.0 (#20) — La confirmación temporal y los episodios empiezan de nuevo después
+                    // de un hueco de cobertura. La línea del terminal deja constancia en la caja negra.
+                    if (continuityBroken) {
+                        acknowledgedSignalLosses = signalLosses
+                        temporalConfidence.interrupt()
+                        threatEpisodeTracker.interrupt()
+                        appendLog("[SEC]", "Continuidad interrumpida por pérdida de señal: la confirmación vuelve a empezar.")
+                    }
                     // v2.10.4 — La servidora va siempre primero; nunca se reordena por potencia.
                     val analyzedServing = analyzedList.firstOrNull()?.takeIf { it.isRegistered }
                     val sorted = listOfNotNull(analyzedServing) +

@@ -24,6 +24,12 @@ class TemporalConfidence(
     private val confirmationCycles: Int = 3,
     private val minObservationSpacingMs: Long = 2_000L,
     private val maxObservationStallMs: Long = 30_000L,
+    /**
+     * 3.0 (#20) — Hueco máximo entre dos observaciones aceptadas para seguir contándolas como
+     * consecutivas. Con la pantalla apagada se sondea cada 10 s; 2 minutos son más de diez
+     * sondeos perdidos. Pasado el hueco, la racha vuelve a empezar.
+     */
+    private val maxContinuityGapMs: Long = 120_000L,
     private val elapsedRealtimeMs: () -> Long = { System.nanoTime() / 1_000_000L }
 ) {
 
@@ -31,6 +37,13 @@ class TemporalConfidence(
     private var lastStreakKey = ""
     private var lastObservationToken: Long? = null
     private var lastAcceptedAtMs: Long? = null
+
+    /**
+     * 3.0 (#20) — Pérdida de la servidora utilizable (lista vacía, abstención, modo avión). Dos
+     * ciclos sospechosos, un hueco sin señal y otro ciclo de la misma celda ya no completan una
+     * confirmación como si fueran seguidos.
+     */
+    fun interrupt() = reset()
 
     /** Olvida todas las rachas. Útil al reiniciar el servicio o entre escenarios de test. */
     fun reset() {
@@ -88,6 +101,8 @@ class TemporalConfidence(
         if (observationToken != null && (previousToken == null || observationToken > previousToken)) {
             lastObservationToken = observationToken
         }
+        // 3.0 (#20) — Demasiado tiempo desde la última observación aceptada: no son consecutivas.
+        if (lastAcceptedAtMs?.let { now - it > maxContinuityGapMs } == true) anomalyStreaks.clear()
         lastAcceptedAtMs = now
 
         val currentStreak = if (cell.isSuspicious) {

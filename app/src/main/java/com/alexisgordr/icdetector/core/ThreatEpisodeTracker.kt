@@ -105,6 +105,12 @@ class ThreatEpisodeTracker(
         return Evaluation(promotedCell, watching, started, promote, accumulatedFamilies)
     }
 
+    /**
+     * 3.0 (#20) — Pérdida de señal: la evidencia de antes del hueco no se correlaciona con la de
+     * después, aunque siga dentro de la ventana de 90 s.
+     */
+    fun interrupt() = reset()
+
     fun reset() {
         evidence.clear()
         lastAcceptedToken = null

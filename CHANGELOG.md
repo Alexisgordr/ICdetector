@@ -1,5 +1,25 @@
 # Changelog
 
+## 3.0.0-beta3 (local beta, not released)
+
+### Phase 3 — Confirmation and rule behaviour
+
+Third beta of 3.0 (roadmap: GitHub issue #27). With correct inputs in place, this phase adjusts how
+evidence is confirmed and how some rules behave. Same separate app, *ICdetection β*; schema 20.
+
+#### Bugs found during testing
+
+- **A confirmation could span a coverage gap (#20).** When the serving cell was lost (empty list,
+  abstention, airplane mode) the screen was cleared, but the confirmation streak survived. Two
+  suspicious cycles, ten minutes without signal and one more suspicious cycle of the same cell could
+  complete a confirmation as if they were consecutive; the multi-signal episode window and H14's
+  previous band also survived the gap. A signal loss now restarts the confirmation streak and the
+  episode correlation and clears the band context (H14 is `N/A` until a new previous band exists),
+  and the terminal records "Continuity interrupted by signal loss" so the gap is visible in the
+  forensic black box. Independently, two accepted observations more than 2 minutes apart are no
+  longer consecutive. A normal handover or a manual refresh does not count as a gap. **Methodology
+  cut:** affects when any alarm is confirmed.
+
 ## 3.0.0-beta2 (local beta, not released)
 
 ### Phase 2 — Correct inputs to the rules

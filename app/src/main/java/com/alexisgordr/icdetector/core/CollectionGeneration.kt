@@ -42,6 +42,15 @@ class CollectionGeneration {
 
     @Volatile private var state = State(0L, null, 0L)
 
+    /**
+     * 3.0 (#20) — Número de pérdidas de señal (no de cambios de celda). Quien acumula evidencia
+     * entre ciclos (confirmación temporal, episodios, contexto de banda) compara este número con
+     * el que vio la última vez: si cambió, hubo un hueco de cobertura y la continuidad se rompe.
+     * Un handover normal no lo cambia, para que H14 pueda seguir comparando bandas entre celdas.
+     */
+    @Volatile var losses: Long = 0L
+        private set
+
     /** Nueva entrega con trabajo real. Un cambio de celda servidora es una interrupción. */
     @Synchronized
     fun deliver(servingIdentity: String): Ticket {
@@ -56,9 +65,14 @@ class CollectionGeneration {
         return Ticket(generation, servingIdentity)
     }
 
-    /** Lista vacía, abstención, modo avión o pantalla vaciada: invalida los ciclos en curso. */
+    /**
+     * Lista vacía, abstención, modo avión o pantalla vaciada: invalida los ciclos en curso.
+     * [signalLost] = false para un refresco manual: vacía la pantalla, pero no es un hueco de
+     * cobertura y no rompe la continuidad de la confirmación (#20).
+     */
     @Synchronized
-    fun lose() {
+    fun lose(signalLost: Boolean = true) {
+        if (signalLost) losses++
         val generation = state.generation + 1
         state = State(generation = generation, servingIdentity = null, lastInterruption = generation)
     }

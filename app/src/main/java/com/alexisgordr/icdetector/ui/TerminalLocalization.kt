@@ -50,6 +50,9 @@ private val replacements = linkedMapOf(
     "Solicitando fix GPS preciso" to "Requesting precise GPS fix",
     "Fix GPS preciso no disponible" to "Precise GPS fix unavailable",
     "Handover celular completado" to "Cellular handover completed",
+    // 3.0 (#20)
+    "Continuidad interrumpida por pérdida de señal: la confirmación vuelve a empezar." to
+        "Continuity interrupted by signal loss: confirmation starts again.",
     "Nueva celda" to "New cell",
     "Ping-Pong observado" to "Ping-pong observed",
     "Sin credenciales configuradas" to "No credentials configured",
