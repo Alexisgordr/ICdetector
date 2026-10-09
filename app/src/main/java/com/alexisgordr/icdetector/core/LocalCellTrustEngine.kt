@@ -87,7 +87,7 @@ object LocalCellTrustEngine {
             // is what freezes CHANGED observations out of every trusted-learning query.
             suspiciousReason = when {
                 contradictions.isNotEmpty() -> reason
-                stableSite.enforced -> "[site-unverified] ${stableSite.reason}"
+                stableSite.enforced -> "${com.alexisgordr.icdetector.models.SITE_UNVERIFIED_PREFIX} ${stableSite.reason}"
                 else -> cell.suspiciousReason
             },
             stableSiteDecision = stableSite

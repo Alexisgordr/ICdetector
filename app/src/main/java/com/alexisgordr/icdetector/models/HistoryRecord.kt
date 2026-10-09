@@ -14,6 +14,14 @@ package com.alexisgordr.icdetector.models
  */
 const val SUBTHRESHOLD_PREFIX = "[sub-umbral]"
 
+/**
+ * 3.0 (#7, B4) — Prefijo de los motivos de Stable-Site cuando la protección está activa. Como
+ * [SUBTHRESHOLD_PREFIX], se guarda en castellano y la interfaz en inglés lo muestra como
+ * `[site-unverified]`. Antes se guardaba en inglés y no tenía traducción. Con la protección en
+ * modo sombra (STABLE_SITE_ENFORCEMENT_ENABLED = false) nunca se ha llegado a guardar.
+ */
+const val SITE_UNVERIFIED_PREFIX = "[sitio-sin-verificar]"
+
 data class HistoryRecord(
     val timestamp: String,
     val netType: String,

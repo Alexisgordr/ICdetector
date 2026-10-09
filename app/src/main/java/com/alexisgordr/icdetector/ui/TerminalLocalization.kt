@@ -20,6 +20,8 @@ private val replacements = linkedMapOf(
     // v2.10.8 — Prefijo de las observaciones sub-umbral. El dato guardado sigue en castellano
     // (SUBTHRESHOLD_PREFIX); solo se traduce al mostrarlo.
     "[sub-umbral]" to "[sub-threshold]",
+    // 3.0 (#7, B4) — Prefijo de Stable-Site (SITE_UNVERIFIED_PREFIX).
+    "[sitio-sin-verificar]" to "[site-unverified]",
     // v2.10.4 — Líneas [RADIO] y [SERVICIO]. Van antes que las genéricas ("Celda ", etc.)
     // y las frases largas antes que las cortas que contienen.
     "[SERVICIO]" to "[SERVICE]",

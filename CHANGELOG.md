@@ -1,5 +1,20 @@
 # Changelog
 
+## 3.0.0-beta4 (local beta, not released)
+
+### Phase 4 — Maintenance backlog and documentation
+
+Fourth and last beta of the 3.0 roadmap (GitHub issue #27): the maintenance items from the
+post-freeze review (#7) and the documentation of the campaign's validation limits (#31). Same
+separate app, *ICdetection β*; schema 20.
+
+#### Maintenance (#7)
+
+- **Stable-Site prefix not translated (B4).** The `[site-unverified]` prefix was stored in English and
+  had no translation, unlike every other stored prefix. It is now stored in Spanish
+  (`[sitio-sin-verificar]`, like `[sub-umbral]`) and shown as `[site-unverified]` in the English
+  interface. Stable-Site enforcement is still off (shadow mode), so no stored row is affected.
+
 ## 3.0.0-beta3 (local beta, not released)
 
 ### Phase 3 — Confirmation and rule behaviour
