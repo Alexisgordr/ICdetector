@@ -440,7 +440,8 @@ class MiniICService : Service() {
                 requestHighAccuracyFix()
             },
             writeDispatcher = historyWriteDispatcher,
-            historyGeneration = { historyEpoch.current() }
+            historyGeneration = { historyEpoch.current() },
+            appVersion = runCatching { packageManager.getPackageInfo(packageName, 0).versionName }.getOrNull()
         )
         securityAlerts = SecurityAlertController(
             tone = { toneGenerator },

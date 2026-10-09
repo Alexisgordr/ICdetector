@@ -44,6 +44,7 @@ class SchemaV20MigrationTest {
         assertNull(single("SELECT updated_at_ms FROM forensic_cases"))
         assertNull(single("SELECT not_evaluated_heuristics FROM history"))
         assertNull(single("SELECT gps_accuracy_m FROM history"))
+        assertNull(single("SELECT app_version FROM history"))
         // Y nada de lo que ya había cambia.
         assertEquals("2026-09-01 10:00:00", single("SELECT timestamp FROM history"))
     }

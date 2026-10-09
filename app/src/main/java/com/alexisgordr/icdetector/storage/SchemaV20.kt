@@ -27,6 +27,9 @@ object SchemaV20 {
     const val COLUMN_NOT_EVALUATED = "not_evaluated_heuristics"
     const val COLUMN_GPS_ACCURACY_M = "gps_accuracy_m"
 
+    // #30 — Versión de la app que hizo la observación (para aplicar los cortes de dataset por fila).
+    const val COLUMN_APP_VERSION = "app_version"
+
     /** Sentencias en orden. Cada una se ejecuta por separado; ver [CellDbHelper.onUpgrade]. */
     val STATEMENTS: List<String> = listOf(
         "ALTER TABLE $TABLE_HISTORY ADD COLUMN $COLUMN_OBSERVED_AT_MS INTEGER",
@@ -37,5 +40,6 @@ object SchemaV20 {
         "ALTER TABLE $TABLE_FORENSIC_CASES ADD COLUMN $UPDATED_AT_MS INTEGER",
         "ALTER TABLE $TABLE_HISTORY ADD COLUMN $COLUMN_NOT_EVALUATED TEXT",
         "ALTER TABLE $TABLE_HISTORY ADD COLUMN $COLUMN_GPS_ACCURACY_M REAL",
+        "ALTER TABLE $TABLE_HISTORY ADD COLUMN $COLUMN_APP_VERSION TEXT",
     )
 }

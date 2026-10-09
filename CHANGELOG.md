@@ -38,6 +38,16 @@ value.
   worse than 50 m are reported so they can be filtered. Detection is unchanged: the app already
   discarded fixes worse than 100 m, H16 requires 75 m or better and Stable-Site 50 m or better.
 
+- **Exports did not say which app version or phone produced them (#30).** Dataset cuts are per
+  version (H10 from 2.10.9, H8 from 2.10.10, more in 3.0), but no export recorded the app version,
+  so the cuts could only be applied by install date. Files from several people could not be told
+  apart once joined. Each new history row now stores the app version that observed it, and the
+  history CSV ends with `AppVersion` (per row, empty before 3.0), `ExportDevice` (manufacturer and
+  model) and `ExportAndroid` (Android version and API level) of the phone that made the export. No
+  personal or hardware identifier is exported (no IMEI, serial number or account).
+  `tools/check_export.py` lists the rows per app version, shows which dataset cuts the file crosses
+  and warns when a file joins exports from several phones.
+
 
 ### Bug-fix release inside the freeze — dataset cut for H8
 

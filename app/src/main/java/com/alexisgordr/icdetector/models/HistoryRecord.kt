@@ -97,7 +97,12 @@ data class HistoryRecord(
      */
     val notEvaluatedHeuristics: String? = null,
     /** 3.0 (#29) — Precisión en metros del fix de [lat]/[lon]. Null sin fix o en filas anteriores. */
-    val gpsAccuracyM: Float? = null
+    val gpsAccuracyM: Float? = null,
+    /**
+     * 3.0 (#30) — Versión de la app que hizo la observación. Permite aplicar los cortes de dataset
+     * (H10 desde 2.10.9, H8 desde 2.10.10, …) fila a fila. Null en filas anteriores a 3.0.
+     */
+    val appVersion: String? = null
 )
 
 /** Misma identidad completa que [CellData.identityKey], aplicada a una fila histórica. */

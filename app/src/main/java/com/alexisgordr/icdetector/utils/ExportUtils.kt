@@ -20,7 +20,11 @@ object ExportUtils {
         "ObservedAtUtc," +
         // 3.0 (#29) — Reglas no evaluadas (`H1;H9`, `NONE` si todas) y precisión del GPS en metros.
         // Vacías en filas anteriores a 3.0: desconocido.
-        "NotEvaluatedHeuristics,GpsAccuracyM"
+        "NotEvaluatedHeuristics,GpsAccuracyM," +
+        // 3.0 (#30) — Versión de la app de cada fila (vacía antes de 3.0) y, constantes en todo el
+        // fichero, el teléfono y la versión de Android que hicieron el export. Sirven para separar
+        // ficheros de varias personas al unirlos. Ningún identificador personal ni del aparato.
+        "AppVersion,ExportDevice,ExportAndroid"
 
     /** Cabecera del CSV de eventos de servicio (pestaña Radio). */
     const val SERVICE_STATE_CSV_HEADER = "TimestampUtc,State,DataRegistered,VoiceRegistered,Searching," +
@@ -64,8 +68,9 @@ object ExportUtils {
                 OutputStreamWriter(outputStream, StandardCharsets.UTF_8).use { writer ->
                     writer.append(CSV_HEADER).append("\n")
                     var written = 0
+                    val device = ExportDevice.current()
                     val expected = streamRecords { item ->
-                        writer.append(csvRow(item)).append("\n")
+                        writer.append(csvRow(item, device)).append("\n")
                         written++
                     }
                     writer.flush()
@@ -75,8 +80,24 @@ object ExportUtils {
             }
         }
 
+    /**
+     * 3.0 (#30) — Teléfono y Android que hacen el export. Solo fabricante, modelo y versión:
+     * nada que identifique a la persona ni al aparato concreto (ni IMEI, ni número de serie).
+     */
+    data class ExportDevice(val device: String, val android: String) {
+        companion object {
+            val UNKNOWN = ExportDevice("", "")
+
+            fun current(): ExportDevice = ExportDevice(
+                device = listOfNotNull(android.os.Build.MANUFACTURER, android.os.Build.MODEL)
+                    .joinToString(" ").trim(),
+                android = "${android.os.Build.VERSION.RELEASE.orEmpty()} (API ${android.os.Build.VERSION.SDK_INT})"
+            )
+        }
+    }
+
     /** Una fila del CSV, ya escapada. Pura: se puede probar sin Android. */
-    fun csvRow(item: HistoryRecord): String = listOf(
+    fun csvRow(item: HistoryRecord, export: ExportDevice = ExportDevice.UNKNOWN): String = listOf(
         item.timestamp,
         item.netType,
         item.cid,
@@ -114,7 +135,10 @@ object ExportUtils {
         item.networkRoaming?.let { if (it) 1 else 0 } ?: "",
         item.observedAtMs?.let { ObservationTime.utcIso(it) } ?: "",
         item.notEvaluatedHeuristics ?: "",
-        item.gpsAccuracyM?.let { String.format(java.util.Locale.ROOT, "%.1f", it) } ?: ""
+        item.gpsAccuracyM?.let { String.format(java.util.Locale.ROOT, "%.1f", it) } ?: "",
+        item.appVersion ?: "",
+        export.device,
+        export.android
     ).joinToString(",") { csvEscape(it) }
 
     /** Una fila del CSV de eventos de servicio. Pura: se puede probar sin Android. */

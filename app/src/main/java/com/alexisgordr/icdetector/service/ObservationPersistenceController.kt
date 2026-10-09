@@ -30,6 +30,8 @@ internal class ObservationPersistenceController(
     private val writeDispatcher: CoroutineDispatcher,
     /** Cambia con cada "Borrar historial": una escritura de antes del borrado no se guarda. */
     private val historyGeneration: () -> Long = { 0L },
+    /** 3.0 (#30) — Versión de la app, guardada en cada fila. */
+    private val appVersion: String? = null,
     private val clock: () -> Long = System::currentTimeMillis
 ) {
     private var lastPeriodicWrite = 0L
@@ -125,7 +127,8 @@ internal class ObservationPersistenceController(
         simOperator = service?.simOperator,
         networkRoaming = service?.roaming,
         notEvaluatedHeuristics = cell.heuristicReport.notEvaluatedIds(),
-        gpsAccuracyM = fix?.takeIf { it.hasAccuracy() }?.accuracy
+        gpsAccuracyM = fix?.takeIf { it.hasAccuracy() }?.accuracy,
+        appVersion = appVersion
         )
     }
 

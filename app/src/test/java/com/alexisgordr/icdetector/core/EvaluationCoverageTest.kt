@@ -46,7 +46,8 @@ class EvaluationCoverageTest {
 
     @Test fun `the csv exports both columns at the end and leaves them empty for legacy rows`() {
         val header = ExportUtils.CSV_HEADER.split(",")
-        assertEquals(listOf("ObservedAtUtc", "NotEvaluatedHeuristics", "GpsAccuracyM"), header.takeLast(3))
+        val start = header.indexOf("ObservedAtUtc")
+        assertEquals(listOf("ObservedAtUtc", "NotEvaluatedHeuristics", "GpsAccuracyM"), header.subList(start, start + 3))
         val base = HistoryRecord(
             timestamp = "2026-10-09 12:00:00", netType = "4G", cid = "1", mnc = "07",
             tac = "1", mcc = "214", dbm = -90, lat = 40.4, lon = -3.7

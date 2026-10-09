@@ -43,7 +43,15 @@ RADIO_CONTEXT_COLUMNS_V2104 = [
 ]
 EXPECTED_COLUMNS_V2104 = EXPECTED_COLUMNS_V21 + RADIO_CONTEXT_COLUMNS_V2104
 # 3.0 (#23) — Instante inequívoco en UTC. Vacío en filas anteriores a 3.0 (desconocido).
-EXPECTED_COLUMNS_V30 = EXPECTED_COLUMNS_V2104 + ["ObservedAtUtc", "NotEvaluatedHeuristics", "GpsAccuracyM"]
+EXPECTED_COLUMNS_V30 = EXPECTED_COLUMNS_V2104 + [
+    "ObservedAtUtc", "NotEvaluatedHeuristics", "GpsAccuracyM", "AppVersion", "ExportDevice", "ExportAndroid",
+]
+# Cortes de dataset: a partir de esta versión cambió cómo se evalúa la regla indicada.
+DATASET_CUTS = [
+    ("2.10.9", "H10 (Ping-Pong)"),
+    ("2.10.10", "H8 (frecuencia)"),
+    ("3.0.0", "instante UTC y cobertura por fila (metodología)"),
+]
 HEURISTIC_IDS = [f"H{i}" for i in range(1, 17)]
 # La app no acepta fixes con una precisión peor que esta (LocationCollectionController).
 MAX_ACCEPTED_ACCURACY_M = 100.0
@@ -176,6 +184,34 @@ def gps_accuracy_issues(rows):
         if not has_fix or acc is None or acc < 0 or acc >= MAX_ACCEPTED_ACCURACY_M:
             issues.append(r)
     return issues
+
+
+def version_key(version):
+    """'3.0.0-beta1' -> (3, 0, 0). Una pre-versión cuenta como su versión base."""
+    base = (version or "").strip().split("-")[0]
+    parts = []
+    for p in base.split("."):
+        if not p.isdigit():
+            return None
+        parts.append(int(p))
+    return tuple(parts + [0] * (3 - len(parts))) if parts else None
+
+
+def dataset_cut_summary(rows):
+    """
+    3.0 (#30) — Filas por versión de la app y, por cada corte, cuántas filas con versión quedan
+    antes y después. Las filas sin AppVersion (anteriores a 3.0) se cuentan aparte: su versión
+    es desconocida y el corte solo se les puede aplicar por fecha.
+    """
+    versions = Counter((r.get("AppVersion") or "").strip() for r in rows)
+    unknown = versions.pop("", 0)
+    cuts = []
+    for cut, rule in DATASET_CUTS:
+        ck = version_key(cut)
+        before = sum(n for v, n in versions.items() if version_key(v) is not None and version_key(v) < ck)
+        after = sum(n for v, n in versions.items() if version_key(v) is not None and version_key(v) >= ck)
+        cuts.append((cut, rule, before, after))
+    return versions, unknown, cuts
 
 
 def calendar_period_stats(times, row_count):
@@ -473,6 +509,26 @@ def main(path):
                     "ya las limita (H16 exige <= 75 m y Stable-Site <= 50 m), pero conviene filtrarlas "
                     "al analizar la geometría."
                 )
+
+    if "AppVersion" in columns:
+        versions, unknown, cuts = dataset_cut_summary(rows)
+        print("\nVERSIONES Y CORTES DE DATASET (3.0)")
+        for v, n in sorted(versions.items(), key=lambda kv: version_key(kv[0]) or ()):
+            print(f"  {v}: {n} filas")
+        if unknown:
+            print(f"  desconocida (anterior a 3.0): {unknown} filas — el corte solo se aplica por fecha")
+        for cut, rule, before, after in cuts:
+            if before and after:
+                print(f"  Corte {cut} ({rule}): {before} filas antes y {after} después — no mezclarlas")
+        devices = Counter(
+            ((r.get("ExportDevice") or "").strip(), (r.get("ExportAndroid") or "").strip()) for r in rows
+        )
+        if len(devices) > 1:
+            notes.append(
+                f"El fichero une exports de {len(devices)} teléfonos/Android distintos: "
+                + "; ".join(f"{d or '?'} {a}".strip() for d, a in devices)
+                + ". Analízalos por separado."
+            )
 
     print("\nMADUREZ DEL HISTORIAL")
     per_cell = Counter((r["CID"], r["MNC"], r["TAC"], r["MCC"]) for r in rows)

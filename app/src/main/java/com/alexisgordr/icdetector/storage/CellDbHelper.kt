@@ -110,6 +110,8 @@ class CellDbHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME, 
         const val COLUMN_NOT_EVALUATED = SchemaV20.COLUMN_NOT_EVALUATED
         /** 3.0 (#29) — Precisión del fix GPS de la fila, en metros. NULL sin fix o en filas anteriores. */
         const val COLUMN_GPS_ACCURACY_M = SchemaV20.COLUMN_GPS_ACCURACY_M
+        /** 3.0 (#30) — Versión de la app que observó la fila. NULL en filas anteriores. */
+        const val COLUMN_APP_VERSION = SchemaV20.COLUMN_APP_VERSION
         // v2.10.4 — Contexto de radio (schema 19). Solo recolección: ninguna consulta de
         // detección lee estas columnas. NULL en filas anteriores = "no se recogía", no "no había".
         const val COLUMN_CONN_STATUS = "conn_status"
@@ -1483,7 +1485,9 @@ class CellDbHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME, 
         /** 3.0 (#29) — [com.alexisgordr.icdetector.models.HeuristicReport.notEvaluatedIds]. */
         notEvaluatedHeuristics: String? = null,
         /** 3.0 (#29) — Precisión del fix de [lat]/[lon], en metros. */
-        gpsAccuracyM: Float? = null
+        gpsAccuracyM: Float? = null,
+        /** 3.0 (#30) — Versión de la app que hizo la observación. */
+        appVersion: String? = null
     ): Long {
         val db = this.writableDatabase
         val values = ContentValues().apply {
@@ -1531,6 +1535,7 @@ class CellDbHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME, 
             if (notEvaluatedHeuristics != null) put(COLUMN_NOT_EVALUATED, notEvaluatedHeuristics)
             // La precisión solo tiene sentido con una posición: sin lat/lon no se guarda.
             if (gpsAccuracyM != null && lat != null && lon != null) put(COLUMN_GPS_ACCURACY_M, gpsAccuracyM.toDouble())
+            if (appVersion != null) put(COLUMN_APP_VERSION, appVersion)
         }
         return db.insert(TABLE_HISTORY, null, values)
     }
@@ -1727,7 +1732,9 @@ class CellDbHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME, 
         val observedIdx = cursor.getColumnIndex(COLUMN_OBSERVED_AT_MS)
         val notEvaluatedIdx = cursor.getColumnIndex(COLUMN_NOT_EVALUATED)
         val accuracyIdx = cursor.getColumnIndex(COLUMN_GPS_ACCURACY_M)
+        val appVersionIdx = cursor.getColumnIndex(COLUMN_APP_VERSION)
         return HistoryRecord(
+            appVersion = if (appVersionIdx >= 0 && !cursor.isNull(appVersionIdx)) cursor.getString(appVersionIdx) else null,
             observedAtMs = if (observedIdx >= 0 && !cursor.isNull(observedIdx)) cursor.getLong(observedIdx) else null,
             notEvaluatedHeuristics = if (notEvaluatedIdx >= 0 && !cursor.isNull(notEvaluatedIdx)) cursor.getString(notEvaluatedIdx) else null,
             gpsAccuracyM = if (accuracyIdx >= 0 && !cursor.isNull(accuracyIdx)) cursor.getFloat(accuracyIdx) else null,

@@ -5,8 +5,8 @@ import sys
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from check_export import (
-    calendar_period_stats, evaluation_coverage, gps_accuracy_issues, instant_issues,
-    radio_context_summary, row_instant,
+    calendar_period_stats, dataset_cut_summary, evaluation_coverage, gps_accuracy_issues,
+    instant_issues, radio_context_summary, row_instant, version_key,
     ta_consistency_issues, ta_unit_diagnostic
 )
 
@@ -158,6 +158,27 @@ class GpsAccuracyTest(unittest.TestCase):
         ]
         self.assertEqual(3, len(gps_accuracy_issues(rows)))
 
+
+class DatasetCutTest(unittest.TestCase):
+    """3.0 (#30) — Con la versión por fila, cada corte de dataset se aplica fila a fila."""
+
+    def test_pre_release_counts_as_its_base_version(self):
+        self.assertEqual((3, 0, 0), version_key("3.0.0-beta1"))
+        self.assertEqual((2, 10, 10), version_key("2.10.10"))
+        self.assertIsNone(version_key(""))
+        self.assertIsNone(version_key("unknown"))
+
+    def test_rows_are_split_by_each_cut_and_legacy_rows_stay_unknown(self):
+        rows = [{"AppVersion": "3.0.0-beta1"}, {"AppVersion": "3.0.0-beta1"},
+                {"AppVersion": "3.1.0"}, {"AppVersion": ""}]
+        versions, unknown, cuts = dataset_cut_summary(rows)
+        self.assertEqual(1, unknown)
+        self.assertEqual(2, versions["3.0.0-beta1"])
+        by_cut = {cut: (before, after) for cut, _, before, after in cuts}
+        self.assertEqual((0, 3), by_cut["3.0.0"])
+        self.assertEqual((0, 3), by_cut["2.10.10"])
+
 if __name__ == "__main__":
     unittest.main()
+
 
