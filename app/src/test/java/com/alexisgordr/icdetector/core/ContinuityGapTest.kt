@@ -81,4 +81,23 @@ class ContinuityGapTest {
         assertTrue(service.contains("prevBand = null"))
         assertTrue(service.contains("collectionGeneration.lose(signalLost = false)"))
     }
+
+    @Test fun `the isolation streak of H1 does not cross a signal loss`() {
+        val isolation = IsolatedCellConfidence()
+        val cell = "214-07-1-100-LTE"
+        isolation.observe(cell, candidate = true, observationToken = 1L)
+        isolation.observe(cell, candidate = true, observationToken = 2L)
+        isolation.reset()                                // lo que hace el servicio tras la pérdida
+        assertFalse("la primera muestra tras el hueco no confirma", isolation.observe(cell, true, 3L))
+        assertEquals(1, isolation.progress)
+        val service = listOf(
+            File("src/main/java/com/alexisgordr/icdetector/service/MiniICService.kt"),
+            File("app/src/main/java/com/alexisgordr/icdetector/service/MiniICService.kt")
+        ).first { it.exists() }.readText()
+        val broken = service.substringAfter("if (continuityBroken) {").substringBefore("}")
+        assertTrue(broken.contains("isolatedCellConfidence.reset()"))
+        // Y el reset va antes de observar la entrega actual.
+        assertTrue(service.indexOf("isolatedCellConfidence.reset()") < service.indexOf("isolatedCellConfidence.observe("))
+    }
 }
+

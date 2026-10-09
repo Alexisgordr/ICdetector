@@ -305,6 +305,16 @@ class MiniICService : Service() {
         fun getService(): MiniICService = this@MiniICService
     }
 
+    /**
+     * 3.0 (#20, #26) — Pérdida de la servidora utilizable: invalida los ciclos en curso, rompe la
+     * continuidad de la confirmación y deja la latencia en "no medida" (una medición de antes del
+     * hueco ya no describe la celda a la que se vuelva).
+     */
+    private fun onSignalLost() {
+        collectionGeneration.lose()
+        latencyMonitor.reset()
+    }
+
     fun forceRefresh() {
         // 3.0 (#24) — La pantalla se vacía: un ciclo en curso no puede volver a pintarla. No es una
         // pérdida de señal (#20): la confirmación en curso no vuelve a empezar.
@@ -590,7 +600,7 @@ class MiniICService : Service() {
 
                     if (isAirplaneModeOn) {
                         // 3.0 (#24) — Modo avión: invalida el ciclo que siga analizando.
-                        collectionGeneration.lose()
+                        onSignalLost()
                         _cellFlow.value = emptyList()
                         updateNotificationText(getString(R.string.no_signal_airplane))
                         appendLog("[SYS]", "⚠️ Modo Avión activo. Suspendiendo escaneo.")
@@ -758,6 +768,9 @@ class MiniICService : Service() {
             latencyMonitor.reset()
             return
         }
+        // 3.0 (#26) — La caducidad corre en cada vuelta del ciclo periódico, aunque no se pueda
+        // medir (sin celda registrada): un OK/ANOMALA no sobrevive más de 90 s sin medición nueva.
+        latencyMonitor.expireIfStale()
         // v2.10.9 — Identidad completa: dos celdas con el mismo CID en otra red o tecnología no
         // comparten la media de latencia.
         val activeCellKey = _cellFlow.value.firstOrNull { it.isRegistered }?.identityKey ?: return
@@ -920,7 +933,7 @@ class MiniICService : Service() {
 
             if (list.isEmpty()) {
                 // 3.0 (#24) — Una pérdida de señal invalida el ciclo que aún esté analizando.
-                collectionGeneration.lose()
+                onSignalLost()
                 _cellFlow.value = emptyList()
                 updateNotificationText(getString(R.string.no_signal_airplane))
                 return
@@ -937,7 +950,7 @@ class MiniICService : Service() {
                 // Si el módem declaró una primaria pero no proporcionó una señal utilizable,
                 // abstenerse: una secundaria nunca puede heredar el historial de la primaria.
                 val declaredPrimary = com.alexisgordr.icdetector.core.ServingCellSelection.hasDeclaredPrimary(list)
-                collectionGeneration.lose()
+                onSignalLost()
                 _cellFlow.value = com.alexisgordr.icdetector.core.ServingCellSelection.abstentionPublication()
                 if (declaredPrimary) logUnusablePrimaryAbstention()
                 updateNotificationText(getString(R.string.searching_network))
@@ -1024,6 +1037,9 @@ class MiniICService : Service() {
                 val signalLosses = collectionGeneration.losses
                 val continuityBroken = signalLosses != acknowledgedSignalLosses
                 if (continuityBroken) {
+                    // 3.0 (#20) — La racha de "sin vecinas" de H1 tampoco cruza el hueco: dos
+                    // muestras antes y una después no confirman el aislamiento.
+                    isolatedCellConfidence.reset()
                     prevBand = null
                     prevBandSite = null
                     prevNrArfcn = null
