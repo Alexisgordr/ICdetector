@@ -1,9 +1,0 @@
-3.0.0-beta2 — beta, fase 2: datos correctos para las reglas.
-
-• Los traspasos usan la identidad completa de la celda, no solo el Cell ID (H10).
-• Las vecinas de relleno (TAC 65535) ya no hacen fallar H5.
-• El EARFCN 0 (Banda 1) se aprende; una sola validación de frecuencia y PCI.
-• Todas las bandas LTE se conocen; corregida la Banda 71 (H14).
-• Timing Advance solo del mismo emisor, por tecnología (H6).
-
-Pesos y umbrales sin cambios; cortes de dataset por regla.

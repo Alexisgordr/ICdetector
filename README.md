@@ -177,6 +177,7 @@ Phase 4, the last of the 3.0 roadmap (GitHub issue #27): **maintenance and docum
 3.0 methodology cuts make them hard to compare; starting clean keeps the 3.0 dataset consistent.
 From 3.0 on, every version — beta or release — updates the previous one normally
 (`com.alexisgordr.icdetector`, same name *ICdetection*).
+The 3.0 betas are local builds and are never published (not on F-Droid or GitHub); they all use version code **39**, the next after v2.10.10 (38), which the 3.0 release keeps.
 
 | Area | Change |
 |---|---|

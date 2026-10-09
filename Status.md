@@ -2,10 +2,11 @@
 
 ## 3.0.0-beta4 — Phase 4: maintenance and documentation (local beta, not released)
 
-**Version code:** 42
+**Version code:** 39
 **Database schema:** 20 (unchanged)
 **Security effect:** none; no rule, weight or threshold change
 **Install:** same app id `com.alexisgordr.icdetector`; updates from earlier 3.0 betas install normally
+**Version code:** every 3.0 beta uses 39 (next after v2.10.10, 38); betas are never published, so the release keeps 39
 
 **#31** — validation limits documented in README, IMPORTANT and MANUAL. **#7** — B4: Stable-Site
 prefix stored in Spanish (`[sitio-sin-verificar]`) and translated; B5: LRU eviction in
@@ -16,7 +17,7 @@ requests. Every item of the 3.0 roadmap (#27) is now implemented.
 
 ## 3.0.0-beta3 — Phase 3: confirmation and rule behaviour (local beta, not released)
 
-**Version code:** 41
+**Version code:** 39
 **Database schema:** 20 (unchanged)
 **Security effect:** confirmation restarts after a coverage gap; weights and thresholds unchanged
 **Dataset cuts:** confirmation methodology (#20), H14 (#10, #8, band table), H12 (#26), H1 status (#28)
@@ -33,7 +34,7 @@ remains `N/A` by decision. Band table checked against TS 36.104 V19.2.0 (bands 5
 
 ## 3.0.0-beta2 — Phase 2: correct inputs to the rules (local beta, not released)
 
-**Version code:** 40
+**Version code:** 39
 **Database schema:** 20 (unchanged from beta1)
 **Security effect:** rules receive corrected inputs; weights and thresholds unchanged
 **Dataset cuts:** H5 (#11), H6 (#21, #33), H10 and handover rows (#19), H14 (#32), H15 and local trust (#22)

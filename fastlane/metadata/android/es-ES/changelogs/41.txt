@@ -1,9 +1,0 @@
-3.0.0-beta3 — beta, fase 3: confirmación y comportamiento de las reglas.
-
-• Una pérdida de señal reinicia la confirmación de alarmas; nada se confirma a través de un hueco.
-• H14 ignora los cambios de banda dentro de la misma estación base.
-• Latencia: no medida / aprendiendo / OK / anómala, con caducidad (H12).
-• H1 muestra "pendiente de confirmar" en vez de "superada".
-• 5G SA: H14 ya evalúa downgrades de banda.
-
-Pesos y umbrales sin cambios; cortes de dataset por regla.

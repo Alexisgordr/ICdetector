@@ -36,7 +36,7 @@ android {
         minSdk = 29
         targetSdk = 37
 
-        versionCode = 42
+        versionCode = 39
         versionName = "3.0.0-beta4"
 
         // 3.0 — Las betas usan el mismo identificador y nombre que la versión final, para poder

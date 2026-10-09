@@ -1,9 +1,9 @@
-3.0.0-beta1 — beta, phase 1: data foundations.
+3.0.0 — bugs found in testing. Clean install required.
 
-• Each observation stores its exact time (UTC): no errors at clock or time-zone changes.
-• Each row records which rules could not be evaluated and the GPS accuracy.
-• App version per row; the CSV says which phone made the export.
-• Late results are attached to the latest observed row.
-• An outdated analysis no longer shows or alerts after signal loss.
+• Exact UTC time, GPS accuracy, app version and unevaluated rules per row (schema 20).
+• Handovers use the full cell identity; every LTE band known; 5G SA in H14.
+• Timing Advance only from the same transmitter.
+• Alarm confirmation restarts after a signal loss.
+• Latency: not measured / learning / measured. H1 "pending" until confirmed.
 
-Database schema 20. Detection rules unchanged.
+Weights and thresholds unchanged; dataset cuts per rule.

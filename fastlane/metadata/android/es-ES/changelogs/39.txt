@@ -1,9 +1,9 @@
-3.0.0-beta1 — beta, fase 1: base de datos.
+3.0.0 — fallos de pruebas. Requiere instalación limpia.
 
-• Cada observación guarda su hora exacta (UTC): sin errores con el cambio de hora o de zona.
-• Cada fila indica qué reglas no se pudieron evaluar y la precisión del GPS.
-• Versión de la app por fila; el CSV indica qué móvil hizo el export.
-• Los resultados tardíos van a la última fila observada.
-• Un análisis desfasado ya no se muestra ni alerta tras perder la señal.
+• Hora UTC exacta, precisión GPS, versión y reglas no evaluadas por fila (esquema 20).
+• Traspasos con identidad completa; todas las bandas LTE; 5G SA en H14.
+• Timing Advance solo del mismo emisor.
+• La confirmación de alarmas se reinicia tras perder la señal.
+• Latencia: no medida / aprendiendo / medida. H1 "pendiente" hasta confirmar.
 
-Esquema de base de datos 20. Reglas sin cambios.
+Pesos y umbrales sin cambios; cortes de dataset por regla.

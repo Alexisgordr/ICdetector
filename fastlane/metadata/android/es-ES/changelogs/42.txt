@@ -1,8 +1,0 @@
-3.0.0-beta4 — beta, fase 4: mantenimiento y documentación.
-
-• Documentados los límites de la campaña (sin verdad de campo, sin control, cobertura limitada).
-• Los fix GPS precisos que fallan se reintentan menos, para ahorrar batería.
-• Una lista única une cada regla con su peso y su familia.
-• La celda de casa ya no se olvida la primera en días con muchas celdas.
-
-La 3.0 requiere instalación limpia. Sin cambios en la detección.

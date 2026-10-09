@@ -1,8 +1,0 @@
-3.0.0-beta4 — beta, phase 4: maintenance and documentation.
-
-• The limits of the field campaign are documented (no ground truth, no control, limited coverage).
-• Failing precise GPS fixes are retried less often to save battery.
-• One canonical list ties each rule to its weight and family.
-• The home cell is no longer forgotten first on busy days.
-
-3.0 needs a clean install. No detection changes.

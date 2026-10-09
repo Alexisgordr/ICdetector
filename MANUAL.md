@@ -64,7 +64,10 @@ start 3.0, export anything you want to keep (history CSV, forensic cases), **uni
 and then install 3.0: the history, settings and OpenCellID key start empty. Installing 3.0 over
 v2.10.x would upgrade the old database to schema 20 (old rows are kept with the new fields empty),
 but mixing 2.10.x and 3.0 data across the methodology cuts is not supported. From 3.0 on, every
-version — beta or release — updates the previous one normally.
+version — beta or release — updates the previous one normally. The betas are local builds, never
+published, and use version code 39 like the 3.0 release (v2.10.10 is 38). A test phone that
+installed an earlier local beta built with version code 40–42 must uninstall it before installing
+the 3.0 release.
 
 - **Exact time:** each new observation stores its instant in UTC. Travelling across time zones or
   the repeated hour at the autumn clock change no longer shifts ages, windows or ordering. The

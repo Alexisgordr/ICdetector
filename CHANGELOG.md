@@ -16,6 +16,11 @@ schema 20.
   release. **3.0 requires a clean install:** export your data, uninstall v2.10.x, then install 3.0.
   Installing over v2.10.x still upgrades the database safely, but mixing data from both sides of
   the methodology cuts is not supported. From 3.0 on, every version updates the previous one.
+- **Version code 39 for every 3.0 beta.** The betas used 39, 40, 41 and 42, but they are local
+  builds and none is published, so the 3.0 release would have skipped from 38 to 43. All betas now
+  use 39, the next after v2.10.10 (38), and the release keeps it. The four store notes are merged
+  into `fastlane/.../changelogs/39.txt` (EN/ES); 40–42 are removed so a later 3.0.x cannot pick up a
+  beta note. A test phone with a local beta built as 40–42 must uninstall it first.
 
 #### Maintenance (#7)
 

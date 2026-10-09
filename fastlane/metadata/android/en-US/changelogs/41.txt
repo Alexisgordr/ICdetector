@@ -1,9 +1,0 @@
-3.0.0-beta3 — beta, phase 3: confirmation and rule behaviour.
-
-• A signal loss restarts alarm confirmation; no confirmation across a coverage gap.
-• H14 ignores band changes inside one base station.
-• Latency: not measured / learning / OK / anomalous, with expiry (H12).
-• H1 shows "pending confirmation" instead of "passed".
-• 5G SA: H14 now evaluates band downgrades.
-
-Weights and thresholds unchanged; dataset cuts per rule.
