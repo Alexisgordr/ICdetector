@@ -7,6 +7,8 @@
 **Security effect:** none; no rule, weight or threshold change
 **Install:** same app id `com.alexisgordr.icdetector`; updates from earlier 3.0 betas install normally
 **Version code:** every 3.0 beta uses 39 (next after v2.10.10, 38); betas are never published, so the release keeps 39
+**Context capture (A03):** time, GPS and service state captured when the reading arrives (`ObservationContext`), not when the row is saved after the analysis
+**Dataset cuts:** context columns (A03)
 **Migration fix:** schema 20 creates `history`, `incidents` or `forensic_cases` if missing before altering them (instrumented tests failed with `no such table`); real v2.10.x databases were not affected
 
 **#31** — validation limits documented in README, IMPORTANT and MANUAL. **#7** — B4: Stable-Site

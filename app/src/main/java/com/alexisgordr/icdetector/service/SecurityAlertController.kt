@@ -3,6 +3,7 @@ package com.alexisgordr.icdetector.service
 import android.media.ToneGenerator
 import android.util.Log
 import com.alexisgordr.icdetector.core.AlarmEpisodeGate
+import com.alexisgordr.icdetector.core.ObservationContext
 import com.alexisgordr.icdetector.models.CellData
 import com.alexisgordr.icdetector.models.identityKey
 
@@ -12,7 +13,7 @@ internal class SecurityAlertController(
     private val legacyProtection: LegacyNetworkProtection,
     private val log: (String) -> Unit,
     private val requestPreciseLocation: () -> Unit,
-    private val persistConfirmedAlarm: (CellData) -> Unit,
+    private val persistConfirmedAlarm: (CellData, ObservationContext) -> Unit,
     private val notifyConfirmedAlarm: (CellData) -> Unit,
     private val strongSignalEnabled: () -> Boolean,
     private val strongSignalThreshold: () -> Float,
@@ -29,7 +30,7 @@ internal class SecurityAlertController(
         pingPongLogged = false
     }
 
-    fun evaluate(cell: CellData, confirmed: Boolean) {
+    fun evaluate(cell: CellData, confirmed: Boolean, context: ObservationContext) {
         val dbm = cell.dbm
         val network = cell.networkType
 
@@ -69,7 +70,7 @@ internal class SecurityAlertController(
             // v2.10.10 — Un episodio por identidad completa que se cierra tras 60 s sin alarma
             // (ver AlarmEpisodeGate). Antes solo se cerraba al cambiar de celda.
             if (confirmed && alarmEpisodes.onConfirmedAlarm(cell.identityKey)) {
-                persistConfirmedAlarm(cell)
+                persistConfirmedAlarm(cell, context)
                 // v2.10.8 — Aviso visible, una vez por episodio (antes solo tono y registro).
                 notifyConfirmedAlarm(cell)
             }

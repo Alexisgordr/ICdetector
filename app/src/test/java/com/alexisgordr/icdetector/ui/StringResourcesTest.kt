@@ -184,7 +184,7 @@ class StringResourcesTest {
     @Test fun `confirmed alarm posts a notification once per episode`() {
         val alerts = module("src/main/java/com/alexisgordr/icdetector/service/SecurityAlertController.kt").readText()
         val episode = alerts.substringAfter("if (confirmed && alarmEpisodes.onConfirmedAlarm(cell.identityKey)) {").substringBefore("}")
-        assertTrue(episode.contains("persistConfirmedAlarm(cell)"))
+        assertTrue(episode.contains("persistConfirmedAlarm(cell, context)"))
         assertTrue(episode.contains("notifyConfirmedAlarm(cell)"))
         val notifications = module("src/main/java/com/alexisgordr/icdetector/service/ServiceNotificationController.kt").readText()
         assertTrue(notifications.contains("fun showConfirmedAlarm"))

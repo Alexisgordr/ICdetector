@@ -67,6 +67,6 @@ class EvaluationCoverageTest {
             File("app/src/main/java/com/alexisgordr/icdetector/service/ObservationPersistenceController.kt")
         ).first { it.exists() }.readText()
         assertTrue(source.contains("notEvaluatedHeuristics = cell.heuristicReport.notEvaluatedIds()"))
-        assertTrue(source.contains("gpsAccuracyM = fix?.takeIf { it.hasAccuracy() }?.accuracy"))
+        assertTrue(source.contains("gpsAccuracyM = fix?.accuracyM"))
     }
 }

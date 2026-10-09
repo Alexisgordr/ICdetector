@@ -24,6 +24,13 @@ schema 20.
 
 #### Bugs found during testing
 
+- **A history row could carry the context of a later moment (A03).** The time, GPS position and
+  service state of a row were read when the row was saved, which happens after the analysis
+  publishes its result. With a slow analysis, a cell reading was stored with the time, position
+  and service state of a later moment. They are now captured when the reading arrives and travel
+  with it to the history row; the analysis uses the same position. Rows written by earlier 3.0
+  betas may carry a context up to one analysis cycle late (**dataset cut** for `ObservedAtMs`,
+  position, `GpsAccuracyM` and service-state columns).
 - **Schema 20 migration failed on a database missing a table.** The migration altered `history`,
   `incidents` and `forensic_cases` without checking they existed. A partial or damaged database
   without one of them stopped with `no such table` and the app could not open; the instrumented

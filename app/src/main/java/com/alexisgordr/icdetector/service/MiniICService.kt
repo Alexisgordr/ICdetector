@@ -449,10 +449,11 @@ class MiniICService : Service() {
             requestFreshCellInfo = ::requestFreshCellInfo,
             historyEpoch = historyEpoch
         )
+        val appVersion = runCatching { packageManager.getPackageInfo(packageName, 0).versionName }.getOrNull()
         observationPersistence = ObservationPersistenceController(
             scope = scope,
-            db = dbHelper,
-            location = { getCurrentLocation() },
+            insert = { row -> dbHelper.logObservation(row, appVersion) },
+            location = { getCurrentLocation()?.toObservedFix() },
             serviceState = { _serviceState.value },
             onWrite = ::noteWriteResult,
             onPeriodicMissingLocation = { timestamp ->
@@ -460,8 +461,7 @@ class MiniICService : Service() {
                 requestHighAccuracyFix()
             },
             writeDispatcher = historyWriteDispatcher,
-            historyGeneration = { historyEpoch.current() },
-            appVersion = runCatching { packageManager.getPackageInfo(packageName, 0).versionName }.getOrNull()
+            historyGeneration = { historyEpoch.current() }
         )
         securityAlerts = SecurityAlertController(
             tone = { toneGenerator },
@@ -973,6 +973,12 @@ class MiniICService : Service() {
             val cycleTicket = collectionGeneration.deliver(
                 list.firstOrNull { it.isRegistered }?.identityKey ?: "N/A"
             )
+            // 3.0 (A03) — Hora, posición y estado de servicio de ESTA lectura, fijados al recibirla.
+            // El análisis puede tardar; la fila del historial y el propio análisis usan este
+            // contexto, no el del momento en que termine. El estado de servicio ya se ha
+            // sondeado al principio de esta entrega.
+            val deliveryLocation = getCurrentLocation()
+            val observationContext = observationPersistence.capture(deliveryLocation?.toObservedFix())
 
             // v2.1 — EL TIMING ADVANCE NO SE COMPARTE ENTRE CELDAS.
             //
@@ -1046,7 +1052,7 @@ class MiniICService : Service() {
                     prevRegisteredDbm = null
                     recentRegisteredDbmTrend.clear()
                 }
-                val currentLocation = getCurrentLocation()
+                val currentLocation = deliveryLocation
                 // Cellular polling only reads motion. New evidence enters from real Location
                 // callbacks, so a repeated lastKnownLocation cannot manufacture static time.
                 val motionEvidence = stableSiteMotion.current(System.currentTimeMillis()).also {
@@ -1455,7 +1461,7 @@ class MiniICService : Service() {
                         }
 
                         // 2. Lanzar alertas y registro con el estado actual
-                        checkAlerts(confirmedActive.copy(verified = knownStatus), confirmed = true)
+                        checkAlerts(confirmedActive.copy(verified = knownStatus), confirmed = true, context = observationContext)
 
                         // 3. Iniciar proceso de verificación (solo si es necesario)
                         verificationController.verify(active)
@@ -1538,6 +1544,13 @@ class MiniICService : Service() {
     private fun getCurrentLocation(): Location? {
         return locationController.currentLocation()
     }
+
+    /** 3.0 (A03) — Posición de una observación, sin depender de Android a partir de aquí. */
+    private fun Location.toObservedFix() = com.alexisgordr.icdetector.core.ObservedFix(
+        latitude = latitude,
+        longitude = longitude,
+        accuracyM = if (hasAccuracy()) accuracy else null
+    )
 
     private fun observeMotionFix(location: Location) {
         latestMotionEvidence = stableSiteMotion.observe(
@@ -1722,7 +1735,7 @@ class MiniICService : Service() {
         }
     }
 
-    private fun checkAlerts(cell: CellData, confirmed: Boolean = false) {
+    private fun checkAlerts(cell: CellData, confirmed: Boolean, context: com.alexisgordr.icdetector.core.ObservationContext) {
         val cid = cell.cellId
         val dbm = cell.dbm
         val net = cell.networkType
@@ -1775,19 +1788,19 @@ class MiniICService : Service() {
                 }
             }
 
-            observationPersistence.recordHandover(cell)
+            observationPersistence.recordHandover(cell, context)
 
             prevServingIdentity = servingIdentity
         } else if (confirmed) {
             // Misma celda que en el ciclo anterior: muestreo periódico (ver más abajo). Solo en la
             // ruta del bucle principal (confirmed = true), nunca en la de re-análisis tras la API,
             // para no duplicar filas por el mismo instante.
-            observationPersistence.recordPeriodicIfDue(cell, isScreenOn)
+            observationPersistence.recordPeriodicIfDue(cell, isScreenOn, context)
         }
 
         telemetryHistory.record(cell)
 
-        securityAlerts.evaluate(cell, confirmed)
+        securityAlerts.evaluate(cell, confirmed, context)
     }
 
     private fun updateNotification(cell: CellData) {
