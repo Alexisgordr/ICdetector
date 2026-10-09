@@ -140,6 +140,12 @@ object BayesianScorer {
         else              -> 1.0f   // poca confianza -> escrutinio completo
     }
 
+    /** 3.0 (#7, O2) — Claves con peso, para comprobar que coinciden con HeuristicCatalog. */
+    internal val weightedKeys: Set<String> get() = LIKELIHOOD_RATIOS.keys
+
+    /** 3.0 (#7, O2) — Claves usadas en los grupos de correlación. */
+    internal val groupedKeys: Set<String> get() = ALL_GROUPED.toSet()
+
     fun calculate(
         failedHeuristics: List<String>,
         verificationStatus: String,

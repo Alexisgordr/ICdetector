@@ -19,6 +19,12 @@ separate app, *ICdetection β*; schema 20.
   the first to enter — could be evicted on a busy day even if it had just been seen, and a later
   change was then recorded as `ON_START` instead of `TRANSITION`. It now evicts the identity unseen
   for longest (LRU).
+- **Each rule had three unconnected names (O2).** A rule's id (`H5`), its key in the Bayesian scorer
+  (`tacDev`) and its multi-signal episode family (identity) lived in three places with nothing tying
+  them together: a new rule without a weight would silently count as neutral. `HeuristicCatalog` now
+  declares all three once per rule; the episode tracker uses it directly and a test checks that the
+  report, the scorer weights and groups, and the keys emitted by the analyzer all match it. No
+  behaviour change.
 
 ## 3.0.0-beta3 (local beta, not released)
 
