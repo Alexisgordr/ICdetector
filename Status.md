@@ -7,6 +7,7 @@
 **Security effect:** none; no rule, weight or threshold change
 **Install:** same app id `com.alexisgordr.icdetector`; updates from earlier 3.0 betas install normally
 **Version code:** every 3.0 beta uses 39 (next after v2.10.10, 38); betas are never published, so the release keeps 39
+**Migration fix:** schema 20 creates `history`, `incidents` or `forensic_cases` if missing before altering them (instrumented tests failed with `no such table`); real v2.10.x databases were not affected
 
 **#31** — validation limits documented in README, IMPORTANT and MANUAL. **#7** — B4: Stable-Site
 prefix stored in Spanish (`[sitio-sin-verificar]`) and translated; B5: LRU eviction in

@@ -61,7 +61,7 @@ class StableSiteStorageTest {
         assertEquals(1,count(upgraded,"SELECT COUNT(*) FROM forensic_cases"))
         assertEquals(0,count(upgraded,"SELECT COUNT(*) FROM site_cell_evidence"))
         assertEquals(0,count(upgraded,"SELECT COUNT(*) FROM site_motion_days"))
-        assertEquals(19,upgraded.version)
+        assertEquals(SchemaV20.VERSION,upgraded.version)
     }
 
     @Test fun twentyPollsRemainOneEpisodeAndSurviveHelperRestart(){
@@ -156,7 +156,7 @@ class StableSiteStorageTest {
         legacy.execSQL("INSERT INTO site_cell_evidence VALUES('site','cell','SERVING',1,2,3)")
         legacy.version=17;legacy.close()
         db=CellDbHelper(context);val upgraded=db.writableDatabase
-        assertEquals(19,upgraded.version)
+        assertEquals(SchemaV20.VERSION,upgraded.version)
         assertEquals(1,count(upgraded,"SELECT COUNT(*) FROM history WHERE cid='kept'"))
         assertEquals(1,count(upgraded,"SELECT COUNT(*) FROM site_cell_evidence"))
         assertEquals(0,count(upgraded,"SELECT COUNT(*) FROM site_rf_neighbours"))
@@ -177,7 +177,7 @@ class StableSiteStorageTest {
         legacy.execSQL("INSERT INTO cell_transitions VALUES('A','B',9,4,'PASSED',123)")
         legacy.version=16;legacy.close()
         db=CellDbHelper(context);val upgraded=db.writableDatabase
-        assertEquals(19,upgraded.version)
+        assertEquals(SchemaV20.VERSION,upgraded.version)
         assertEquals(1,count(upgraded,"SELECT COUNT(*) FROM history WHERE cid='history-kept'"))
         assertEquals(1,count(upgraded,"SELECT COUNT(*) FROM forensic_cases WHERE id=2"))
         assertEquals(1,count(upgraded,"SELECT COUNT(*) FROM forensic_samples WHERE id=3 AND case_id=2"))
@@ -284,7 +284,7 @@ class StableSiteStorageTest {
         legacy.execSQL("INSERT INTO history VALUES(1,'kept')")
         legacy.version=18;legacy.close()
         db=CellDbHelper(context);val upgraded=db.writableDatabase
-        assertEquals(19,upgraded.version)
+        assertEquals(SchemaV20.VERSION,upgraded.version)
         assertEquals(1,count(upgraded,"SELECT COUNT(*) FROM history WHERE cid='kept'"))
         val columns=upgraded.rawQuery("PRAGMA table_info(history)",null).use{c->buildSet{while(c.moveToNext())add(c.getString(1))}}
         assertTrue(columns.containsAll(CellDbHelper.RADIO_CONTEXT_COLUMNS.map{it.first}))

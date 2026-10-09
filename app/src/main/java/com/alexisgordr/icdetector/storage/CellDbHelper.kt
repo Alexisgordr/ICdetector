@@ -297,9 +297,10 @@ class CellDbHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME, 
         } finally { db.endTransaction() }
     }
 
-    override fun onCreate(db: SQLiteDatabase) {
+    /** Tabla del historial con las columnas hasta el esquema 19; [applySchemaV20] añade las del 20. */
+    private fun createHistoryTable(db: SQLiteDatabase) {
         db.execSQL(
-            "CREATE TABLE $TABLE_HISTORY (" +
+            "CREATE TABLE IF NOT EXISTS $TABLE_HISTORY (" +
                     "$COLUMN_ID INTEGER PRIMARY KEY AUTOINCREMENT, " +
                     "$COLUMN_TIMESTAMP TEXT, " +
                     "$COLUMN_NET_TYPE TEXT, " +
@@ -325,6 +326,10 @@ class CellDbHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME, 
                     "$COLUMN_RADIO TEXT, " +
                     RADIO_CONTEXT_COLUMNS.joinToString(", ") { (name, type) -> "$name $type" } + ")",
         )
+    }
+
+    override fun onCreate(db: SQLiteDatabase) {
+        createHistoryTable(db)
         createIndexes(db)
         createIncidentTable(db)
         createForensicTables(db)
@@ -426,8 +431,15 @@ class CellDbHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME, 
      * 3.0 — Esquema 20 (ver [SchemaV20]). Una columna que ya existe (instalación parcial) se
      * acepta; cualquier otro fallo se propaga: seguir con un esquema a medias haría fallar en
      * silencio cada escritura del historial, que es peor que no abrir la base de datos.
+     *
+     * Antes de añadir columnas se asegura de que existan las tres tablas que toca. Una base de
+     * datos a la que le falte alguna (instalación parcial o rota) la recibe vacía, sin datos
+     * inventados; antes el ALTER fallaba con "no such table" y la app no llegaba a abrir.
      */
     private fun applySchemaV20(db: SQLiteDatabase) {
+        createHistoryTable(db)
+        createIncidentTable(db)
+        createForensicTables(db)
         SchemaV20.STATEMENTS.forEach { sql ->
             try {
                 db.execSQL(sql)

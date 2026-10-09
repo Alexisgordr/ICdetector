@@ -8,6 +8,7 @@ import com.alexisgordr.icdetector.models.RadioTech
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -60,6 +61,32 @@ class SchemaV20UpgradeTest {
         assertEquals("H1;H9", latest.notEvaluatedHeuristics)
         assertEquals(8f, latest.gpsAccuracyM!!, 0.01f)
         assertEquals("3.0.0-beta1", latest.appVersion)
+    }
+
+    /**
+     * Bug found during testing: una base de datos antigua sin `incidents` ni `forensic_cases`
+     * no abría ("no such table: incidents"). Ahora las recibe vacías y conserva sus filas.
+     */
+    @Test fun upgradeFromPartialSchemaCreatesMissingTablesAndKeepsRows() {
+        helper?.close(); context.deleteDatabase(NAME)
+        val file = context.getDatabasePath(NAME).apply { parentFile?.mkdirs() }
+        SQLiteDatabase.openOrCreateDatabase(file, null).use { db ->
+            db.execSQL("CREATE TABLE history (id INTEGER PRIMARY KEY, cid TEXT)")
+            db.execSQL("INSERT INTO history VALUES (1, 'kept')")
+            db.version = 18
+        }
+        val db = CellDbHelper(context).also { helper = it }.writableDatabase
+        assertEquals(SchemaV20.VERSION, db.version)
+        db.rawQuery("SELECT cid, observed_at_ms FROM history", null).use { c ->
+            c.moveToFirst()
+            assertEquals("kept", c.getString(0))
+            assertTrue(c.isNull(1))
+        }
+        fun columns(table: String) = db.rawQuery("PRAGMA table_info($table)", null)
+            .use { c -> buildSet { while (c.moveToNext()) add(c.getString(1)) } }
+        assertTrue(columns("incidents").containsAll(listOf("started_at_ms", "updated_at_ms")))
+        assertTrue(columns("forensic_cases").containsAll(listOf("created_at_ms", "updated_at_ms")))
+        db.rawQuery("SELECT COUNT(*) FROM incidents", null).use { c -> c.moveToFirst(); assertEquals(0, c.getInt(0)) }
     }
 
     private companion object {

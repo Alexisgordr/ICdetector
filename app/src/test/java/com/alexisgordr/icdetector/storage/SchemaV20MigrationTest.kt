@@ -122,6 +122,46 @@ class SchemaV20MigrationTest {
         assertTrue(helper.contains("if (oldVersion < 20) applySchemaV20(db)"))
     }
 
+    /**
+     * Bug found during testing: una base de datos sin `incidents` o sin `forensic_cases`
+     * (instalación parcial; así son también las bases de datos de los tests instrumentados de
+     * migraciones antiguas) hacía fallar el ALTER con "no such table" y la app no abría. La
+     * migración crea antes, vacías, las tablas que toca.
+     */
+    @Test fun `the migration creates every table it alters before altering it`() {
+        val altered = SchemaV20.STATEMENTS.mapNotNull {
+            Regex("^ALTER TABLE (\\w+) ").find(it)?.groupValues?.get(1)
+        }.toSet()
+        assertEquals(
+            setOf(SchemaV20.TABLE_HISTORY, SchemaV20.TABLE_INCIDENTS, SchemaV20.TABLE_FORENSIC_CASES),
+            altered
+        )
+        val helper = listOf(
+            File("src/main/java/com/alexisgordr/icdetector/storage/CellDbHelper.kt"),
+            File("app/src/main/java/com/alexisgordr/icdetector/storage/CellDbHelper.kt")
+        ).first { it.exists() }.readText()
+        val body = helper.substringAfter("private fun applySchemaV20(db: SQLiteDatabase) {")
+            .substringBefore("SchemaV20.STATEMENTS")
+        listOf("createHistoryTable(db)", "createIncidentTable(db)", "createForensicTables(db)")
+            .forEach { assertTrue(it, body.contains(it)) }
+        listOf(
+            "CREATE TABLE IF NOT EXISTS \$TABLE_HISTORY (",
+            "CREATE TABLE IF NOT EXISTS \$TABLE_INCIDENTS (",
+            "CREATE TABLE IF NOT EXISTS \$TABLE_FORENSIC_CASES ("
+        ).forEach { assertTrue(it, helper.contains(it)) }
+    }
+
+    @Test fun `without the tables the bare statements fail, which is the bug being fixed`() {
+        val partial = DriverManager.getConnection("jdbc:sqlite::memory:")
+        partial.use { c ->
+            c.createStatement().use { it.execute("CREATE TABLE history (id INTEGER PRIMARY KEY, cid TEXT)") }
+            val error = runCatching {
+                SchemaV20.STATEMENTS.forEach { sql -> c.createStatement().use { it.execute(sql) } }
+            }.exceptionOrNull()
+            assertTrue(error?.message.orEmpty().contains("no such table"))
+        }
+    }
+
     private fun insertNew(text: String, ms: Long, cid: String = "1") = db.prepareStatement(
         "INSERT INTO history (timestamp, observed_at_ms, cid, mnc, tac, mcc, radio, score, failed_heuristics) " +
             "VALUES (?, ?, ?, '07', '1', '214', 'LTE', 100, 'OK')"

@@ -22,6 +22,16 @@ schema 20.
   into `fastlane/.../changelogs/39.txt` (EN/ES); 40–42 are removed so a later 3.0.x cannot pick up a
   beta note. A test phone with a local beta built as 40–42 must uninstall it first.
 
+#### Bugs found during testing
+
+- **Schema 20 migration failed on a database missing a table.** The migration altered `history`,
+  `incidents` and `forensic_cases` without checking they existed. A partial or damaged database
+  without one of them stopped with `no such table` and the app could not open; the instrumented
+  migration tests, which build such partial databases, failed the same way. The migration now
+  creates any of the three tables that is missing, empty, before adding columns; no row is
+  invented. A real v2.10.x database (schema 19) and a fresh install were not affected. The
+  instrumented tests now expect schema 20.
+
 #### Maintenance (#7)
 
 - **Stable-Site prefix not translated (B4).** The `[site-unverified]` prefix was stored in English and
