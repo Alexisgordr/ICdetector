@@ -83,7 +83,13 @@ data class HistoryRecord(
     val serviceState: String? = null,
     val networkOperator: String? = null,
     val simOperator: String? = null,
-    val networkRoaming: Boolean? = null
+    val networkRoaming: Boolean? = null,
+    /**
+     * 3.0 (#23) — Instante de la observación en milisegundos desde epoch (UTC). [timestamp] es
+     * texto local sin zona y se repite en el cambio de hora de otoño; este valor no. Null en las
+     * filas anteriores a 3.0: su zona nunca se guardó y no se reconstruye.
+     */
+    val observedAtMs: Long? = null
 )
 
 /** Misma identidad completa que [CellData.identityKey], aplicada a una fila histórica. */

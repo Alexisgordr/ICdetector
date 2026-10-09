@@ -62,7 +62,7 @@ class CellDbHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME, 
             }
 
         private const val DATABASE_NAME = "icdetector_history.db"
-        private const val DATABASE_VERSION = 19
+        private const val DATABASE_VERSION = SchemaV20.VERSION
         const val TABLE_HISTORY = "history"
         const val COLUMN_ID = "id"
         const val COLUMN_TIMESTAMP = "timestamp"
@@ -104,6 +104,8 @@ class CellDbHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME, 
         // de estado y en el historial de campo hay 54 celdas que alternan entre "4G" y "5G" sin
         // cambiar de identidad. Para analizar los datos hace falta el dato firme, no la etiqueta.
         const val COLUMN_RADIO = "radio"
+        /** 3.0 (#23) — Instante de la observación (epoch ms, UTC). NULL en filas anteriores. */
+        const val COLUMN_OBSERVED_AT_MS = SchemaV20.COLUMN_OBSERVED_AT_MS
         // v2.10.4 — Contexto de radio (schema 19). Solo recolección: ninguna consulta de
         // detección lee estas columnas. NULL en filas anteriores = "no se recogía", no "no había".
         const val COLUMN_CONN_STATUS = "conn_status"
@@ -317,6 +319,7 @@ class CellDbHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME, 
         createStableSiteTables(db)
         createMobilityTables(db)
         createServiceStateTable(db)
+        applySchemaV20(db)
     }
 
     override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {
@@ -402,6 +405,22 @@ class CellDbHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME, 
                 try { db.execSQL("ALTER TABLE $TABLE_HISTORY ADD COLUMN $name $type") } catch (_: Exception) {}
             }
             createServiceStateTable(db)
+        }
+        if (oldVersion < 20) applySchemaV20(db)
+    }
+
+    /**
+     * 3.0 — Esquema 20 (ver [SchemaV20]). Una columna que ya existe (instalación parcial) se
+     * acepta; cualquier otro fallo se propaga: seguir con un esquema a medias haría fallar en
+     * silencio cada escritura del historial, que es peor que no abrir la base de datos.
+     */
+    private fun applySchemaV20(db: SQLiteDatabase) {
+        SchemaV20.STATEMENTS.forEach { sql ->
+            try {
+                db.execSQL(sql)
+            } catch (e: Exception) {
+                if (e.message?.contains("duplicate column", ignoreCase = true) != true) throw e
+            }
         }
     }
 
@@ -571,9 +590,7 @@ class CellDbHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME, 
     /** Últimas posiciones GPS válidas donde este dispositivo observó la identidad indicada. */
     fun getCellLocationSamples(cell: CellData, limit: Int = 40): List<CellLocationSample> {
         if (cell.cellId == "N/A" || cell.radioTech == RadioTech.UNKNOWN) return emptyList()
-        val cutoff = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.ROOT).format(
-            Date(System.currentTimeMillis() - 30L * 24 * 60 * 60 * 1000)
-        )
+        val cutoff = System.currentTimeMillis() - 30L * 24 * 60 * 60 * 1000
         val out = mutableListOf<CellLocationSample>()
         if (!hasMatureTrustedBaseline(cell.cellId, cell.mnc, cell.tac, cell.mcc, cell.radioTech, cutoff)) {
             return emptyList()
@@ -583,10 +600,10 @@ class CellDbHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME, 
                 "WHERE $COLUMN_CID=? AND $COLUMN_MNC=? AND $COLUMN_TAC=? AND $COLUMN_MCC=? " +
                 "AND $COLUMN_RADIO=? AND $COLUMN_LAT IS NOT NULL AND $COLUMN_LON IS NOT NULL " +
                 "AND $COLUMN_SCORE>=? AND ($COLUMN_FAILED_H IS NULL OR TRIM($COLUMN_FAILED_H)='' OR $COLUMN_FAILED_H='OK') " +
-                "AND $COLUMN_TIMESTAMP>=? ORDER BY $COLUMN_ID DESC LIMIT ?",
+                "AND ${observedSince()} ORDER BY $COLUMN_ID DESC LIMIT ?",
             arrayOf(
                 cell.cellId, cell.mnc, cell.tac, cell.mcc, cell.radioTech.name,
-                TRUSTED_BASELINE_MIN_SCORE.toString(), cutoff, limit.toString()
+                TRUSTED_BASELINE_MIN_SCORE.toString(), *since(cutoff), limit.toString()
             )
         ).use { cursor ->
             while (cursor.moveToNext()) {
@@ -606,9 +623,7 @@ class CellDbHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME, 
      * líneas base; no cambia qué aprenden ni cuándo.
      */
     fun hasTrustedBaselineGate(cellId: String, mnc: String, tac: String, mcc: String, radio: RadioTech): Boolean {
-        val cutoff = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.ROOT).format(
-            Date(System.currentTimeMillis() - 30L * 24 * 60 * 60 * 1000)
-        )
+        val cutoff = System.currentTimeMillis() - 30L * 24 * 60 * 60 * 1000
         return hasMatureTrustedBaseline(cellId, mnc, tac, mcc, radio, cutoff)
     }
 
@@ -622,14 +637,14 @@ class CellDbHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME, 
         tac: String,
         mcc: String,
         radio: RadioTech,
-        since: String
+        sinceMs: Long
     ): Boolean = readableDatabase.rawQuery(
         "SELECT COUNT(*),COUNT(DISTINCT substr($COLUMN_TIMESTAMP,1,10)) FROM $TABLE_HISTORY " +
             "WHERE $COLUMN_CID=? AND $COLUMN_MNC=? AND $COLUMN_TAC=? AND $COLUMN_MCC=? " +
-            "AND $COLUMN_RADIO=? AND $COLUMN_TIMESTAMP>=? AND $COLUMN_SCORE>=? " +
+            "AND $COLUMN_RADIO=? AND ${observedSince()} AND $COLUMN_SCORE>=? " +
             "AND ($COLUMN_FAILED_H IS NULL OR TRIM($COLUMN_FAILED_H)='' OR $COLUMN_FAILED_H='OK')",
         arrayOf(
-            cellId, mnc, tac, mcc, radio.name, since,
+            cellId, mnc, tac, mcc, radio.name, *since(sinceMs),
             TRUSTED_BASELINE_MIN_SCORE.toString()
         )
     ).use { cursor ->
@@ -654,9 +669,7 @@ class CellDbHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME, 
         perCell: Int = 40,
         days: Int = 30
     ): Map<String, List<CellLocationSample>> {
-        val cutoff = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.ROOT).format(
-            Date(System.currentTimeMillis() - days.toLong() * 24 * 60 * 60 * 1000)
-        )
+        val cutoff = System.currentTimeMillis() - days.toLong() * 24 * 60 * 60 * 1000
         val out = LinkedHashMap<String, MutableList<CellLocationSample>>()
         readableDatabase.rawQuery(
             "SELECT $COLUMN_MCC,$COLUMN_MNC,$COLUMN_TAC,$COLUMN_CID,$COLUMN_RADIO," +
@@ -664,8 +677,8 @@ class CellDbHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME, 
                 "WHERE $COLUMN_LAT IS NOT NULL AND $COLUMN_LON IS NOT NULL " +
                 "AND $COLUMN_SCORE>=? " +
                 "AND ($COLUMN_FAILED_H IS NULL OR TRIM($COLUMN_FAILED_H)='' OR $COLUMN_FAILED_H='OK') " +
-                "AND $COLUMN_TIMESTAMP>=? ORDER BY $COLUMN_ID DESC",
-            arrayOf(TRUSTED_BASELINE_MIN_SCORE.toString(), cutoff)
+                "AND ${observedSince()} ORDER BY $COLUMN_ID DESC",
+            arrayOf(TRUSTED_BASELINE_MIN_SCORE.toString(), *since(cutoff))
         ).use { cursor ->
             while (cursor.moveToNext()) {
                 val cid = cursor.getString(3) ?: continue
@@ -1144,15 +1157,17 @@ class CellDbHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME, 
 
     override fun createForensicCase(cell: CellData, origin: ForensicCaseOrigin): Long {
         val db = writableDatabase
-        val now = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.ROOT).format(Date())
+        val nowMs = System.currentTimeMillis()
+        val now = ObservationTime.localText(nowMs)
         val provisional = ContentValues().apply {
             put("case_code", "PENDING")
             put("created_at", now); put("updated_at", now)
+            put(SchemaV20.CASE_CREATED_AT_MS, nowMs); put(SchemaV20.UPDATED_AT_MS, nowMs)
             put("state", ForensicCaseState.CAPTURING.name); put("cell_identity", cell.identityKey)
             put("highest_phase", cell.temporalProgress.phase); put("confirmed", 0)
         }
         val id = db.insertOrThrow(TABLE_FORENSIC_CASES, null, provisional)
-        val date = SimpleDateFormat("yyyy-MM-dd", Locale.ROOT).format(Date())
+        val date = now.take(10)
         db.update(TABLE_FORENSIC_CASES, ContentValues().apply {
             val prefix = if (origin == ForensicCaseOrigin.TRUST_CONTRADICTION) "ICD-OBS" else "ICD"
             put("case_code", "$prefix-$date-${id.toString().padStart(4, '0')}")
@@ -1180,8 +1195,8 @@ class CellDbHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME, 
      * v2.8.0 — ¿Hay ya un caso forense de esta identidad creado a partir de [sinceWallMs]?
      *
      * Deduplicación persistente de las capturas abiertas al arrancar con la celda ya contradicha.
-     * Compara sobre `created_at`, que se guarda como texto `yyyy-MM-dd HH:mm:ss`: con formato fijo
-     * y ancho fijo, el orden lexicográfico y el cronológico coinciden.
+     * 3.0 (#23) — Compara sobre el instante de creación. Los casos anteriores a 3.0 no lo tienen y
+     * siguen comparándose sobre el texto local `created_at`, como antes.
      *
      * Cuenta cualquier origen a propósito, pero exige al menos una muestra real. Un caso cuya
      * creación tuvo éxito justo antes de quedarse el disco sin espacio no constituye evidencia y
@@ -1189,13 +1204,13 @@ class CellDbHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME, 
      */
     override fun hasRecentForensicCaseFor(identity: String, sinceWallMs: Long): Boolean {
         return try {
-            val threshold = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.ROOT).format(Date(sinceWallMs))
             readableDatabase.rawQuery(
                 "SELECT 1 FROM $TABLE_FORENSIC_CASES c " +
-                    "WHERE c.cell_identity=? AND c.created_at>=? " +
+                    "WHERE c.cell_identity=? AND " +
+                    ObservationTime.sinceClause("c.${SchemaV20.CASE_CREATED_AT_MS}", "c.created_at") + " " +
                     "AND EXISTS (SELECT 1 FROM $TABLE_FORENSIC_SAMPLES s WHERE s.case_id=c.id) " +
                     "LIMIT 1",
-                arrayOf(identity, threshold)
+                arrayOf(identity, *since(sinceWallMs))
             ).use { it.moveToFirst() }
         } catch (_: Exception) {
             // Ante la duda, no bloquear la captura: perder una muestra es peor que duplicar un caso.
@@ -1204,11 +1219,12 @@ class CellDbHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME, 
     }
 
     override fun updateForensicCaseProgress(caseId: Long, cell: CellData) {
-        val now = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.ROOT).format(Date())
+        val nowMs = System.currentTimeMillis()
         writableDatabase.execSQL(
-            "UPDATE $TABLE_FORENSIC_CASES SET updated_at=?, highest_phase=MAX(highest_phase, ?), " +
-                "confirmed=MAX(confirmed, ?) WHERE id=?",
-            arrayOf(now, cell.temporalProgress.phase, if (cell.temporalProgress.confirmed) 1 else 0, caseId)
+            "UPDATE $TABLE_FORENSIC_CASES SET updated_at=?, ${SchemaV20.UPDATED_AT_MS}=?, " +
+                "highest_phase=MAX(highest_phase, ?), confirmed=MAX(confirmed, ?) WHERE id=?",
+            arrayOf(ObservationTime.localText(nowMs), nowMs, cell.temporalProgress.phase,
+                if (cell.temporalProgress.confirmed) 1 else 0, caseId)
         )
     }
 
@@ -1217,9 +1233,11 @@ class CellDbHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME, 
     }
 
     override fun finishForensicCase(caseId: Long, state: ForensicCaseState) {
-        val now = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.ROOT).format(Date())
+        val nowMs = System.currentTimeMillis()
+        val now = ObservationTime.localText(nowMs)
         writableDatabase.update(TABLE_FORENSIC_CASES, ContentValues().apply {
             put("state", state.name); put("updated_at", now); put("closed_at", now)
+            put(SchemaV20.UPDATED_AT_MS, nowMs)
         }, "id=?", arrayOf(caseId.toString()))
     }
 
@@ -1231,9 +1249,11 @@ class CellDbHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME, 
     }
 
     fun interruptOpenForensicCases() {
-        val now = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.ROOT).format(Date())
+        val nowMs = System.currentTimeMillis()
+        val now = ObservationTime.localText(nowMs)
         writableDatabase.update(TABLE_FORENSIC_CASES, ContentValues().apply {
             put("state", ForensicCaseState.INTERRUPTED.name); put("updated_at", now); put("closed_at", now)
+            put(SchemaV20.UPDATED_AT_MS, nowMs)
         }, "state IN (?,?)", arrayOf(ForensicCaseState.CAPTURING.name, ForensicCaseState.POST_CAPTURE.name))
     }
 
@@ -1308,11 +1328,13 @@ class CellDbHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME, 
         val progress = cell.temporalProgress
         if (!progress.active) return
         val db = writableDatabase
-        val now = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.ROOT).format(Date())
+        val nowMs = System.currentTimeMillis()
+        val now = ObservationTime.localText(nowMs)
         val openId = findOpenIncidentId(db, cell.identityKey)
         val state = if (progress.confirmed) IncidentState.CONFIRMED else IncidentState.OBSERVING
         val values = ContentValues().apply {
             put("updated_at", now)
+            put(SchemaV20.UPDATED_AT_MS, nowMs)
             put("state", state.name)
             put("highest_phase", progress.phase)
             put("required_phases", progress.required)
@@ -1323,6 +1345,7 @@ class CellDbHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME, 
         }
         if (openId == null) {
             values.put("started_at", now)
+            values.put(SchemaV20.INCIDENT_STARTED_AT_MS, nowMs)
             values.put("identity", cell.identityKey)
             values.put("cid", cell.cellId)
             values.put("radio", cell.radioTech.name)
@@ -1335,9 +1358,11 @@ class CellDbHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME, 
     /** Cierra episodios que dejaron de observarse o fueron interrumpidos por un handover. */
     fun closeOpenIncidents(activeIdentity: String?, interrupted: Boolean = false) {
         val db = writableDatabase
-        val now = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.ROOT).format(Date())
+        val nowMs = System.currentTimeMillis()
+        val now = ObservationTime.localText(nowMs)
         val values = ContentValues().apply {
             put("updated_at", now)
+            put(SchemaV20.UPDATED_AT_MS, nowMs)
             put("ended_at", now)
             put("state", if (interrupted) IncidentState.INTERRUPTED.name else IncidentState.RECOVERED.name)
         }
@@ -1454,8 +1479,8 @@ class CellDbHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME, 
     ): Long {
         val db = this.writableDatabase
         val values = ContentValues().apply {
-            val sdf = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.ROOT)
-            put(COLUMN_TIMESTAMP, sdf.format(Date(observedAtMs)))
+            put(COLUMN_TIMESTAMP, ObservationTime.localText(observedAtMs))
+            put(COLUMN_OBSERVED_AT_MS, observedAtMs)
             put(COLUMN_NET_TYPE, netType)
             put(COLUMN_CID, cid)
             put(COLUMN_MNC, mnc)
@@ -1499,20 +1524,25 @@ class CellDbHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME, 
         return db.insert(TABLE_HISTORY, null, values)
     }
 
+    /** 3.0 (#23) — "Observada en o después del corte" (o "después", si [strict]). Dos parámetros: [since]. */
+    private fun observedSince(strict: Boolean = false): String =
+        ObservationTime.sinceClause(COLUMN_OBSERVED_AT_MS, COLUMN_TIMESTAMP, strict)
+
+    /** 3.0 (#23) — "Observada antes del corte". Dos parámetros: [since]. */
+    private fun observedBefore(): String = ObservationTime.beforeClause(COLUMN_OBSERVED_AT_MS, COLUMN_TIMESTAMP)
+
+    /** Parámetros de [observedSince] / [observedBefore] para un corte en milisegundos. */
+    private fun since(cutoffMs: Long): Array<String> = ObservationTime.cutoffArgs(cutoffMs)
+
     /**
      * Edad en milisegundos de un registro a partir de su timestamp, o null si no se puede leer.
      * Devolver null significa "no sé cuándo fue", y quien pregunta trata ese caso como "no ha
      * caducado": inventar una edad sería peor que no tenerla.
      */
-    private fun edadDeRegistro(timestamp: String?): Long? {
-        if (timestamp.isNullOrBlank()) return null
-        return try {
-            val sdf = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.ROOT)
-            val fecha = sdf.parse(timestamp) ?: return null
-            (Date().time - fecha.time).coerceAtLeast(0L)
-        } catch (_: Exception) {
-            null
-        }
+    private fun edadDeRegistro(observedAtMs: Long?, timestamp: String?): Long? {
+        // 3.0 (#23) — El instante guardado si existe; las filas anteriores, por su texto como antes.
+        val at = ObservationTime.bestEffortMs(observedAtMs, timestamp) ?: return null
+        return (System.currentTimeMillis() - at).coerceAtLeast(0L)
     }
 
     fun getKnownStatus(
@@ -1541,7 +1571,7 @@ class CellDbHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME, 
         // La tecnología forma parte de la identidad de verificación. Las filas antiguas con
         // `radio` NULL se conservan como evidencia histórica, pero no pueden confirmar hoy una
         // tecnología que nunca registraron. Deben volver a consultarse.
-        val query = "SELECT $COLUMN_VERIFIED, $COLUMN_API_LAT, $COLUMN_API_LON, $COLUMN_TIMESTAMP FROM $TABLE_HISTORY " +
+        val query = "SELECT $COLUMN_VERIFIED, $COLUMN_API_LAT, $COLUMN_API_LON, $COLUMN_TIMESTAMP, $COLUMN_OBSERVED_AT_MS FROM $TABLE_HISTORY " +
                     "WHERE $COLUMN_CID=? AND $COLUMN_MNC=? AND $COLUMN_TAC=? AND $COLUMN_MCC=? " +
                     "AND $COLUMN_RADIO=? " +
                     "AND $COLUMN_VERIFIED='VERIFIED' " +
@@ -1557,6 +1587,7 @@ class CellDbHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME, 
             val savedLat = if (cursor.isNull(1)) null else cursor.getDouble(1)
             val savedLon = if (cursor.isNull(2)) null else cursor.getDouble(2)
             val savedTimeStr = cursor.getString(3)
+            val savedAtMs = if (cursor.isNull(4)) null else cursor.getLong(4)
             
             val savedStatus = try { VerificationStatus.valueOf(savedStatusStr) } catch(_: Exception) { VerificationStatus.PENDING }
             
@@ -1569,7 +1600,7 @@ class CellDbHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME, 
                 // una confirmación de hace medio año no dice nada del presente. Pasado el TTL se
                 // vuelve a preguntar. El hecho histórico NO se borra: las filas verificadas siguen
                 // en el historial, que es lo que se analizará luego.
-                val edad = edadDeRegistro(savedTimeStr)
+                val edad = edadDeRegistro(savedAtMs, savedTimeStr)
                 if (edad != null && edad > VERIFIED_TTL_MS) {
                     status = VerificationStatus.PENDING
                 } else if (currentLat == null || currentLon == null || savedLat == null || savedLon == null) {
@@ -1682,7 +1713,9 @@ class CellDbHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME, 
             .getOrDefault(RadioTech.UNKNOWN)
         } else RadioTech.UNKNOWN
 
+        val observedIdx = cursor.getColumnIndex(COLUMN_OBSERVED_AT_MS)
         return HistoryRecord(
+            observedAtMs = if (observedIdx >= 0 && !cursor.isNull(observedIdx)) cursor.getLong(observedIdx) else null,
             timestamp = cursor.getString(cursor.getColumnIndexOrThrow(COLUMN_TIMESTAMP)),
             netType = cursor.getString(cursor.getColumnIndexOrThrow(COLUMN_NET_TYPE)),
             cid = cursor.getString(cursor.getColumnIndexOrThrow(COLUMN_CID)),
@@ -1800,20 +1833,21 @@ class CellDbHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME, 
     fun pruneOldRecords(daysToKeep: Int = DEFAULT_RETENTION_DAYS): Int {
         return try {
             val cutoff = System.currentTimeMillis() - (daysToKeep.toLong() * 24 * 60 * 60 * 1000)
-            val sdf = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.ROOT)
-            val threshold = sdf.format(Date(cutoff))
+            // 3.0 (#23) — Por instante cuando existe; las filas anteriores, por su texto local.
+            val cutoffArgs = since(cutoff)
+            val updatedBefore = ObservationTime.beforeClause(SchemaV20.UPDATED_AT_MS, "updated_at")
             val db = this.writableDatabase
             // Una sola transacción: si el proceso muere a mitad de la poda no quedan casos
             // forenses sin sus muestras ni tablas de sitios a medio recortar.
             db.beginTransaction()
             try {
-                val historyDeleted = db.delete(TABLE_HISTORY, "$COLUMN_TIMESTAMP < ?", arrayOf(threshold))
-                db.delete(TABLE_INCIDENTS, "updated_at < ?", arrayOf(threshold))
-                val oldCases = db.rawQuery("SELECT id FROM $TABLE_FORENSIC_CASES WHERE updated_at < ?", arrayOf(threshold)).use { c ->
+                val historyDeleted = db.delete(TABLE_HISTORY, observedBefore(), cutoffArgs)
+                db.delete(TABLE_INCIDENTS, updatedBefore, cutoffArgs)
+                val oldCases = db.rawQuery("SELECT id FROM $TABLE_FORENSIC_CASES WHERE $updatedBefore", cutoffArgs).use { c ->
                     buildList { while (c.moveToNext()) add(c.getLong(0)) }
                 }
                 oldCases.forEach { id -> db.delete(TABLE_FORENSIC_SAMPLES, "case_id=?", arrayOf(id.toString())) }
-                db.delete(TABLE_FORENSIC_CASES, "updated_at < ?", arrayOf(threshold))
+                db.delete(TABLE_FORENSIC_CASES, updatedBefore, cutoffArgs)
                 db.delete(TABLE_CELL_TRANSITIONS, "last_seen_ms < ?", arrayOf(cutoff.toString()))
                 // v2.10.4 — Eventos de servicio: misma antigüedad que el historial y un tope de filas,
                 // por si un módem inestable genera cambios continuos.
@@ -1982,9 +2016,8 @@ class CellDbHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME, 
             // sin GPS y el fix llegaba minutos después, la posición nueva se estampaba en una fila
             // antigua con su hora antigua, y eso contaminaba la geometría de H11/H13/H16. Fuera
             // de la ventana la fila se queda sin coordenadas, que es lo honesto.
-            val sdf = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.ROOT)
-            val earliest = sdf.format(Date(fixTimeMs - COORDINATE_BACKFILL_WINDOW_MS))
-            val latest = sdf.format(Date(fixTimeMs + COORDINATE_BACKFILL_FUTURE_TOLERANCE_MS))
+            val earliest = fixTimeMs - COORDINATE_BACKFILL_WINDOW_MS
+            val latest = fixTimeMs + COORDINATE_BACKFILL_FUTURE_TOLERANCE_MS
             db.update(
                 TABLE_HISTORY,
                 values,
@@ -1992,8 +2025,8 @@ class CellDbHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME, 
                     "WHERE $COLUMN_CID = ? AND $COLUMN_MNC = ? AND $COLUMN_TAC = ? AND $COLUMN_MCC = ? " +
                     "AND $COLUMN_RADIO = ?) " +
                     "AND $COLUMN_LAT IS NULL AND $COLUMN_LON IS NULL " +
-                    "AND $COLUMN_TIMESTAMP >= ? AND $COLUMN_TIMESTAMP <= ?",
-                arrayOf(cellId, mnc, tac, mcc, radio.name, earliest, latest)
+                    "AND ${observedSince()} AND ${ObservationTime.untilClause(COLUMN_OBSERVED_AT_MS, COLUMN_TIMESTAMP)}",
+                arrayOf(cellId, mnc, tac, mcc, radio.name, *since(earliest), *since(latest))
             )
         } catch (_: Exception) {
             0
@@ -2028,11 +2061,7 @@ class CellDbHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME, 
         // Decaimiento temporal: Solo considerar registros de los últimos 30 días
         val thirtyDaysAgo = System.currentTimeMillis() - (30L * 24 * 60 * 60 * 1000)
         
-        val dateFormat = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.ROOT)
-        val recentThreshold = dateFormat.format(Date(fiveMinutesAgo))
-        val oldThreshold = dateFormat.format(Date(thirtyDaysAgo))
-
-        if (!hasMatureTrustedBaseline(cellId, mnc, tac, mcc, radio, oldThreshold)) {
+        if (!hasMatureTrustedBaseline(cellId, mnc, tac, mcc, radio, thirtyDaysAgo)) {
             return emptyList()
         }
         
@@ -2048,8 +2077,8 @@ class CellDbHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME, 
               AND $COLUMN_RADIO = ?
               AND $COLUMN_SCORE >= ?
               AND ($COLUMN_FAILED_H IS NULL OR TRIM($COLUMN_FAILED_H) = '' OR $COLUMN_FAILED_H = 'OK')
-              AND $COLUMN_TIMESTAMP < ?
-              AND $COLUMN_TIMESTAMP > ?
+              AND ${observedBefore()}
+              AND ${observedSince(strict = true)}
             ORDER BY $COLUMN_ID DESC
             LIMIT 300
         """.trimIndent()
@@ -2059,7 +2088,7 @@ class CellDbHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME, 
             query,
             arrayOf(
                 cellId, mnc, tac, mcc, radio.name, TRUSTED_BASELINE_MIN_SCORE.toString(),
-                recentThreshold, oldThreshold
+                *since(fiveMinutesAgo), *since(thirtyDaysAgo)
             )
         )
         try {
@@ -2133,10 +2162,8 @@ class CellDbHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME, 
     ): SignalBaseline? {
         val db = this.readableDatabase
         val thirtyDaysAgo = System.currentTimeMillis() - (30L * 24 * 60 * 60 * 1000)
-        val dateFormat = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.ROOT)
-        val oldThreshold = dateFormat.format(Date(thirtyDaysAgo))
 
-        if (!hasMatureTrustedBaseline(cellId, mnc, tac, mcc, radio, oldThreshold)) return null
+        if (!hasMatureTrustedBaseline(cellId, mnc, tac, mcc, radio, thirtyDaysAgo)) return null
 
         val query = """
             SELECT $COLUMN_DBM, $COLUMN_LAT, $COLUMN_LON
@@ -2150,14 +2177,14 @@ class CellDbHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME, 
               AND $COLUMN_RADIO = ?
               AND $COLUMN_SCORE >= ?
               AND ($COLUMN_FAILED_H IS NULL OR TRIM($COLUMN_FAILED_H) = '' OR $COLUMN_FAILED_H = 'OK')
-              AND $COLUMN_TIMESTAMP > ?
+              AND ${observedSince(strict = true)}
             ORDER BY $COLUMN_ID DESC
             LIMIT 200
         """.trimIndent()
 
         val cursor = db.rawQuery(
             query,
-            arrayOf(cellId, mnc, tac, mcc, radio.name, TRUSTED_BASELINE_MIN_SCORE.toString(), oldThreshold)
+            arrayOf(cellId, mnc, tac, mcc, radio.name, TRUSTED_BASELINE_MIN_SCORE.toString(), *since(thirtyDaysAgo))
         )
         val samples = mutableListOf<Int>()
         try {
@@ -2216,8 +2243,6 @@ class CellDbHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME, 
     fun getCellReputation(cellId: String, mnc: String, tac: String, mcc: String, radio: RadioTech): CellReputation {
         val db = this.readableDatabase
         val ninetyDaysAgo = System.currentTimeMillis() - (90L * 24 * 60 * 60 * 1000)
-        val dateFormat = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.ROOT)
-        val threshold = dateFormat.format(Date(ninetyDaysAgo))
 
         val query = """
             SELECT $COLUMN_SCORE, $COLUMN_TIMESTAMP, $COLUMN_FAILED_H
@@ -2227,7 +2252,7 @@ class CellDbHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME, 
               AND $COLUMN_TAC = ?
               AND $COLUMN_MCC = ?
               AND $COLUMN_RADIO = ?
-              AND $COLUMN_TIMESTAMP > ?
+              AND ${observedSince(strict = true)}
             ORDER BY $COLUMN_ID DESC
             LIMIT 500
         """.trimIndent()
@@ -2235,7 +2260,7 @@ class CellDbHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME, 
         var total = 0
         var clean = 0
         val days = HashSet<String>()
-        db.rawQuery(query, arrayOf(cellId, mnc, tac, mcc, radio.name, threshold)).use { cursor ->
+        db.rawQuery(query, arrayOf(cellId, mnc, tac, mcc, radio.name, *since(ninetyDaysAgo))).use { cursor ->
             if (cursor.moveToFirst()) {
                 do {
                     val score = cursor.getInt(0)
@@ -2276,12 +2301,11 @@ class CellDbHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME, 
      */
     fun getLocalCellTrustEvidence(cell: CellData): LocalCellTrustEvidence {
         if (cell.cellId == "N/A" || cell.radioTech == RadioTech.UNKNOWN) return LocalCellTrustEvidence()
-        val threshold = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.ROOT).format(
-            Date(System.currentTimeMillis() - 90L * 24 * 60 * 60 * 1000)
-        )
+        val nowMs = System.currentTimeMillis()
+        val threshold = since(nowMs - 90L * 24 * 60 * 60 * 1000)
         val args = arrayOf(
             cell.cellId, cell.mnc, cell.tac, cell.mcc, cell.radioTech.name,
-            TRUSTED_BASELINE_MIN_SCORE.toString(), threshold
+            TRUSTED_BASELINE_MIN_SCORE.toString(), *threshold
         )
         val pciCounts = HashMap<Int, Int>()
         val arfcnCounts = HashMap<Int, Int>()
@@ -2290,15 +2314,14 @@ class CellDbHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME, 
         var detailedClean = 0
         var located = 0
         var rf = 0
-        val format = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.ROOT)
         val cleanWhere = "$COLUMN_CID=? AND $COLUMN_MNC=? AND $COLUMN_TAC=? AND $COLUMN_MCC=? " +
             "AND $COLUMN_RADIO=? AND $COLUMN_SCORE>=? " +
             "AND ($COLUMN_FAILED_H IS NULL OR TRIM($COLUMN_FAILED_H)='' OR $COLUMN_FAILED_H='OK') " +
-            "AND $COLUMN_TIMESTAMP>=? AND length($COLUMN_TIMESTAMP)>=10"
-        val temporalSummary = getDailyEvidenceSummary(cleanWhere, args, format)
-        val recentThreshold = format.format(Date(System.currentTimeMillis() - 48L * 60 * 60 * 1000))
+            "AND ${observedSince()} AND length($COLUMN_TIMESTAMP)>=10"
+        val temporalSummary = getDailyEvidenceSummary(cleanWhere, args)
+        val recentCutoff = nowMs - 48L * 60 * 60 * 1000
         readableDatabase.rawQuery(
-            "SELECT $COLUMN_TIMESTAMP,$COLUMN_LAT,$COLUMN_LON,$COLUMN_PCI,$COLUMN_ARFCN " +
+            "SELECT $COLUMN_TIMESTAMP,$COLUMN_LAT,$COLUMN_LON,$COLUMN_PCI,$COLUMN_ARFCN,$COLUMN_OBSERVED_AT_MS " +
                 "FROM $TABLE_HISTORY WHERE $cleanWhere ORDER BY $COLUMN_ID DESC LIMIT 500",
             args
         ).use { c ->
@@ -2313,7 +2336,10 @@ class CellDbHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME, 
                 if (pci != null && arfcn != null) {
                     val perCarrier = pciByArfcn.getOrPut(arfcn) { HashMap() }
                     perCarrier[pci] = (perCarrier[pci] ?: 0) + 1
-                    if (ts >= recentThreshold) recentCleanPcisByArfcn.getOrPut(arfcn) { linkedSetOf() } += pci
+                    val observedAt = if (c.isNull(5)) null else c.getLong(5)
+                    if (ObservationTime.isAfter(observedAt, ts, recentCutoff - 1)) {
+                        recentCleanPcisByArfcn.getOrPut(arfcn) { linkedSetOf() } += pci
+                    }
                 }
             }
         }
@@ -2339,12 +2365,12 @@ class CellDbHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME, 
             val candidateArgs = arrayOf(
                 cell.cellId, cell.mnc, cell.tac, cell.mcc, cell.radioTech.name,
                 cell.pci.toString(), cell.arfcn.toString(),
-                LOCAL_TRUST_RECONFIGURATION_HISTORY_LIKE, threshold
+                LOCAL_TRUST_RECONFIGURATION_HISTORY_LIKE, *threshold
             )
             val candidateWhere = "$COLUMN_CID=? AND $COLUMN_MNC=? AND $COLUMN_TAC=? AND $COLUMN_MCC=? " +
                 "AND $COLUMN_RADIO=? AND $COLUMN_PCI=? AND $COLUMN_ARFCN=? AND $COLUMN_SCORE>=100 " +
-                "AND $COLUMN_FAILED_H LIKE ? AND $COLUMN_TIMESTAMP>=? AND length($COLUMN_TIMESTAMP)>=10"
-            val candidateTemporal = getDailyEvidenceSummary(candidateWhere, candidateArgs, format)
+                "AND $COLUMN_FAILED_H LIKE ? AND ${observedSince()} AND length($COLUMN_TIMESTAMP)>=10"
+            val candidateTemporal = getDailyEvidenceSummary(candidateWhere, candidateArgs)
             readableDatabase.rawQuery(
                 "SELECT $COLUMN_LAT,$COLUMN_LON FROM $TABLE_HISTORY WHERE $candidateWhere " +
                     "ORDER BY $COLUMN_ID DESC LIMIT 500",
@@ -2380,22 +2406,34 @@ class CellDbHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME, 
         )
     }
 
+    /**
+     * Evidencia agrupada por día local (el "día" sigue siendo el del texto local, a propósito).
+     * 3.0 (#23) — Primer y último instante de cada día: el guardado cuando existe. Un día que
+     * mezcla filas antiguas y nuevas (el de la actualización) toma el primero del texto antiguo,
+     * que es anterior, y el último del instante nuevo.
+     */
     private fun getDailyEvidenceSummary(
         whereClause: String,
-        args: Array<String>,
-        format: SimpleDateFormat
+        args: Array<String>
     ): com.alexisgordr.icdetector.core.DailyEvidenceSummary {
         val buckets = mutableListOf<com.alexisgordr.icdetector.core.DailyEvidenceBucket>()
         readableDatabase.rawQuery(
-            "SELECT substr($COLUMN_TIMESTAMP,1,10),COUNT(*),MIN($COLUMN_TIMESTAMP),MAX($COLUMN_TIMESTAMP) " +
+            "SELECT substr($COLUMN_TIMESTAMP,1,10),COUNT(*),MIN($COLUMN_TIMESTAMP),MAX($COLUMN_TIMESTAMP)," +
+                "COUNT($COLUMN_OBSERVED_AT_MS),MIN($COLUMN_OBSERVED_AT_MS),MAX($COLUMN_OBSERVED_AT_MS) " +
                 "FROM $TABLE_HISTORY WHERE $whereClause GROUP BY substr($COLUMN_TIMESTAMP,1,10)",
             args
         ).use { c ->
             while (c.moveToNext()) {
+                val count = c.getInt(1)
+                val withInstant = c.getInt(4)
+                val legacyFirst = ObservationTime.parseLegacy(c.getString(2))
+                val legacyLast = ObservationTime.parseLegacy(c.getString(3))
+                val instantFirst = if (c.isNull(5)) null else c.getLong(5)
+                val instantLast = if (c.isNull(6)) null else c.getLong(6)
                 buckets += com.alexisgordr.icdetector.core.DailyEvidenceBucket(
-                    observations = c.getInt(1),
-                    firstTimestampMs = runCatching { format.parse(c.getString(2))?.time }.getOrNull(),
-                    lastTimestampMs = runCatching { format.parse(c.getString(3))?.time }.getOrNull()
+                    observations = count,
+                    firstTimestampMs = if (withInstant < count) legacyFirst else instantFirst,
+                    lastTimestampMs = instantLast ?: legacyLast
                 )
             }
         }
@@ -2420,10 +2458,8 @@ class CellDbHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME, 
     ): CellRfFingerprint? {
         val db = this.readableDatabase
         val ninetyDaysAgo = System.currentTimeMillis() - (90L * 24 * 60 * 60 * 1000)
-        val dateFormat = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.ROOT)
-        val threshold = dateFormat.format(Date(ninetyDaysAgo))
 
-        if (!hasMatureTrustedBaseline(cellId, mnc, tac, mcc, radio, threshold)) return null
+        if (!hasMatureTrustedBaseline(cellId, mnc, tac, mcc, radio, ninetyDaysAgo)) return null
 
         val query = """
             SELECT $COLUMN_RSRQ, $COLUMN_SINR, $COLUMN_LAT, $COLUMN_LON
@@ -2437,7 +2473,7 @@ class CellDbHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME, 
               AND $COLUMN_SINR IS NOT NULL
               AND $COLUMN_SCORE >= ?
               AND ($COLUMN_FAILED_H IS NULL OR TRIM($COLUMN_FAILED_H) = '' OR $COLUMN_FAILED_H = 'OK')
-              AND $COLUMN_TIMESTAMP > ?
+              AND ${observedSince(strict = true)}
             ORDER BY $COLUMN_ID DESC
             LIMIT 200
         """.trimIndent()
@@ -2446,7 +2482,7 @@ class CellDbHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME, 
         val sinrs = mutableListOf<Int>()
         db.rawQuery(
             query,
-            arrayOf(cellId, mnc, tac, mcc, radio.name, TRUSTED_BASELINE_MIN_SCORE.toString(), threshold)
+            arrayOf(cellId, mnc, tac, mcc, radio.name, TRUSTED_BASELINE_MIN_SCORE.toString(), *since(ninetyDaysAgo))
         ).use { cursor ->
             if (cursor.moveToFirst()) {
                 do {
@@ -2586,7 +2622,7 @@ class CellDbHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME, 
         return try {
             val db = this.readableDatabase
             db.rawQuery(
-                "SELECT $COLUMN_TIMESTAMP FROM $TABLE_HISTORY WHERE $COLUMN_CID=? AND $COLUMN_MNC=? " +
+                "SELECT $COLUMN_TIMESTAMP,$COLUMN_OBSERVED_AT_MS FROM $TABLE_HISTORY WHERE $COLUMN_CID=? AND $COLUMN_MNC=? " +
                     "AND $COLUMN_TAC=? AND $COLUMN_MCC=? " +
                     "AND $COLUMN_RADIO=? " +
                     "AND $COLUMN_VERIFIED='VERIFIED' " +
@@ -2595,7 +2631,7 @@ class CellDbHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME, 
                 arrayOf(cid, mnc, tac, mcc, radio.name)
             ).use { c ->
                 if (!c.moveToFirst()) return@use false
-                val edad = edadDeRegistro(c.getString(0))
+                val edad = edadDeRegistro(if (c.isNull(1)) null else c.getLong(1), c.getString(0))
                 // Sin fecha legible se conserva la verificación: ante la duda, no se destruye una
                 // confirmación previa por no saber cuándo se hizo.
                 edad == null || edad <= VERIFIED_TTL_MS
@@ -2665,9 +2701,6 @@ class CellDbHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME, 
         val now = System.currentTimeMillis()
         val thirtyDaysAgo = now - (30L * 24 * 60 * 60 * 1000)
         val recentWindow = now - (48L * 60 * 60 * 1000)   // últimas 48 h
-        val dateFormat = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.ROOT)
-        val oldThreshold = dateFormat.format(Date(thirtyDaysAgo))
-        val recentThreshold = dateFormat.format(Date(recentWindow))
 
         // H15 necesita conservar su propio baseline después de disparar. Además de filas limpias,
         // admite filas cuyo único fallo sea H15; otras heurísticas nunca contaminan esta historia.
@@ -2682,8 +2715,8 @@ class CellDbHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME, 
         val mature = db.rawQuery(
             "SELECT COUNT(*),COUNT(DISTINCT substr($COLUMN_TIMESTAMP,1,10)) FROM $TABLE_HISTORY " +
                 "WHERE $COLUMN_CID=? AND $COLUMN_MNC=? AND $COLUMN_TAC=? AND $COLUMN_MCC=? " +
-                "AND $COLUMN_RADIO=? AND $COLUMN_TIMESTAMP>=? AND $eligibleSql",
-            arrayOf(cellId, mnc, tac, mcc, radio.name, oldThreshold,
+                "AND $COLUMN_RADIO=? AND ${observedSince()} AND $eligibleSql",
+            arrayOf(cellId, mnc, tac, mcc, radio.name, *since(thirtyDaysAgo),
                 TRUSTED_BASELINE_MIN_SCORE.toString(), *h15Patterns)
         ).use { it.moveToFirst() && it.getInt(0) >= TRUSTED_BASELINE_MIN_SAMPLES &&
             it.getInt(1) >= TRUSTED_BASELINE_MIN_DAYS }
@@ -2692,7 +2725,7 @@ class CellDbHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME, 
         }
 
         val query = """
-            SELECT $COLUMN_PCI, $COLUMN_ARFCN, $COLUMN_TIMESTAMP
+            SELECT $COLUMN_PCI, $COLUMN_ARFCN, $COLUMN_TIMESTAMP, $COLUMN_OBSERVED_AT_MS
             FROM $TABLE_HISTORY
             WHERE $COLUMN_CID = ?
               AND $COLUMN_MNC = ?
@@ -2700,24 +2733,26 @@ class CellDbHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME, 
               AND $COLUMN_MCC = ?
               AND $COLUMN_RADIO = ?
               AND $eligibleSql
-              AND $COLUMN_TIMESTAMP > ?
-            ORDER BY $COLUMN_TIMESTAMP ASC, $COLUMN_ID ASC
+              AND ${observedSince(strict = true)}
+            ORDER BY ${ObservationTime.orderAscending(COLUMN_OBSERVED_AT_MS, COLUMN_TIMESTAMP, COLUMN_ID)}
         """.trimIndent()
 
         val cursor = db.rawQuery(
             query,
             arrayOf(cellId, mnc, tac, mcc, radio.name,
-                TRUSTED_BASELINE_MIN_SCORE.toString(), *h15Patterns, oldThreshold)
+                TRUSTED_BASELINE_MIN_SCORE.toString(), *h15Patterns, *since(thirtyDaysAgo))
         )
         try {
             if (cursor.moveToFirst()) {
                 val pciIdx = cursor.getColumnIndexOrThrow(COLUMN_PCI)
                 val arfcnIdx = cursor.getColumnIndexOrThrow(COLUMN_ARFCN)
                 val tsIdx = cursor.getColumnIndexOrThrow(COLUMN_TIMESTAMP)
+                val observedIdx = cursor.getColumnIndexOrThrow(COLUMN_OBSERVED_AT_MS)
                 do {
                     total++
                     val ts = cursor.getString(tsIdx) ?: ""
-                    val isRecent = ts > recentThreshold   // formato "yyyy-MM-dd HH:mm:ss" ordena lexicográficamente
+                    val observedAt = if (cursor.isNull(observedIdx)) null else cursor.getLong(observedIdx)
+                    val isRecent = ObservationTime.isAfter(observedAt, ts, recentWindow)
 
                     // PCI válido LTE/NR: 0..1007. Ignorar valores fuera de rango (lecturas basura).
                     val pci = if (!cursor.isNull(pciIdx)) cursor.getInt(pciIdx).takeIf { it in 0..1007 } else null

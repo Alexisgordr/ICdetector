@@ -5,7 +5,8 @@ import sys
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from check_export import (
-    calendar_period_stats, radio_context_summary, ta_consistency_issues, ta_unit_diagnostic
+    calendar_period_stats, instant_issues, radio_context_summary, row_instant,
+    ta_consistency_issues, ta_unit_diagnostic
 )
 
 
@@ -86,6 +87,35 @@ class RadioContextSummaryTest(unittest.TestCase):
         self.assertEqual(1, summary["invalid_connection"])
         self.assertEqual(1, summary["invalid_service"])
 
+
+
+
+class ObservedInstantTest(unittest.TestCase):
+    """3.0 (#23) — El instante UTC desambigua la hora repetida del cambio de hora de otoño."""
+
+    def test_repeated_autumn_hour_has_two_distinct_instants(self):
+        # Madrid, 25-10-2026: las 02:30 locales ocurren dos veces (CEST +2 y CET +1).
+        first = {"Timestamp": "2026-10-25 02:30:00", "ObservedAtUtc": "2026-10-25T00:30:00.000Z"}
+        second = {"Timestamp": "2026-10-25 02:30:00", "ObservedAtUtc": "2026-10-25T01:30:00.000Z"}
+        self.assertLess(row_instant(first), row_instant(second))
+        self.assertEqual([], instant_issues([first, second]))
+
+    def test_rows_before_3_0_have_no_instant_and_are_not_flagged(self):
+        legacy = {"Timestamp": "2026-09-01 10:00:00", "ObservedAtUtc": ""}
+        self.assertIsNone(row_instant(legacy))
+        self.assertEqual([], instant_issues([legacy]))
+
+    def test_impossible_offsets_and_unreadable_instants_are_flagged(self):
+        rows = [
+            {"Timestamp": "2026-10-09 12:00:00", "ObservedAtUtc": "2026-10-08T12:00:00.000Z"},
+            {"Timestamp": "2026-10-09 12:07:00", "ObservedAtUtc": "2026-10-09T10:00:00.000Z"},
+            {"Timestamp": "2026-10-09 12:00:00", "ObservedAtUtc": "yesterday"},
+        ]
+        self.assertEqual(3, len(instant_issues(rows)))
+
+    def test_half_hour_zones_are_valid(self):
+        row = {"Timestamp": "2026-10-09 17:30:00", "ObservedAtUtc": "2026-10-09T12:00:00.250Z"}
+        self.assertEqual([], instant_issues([row]))
 
 if __name__ == "__main__":
     unittest.main()

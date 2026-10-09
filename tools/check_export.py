@@ -42,6 +42,9 @@ RADIO_CONTEXT_COLUMNS_V2104 = [
     "SimOperator", "NetworkRoaming",
 ]
 EXPECTED_COLUMNS_V2104 = EXPECTED_COLUMNS_V21 + RADIO_CONTEXT_COLUMNS_V2104
+# 3.0 (#23) — Instante inequívoco en UTC. Vacío en filas anteriores a 3.0 (desconocido).
+EXPECTED_COLUMNS_V30 = EXPECTED_COLUMNS_V2104 + ["ObservedAtUtc"]
+UTC_FORMAT = "%Y-%m-%dT%H:%M:%S.%fZ"
 SERVING_CONNECTION_VALUES = {"PRIMARY_SERVING", "SECONDARY_SERVING", "NONE", "UNKNOWN"}
 SERVICE_STATE_VALUES = {"IN_SERVICE", "OUT_OF_SERVICE", "EMERGENCY_ONLY", "POWER_OFF", "UNKNOWN"}
 
@@ -92,6 +95,42 @@ def load(path):
     with open(path, newline="", encoding="utf-8") as fh:
         reader = csv.DictReader(fh)
         return reader.fieldnames or [], list(reader)
+
+
+def row_instant(row):
+    """Instante UTC de la fila (datetime sin zona, en UTC), o None en filas anteriores a 3.0."""
+    raw = (row.get("ObservedAtUtc") or "").strip()
+    if not raw:
+        return None
+    try:
+        return datetime.strptime(raw, UTC_FORMAT)
+    except ValueError:
+        return None
+
+
+def instant_issues(rows):
+    """
+    Filas cuyo texto local no encaja con su instante UTC. La diferencia entre ambos es la
+    zona horaria del momento: tiene que estar entre -14 h y +14 h y ser múltiplo de 15 min.
+    Una fila con ObservedAtUtc ilegible también cuenta como problema.
+    """
+    issues = []
+    for r in rows:
+        raw = (r.get("ObservedAtUtc") or "").strip()
+        if not raw:
+            continue
+        utc = row_instant(r)
+        try:
+            local = datetime.strptime(r.get("Timestamp") or "", TS_FORMAT)
+        except ValueError:
+            local = None
+        if utc is None or local is None:
+            issues.append(r)
+            continue
+        offset_s = (local - utc.replace(microsecond=0)).total_seconds()
+        if abs(offset_s) > 14 * 3600 or round(offset_s) % 900 != 0:
+            issues.append(r)
+    return issues
 
 
 def calendar_period_stats(times, row_count):
@@ -262,30 +301,53 @@ def main(path):
     # ---- 3. Saltos físicamente imposibles ---------------------------------------------------
     # Lat/Lon es la posición del dispositivo. Entre dos observaciones consecutivas no puede
     # implicar una velocidad terrestre absurda.
-    fixes = []
+    # 3.0 (#23) — Las filas con instante UTC se ordenan por él (sin saltos falsos en el cambio
+    # de hora); las anteriores, por su texto local como antes. Las dos series no se mezclan.
+    legacy_fixes, instant_fixes = [], []
     for r in rows:
         lat, lon = fnum(r, "Lat"), fnum(r, "Lon")
         if lat is None or lon is None:
+            continue
+        instant = row_instant(r)
+        if instant is not None:
+            instant_fixes.append((instant, lat, lon, r.get("Timestamp", "")))
             continue
         try:
             ts = datetime.strptime(r["Timestamp"], TS_FORMAT)
         except (ValueError, KeyError):
             continue
-        fixes.append((ts, lat, lon, r["Timestamp"]))
-    fixes.sort(key=lambda x: x[0])
+        legacy_fixes.append((ts, lat, lon, r["Timestamp"]))
 
     jumps = []
-    for (t1, la1, lo1, s1), (t2, la2, lo2, s2) in zip(fixes, fixes[1:]):
-        dt = max((t2 - t1).total_seconds(), 1.0)
-        kmh = (haversine_m(la1, lo1, la2, lo2) / dt) * 3.6
-        if kmh > 400:
-            jumps.append((s1, s2, round(kmh)))
+    for fixes in (legacy_fixes, instant_fixes):
+        fixes.sort(key=lambda x: x[0])
+        for (t1, la1, lo1, s1), (t2, la2, lo2, s2) in zip(fixes, fixes[1:]):
+            dt = max((t2 - t1).total_seconds(), 1.0)
+            kmh = (haversine_m(la1, lo1, la2, lo2) / dt) * 3.6
+            if kmh > 400:
+                jumps.append((s1, s2, round(kmh)))
     check(
         "Ningún salto entre fixes por encima de 400 km/h",
         not jumps,
         f"{len(jumps)} saltos (el primero {jumps[0][0]} -> {jumps[0][1]}: {jumps[0][2]} km/h)"
         if jumps else "",
     )
+
+    # ---- 3b. Instante UTC (3.0) ----------------------------------------------------------
+    if "ObservedAtUtc" in columns:
+        bad_instant = instant_issues(rows)
+        check(
+            "ObservedAtUtc coherente con la hora local (zona entre -14 h y +14 h)",
+            not bad_instant,
+            f"{len(bad_instant)} filas (p. ej. {bad_instant[0].get('Timestamp')} / "
+            f"{bad_instant[0].get('ObservedAtUtc')!r})" if bad_instant else "",
+        )
+        without = sum(1 for r in rows if not (r.get("ObservedAtUtc") or "").strip())
+        if without:
+            notes.append(
+                f"{without} filas sin ObservedAtUtc: son anteriores a 3.0 y su instante es "
+                "desconocido (solo hay hora local sin zona). No se reconstruye."
+            )
 
     # ---- 4. Rangos físicos ------------------------------------------------------------------
     bad_dbm = [r for r in rows if not (-145 <= fnum_or(r, "DBM", -90) <= -30)]

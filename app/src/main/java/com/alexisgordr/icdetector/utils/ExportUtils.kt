@@ -4,6 +4,7 @@ import android.content.Context
 import android.net.Uri
 import com.alexisgordr.icdetector.models.HistoryRecord
 import com.alexisgordr.icdetector.models.ServiceStateSnapshot
+import com.alexisgordr.icdetector.storage.ObservationTime
 import java.io.OutputStreamWriter
 import java.nio.charset.StandardCharsets
 
@@ -14,7 +15,9 @@ object ExportUtils {
         // v2.10.4 — Contexto de radio. Van al final para que cualquier análisis que lea las
         // columnas por nombre (o las 23 primeras por posición) siga funcionando igual.
         "ServingConnection,BandwidthKHz,Bands,AdditionalPlmns,CsgIndicator,CsgIdentity,CsgName," +
-        "SecondaryCarriers,ServiceState,NetworkOperator,SimOperator,NetworkRoaming"
+        "SecondaryCarriers,ServiceState,NetworkOperator,SimOperator,NetworkRoaming," +
+        // 3.0 (#23) — Instante inequívoco en UTC (ISO-8601). Vacío en filas anteriores a 3.0.
+        "ObservedAtUtc"
 
     /** Cabecera del CSV de eventos de servicio (pestaña Radio). */
     const val SERVICE_STATE_CSV_HEADER = "TimestampUtc,State,DataRegistered,VoiceRegistered,Searching," +
@@ -105,7 +108,8 @@ object ExportUtils {
         item.serviceState ?: "",
         item.networkOperator ?: "",
         item.simOperator ?: "",
-        item.networkRoaming?.let { if (it) 1 else 0 } ?: ""
+        item.networkRoaming?.let { if (it) 1 else 0 } ?: "",
+        item.observedAtMs?.let { ObservationTime.utcIso(it) } ?: ""
     ).joinToString(",") { csvEscape(it) }
 
     /** Una fila del CSV de eventos de servicio. Pura: se puede probar sin Android. */

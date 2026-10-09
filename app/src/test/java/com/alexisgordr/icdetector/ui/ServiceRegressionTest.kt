@@ -82,7 +82,8 @@ class ServiceRegressionTest {
     @Test fun `gps backfill is limited to a recent row`() {
         val db = source("storage/CellDbHelper.kt")
         assertTrue(db.contains("COORDINATE_BACKFILL_WINDOW_MS = 2L * 60_000L"))
-        assertTrue(db.contains("AND \$COLUMN_TIMESTAMP >= ? AND \$COLUMN_TIMESTAMP <= ?"))
+        // 3.0 (#23) — La ventana se mide con el instante de la fila (texto local solo en filas antiguas).
+        assertTrue(db.contains("AND \${observedSince()} AND \${ObservationTime.untilClause(COLUMN_OBSERVED_AT_MS, COLUMN_TIMESTAMP)}"))
         val service = source("service/MiniICService.kt")
         assertEquals(2, Regex("fixTimeMs = (loc|location)\\.time").findAll(service).count())
     }

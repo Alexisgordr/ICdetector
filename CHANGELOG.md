@@ -1,6 +1,30 @@
 # Changelog
 
-## 2.10.10
+## 3.0.0-beta1 (in progress, not released)
+
+### Phase 1 — Data foundations
+
+First beta of 3.0, built after the field-collection freeze. It follows the ordered roadmap in
+GitHub issue #27. Database schema **20**: the migration only adds columns, and every row recorded
+before 3.0 keeps the new columns empty, meaning **unknown** — nothing is filled in with an assumed
+value.
+
+#### Bugs found during testing
+
+- **Times were ambiguous (#23).** History, incident and forensic times were stored only as local
+  text without a time zone. Travelling across zones changed the age the app computed, and at the
+  autumn clock change the repeated hour gave two different moments the same text, so H15's ordering
+  inside that hour was undefined. Every new row now also stores the instant of the observation in
+  milliseconds since epoch (UTC). Windows (30/90 days, 48 h, the 2-minute GPS backfill), the
+  verification TTL, retention and H15's ordering use that instant. Rows recorded before 3.0 have no
+  instant (their zone was never stored and is not reconstructed); they keep the previous
+  approximate comparison on their local text. The local text is still written: it is what the
+  screens show and it still defines the "day" of the evidence-by-days counts. The history CSV gains
+  an `ObservedAtUtc` column (ISO-8601, UTC) at the end, empty for rows before 3.0, and
+  `tools/check_export.py` uses it for the impossible-jump check and verifies it against the local
+  time. **Methodology cut:** age and ordering are exact from 3.0 on; before 3.0 they remain
+  approximate around clock changes and zone changes.
+
 
 ### Bug-fix release inside the freeze — dataset cut for H8
 
