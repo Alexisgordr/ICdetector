@@ -36,6 +36,8 @@ internal class LocationCollectionController(
     private var streamActive = false
     private var forcedFixListener: LocationListener? = null
     private var lastForcedFixTime = 0L
+    /** 3.0 (#7, O5) — Espera mínima entre intentos normales; ver PreciseFixBackoff. */
+    private val preciseFixBackoff = com.alexisgordr.icdetector.core.PreciseFixBackoff(FORCED_FIX_DEBOUNCE_MS)
     private var lastAcceptedLocation: Location? = null
     private var lastPersistedLocationTime = 0L
     private var awaitingFreshCoordinates = false
@@ -101,7 +103,8 @@ internal class LocationCollectionController(
 
         lateinit var listener: LocationListener
         synchronized(forcedFixLock) {
-            if (!force && now - lastForcedFixTime < FORCED_FIX_DEBOUNCE_MS) return
+            // 3.0 (#7, O5) — La espera mínima crece si los fixes precisos fallan seguidos.
+            if (!force && now - lastForcedFixTime < preciseFixBackoff.minIntervalMs()) return
             if (forcedFixListener != null) return
             lastForcedFixTime = now
             listener = LocationListener { location ->
@@ -116,6 +119,7 @@ internal class LocationCollectionController(
                     } else false
                 }
                 if (!ownsRegistration) return@LocationListener
+                synchronized(forcedFixLock) { preciseFixBackoff.onSuccess() }
                 try { manager.removeUpdates(listener) } catch (_: Exception) {}
                 accept(location)
                 resolvePendingCoordinates()
@@ -143,6 +147,7 @@ internal class LocationCollectionController(
             val timedOut = synchronized(forcedFixLock) {
                 if (forcedFixListener === listener) {
                     forcedFixListener = null
+                    preciseFixBackoff.onTimeout()
                     true
                 } else false
             }

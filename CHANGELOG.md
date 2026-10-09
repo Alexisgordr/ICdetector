@@ -25,6 +25,11 @@ separate app, *ICdetection β*; schema 20.
   declares all three once per rule; the episode tracker uses it directly and a test checks that the
   report, the scorer weights and groups, and the keys emitted by the analyzer all match it. No
   behaviour change.
+- **Precise GPS fixes were retried at the same pace when they kept failing (O5).** Each handover could
+  start a new 20 s precise-fix attempt. Where GPS does not reach (indoors, tunnels, garages) all of
+  them failed, keeping the GPS on for nothing. After each consecutive failure the minimum interval
+  between normal attempts now doubles (30 s, 1, 2, 4, 8 min, capped at 10 min) and returns to 30 s
+  with the first accepted fix. Forced requests (suspicious episode, leaving airplane mode) never wait.
 
 ## 3.0.0-beta3 (local beta, not released)
 
