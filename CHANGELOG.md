@@ -49,6 +49,14 @@ change (still 20).
   they are all of the same class. Same-eNodeB band changes stay a separate issue (#10).
   `tools/check_export.py` counts LTE rows whose declared band is outside the table. **Dataset cut for
   H14.**
+- **Timing Advance could be borrowed from another transmitter (#21).** When the serving cell had no
+  TA, the app copied it from another list entry with the same Cell ID and TAC, without checking the
+  technology or the physical cell. LTE and NR can share numbers and measure TA in different units:
+  the unit was copied, but the value belonged to another transmitter and fed H6, the highest penalty
+  in the system. The TA is now copied only from a duplicate of the same cell: same technology, same
+  Cell ID and TAC, matching or unreported MCC/MNC, and at least one physical field (PCI or frequency)
+  reported by both and equal. A field the modem omits is not required; with none to compare, the app
+  abstains. **Dataset cut for H6.**
 
 ## 3.0.0-beta1 (local beta, not released)
 

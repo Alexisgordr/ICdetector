@@ -967,15 +967,10 @@ class MiniICService : Service() {
             val activeIndex = list.indexOfFirst { it.isRegistered }
             if (activeIndex >= 0) {
                 val activeCell = list[activeIndex]
-                if (activeCell.timingAdvance == null && activeCell.cellId != "N/A") {
-                    val sameCellWithTa = list.firstOrNull { c ->
-                        !c.isRegistered &&
-                            c.timingAdvance != null && c.timingAdvance >= 0 &&
-                            c.cellId == activeCell.cellId &&
-                            (c.mnc == activeCell.mnc || c.mnc == "N/A") &&
-                            c.tac == activeCell.tac &&
-                            (c.mcc == activeCell.mcc || c.mcc == "N/A")
-                    }
+                // 3.0 (#21) — Solo de la MISMA celda duplicada: misma tecnología y mismo emisor
+                // físico (PCI/frecuencia). Ver TimingAdvanceBorrowing.
+                run {
+                    val sameCellWithTa = com.alexisgordr.icdetector.core.TimingAdvanceBorrowing.source(activeCell, list)
                     if (sameCellWithTa != null) {
                         list[activeIndex] = activeCell.copy(
                             timingAdvance = sameCellWithTa.timingAdvance,
