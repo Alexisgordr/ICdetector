@@ -141,6 +141,8 @@ object ThreatAnalyzer {
         previousDbm: Int? = null,
         /** 3.0 (#10) — Estación base ([LteSite.key]) de la celda en la que se midió [previousBand]. */
         previousBandSite: String? = null,
+        /** 3.0 (#8) — NR-ARFCN de la servidora NR anterior (5G SA), para H14 en NR. */
+        previousNrArfcn: Int? = null,
         recentRegisteredDbm: List<Int> = emptyList(),
         rfStability: CellRfStability? = null,
         reputation: CellReputation? = null,
@@ -500,6 +502,27 @@ object ThreatAnalyzer {
                     val from = BandPlan.approxFreqMhz(previousBand) ?: 0
                     val to = BandPlan.approxFreqMhz(curBand) ?: 0
                     reasons.add("Downgrade de banda forzado (${from}MHz→${to}MHz, B$previousBand→B$curBand)")
+                    score -= 25
+                }
+            }
+        }
+
+        // 14b. 3.0 (#8) — Downgrade de banda en 5G SA (NR → NR). Misma regla y mismas
+        // condiciones que en LTE, con la clase alta/baja sacada de la frecuencia del NR-ARFCN
+        // (las bandas NR se solapan, así que no se usa un número de banda). Sin excepción de
+        // "misma estación": el gNB ID tiene longitud variable y no se puede extraer del NCI.
+        // Un cambio entre LTE y NR no se evalúa (N/A).
+        if (active.radioTech == RadioTech.NR) {
+            val curMhz = NrFrequency.dlMhz(active.arfcn)
+            val prevMhz = NrFrequency.dlMhz(previousNrArfcn)
+            eBandDowngrade = curMhz != null && prevMhz != null && previousDbm != null
+            if (eBandDowngrade && NrFrequency.isHigh(previousNrArfcn) && NrFrequency.isLow(active.arfcn)) {
+                val prevStrong = previousDbm!! >= -90
+                val newStrong = active.dbm >= -95
+                val notCoverageFallback = active.dbm >= previousDbm
+                if (prevStrong && newStrong && notCoverageFallback && !isSignalDegrading(recentRegisteredDbm)) {
+                    hBandDowngrade = false
+                    reasons.add("Downgrade de banda forzado (5G ${prevMhz!!.toInt()}MHz→${curMhz!!.toInt()}MHz)")
                     score -= 25
                 }
             }

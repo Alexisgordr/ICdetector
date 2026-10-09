@@ -263,7 +263,8 @@ private val replacements = linkedMapOf(
     "el módem no entrega RSRQ ni SINR" to "the modem provides neither RSRQ nor SINR",
     "faltan datos cruzados del ciclo" to "cross-signal data is unavailable for this cycle",
     "baseline en aprendizaje; se necesitan muestras históricas compatibles" to "baseline still learning; compatible historical samples are required",
-    "falta una banda LTE anterior válida para comparar" to "a previous valid LTE band is unavailable for comparison",
+    "falta una banda anterior válida (LTE o 5G) de la misma tecnología para comparar" to
+        "no previous valid band (LTE or 5G) of the same technology to compare with",
     "la tecnología o banda actual no permite la comparación" to "the current technology or band does not allow comparison",
     "historial RF insuficiente" to "insufficient RF history",
     "observaciones" to "observations",

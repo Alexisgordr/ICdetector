@@ -44,6 +44,17 @@ evidence is confirmed and how some rules behave. Same separate app, *ICdetection
   there and the condition the rule looks for — a strong lone cell — is absent. Score and alarms are
   unchanged (only failures add points); the H1 status in diagnostics, coverage counts and forensic
   snapshots changes. **Dataset cut for H1 status.**
+- **5G SA had less coverage than LTE (#8).** On a 5G Standalone serving cell H14 (band downgrade) was
+  always `N/A`, because the band table is LTE-only. In NR one NR-ARFCN can belong to several
+  overlapping bands (632448 is in n77 and n78), so a band table would not help; what H14 needs is
+  whether the carrier is high or low, and the NR-ARFCN gives the exact downlink frequency (TS 38.104
+  global raster). H14 now evaluates NR → NR changes with the same conditions as LTE; a change between
+  LTE and NR is not evaluated, and there is no same-site exception in NR (the gNB ID length is not
+  fixed). **H6 on NR stays `N/A`:** Android's NR Timing Advance has no defensible conversion to metres
+  (the documentation does not settle whether it is one-way or round-trip, and no field data has NR and
+  LTE TA at the same site), so the raw value keeps being recorded as `NR_RAW` for later study.
+  Regression tests cover an NR serving cell (H8 passes, H14 evaluated or `N/A`, H6 `N/A`). The H14
+  diagnostic now mentions LTE or 5G. **Dataset cut for H14 on 5G SA.**
 
 ## 3.0.0-beta2 (local beta, not released)
 

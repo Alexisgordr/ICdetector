@@ -85,7 +85,7 @@ object DiagnosticEngine {
             HeuristicDiagnostic(13, "Baseline y huella RF", r.signalBaseline,
                 explanation(r.signalBaseline, "N/A: baseline en aprendizaje; se necesitan muestras históricas compatibles.")),
             HeuristicDiagnostic(14, "Downgrade de banda", r.bandDowngrade,
-                explanation(r.bandDowngrade, if (!i.previousBandAvailable) "N/A: falta una banda LTE anterior válida para comparar." else "N/A: la tecnología o banda actual no permite la comparación.")),
+                explanation(r.bandDowngrade, if (!i.previousBandAvailable) "N/A: falta una banda anterior válida (LTE o 5G) de la misma tecnología para comparar." else "N/A: la tecnología o banda actual no permite la comparación.")),
             HeuristicDiagnostic(15, "Estabilidad de identidad RF", r.rfStability,
                 explanation(r.rfStability, "N/A: historial RF insuficiente (${i.rfStability?.totalObservations ?: 0}/4 observaciones).")),
             HeuristicDiagnostic(16, "Coherencia de transición celular", r.transitionCoherence,

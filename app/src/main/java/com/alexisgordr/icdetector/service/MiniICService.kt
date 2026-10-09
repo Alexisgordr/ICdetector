@@ -293,6 +293,8 @@ class MiniICService : Service() {
     private var prevBand: Int? = null
     /** 3.0 (#10) — eNodeB de la celda en la que se midió [prevBand]. */
     private var prevBandSite: String? = null
+    /** 3.0 (#8) — NR-ARFCN de la servidora anterior si era NR (H14 en 5G SA). */
+    private var prevNrArfcn: Int? = null
     /** 3.0 (#20) — Pérdidas de señal ya tenidas en cuenta; ver CollectionGeneration.losses. */
     @Volatile private var acknowledgedSignalLosses = 0L
     private var prevRegisteredDbm: Int? = null
@@ -1024,6 +1026,7 @@ class MiniICService : Service() {
                 if (continuityBroken) {
                     prevBand = null
                     prevBandSite = null
+                    prevNrArfcn = null
                     prevRegisteredDbm = null
                     recentRegisteredDbmTrend.clear()
                 }
@@ -1251,6 +1254,7 @@ class MiniICService : Service() {
                             previousBand = prevBand,
                             previousDbm = prevRegisteredDbm,
                             previousBandSite = prevBandSite,
+                            previousNrArfcn = prevNrArfcn,
                             recentRegisteredDbm = recentRegisteredDbmTrend.toList(),
                             rfStability = rfStability,
                             reputation = reputation,
@@ -1386,7 +1390,7 @@ class MiniICService : Service() {
                             latencyAvailable = NetworkLatencyMonitor.isMeasured(networkLatencyState.value),
                             latencyLearning = networkLatencyState.value == NetworkLatencyMonitor.STATE_LEARNING,
                             cipheringAvailable = isHardwareCipheringAvailable,
-                            previousBandAvailable = prevBand != null && prevRegisteredDbm != null,
+                            previousBandAvailable = (prevBand != null || prevNrArfcn != null) && prevRegisteredDbm != null,
                             signalBaseline = signalBaseline,
                             rfFingerprint = rfFingerprint,
                             rfStability = rfStability,
@@ -1455,6 +1459,7 @@ class MiniICService : Service() {
                             active.band ?: active.arfcn?.let { com.alexisgordr.icdetector.core.BandPlan.earfcnToBandLte(it) }
                         } else null
                         prevBandSite = com.alexisgordr.icdetector.core.LteSite.key(active)
+                        prevNrArfcn = active.arfcn.takeIf { active.radioTech == RadioTech.NR }
                         prevRegisteredDbm = active.dbm
                         if (active.dbm != Int.MAX_VALUE && active.dbm != -999) {
                             recentRegisteredDbmTrend.add(active.dbm)
