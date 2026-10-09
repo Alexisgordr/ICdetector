@@ -87,6 +87,27 @@ class CoverageContinuityTest {
         assertEquals(2, streakAfterGap(31_000L))
     }
 
+    /**
+     * Las dos puertas de tiempo son distintas a propósito y su RELACIÓN es lo que importa, no los
+     * números: con lecturas cada 10 s (pantalla apagada), 30 s son 3 lecturas perdidas (módem
+     * atascado: dejar pasar una muestra real) y 120 s son 12 (hueco de cobertura: romper la
+     * continuidad). Si cambia el intervalo de lectura, este test obliga a revisar las dos.
+     */
+    @Test fun `the continuity gap stays wider than the stalled-modem gate, both sized in scan intervals`() {
+        val stall = TemporalConfidence.MAX_OBSERVATION_STALL_MS
+        val gap = CoverageContinuity.MAX_GAP_MS
+        val service = listOf(
+            File("src/main/java/com/alexisgordr/icdetector/service/MiniICService.kt"),
+            File("app/src/main/java/com/alexisgordr/icdetector/service/MiniICService.kt")
+        ).first { it.exists() }.readText()
+        val screenOffScan = Regex("SCREEN_OFF_SCAN_INTERVAL_MS = ([0-9_]+)L").find(service)!!
+            .groupValues[1].replace("_", "").toLong()
+        assertTrue("las dos puertas no pueden colapsar", gap > stall)
+        assertTrue("la puerta de módem atascado tolera al menos 2 lecturas perdidas", stall >= 2 * screenOffScan)
+        assertTrue("un hueco de cobertura son al menos 10 lecturas perdidas", gap >= 10 * screenOffScan)
+        assertTrue("el hueco es al menos 3 veces la puerta de módem atascado", gap >= 3 * stall)
+    }
+
     @Test fun `the first observation ever is not a gap`() {
         assertEquals(Break.NONE, CoverageContinuity().check(0L, 999_999_999L))
     }
