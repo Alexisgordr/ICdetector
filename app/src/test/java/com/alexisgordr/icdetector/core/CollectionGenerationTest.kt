@@ -50,6 +50,33 @@ class CollectionGenerationTest {
         assertTrue(generation.mayPublish(fresh))
     }
 
+    @Test fun `a loss is not undone when the same cell comes back`() {
+        // A → pérdida → A: el primer ciclo de A empezó antes de la interrupción.
+        val old = generation.deliver("214-07-1-100-LTE")
+        generation.lose()
+        val back = generation.deliver("214-07-1-100-LTE")
+        assertFalse(generation.mayPublish(old))
+        assertTrue(generation.mayPublish(back))
+    }
+
+    @Test fun `a detour through another cell is not undone when the first cell comes back`() {
+        // A → B → A: el cambio a B interrumpe; volver a A no rehabilita el primer ciclo.
+        val old = generation.deliver("214-07-1-100-LTE")
+        generation.deliver("214-07-1-200-LTE")
+        val back = generation.deliver("214-07-1-100-LTE")
+        assertFalse(generation.mayPublish(old))
+        assertTrue(generation.mayPublish(back))
+    }
+
+    @Test fun `only the deliveries after the last interruption keep publishing`() {
+        generation.deliver("214-07-1-100-LTE")
+        generation.lose()
+        val first = generation.deliver("214-07-1-100-LTE")
+        val second = generation.deliver("214-07-1-100-LTE")
+        assertTrue(generation.mayPublish(first))
+        assertTrue(generation.mayPublish(second))
+    }
+
     @Test fun `the service checks before every side effect and on every loss`() {
         val service = listOf(
             File("src/main/java/com/alexisgordr/icdetector/service/MiniICService.kt"),
@@ -61,7 +88,13 @@ class CollectionGenerationTest {
         val firstCode = publish.lineSequence().drop(1).map { it.trim() }.first { it.isNotEmpty() && !it.startsWith("//") }
         assertTrue(firstCode, firstCode == "if (!collectionGeneration.mayPublish(cycleTicket)) return@withContext")
         assertTrue(publish.indexOf("checkAlerts(") > 0)
-        // La lista vacía y la abstención invalidan los ciclos en curso.
-        assertTrue(Regex("collectionGeneration\\.lose\\(\\)").findAll(service).count() >= 2)
+        // Lista vacía, abstención, modo avión y refresco forzado invalidan los ciclos en curso.
+        assertTrue(Regex("collectionGeneration\\.lose\\(\\)").findAll(service).count() >= 4)
+        // Cada vez que la pantalla se vacía fuera del propio ciclo, antes se invalida.
+        Regex("\\n( *)_cellFlow\\.value = emptyList\\(\\)").findAll(service).forEach { match ->
+            val before = service.substring(0, match.range.first).trimEnd().lines().takeLast(3).joinToString("\n")
+            val insideCycle = before.contains("stableSiteIntensiveActive = false")
+            assertTrue("sin invalidar: ...$before", insideCycle || before.contains("collectionGeneration.lose()"))
+        }
     }
 }

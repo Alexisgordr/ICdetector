@@ -299,6 +299,8 @@ class MiniICService : Service() {
     }
 
     fun forceRefresh() {
+        // 3.0 (#24) — La pantalla se vacía: un ciclo en curso no puede volver a pintarla.
+        collectionGeneration.lose()
         _cellFlow.value = emptyList()
         requestFreshCellInfo()
     }
@@ -579,6 +581,8 @@ class MiniICService : Service() {
                     ) != 0
 
                     if (isAirplaneModeOn) {
+                        // 3.0 (#24) — Modo avión: invalida el ciclo que siga analizando.
+                        collectionGeneration.lose()
                         _cellFlow.value = emptyList()
                         updateNotificationText(getString(R.string.no_signal_airplane))
                         appendLog("[SYS]", "⚠️ Modo Avión activo. Suspendiendo escaneo.")

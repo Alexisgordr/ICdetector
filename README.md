@@ -173,7 +173,7 @@ filled with an assumed value. Detection rules, weights and thresholds are unchan
 | **Evaluation coverage** (#29) | Each row records which rules could not be evaluated (`H1;H6;H9`, or `NONE`) and the accuracy of its GPS fix. After the campaign you can measure how long each rule was actually evaluable, and filter vague positions. CSV: `NotEvaluatedHeuristics`, `GpsAccuracyM`. |
 | **App version and device** (#30) | Each row stores the app version that observed it, so dataset cuts apply per row. The CSV also says which phone and Android version made the export (no personal or hardware identifier). CSV: `AppVersion`, `ExportDevice`, `ExportAndroid`. |
 | **Most recent row** (#25) | "The latest row" is the last one observed, not the last one written. Verification results and GPS backfill land on the right row. |
-| **Stale cycles** (#24) | A slow analysis cycle no longer shows a cell, alerts or writes after the signal was lost or the serving cell changed. |
+| **Stale cycles** (#24) | A slow analysis cycle no longer shows a cell, alerts or writes after the signal was lost (including airplane mode), the screen was refreshed or the serving cell changed — even if the same cell comes back afterwards. |
 | **Validator** | `tools/check_export.py` checks the UTC instant against the local time, prints the evaluation coverage of each rule, checks GPS accuracy, lists app versions and the dataset cuts a file crosses, and warns when a file joins several phones. |
 
 **Methodology cut (3.0):** ages and ordering are exact from 3.0 on; before 3.0 they remain

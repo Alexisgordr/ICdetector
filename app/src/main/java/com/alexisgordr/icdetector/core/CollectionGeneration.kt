@@ -13,11 +13,14 @@ package com.alexisgordr.icdetector.core
  * Reglas:
  *  - Al empezar, un ciclo que ya no es la entrega más reciente se descarta, como antes: la más
  *    reciente correrá después.
- *  - Al publicar, se descarta si después de él hubo una pérdida de señal / abstención, o una
- *    entrega con OTRA celda servidora. Sus efectos ya no describen el presente.
- *  - Si lo más reciente es otra entrega de la MISMA celda, se publica: describe la misma celda
- *    unos instantes antes y la nueva la sustituye enseguida. Descartarlo podría dejar la app sin
- *    publicar nada mientras sigan llegando entregas más deprisa de lo que se analizan.
+ *  - Una INTERRUPCIÓN invalida para siempre todos los ciclos anteriores a ella. Es interrupción
+ *    una pérdida (lista vacía, abstención, modo avión, refresco forzado) y una entrega cuya
+ *    celda servidora es distinta de la anterior. Que después vuelva la misma celda no los
+ *    rehabilita: A → pérdida → A y A → B → A dejan inválido el primer ciclo de A.
+ *  - Sin interrupción, varias entregas seguidas de la MISMA celda no se invalidan entre sí: el
+ *    ciclo anterior describe la misma celda unos instantes antes y el nuevo lo sustituye
+ *    enseguida. Descartarlo podría dejar la app sin publicar nada mientras sigan llegando
+ *    entregas más deprisa de lo que se analizan.
  *
  * Lo que el ciclo ya registró antes de publicar (evidencia del TA, contexto agregado de
  * Stable-Site por minuto) se conserva: son observaciones reales de ese momento.
@@ -30,31 +33,39 @@ class CollectionGeneration {
     /** Lo que identifica a un ciclo: su número y la celda servidora que analiza. */
     data class Ticket(val generation: Long, val servingIdentity: String)
 
-    private data class Latest(val generation: Long, val servingIdentity: String?)
+    private data class State(
+        val generation: Long,
+        val servingIdentity: String?,
+        /** Número de la última interrupción. Los tickets anteriores a ella ya no publican. */
+        val lastInterruption: Long
+    )
 
-    @Volatile private var latest = Latest(0L, null)
+    @Volatile private var state = State(0L, null, 0L)
 
-    /** Nueva entrega con trabajo real. */
+    /** Nueva entrega con trabajo real. Un cambio de celda servidora es una interrupción. */
     @Synchronized
     fun deliver(servingIdentity: String): Ticket {
-        val next = Latest(latest.generation + 1, servingIdentity)
-        latest = next
-        return Ticket(next.generation, servingIdentity)
+        val current = state
+        val generation = current.generation + 1
+        val interrupted = current.servingIdentity != servingIdentity
+        state = State(
+            generation = generation,
+            servingIdentity = servingIdentity,
+            lastInterruption = if (interrupted) generation else current.lastInterruption
+        )
+        return Ticket(generation, servingIdentity)
     }
 
-    /** Lista vacía, abstención o pérdida de la servidora: invalida los ciclos en curso. */
+    /** Lista vacía, abstención, modo avión o pantalla vaciada: invalida los ciclos en curso. */
     @Synchronized
     fun lose() {
-        latest = Latest(latest.generation + 1, null)
+        val generation = state.generation + 1
+        state = State(generation = generation, servingIdentity = null, lastInterruption = generation)
     }
 
     /** Al empezar: solo corre la entrega más reciente. */
-    fun isLatest(ticket: Ticket): Boolean = latest.generation == ticket.generation
+    fun isLatest(ticket: Ticket): Boolean = state.generation == ticket.generation
 
-    /** Al publicar: ver las reglas de la clase. */
-    fun mayPublish(ticket: Ticket): Boolean {
-        val now = latest
-        if (now.generation == ticket.generation) return true
-        return now.servingIdentity != null && now.servingIdentity == ticket.servingIdentity
-    }
+    /** Al publicar: ninguna interrupción desde que se entregó este ciclo. */
+    fun mayPublish(ticket: Ticket): Boolean = state.lastInterruption <= ticket.generation
 }

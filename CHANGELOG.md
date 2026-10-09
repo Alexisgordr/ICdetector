@@ -64,7 +64,9 @@ value.
   been lost or the serving cell had changed. Each cycle now carries a ticket (`CollectionGeneration`)
   that is checked again just before it publishes; an empty list or abstention invalidates it. A
   newer delivery of the **same** cell does not invalidate it, so the app cannot stop publishing when
-  deliveries arrive faster than they are analysed. Observations the cycle already recorded (Timing
+  deliveries arrive faster than they are analysed, but any interruption — an empty list, an
+  abstention, airplane mode, a forced refresh or a change of serving cell — invalidates every earlier
+  cycle for good, even if the same cell comes back (A → loss → A, A → B → A). Observations the cycle already recorded (Timing
   Advance evidence, the per-minute Stable-Site context) are kept: they describe a real moment.
 
 
