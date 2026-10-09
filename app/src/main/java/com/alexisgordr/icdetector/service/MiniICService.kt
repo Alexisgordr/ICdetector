@@ -747,7 +747,8 @@ class MiniICService : Service() {
         val identity = cell.identityKey
         if (identity == latencyCellIdentity) return
         latencyCellIdentity = identity
-        latencyMonitor.onCellChanged(identity, idleLatencyState())
+        // 3.0 (#26) — Celda nueva: todavía no medida. Antes se mostraba "OK" sin medir nada.
+        latencyMonitor.onCellChanged(identity, NetworkLatencyMonitor.STATE_NOT_MEASURED)
     }
 
     private fun checkLatencyAnomaly() {
@@ -1243,8 +1244,9 @@ class MiniICService : Service() {
                             currentLocation = currentLocation,
                             preloadedHistory = preloadedHistory,
                             isWifiActive = wifiActive,
-                            isNetworkLatencyAnomalous = networkLatencyState.value == "ANOMALA",
-                            isNetworkLatencyAvailable = networkLatencyState.value != "N/A",
+                            isNetworkLatencyAnomalous = networkLatencyState.value == NetworkLatencyMonitor.STATE_ANOMALOUS,
+                            // 3.0 (#26) — Solo una medición contra la referencia (OK/ANOMALA) cuenta.
+                            isNetworkLatencyAvailable = NetworkLatencyMonitor.isMeasured(networkLatencyState.value),
                             signalBaseline = signalBaseline,
                             previousBand = prevBand,
                             previousDbm = prevRegisteredDbm,
@@ -1380,7 +1382,8 @@ class MiniICService : Service() {
                             wifiActive = isWifiConnected(),
                             locationAvailable = currentLocation != null,
                             historyWithLocation = preloadedHistory.count { it.lat != null && it.lon != null },
-                            latencyAvailable = networkLatencyState.value != "N/A",
+                            latencyAvailable = NetworkLatencyMonitor.isMeasured(networkLatencyState.value),
+                            latencyLearning = networkLatencyState.value == NetworkLatencyMonitor.STATE_LEARNING,
                             cipheringAvailable = isHardwareCipheringAvailable,
                             previousBandAvailable = prevBand != null && prevRegisteredDbm != null,
                             signalBaseline = signalBaseline,
@@ -1581,9 +1584,6 @@ class MiniICService : Service() {
     private fun isLatencyProbeActive(): Boolean =
         isLatencyDetectionEnabled && !isWifiConnected() && !isVpnActive() && !isProxyEnabled
 
-    // Estado "idle" del indicador tras un handover: "OK" solo si la sonda puede medir;
-    // si no, "N/A" para no afirmar un estado de red sin verificación.
-    private fun idleLatencyState(): String = if (isLatencyProbeActive()) "OK" else "N/A"
 
     private fun onGpsAvailable() {
         val now = System.currentTimeMillis()

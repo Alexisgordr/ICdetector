@@ -13,6 +13,8 @@ object DiagnosticEngine {
         val locationAvailable: Boolean,
         val historyWithLocation: Int,
         val latencyAvailable: Boolean,
+        /** 3.0 (#26) — La sonda mide, pero aún aprende la referencia de esta celda. */
+        val latencyLearning: Boolean = false,
         val cipheringAvailable: Boolean,
         val previousBandAvailable: Boolean,
         val signalBaseline: SignalBaseline?,
@@ -68,6 +70,7 @@ object DiagnosticEngine {
             HeuristicDiagnostic(12, "Correlación latencia + RF", r.latencyCorrelation,
                 explanation(r.latencyCorrelation, when {
                     i.wifiActive -> "N/A: Wi-Fi/VPN impide atribuir la latencia al enlace celular."
+                    i.latencyLearning -> "N/A: la sonda de latencia aún aprende la referencia de esta celda."
                     !i.latencyAvailable -> "N/A: la sonda de latencia todavía no tiene una medición válida."
                     cell.rsrq == null && cell.sinr == null -> "N/A: el módem no entrega RSRQ ni SINR."
                     else -> "N/A: faltan datos cruzados del ciclo."

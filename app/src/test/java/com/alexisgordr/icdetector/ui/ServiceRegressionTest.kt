@@ -34,7 +34,8 @@ class ServiceRegressionTest {
         assertTrue(service.contains("?.identityKey ?: return"))
         // El reset compara la identidad completa, no solo el CID.
         assertTrue(service.contains("val identity = cell.identityKey"))
-        assertTrue(service.contains("latencyMonitor.onCellChanged(identity, idleLatencyState())"))
+        // 3.0 (#26) — Celda nueva: "no medida", nunca un OK sin medir.
+        assertTrue(service.contains("latencyMonitor.onCellChanged(identity, NetworkLatencyMonitor.STATE_NOT_MEASURED)"))
         assertFalse(service.contains("activeRaw.cellId != prevCid) {\n                latencyMonitor.reset"))
         assertTrue(service.contains("latencyMonitor.check(activeCellKey)"))
     }

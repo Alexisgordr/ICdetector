@@ -295,4 +295,9 @@
     <string name="alarm_notification_body_format">CID %1$s · %2$s · %3$s</string>
     <string name="baseline_waiting">EN ESPERA</string>
     <string name="baseline_needs_days">NECESITA 2 DÍAS</string>
+    <!-- 3.0 (#26) — Indicador de latencia de red -->
+    <string name="latency_state_ok">● RED OK</string>
+    <string name="latency_state_anomalous">● RED ANÓMALA</string>
+    <string name="latency_state_learning">● RED APRENDIENDO</string>
+    <string name="latency_state_not_measured">● RED N/A</string>
 </resources>

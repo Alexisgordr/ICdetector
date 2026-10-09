@@ -26,6 +26,16 @@ evidence is confirmed and how some rules behave. Same separate app, *ICdetection
   penalises a change between cells of the same eNodeB in the same network (known MCC and MNC);
   without a known network the exception does not apply. A loss of signal also clears the stored
   site. **Dataset cut for H14.**
+- **Latency showed OK before measuring anything (#26).** After a cell change the network indicator
+  was set to OK while the probe could run, before the new cell had any measurement; while the
+  baseline was being learnt it stayed OK; and a measured OK had no expiry. H12 treated that OK as an
+  available measurement. The latency state now has four explicit values: not measured (`N/A`),
+  learning (`APRENDIENDO`, fewer than 5 samples for this cell), OK and anomalous. A measured result is
+  valid for 90 s; with no new measurement it returns to not measured (an isolated failed probe does not
+  make it flicker). H12 is evaluated only with OK or anomalous; while learning it is `N/A` with its own
+  explanation. The network indicator on the main screen shows the learning state (amber) and is now
+  translated (`NET` in English, `RED` in Spanish). The optional latency feature is off by default.
+  **Dataset cut for H12.**
 
 ## 3.0.0-beta2 (local beta, not released)
 
