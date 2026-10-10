@@ -31,6 +31,32 @@ class AlarmAudibilityTest {
         assertEquals(AlarmSound.SILENCED, AlarmAudibility.evaluate(true, 1))  // IMPORTANCE_MIN
     }
 
+    @Test fun `a high-importance channel whose sound is None is reported as silenced`() {
+        assertEquals(AlarmSound.SILENCED, AlarmAudibility.evaluate(true, 4, alertChannelHasSound = false))
+        assertEquals(AlarmSound.SILENCED, AlarmAudibility.evaluate(true, 3, alertChannelHasSound = false))
+        assertEquals(AlarmSound.AUDIBLE, AlarmAudibility.evaluate(true, 4, alertChannelHasSound = true))
+        // Un canal que aún no existe nacerá con sonido.
+        assertEquals(AlarmSound.AUDIBLE, AlarmAudibility.evaluate(true, null, alertChannelHasSound = false))
+    }
+
+    @Test fun `the service checks the channel sound, including null and Uri EMPTY`() {
+        val controller = source("service/ServiceNotificationController.kt")
+        assertTrue(controller.contains("alertChannelHasSound = sound != null && sound != android.net.Uri.EMPTY"))
+    }
+
+    @Test fun `the warning talks about the notification, not about the separate alert tone`() {
+        listOf("values", "values-es").forEach { dir ->
+            val strings = listOf(
+                File("src/main/res/$dir/strings.xml"), File("app/src/main/res/$dir/strings.xml")
+            ).first { it.exists() }.readText()
+            listOf("alarm_muted_body_silenced", "alarm_muted_body_blocked").forEach { key ->
+                val text = Regex("<string name=\"$key\">(.*?)</string>").find(strings)!!.groupValues[1]
+                assertTrue("$dir/$key", text.contains(if (dir == "values") "notification" else "notificación"))
+                assertTrue("$dir/$key no promete silencio total", !text.contains("ni oirás") && !text.contains("see or hear"))
+            }
+        }
+    }
+
     @Test fun `disabled notifications or a blocked channel are reported as blocked`() {
         assertEquals(AlarmSound.BLOCKED, AlarmAudibility.evaluate(false, 4))
         assertEquals(AlarmSound.BLOCKED, AlarmAudibility.evaluate(false, null))

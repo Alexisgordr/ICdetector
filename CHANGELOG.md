@@ -62,7 +62,10 @@ post-freeze review (#7) and the documentation of the campaign's validation limit
   arrived without sound with nothing to say so. The monitoring notification is now always silent,
   and the main screen shows a warning with a shortcut to the alert settings when ICdetection
   notifications are off or the *Security alerts* channel is silenced (`AlarmAudibility`). Only a
-  confirmed network anomaly makes a sound. No detection or data change.
+  confirmed network anomaly makes a sound. No detection or data change. Follow-up found in review:
+  a high-importance channel whose sound is *None* (`channel.sound` null or `Uri.EMPTY`) also counts
+  as silenced, and the warning now says it is about the notification — the separate alert tone
+  still plays unless the phone is on silent, vibrate or Do Not Disturb.
 - **A history row could carry the context of a later moment (A03).** The time, GPS position and
   service state of a row were read when the row was saved, which happens after the analysis
   publishes its result. With a slow analysis, a cell reading was stored with the time, position

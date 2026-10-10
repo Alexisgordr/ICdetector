@@ -19,7 +19,7 @@ object AlarmAudibility {
     enum class AlarmSound {
         /** Notificaciones activas y canal de alertas con sonido (o aún no creado: nace con sonido). */
         AUDIBLE,
-        /** El canal de alertas existe pero no hace sonido (silencioso o mínimo). */
+        /** El canal de alertas existe pero no hace sonido (silencioso, mínimo o sonido "Ninguno"). */
         SILENCED,
         /** Las notificaciones de la app o el canal de alertas están desactivados. */
         BLOCKED
@@ -32,12 +32,20 @@ object AlarmAudibility {
     /**
      * @param notificationsEnabled `NotificationManager.areNotificationsEnabled()`.
      * @param alertChannelImportance importancia del canal de alertas, o null si aún no existe.
+     * @param alertChannelHasSound si el canal tiene un sonido: `channel.sound` distinto de null y de
+     *   `Uri.EMPTY`. Android permite un canal de importancia alta con sonido "Ninguno"; ese canal
+     *   salta en pantalla pero no suena. Bug found during testing: antes no se miraba.
      */
-    fun evaluate(notificationsEnabled: Boolean, alertChannelImportance: Int?): AlarmSound = when {
+    fun evaluate(
+        notificationsEnabled: Boolean,
+        alertChannelImportance: Int?,
+        alertChannelHasSound: Boolean = true
+    ): AlarmSound = when {
         !notificationsEnabled -> AlarmSound.BLOCKED
         alertChannelImportance == null -> AlarmSound.AUDIBLE
         alertChannelImportance <= IMPORTANCE_NONE -> AlarmSound.BLOCKED
         alertChannelImportance < IMPORTANCE_DEFAULT -> AlarmSound.SILENCED
+        !alertChannelHasSound -> AlarmSound.SILENCED
         else -> AlarmSound.AUDIBLE
     }
 }

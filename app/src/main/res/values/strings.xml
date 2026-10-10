@@ -303,8 +303,8 @@
     <string name="latency_state_not_measured">● NET N/A</string>
     <!-- 3.0 (#35) — Alarmas silenciadas -->
     <string name="alarm_muted_title">⚠ ALARMS ARE MUTED</string>
-    <string name="alarm_muted_body_silenced">The Security alerts channel is silent, so a confirmed network anomaly will not make a sound. Turn it back on: ICdetection only makes a sound when a network anomaly is confirmed, and the monitoring notification is always silent.</string>
-    <string name="alarm_muted_body_blocked">ICdetection notifications are turned off, so you will not see or hear a confirmed network anomaly. Turn them back on: ICdetection only makes a sound when a network anomaly is confirmed, and the monitoring notification is always silent.</string>
+    <string name="alarm_muted_body_silenced">The Security alerts channel is silent, so the notification of a confirmed network anomaly will arrive without sound. Turn its sound back on: ICdetection only makes a sound when a network anomaly is confirmed, and the monitoring notification is always silent. The short alert tone is separate and still plays unless the phone is on silent, vibrate or Do Not Disturb.</string>
+    <string name="alarm_muted_body_blocked">ICdetection notifications are turned off, so a confirmed network anomaly will not appear as a notification. Turn them back on: ICdetection only makes a sound when a network anomaly is confirmed, and the monitoring notification is always silent. The short alert tone is separate and still plays unless the phone is on silent, vibrate or Do Not Disturb.</string>
     <string name="alarm_muted_action">OPEN ALERT SETTINGS</string>
     <!-- 3.0 — Modo de ubicación -->
     <string name="location_adaptive_title">Adaptive location (battery saver)</string>

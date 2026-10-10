@@ -137,9 +137,10 @@ ICdetection uses two notification channels, which you can configure separately i
 | **Security alerts** | A confirmed network anomaly, once per episode | Keep it alerting so you hear an alarm |
 
 Only a confirmed network anomaly makes a sound, so there is no need to silence the app. If
-notifications are off or *Security alerts* is silenced, the main screen shows **ALARMS ARE MUTED**
-with a button that opens the alert settings. The alert tone itself plays at notification volume and
-respects silent, vibrate and Do Not Disturb.
+notifications are off, or *Security alerts* is silenced or has its sound set to *None*, the main
+screen shows **ALARMS ARE MUTED** with a button that opens the alert settings. That warning is about
+the notification: the short alert tone is separate, plays at notification volume and respects only
+silent, vibrate and Do Not Disturb.
 
 ### External verification
 

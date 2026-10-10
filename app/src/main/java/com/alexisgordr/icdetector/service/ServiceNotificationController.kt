@@ -150,9 +150,13 @@ internal class ServiceNotificationController(
         /** 3.0 (#35) — ¿Sonaría ahora la notificación de una alarma confirmada? */
         fun alarmAudibility(context: Context): AlarmAudibility.AlarmSound {
             val manager = context.getSystemService(NotificationManager::class.java)
+            val channel = manager.getNotificationChannel(ALERT_CHANNEL_ID)
+            val sound = channel?.sound
             return AlarmAudibility.evaluate(
                 notificationsEnabled = manager.areNotificationsEnabled(),
-                alertChannelImportance = manager.getNotificationChannel(ALERT_CHANNEL_ID)?.importance
+                alertChannelImportance = channel?.importance,
+                // Sonido "Ninguno": null o Uri.EMPTY, según la versión de Android.
+                alertChannelHasSound = sound != null && sound != android.net.Uri.EMPTY
             )
         }
 
