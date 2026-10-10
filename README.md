@@ -387,7 +387,9 @@ after charging; where GPS keeps failing, precise fixes are retried less often.
 
 **Location mode.** Settings offers *Continuous* (default), *Smart* and *Adaptive*, with names and
 descriptions also available in Spanish. Continuous retains the permanent GPS stream for campaigns.
-Smart uses short acquisition windows roughly every 45 seconds. Smart and Adaptive pause after
+Smart uses short acquisition windows roughly every 45 seconds; a handover to a cell not seen in the
+last 10 minutes opens or extends a continuous GPS window until 60 seconds after that change, so GPS
+stays active during a journey, while hopping between known cells at rest does not. Smart and Adaptive pause after
 repeated acquisition failures and retry after 2, 5 and 10 minutes; cell changes and suspected
 anomalies may request an earlier bounded attempt. Cellular scanning continues independently.
 GPS positions for every cell and a particular battery saving cannot be guaranteed. Each row records

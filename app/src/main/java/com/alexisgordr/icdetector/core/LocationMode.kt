@@ -10,7 +10,8 @@ package com.alexisgordr.icdetector.core
  *  - [CONTINUOUS] (predeterminado): el comportamiento de siempre. GPS activo mientras monitoriza,
  *    con la pantalla encendida o apagada. Es el modo de la campaña.
  *  - [INTELLIGENT]: intenta un fix en una ventana acotada aproximadamente cada 45 s, también con la
- *    pantalla apagada. No mantiene una suscripción GPS permanente.
+ *    pantalla apagada. Cada handover abre o prolonga una ventana continua de 60 s; después vuelve
+ *    a los intentos puntuales. Los handovers no saltan la pausa por recepción degradada.
  *  - [ADAPTIVE] (ahorro): con recepción normal y pantalla encendida, igual que el continuo. Apagada
  *    no hay GPS continuo; se pide una ubicación al volver a usar el móvil, al cambiar de celda o al
  *    detectar una sospecha, como mucho una cada [ADAPTIVE_MIN_FIX_INTERVAL_MS], para que cambios de

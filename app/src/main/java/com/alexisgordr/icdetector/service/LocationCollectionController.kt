@@ -50,6 +50,7 @@ internal class LocationCollectionController(
     private var lastLiveFixAtMs: Long? = null
     private var forcedFixListener: LocationListener? = null
     private var forcedFixTimeout: Job? = null
+    private var handoverWindowExpiry: Job? = null
     private var lastForcedFixAtMs: Long? = null
     private var savingProbeAttempted = false
     private var lastAcceptedLocation: Location? = null
@@ -80,11 +81,13 @@ internal class LocationCollectionController(
         if (changedMode) {
             cancelPreciseFix()
             stopContinuousUpdates()
+            clearHandoverWindow()
             appliedMode = mode
         }
         if (!collectionEnabled || !gpsAvailable()) {
             stopContinuousUpdates()
             cancelPreciseFix()
+            clearHandoverWindow()
             return
         }
         val now = SystemClock.elapsedRealtime()
@@ -95,9 +98,18 @@ internal class LocationCollectionController(
             stopContinuousUpdates()
             logDegradedReception(now)
         }
-        if (powerPolicy.streamWanted(mode, screenOn)) {
+        if (powerPolicy.streamWanted(mode, screenOn, now)) {
+            if (mode == LocationMode.INTELLIGENT) cancelPreciseFix()
             startContinuousUpdates()
         } else {
+            // A completed Smart window without any new live fix counts as a failed acquisition.
+            // Mode changes, disabled GPS and critical-battery cancellation returned above.
+            if (streamActive && mode == LocationMode.INTELLIGENT && !powerPolicy.receptionDegraded &&
+                (lastLiveFixAtMs == null || lastLiveFixAtMs!! < streamStartedAtMs)
+            ) {
+                powerPolicy.onProbeFailed(now)
+                if (powerPolicy.receptionDegraded) logDegradedReception(now)
+            }
             stopContinuousUpdates()
         }
         if (powerPolicy.periodicProbeDue(mode, now) ||
@@ -148,15 +160,55 @@ internal class LocationCollectionController(
 
     fun requestPreciseFix(force: Boolean = false) = onMain { requestPreciseFixOnMain(force) }
 
+    /** Inteligente: ver [GpsPowerPolicy.onHandover] (antenas nuevas, recientes y fix fresco). */
+    fun onHandover(newCell: String, previousCell: String?) = onMain {
+        // Apply a freshly selected mode before creating its window, so mode cleanup cannot erase it.
+        updateOnMain()
+        if (!collectionEnabled || !gpsAvailable()) return@onMain
+        val action = powerPolicy.onHandover(
+            locationMode(), SystemClock.elapsedRealtime(), newCell, previousCell, lastLiveFixAtMs
+        )
+        when (action) {
+            GpsPowerPolicy.HandoverAction.NONE -> return@onMain
+            // Continuo y adaptativo, o antena reciente sin fix de los últimos 45 s: petición normal.
+            GpsPowerPolicy.HandoverAction.SHARED_GATE -> {
+                requestPreciseFixOnMain(force = false)
+                return@onMain
+            }
+            GpsPowerPolicy.HandoverAction.PROBE -> {
+                requestPreciseFixOnMain(force = false)
+                return@onMain
+            }
+            // Una antena nueva siempre despierta el GPS, también con mala recepción.
+            GpsPowerPolicy.HandoverAction.BOUNDED_PROBE -> {
+                requestPreciseFixOnMain(force = false, newCellHandover = true)
+                return@onMain
+            }
+            GpsPowerPolicy.HandoverAction.WINDOW -> Unit
+        }
+        handoverWindowExpiry?.cancel()
+        updateOnMain()
+        handoverWindowExpiry = scope.launch(Dispatchers.Main.immediate) {
+            delay(GpsPowerPolicy.HANDOVER_WINDOW_MS)
+            updateOnMain()
+        }
+    }
+
+    private fun clearHandoverWindow() {
+        handoverWindowExpiry?.cancel()
+        handoverWindowExpiry = null
+        powerPolicy.clearHandoverWindow()
+    }
+
     @SuppressLint("MissingPermission")
-    private fun requestPreciseFixOnMain(force: Boolean) {
+    private fun requestPreciseFixOnMain(force: Boolean, newCellHandover: Boolean = false) {
         if (!collectionEnabled || !gpsAvailable() || forcedFixListener != null) return
         val mode = locationMode()
         val now = SystemClock.elapsedRealtime()
         if (mode != LocationMode.CONTINUOUS) {
             // An existing GPS stream already supplies live fixes. Do not add overlapping probes.
             if (streamActive) return
-            if (!powerPolicy.tryStartProbe(mode, now)) return
+            if (!powerPolicy.probeAllowed(mode, now, newCellHandover)) return
         } else if (!force && lastForcedFixAtMs?.let {
             now - it < preciseFixBackoff.minIntervalMs()
         } == true) return
@@ -164,6 +216,9 @@ internal class LocationCollectionController(
         lastForcedFixAtMs = now
         val timeoutMs = when {
             mode == LocationMode.CONTINUOUS -> if (force) COLD_FIX_TIMEOUT_MS else WARM_FIX_TIMEOUT_MS
+            // El intento por antena nueva sin recepción dura como mucho 20 s, también si es el
+            // primero tras cambiar de modo.
+            newCellHandover -> GpsPowerPolicy.SAVING_PROBE_TIMEOUT_MS
             !savingProbeAttempted -> GpsPowerPolicy.INITIAL_PROBE_TIMEOUT_MS
             else -> GpsPowerPolicy.SAVING_PROBE_TIMEOUT_MS
         }
@@ -194,6 +249,8 @@ internal class LocationCollectionController(
             log("No se pudo registrar el fix GPS preciso: ${error.message}")
             return
         }
+        // El intento ha empezado de verdad: cuenta para el control común de todos los límites.
+        if (mode != LocationMode.CONTINUOUS) powerPolicy.onProbeStarted(now)
         forcedFixTimeout = scope.launch(Dispatchers.Main.immediate) {
             delay(timeoutMs)
             if (destroyed || forcedFixListener !== listener) return@launch
@@ -251,6 +308,7 @@ internal class LocationCollectionController(
     /** Service.onDestroy is on Main; cleanup still runs after its coroutine scope was cancelled. */
     fun destroy() {
         destroyed = true
+        clearHandoverWindow()
         stopContinuousUpdates()
         cancelPreciseFix()
     }

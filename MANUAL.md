@@ -123,13 +123,23 @@ app does not request the privileged battery-optimization exemption itself.
   - **Smart**: attempts a GPS fix roughly 45 seconds after the previous successful fix or the
     end of an unsuccessful attempt. A probe stops on success or after 20 seconds; the first
     saving-mode probe after service startup gets 45 seconds for acquisition. Requests caused by
-    cell changes, suspected anomalies or screen events share a minimum 30-second interval and
-    cannot overlap. This mode aims for frequent location coverage without a permanent GPS stream.
+    suspected anomalies or screen events share a minimum 30-second interval and cannot overlap.
+    **Handovers:** a change to a cell not seen in the last 10 minutes always wakes the GPS: it opens
+    or extends one continuous window until 60 seconds after that change, also with the screen off,
+    so the GPS stays active during a journey; a recent fix never skips that window. With poor
+    reception, a new cell gets a short 20-second attempt instead, without waiting for the 2-minute
+    limit, and only if the last attempt of any kind started at least a minute earlier: at most 20
+    seconds of searching per minute, so a run of new cells (a train in a tunnel) cannot keep the
+    GPS searching. Every attempt that actually starts counts towards one shared limit. A change back to a cell seen in the last 10 minutes (the phone hopping between
+    two cells while you are still) does not open or extend the window; it reuses a fix younger than
+    45 seconds and otherwise asks for one. This keeps the battery saving at rest. Cells are compared
+    by full identity and all times use the monotonic clock.
   - **Adaptive**: retains continuous GPS with the screen on while reception is usable. With the
     screen off, it requests fixes on relevant events, at most once a minute.
 
-  **Poor reception:** Smart and Adaptive pause repeated acquisition after three failed probes.
-  Adaptive also stops a continuous stream after three minutes without a new usable GPS fix.
+  **Poor reception:** Smart and Adaptive pause repeated acquisition after three failed probes
+  (or Smart windows without any new live fix). Either saving mode also stops a continuous stream
+  after three minutes without a new usable GPS fix; further handovers cannot extend that search.
   Periodic retries wait 2, then 5, then at most 10 minutes after failure. A cell change, screen
   event or suspected anomaly can request an earlier probe, at most once every 2 minutes during
   poor reception; events do not reset the failure count. One newly delivered usable fix restores

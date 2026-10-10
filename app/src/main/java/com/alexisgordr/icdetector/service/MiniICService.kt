@@ -1834,9 +1834,9 @@ class MiniICService : Service() {
             appendLog("[RADIO]", "Handover celular completado -> Nueva celda CID: $cid ($net)")
             // Esta celda queda pendiente de coordenadas frescas hasta que un fix las rellene.
             locationController.markCoordinatesPending()
-            // En modos con pausas, el handover puede pedir un fix acotado sin saltarse el límite
-            // compartido. El escaneo celular no depende de que esa petición consiga coordenadas.
-            requestHighAccuracyFix()
+            // Inteligente: una antena nueva abre o alarga una ventana de GPS de 60 s (con mala
+            // recepción, un intento corto); una antena reciente no encadena ventanas.
+            locationController.onHandover(servingIdentity.key, prevServingIdentity?.key)
             auditController.generate(cell)
 
             val currentTime = System.currentTimeMillis()

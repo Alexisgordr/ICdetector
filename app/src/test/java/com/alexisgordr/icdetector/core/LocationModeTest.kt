@@ -84,7 +84,7 @@ class LocationModeTest {
         assertTrue(service.contains("locationMode = { locationMode.storedValue }"))
 
         val gps = source("service/LocationCollectionController.kt")
-        assertTrue(gps.contains("powerPolicy.tryStartProbe(mode, now)"))
+        assertTrue(gps.contains("powerPolicy.probeAllowed(mode, now, newCellHandover)"))
         assertTrue(gps.contains("powerPolicy.periodicProbeDue(mode, now)"))
 
         val notifications = source("service/ServiceNotificationController.kt")

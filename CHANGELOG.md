@@ -18,15 +18,29 @@ post-freeze review (#7) and the documentation of the campaign's validation limit
 #### Location mode (found during testing: continuous GPS drains the battery)
 
 - **Smart location / Ubicación inteligente.** Adds a third mode with GPS-only
-  acquisition windows: attempts roughly every 45 seconds, stops on success or a 20-second timeout
+  acquisition windows outside handover windows: attempts roughly every 45 seconds, stops on success or a 20-second timeout
   (45 seconds for the first saving-mode attempt). Smart and Adaptive pause after repeated failed
-  probes; Adaptive also pauses a stream with no fresh usable fix for 3 minutes. Periodic retries
+  probes or empty Smart windows; both saving modes also pause a stream with no fresh usable fix for 3 minutes. Periodic retries
   wait 2, 5 and 10 minutes; event requests are limited to one per 2 minutes while reception is
   poor. Only a live fix restores the normal schedule. Listener ownership is confined to Main,
   all probes have cleanup and age checks use elapsed realtime. The selected mode is stored as
   `INTELLIGENT` using schema 21, and the CSV checker accepts it. Names, descriptions and terminal
   messages are provided in English and Spanish. This changes GPS input availability, not rule
   weights; keep field data separated by mode.
+
+- **Smart handover window (found during testing: new cells were left without a position).** In
+  Smart, a handover to a cell not seen in the last 10 minutes always wakes the GPS: it opens or
+  extends one continuous window until 60 seconds after that change, without the 30-second probe
+  limit, so GPS stays active during a journey; a recent fix never skips that window. With poor
+  reception the new cell gets an attempt of at most 20 seconds (also the first one after a mode
+  change) without the 2-minute wait, only if the last attempt of any kind started at least a minute
+  earlier; every attempt that actually starts counts towards one shared limit, so a run of new
+  cells or a mix of handovers and periodic attempts cannot keep the GPS searching. To keep the battery saving at rest, a
+  change back to a cell seen in the last 10 minutes does not open or extend the window (it reuses a
+  fix younger than 45 s and otherwise asks for one). Cells are compared by full identity; times use
+  the monotonic clock. Three empty windows, or 3 minutes
+  without a fresh stream fix, activate the poor-reception backoff. Continuous and Adaptive are
+  unchanged.
 
 - **GPS status indicator.** Every 5 seconds while the screen is visible, checks the service's validated GPS cache and provider
   availability instead of maintaining a separate wall-clock freshness check. Displays `GPS OK`

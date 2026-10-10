@@ -29,7 +29,7 @@ class PreciseFixBackoffTest {
             File("app/src/main/java/com/alexisgordr/icdetector/service/LocationCollectionController.kt")
         ).first { it.exists() }.readText()
         assertTrue(controller.contains("mode != LocationMode.CONTINUOUS"))
-        assertTrue(controller.contains("powerPolicy.tryStartProbe(mode, now)"))
+        assertTrue(controller.contains("powerPolicy.probeAllowed(mode, now, newCellHandover)"))
         assertTrue(controller.contains("} else if (!force && lastForcedFixAtMs?.let"))
         assertTrue(controller.contains("preciseFixBackoff.onTimeout()"))
         assertTrue(controller.contains("preciseFixBackoff.onSuccess()"))
