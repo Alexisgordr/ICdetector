@@ -460,7 +460,10 @@ class MiniICService : Service() {
             requestFreshCellInfo = ::requestFreshCellInfo,
             historyEpoch = historyEpoch
         )
-        val appVersion = runCatching { packageManager.getPackageInfo(packageName, 0).versionName }.getOrNull()
+        // 3.0 — `versionName+commit`: separa en los datos las filas de compilaciones distintas.
+        val appVersion = com.alexisgordr.icdetector.core.AppBuildId.current(
+            runCatching { packageManager.getPackageInfo(packageName, 0).versionName }.getOrNull()
+        )
         observationPersistence = ObservationPersistenceController(
             scope = scope,
             insert = { row -> dbHelper.logObservation(row, appVersion) },

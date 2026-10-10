@@ -676,7 +676,11 @@ LocationMode
   rule listed here neither passed nor failed.
 - `GpsAccuracyM` is the accuracy of the row's fix in metres; filter large values before analysing
   geometry.
-- `AppVersion` is the version that recorded the row; use it to apply dataset cuts per row.
+- `AppVersion` is the version that recorded the row; use it to apply dataset cuts per row. From
+  3.0 it also names the build: `versionName+commit`, for example `3.0.0-beta4+6bb5ed3`, so rows
+  from different builds of the same beta can be separated. `-dirty` means the build had
+  uncommitted changes; `nogit` means the commit could not be known (built without git and not from
+  a `git archive` ZIP). The part after `+` does not change the version.
 - `ExportDevice` and `ExportAndroid` describe the phone that made the export (manufacturer, model,
   Android version), with no personal or hardware identifier.
 - `LocationMode` is `CONTINUOUS`, `INTELLIGENT` or `ADAPTIVE`: the location mode the row was observed with.

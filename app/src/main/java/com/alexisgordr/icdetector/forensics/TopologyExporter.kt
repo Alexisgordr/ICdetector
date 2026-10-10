@@ -15,7 +15,7 @@ object TopologyExporter {
         val packageInfo = context.packageManager.getPackageInfo(context.packageName, 0)
         val files = buildFiles(
             transitions = transitions,
-            appVersion = packageInfo.versionName ?: "unknown",
+            appVersion = com.alexisgordr.icdetector.core.AppBuildId.current(packageInfo.versionName) ?: "unknown",
             appVersionCode = packageInfo.longVersionCode,
             generatedAt = Instant.now()
         )

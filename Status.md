@@ -44,7 +44,9 @@ indicator uses the same validated position as the analysis.
 ## Dataset cuts in 3.0
 
 3.0 data is not comparable with the v2.10.x campaign for the rules below. Within 3.0, each row
-records the app version that observed it (`AppVersion`), so cuts can be applied per row.
+records the app version that observed it (`AppVersion`), so cuts can be applied per row. From 3.0
+`AppVersion` also carries the build commit (`3.0.0-beta4+6bb5ed3`), so builds of the same beta can
+be told apart.
 
 | Area | Issues | What changed |
 |---|---|---|

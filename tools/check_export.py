@@ -290,8 +290,9 @@ def gps_accuracy_issues(rows):
 
 
 def version_key(version):
-    """'3.0.0-beta1' -> (3, 0, 0). Una pre-versión cuenta como su versión base."""
-    base = (version or "").strip().split("-")[0]
+    """'3.0.0-beta1' -> (3, 0, 0). Una pre-versión cuenta como su versión base, y lo que va tras
+    '+' (el commit de la compilación, 3.0) no cuenta: '3.0.0+6bb5ed3' -> (3, 0, 0)."""
+    base = (version or "").strip().split("+")[0].split("-")[0]
     parts = []
     for p in base.split("."):
         if not p.isdigit():

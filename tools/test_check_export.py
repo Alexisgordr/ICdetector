@@ -165,6 +165,10 @@ class DatasetCutTest(unittest.TestCase):
     def test_pre_release_counts_as_its_base_version(self):
         self.assertEqual((3, 0, 0), version_key("3.0.0-beta1"))
         self.assertEqual((2, 10, 10), version_key("2.10.10"))
+        # 3.0 — El commit de la compilación tras "+" no cambia la versión.
+        self.assertEqual((3, 0, 0), version_key("3.0.0-beta4+6bb5ed3"))
+        self.assertEqual((3, 0, 0), version_key("3.0.0+6bb5ed3-dirty"))
+        self.assertEqual((3, 0, 0), version_key("3.0.0+nogit"))
         self.assertIsNone(version_key(""))
         self.assertIsNone(version_key("unknown"))
 

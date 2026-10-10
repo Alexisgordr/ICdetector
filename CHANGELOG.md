@@ -141,6 +141,14 @@ post-freeze review (#7) and the documentation of the campaign's validation limit
   through the identity index (now checked with `EXPLAIN QUERY PLAN` in `tools/check_sql_affinity.py`);
   the only extra cost is sorting those rows. No limit was added on purpose: it would change which
   history H15 sees. The trust-contradiction eviction (B5) and this review close the open items of #7.
+- **The build commit in `AppVersion` (found during testing: builds of one beta could not be told
+  apart).** Every build of a beta shares `versionName` and version code, so rows recorded before and
+  after a change looked identical. `AppVersion` (history rows, CSV and the forensic, topology and
+  geometry exports) is now `versionName+commit`, e.g. `3.0.0-beta4+6bb5ed3`; `-dirty` marks
+  uncommitted changes and `nogit` an unknown commit. Gradle reads the commit with `git describe`,
+  or from `BUILD_COMMIT`, which `git archive` fills in for ZIPs. The version itself, the version
+  code and the schema do not change; `tools/check_export.py` ignores the part after `+` when it
+  compares versions.
 - **Gradle configuration cache enabled.** Gradle suggested it after every build; repeated builds now
   start faster. Problems are reported as warnings, so an incompatible plugin cannot break the build.
   No change to the app or the APK.

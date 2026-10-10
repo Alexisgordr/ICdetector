@@ -21,6 +21,27 @@ plugins {
     id("org.jetbrains.kotlin.plugin.compose")
 }
 
+// 3.0 — Commit de esta compilación, para AppVersion (`versionName+commit`, ver core/AppBuildId.kt).
+// Desde el repositorio: `git describe` (commit corto, `-dirty` con cambios sin commitear). Desde un
+// ZIP de `git archive`: el fichero BUILD_COMMIT, que git rellena (export-subst). Si no: "nogit".
+// Con proveedores de Gradle, compatible con la caché de configuración.
+val buildCommit: String = run {
+    val commit = Regex("[0-9a-f]{7,40}(-dirty)?")
+    val fromGit = runCatching {
+        providers.exec {
+            commandLine("git", "describe", "--always", "--dirty", "--abbrev=7", "--exclude=*")
+            isIgnoreExitValue = true
+        }.standardOutput.asText.get().trim()
+    }.getOrDefault("")
+    val fromArchive = providers.fileContents(rootProject.layout.projectDirectory.file("BUILD_COMMIT"))
+        .asText.orNull?.trim().orEmpty()
+    when {
+        commit.matches(fromGit) -> fromGit
+        commit.matches(fromArchive) -> fromArchive
+        else -> "nogit"
+    }
+}
+
 android {
     namespace = "com.alexisgordr.icdetector"
 
@@ -37,6 +58,7 @@ android {
         targetSdk = 37
 
         versionCode = 39
+        buildConfigField("String", "BUILD_COMMIT", "\"$buildCommit\"")
         versionName = "3.0.0-beta4"
 
         // 3.0 — Las betas usan el mismo identificador y nombre que la versión final, para poder
@@ -67,6 +89,7 @@ android {
     }
     buildFeatures {
         compose = true
+        buildConfig = true
     }
 
     lint {
