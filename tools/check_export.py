@@ -46,9 +46,9 @@ EXPECTED_COLUMNS_V2104 = EXPECTED_COLUMNS_V21 + RADIO_CONTEXT_COLUMNS_V2104
 EXPECTED_COLUMNS_V30 = EXPECTED_COLUMNS_V2104 + [
     "ObservedAtUtc", "NotEvaluatedHeuristics", "GpsAccuracyM", "AppVersion", "ExportDevice", "ExportAndroid",
 ]
-# 3.0 (esquema 21) — Modo de ubicación de cada fila: CONTINUOUS o ADAPTIVE. Vacío = desconocido.
+# 3.0 (esquema 21) — Modo de ubicación: CONTINUOUS, INTELLIGENT o ADAPTIVE. Vacío = desconocido.
 EXPECTED_COLUMNS_V30_LOCATION = EXPECTED_COLUMNS_V30 + ["LocationMode"]
-LOCATION_MODES = ("CONTINUOUS", "ADAPTIVE")
+LOCATION_MODES = ("CONTINUOUS", "INTELLIGENT", "ADAPTIVE")
 # Cortes de dataset: a partir de esta versión cambió cómo se evalúa la regla indicada.
 DATASET_CUTS = [
     ("2.10.9", "H10 (Ping-Pong)"),
@@ -656,12 +656,13 @@ def main(path):
             print(f"  {mode}: {modes.get(mode, 0)} filas")
         if unknown:
             print(f"  desconocido (anterior al esquema 21): {unknown} filas")
-        check("LocationMode es CONTINUOUS, ADAPTIVE o vacío", invalid == 0,
+        check("LocationMode es CONTINUOUS, INTELLIGENT, ADAPTIVE o vacío", invalid == 0,
               f"{invalid} filas con otro valor" if invalid else "")
-        if modes.get("ADAPTIVE"):
+        if modes.get("ADAPTIVE") or modes.get("INTELLIGENT"):
             notes.append(
-                f"{modes['ADAPTIVE']} filas en modo adaptativo: con la pantalla apagada la posición "
-                "solo se pide en momentos concretos, así que H11, H13 y H16 están en N/A más a menudo. "
+                f"{modes['ADAPTIVE'] + modes['INTELLIGENT']} filas en modos con pausas GPS: "
+                "la posición se pide en ventanas acotadas o momentos concretos, así que H11, H13 "
+                "y H16 pueden estar en N/A más a menudo. "
                 "Compara la cobertura de esas reglas por modo antes de juntar los datos."
             )
 

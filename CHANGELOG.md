@@ -17,27 +17,33 @@ post-freeze review (#7) and the documentation of the campaign's validation limit
 
 #### Location mode (found during testing: continuous GPS drains the battery)
 
-- **New setting: Adaptive location (battery saver).** Settings → *Adaptive location*. **Off**
-  (default) keeps the continuous GPS of every earlier version: the stream stays active with the
-  screen off, which uses more battery and gives the most complete location data — the mode for
-  field campaigns. **On** (adaptive) uses less battery: with the screen off there is no continuous
-  GPS, and a fix is requested only when the phone is used again, the serving cell changes or a
-  suspicion is detected, **at most once a minute** (`LocationPolicy.OnDemandGate`), so repeated
-  cell changes or a persistent suspicion cannot keep the GPS on. A location older than 2 minutes
-  is never used, so between fixes the location-based rules (H11, H13, H16) are `N/A` instead of
-  using a stale position.
+- **Smart location / Ubicación inteligente.** Adds a third mode with GPS-only
+  acquisition windows: attempts roughly every 45 seconds, stops on success or a 20-second timeout
+  (45 seconds for the first saving-mode attempt). Smart and Adaptive pause after repeated failed
+  probes; Adaptive also pauses a stream with no fresh usable fix for 3 minutes. Periodic retries
+  wait 2, 5 and 10 minutes; event requests are limited to one per 2 minutes while reception is
+  poor. Only a live fix restores the normal schedule. Listener ownership is confined to Main,
+  all probes have cleanup and age checks use elapsed realtime. The selected mode is stored as
+  `INTELLIGENT` using schema 21, and the CSV checker accepts it. Names, descriptions and terminal
+  messages are provided in English and Spanish. This changes GPS input availability, not rule
+  weights; keep field data separated by mode.
+
+- **Settings → Location mode.** Continuous remains the default. Adaptive uses a stream with the
+  screen on while reception is usable, and bounded event requests with the screen off. All saving
+  requests share `GpsPowerPolicy`, including suspicious episodes and periodic retries. Positions
+  older than 2 minutes are unavailable; location-dependent rules can be `N/A` between fixes.
 - **Schema 21: the mode of every row.** An additive migration adds `location_mode` to the history;
-  each row stores `CONTINUOUS` or `ADAPTIVE`, captured when the reading arrived. Rows from before
+  each row stores `CONTINUOUS`, `INTELLIGENT` or `ADAPTIVE`, captured when the reading arrived. Rows from before
   schema 21 keep it empty (unknown). The history CSV ends with a new `LocationMode` column, and
-  `tools/check_export.py` counts rows per mode and warns when adaptive rows are mixed in.
+  `tools/check_export.py` counts rows per mode and warns when rows with GPS pauses are mixed in.
 - The persistent notification title and a terminal line say which mode is active.
 - **Bug found during testing — adaptive mode after a restart with the screen off.** The service
   assumed the screen was on until the first screen event, so if Android restarted it with the
   screen off, adaptive mode kept the continuous GPS on until the next screen-off. The real state is
   now read from `PowerManager.isInteractive` before the mode is applied.
-- **Dataset:** with the default (continuous) nothing changes. Rows recorded in adaptive mode have
-  fewer positions with the screen off; compare H11, H13 and H16 coverage per mode before joining
-  data. No rule, weight or threshold changes.
+- **Dataset:** Continuous keeps its permanent GPS subscription; fix freshness now uses elapsed
+  realtime in every mode. Smart and Adaptive may supply fewer positions; compare H11, H13 and H16
+  coverage per mode and app version before joining data. No rule, weight or threshold changes.
 
 #### Installation
 

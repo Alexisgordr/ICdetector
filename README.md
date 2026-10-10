@@ -385,10 +385,13 @@ For long collection sessions the app keeps a GPS-only stream and a partial wake 
 monitoring, which increases battery use. At 5% battery or less while unplugged, both pause and resume
 after charging; where GPS keeps failing, precise fixes are retried less often.
 
-**Location mode.** *Continuous* (default) keeps that GPS stream with the screen off: more battery,
-most complete location data, the mode for campaigns. *Adaptive* (Settings → Adaptive location) uses
-less battery: with the screen off, a fix is requested only when the phone is used again, the cell
-changes or a suspicion appears, at most once a minute. Each row records its mode.
+**Location mode.** Settings offers *Continuous* (default), *Smart* and *Adaptive*, with names and
+descriptions also available in Spanish. Continuous retains the permanent GPS stream for campaigns.
+Smart uses short acquisition windows roughly every 45 seconds. Smart and Adaptive pause after
+repeated acquisition failures and retry after 2, 5 and 10 minutes; cell changes and suspected
+anomalies may request an earlier bounded attempt. Cellular scanning continues independently.
+GPS positions for every cell and a particular battery saving cannot be guaranteed. Each row records
+its selected mode; see the [manual](MANUAL.md) for timing and coverage.
 
 ---
 

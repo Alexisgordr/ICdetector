@@ -9,17 +9,22 @@ package com.alexisgordr.icdetector.core
  *
  *  - [CONTINUOUS] (predeterminado): el comportamiento de siempre. GPS activo mientras monitoriza,
  *    con la pantalla encendida o apagada. Es el modo de la campaña.
- *  - [ADAPTIVE] (ahorro): con la pantalla encendida, igual que el continuo. Con la pantalla apagada
+ *  - [INTELLIGENT]: intenta un fix en una ventana acotada aproximadamente cada 45 s, también con la
+ *    pantalla apagada. No mantiene una suscripción GPS permanente.
+ *  - [ADAPTIVE] (ahorro): con recepción normal y pantalla encendida, igual que el continuo. Apagada
  *    no hay GPS continuo; se pide una ubicación al volver a usar el móvil, al cambiar de celda o al
  *    detectar una sospecha, como mucho una cada [ADAPTIVE_MIN_FIX_INTERVAL_MS], para que cambios de
  *    celda repetidos o una sospecha persistente no acaben pidiendo GPS sin parar.
  *
+ * INTELLIGENT y ADAPTIVE espacian los reintentos a 2, 5 y 10 minutos si no consiguen fixes. Esto es
+ * evidencia de falta de recepción, no un detector fiable de interiores. Ver [GpsPowerPolicy].
  * Una ubicación de más de 2 minutos nunca se usa (ver LocationCollectionController): en modo
  * adaptativo, entre peticiones, las reglas que necesitan posición quedan en N/A en vez de usar una
  * posición vieja. Cada fila del historial guarda el modo con el que se observó.
  */
 enum class LocationMode(val storedValue: String) {
     CONTINUOUS("CONTINUOUS"),
+    INTELLIGENT("INTELLIGENT"),
     ADAPTIVE("ADAPTIVE");
 
     companion object {
@@ -37,26 +42,7 @@ enum class LocationMode(val storedValue: String) {
 
 /** 3.0 — Decisiones del modo de ubicación, sin Android, para poder probarlas. */
 object LocationPolicy {
-
-    /** ¿Debe estar activo el GPS continuo? En adaptativo, solo con la pantalla encendida. */
+    /** GPS permanente: continuo siempre; adaptativo con pantalla encendida; inteligente nunca. */
     fun streamWanted(mode: LocationMode, screenOn: Boolean): Boolean =
-        mode == LocationMode.CONTINUOUS || screenOn
-
-    /**
-     * ¿Se acepta ahora una petición de ubicación bajo demanda? En continuo no cambia nada (se
-     * aplican las esperas de siempre). En adaptativo, como mucho una cada
-     * [LocationMode.ADAPTIVE_MIN_FIX_INTERVAL_MS], también las forzadas por una sospecha.
-     */
-    class OnDemandGate(private val minIntervalMs: Long = LocationMode.ADAPTIVE_MIN_FIX_INTERVAL_MS) {
-        private var lastGrantedAtMs: Long? = null
-
-        @Synchronized
-        fun tryAcquire(mode: LocationMode, nowElapsedMs: Long): Boolean {
-            if (mode == LocationMode.CONTINUOUS) return true
-            val last = lastGrantedAtMs
-            if (last != null && nowElapsedMs - last < minIntervalMs) return false
-            lastGrantedAtMs = nowElapsedMs
-            return true
-        }
-    }
+        mode == LocationMode.CONTINUOUS || (mode == LocationMode.ADAPTIVE && screenOn)
 }

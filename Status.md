@@ -36,7 +36,8 @@ creates missing tables; time, GPS and service state captured when the reading ar
 of more than 2 minutes without readings breaks continuity like a signal loss (#20); one constant for
 that gap, kept distinct from the 30 s stalled-modem gate and guarded by a test; the monitoring
 notification is always silent and the app warns when alarms are muted (#35); a location mode setting
-(continuous by default, adaptive to save battery) with the mode stored per row (schema 21).
+(continuous by default; smart and adaptive with bounded GPS attempts and retries of 2, 5 and 10
+minutes when reception is poor) with the mode stored per row (schema 21).
 
 ## Dataset cuts in 3.0
 
@@ -47,7 +48,7 @@ records the app version that observed it (`AppVersion`), so cuts can be applied 
 |---|---|---|
 | Ages and ordering | #23 | Exact UTC instant from 3.0; approximate before |
 | Context columns | A03 | Time, position and service state of the moment the reading arrived |
-| Location mode | — | Adaptive rows have fewer positions with the screen off (`LocationMode`); continuous is unchanged |
+| Location mode | — | Smart and adaptive rows can have fewer fresh positions (`LocationMode`); in every mode, fix age is measured with the monotonic clock and stream fixes pass the same accuracy and continuity checks |
 | Confirmation (all alarms) | #20 | Restarts after a signal loss or a gap of more than 2 min |
 | H1 | #20 #28 | Isolation streak restarts after a gap; `N/A` while pending |
 | H5 | #11 | LTE neighbour placeholders read as unavailable |

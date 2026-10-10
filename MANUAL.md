@@ -110,18 +110,36 @@ app does not request the privileged battery-optimization exemption itself.
   requests a bounded high-accuracy fix. A fix is applied only to the newest coordinate-less record
   of the same complete cell identity, and only if that record is from the last 2 minutes. Otherwise
   the coordinates stay empty; the app never invents, reuses or retroactively assigns a stale position.
-- **Where GPS does not reach:** if precise fixes keep failing, the app waits longer between normal
-  attempts (from 30 seconds up to 10 minutes). A suspicious episode still requests a fix
-  immediately.
-- **Location mode:** **Settings → Adaptive location (battery saver)**.
-  - *Off* (default, **continuous**): uses more battery. The GPS stays active with the screen off,
-    so every observation has the most complete position data. Use it for field campaigns.
-  - *On* (**adaptive**): uses less battery. With the screen on it behaves like continuous. With the
-    screen off there is no continuous GPS: a fix is requested when you use the phone again, the
-    serving cell changes or a suspicion is detected, at most once a minute. A position older than
-    2 minutes is never used, so H11, H13 and H16 are `N/A` more often.
+- **Location mode:** **Settings → Location mode**. Names and descriptions follow the app language:
+  *Continuo / Continuous*, *Inteligente / Smart*, *Adaptativo / Adaptive*.
+  - **Continuous** (default): the existing GPS stream remains active with the screen on or off.
+    Use it for field campaigns where location continuity matters. Failed normal precise-fix
+    requests retain their existing backoff; forced requests retain their existing behavior.
+  - **Smart**: attempts a GPS fix roughly 45 seconds after the previous successful fix or the
+    end of an unsuccessful attempt. A probe stops on success or after 20 seconds; the first
+    saving-mode probe after service startup gets 45 seconds for acquisition. Requests caused by
+    cell changes, suspected anomalies or screen events share a minimum 30-second interval and
+    cannot overlap. This mode aims for frequent location coverage without a permanent GPS stream.
+  - **Adaptive**: retains continuous GPS with the screen on while reception is usable. With the
+    screen off, it requests fixes on relevant events, at most once a minute.
 
-  Each history row records the mode it was observed with (`LocationMode` in the CSV), and the
+  **Poor reception:** Smart and Adaptive pause repeated acquisition after three failed probes.
+  Adaptive also stops a continuous stream after three minutes without a new usable GPS fix.
+  Periodic retries wait 2, then 5, then at most 10 minutes after failure. A cell change, screen
+  event or suspected anomaly can request an earlier probe, at most once every 2 minutes during
+  poor reception; events do not reset the failure count. One newly delivered usable fix restores
+  the normal policy. GPS reception loss suggests an obstruction, not necessarily a building:
+  tunnels, garages and other conditions can behave similarly. Repeated cached positions cannot
+  clear the poor-reception state. No Wi-Fi/cellular position provider is added.
+
+  Cellular scanning continues while GPS acquisition pauses. Fresh coordinates for every cell
+  cannot be guaranteed, especially in fast travel or indoors. Fix age is checked using elapsed
+  realtime, so changing the clock does not make an old position fresh. The existing 2-minute age
+  limit remains. Location-dependent rules can be `N/A`; battery savings require measurement on
+  the device. Switching to a saving mode changes the availability of detector inputs.
+
+  Each history row records the selected mode it was observed with (`CONTINUOUS`, `INTELLIGENT` or
+  `ADAPTIVE` in the CSV), and the
   monitoring notification title shows the active mode.
 - **After a phone restart,** collection resumes when you open the app again. The gap is reported as
   an interrupted-collection notice, never silently hidden.
@@ -646,7 +664,7 @@ LocationMode
 - `AppVersion` is the version that recorded the row; use it to apply dataset cuts per row.
 - `ExportDevice` and `ExportAndroid` describe the phone that made the export (manufacturer, model,
   Android version), with no personal or hardware identifier.
-- `LocationMode` is `CONTINUOUS` or `ADAPTIVE`: the location mode the row was observed with.
+- `LocationMode` is `CONTINUOUS`, `INTELLIGENT` or `ADAPTIVE`: the location mode the row was observed with.
   Compare position-based rules per mode before joining data.
 
 Columns that did not exist when a row was recorded are empty — unknown, never an assumed value.

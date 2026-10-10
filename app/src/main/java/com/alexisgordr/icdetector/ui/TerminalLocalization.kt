@@ -311,6 +311,11 @@ private val replacements = linkedMapOf(
     // 3.0 — Modo de ubicación
     "Modo de ubicación adaptativo: GPS continuo solo con la pantalla encendida." to "Adaptive location mode: continuous GPS only while the screen is on.",
     "Modo de ubicación continuo: GPS activo también con la pantalla apagada." to "Continuous location mode: GPS stays active with the screen off.",
+    "Modo de ubicación inteligente: intentos GPS breves cada 45 s cuando hay recepción." to "Smart location mode: short GPS attempts every 45 s when reception is available.",
+    "Recepción GPS recuperada: reanudando el modo de ubicación." to "GPS reception recovered: resuming the location mode.",
+    "Recepción GPS degradada: próximo intento periódico en " to "Poor GPS reception: next periodic attempt in ",
+    "El escaneo celular continúa." to "Cellular scanning continues.",
+    "No se pudo registrar el GPS continuo: " to "Could not register continuous GPS: ",
     "Batería crítica (<" to "Critical battery (<",
     "%): ubicación continua en pausa hasta conectar el cargador." to "%): continuous location paused until the charger is connected.",
     "Alimentación recuperada: ubicación continua y recolección 24/7 reanudadas." to "Power restored: continuous location and 24/7 collection resumed.",

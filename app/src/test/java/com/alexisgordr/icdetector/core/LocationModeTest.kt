@@ -6,7 +6,7 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.io.File
 
-/** 3.0 — Modo de ubicación: continuo (predeterminado) o adaptativo (ahorro). */
+/** 3.0 — Modos de ubicación: continuo (predeterminado), inteligente y adaptativo. */
 class LocationModeTest {
 
     @Test fun `continuous is the default, also for unknown stored values`() {
@@ -15,6 +15,7 @@ class LocationModeTest {
         assertEquals(LocationMode.CONTINUOUS, LocationMode.fromStored("SOMETHING_ELSE"))
         assertEquals(LocationMode.CONTINUOUS, LocationMode.fromStored("CONTINUOUS"))
         assertEquals(LocationMode.ADAPTIVE, LocationMode.fromStored("ADAPTIVE"))
+        assertEquals(LocationMode.INTELLIGENT, LocationMode.fromStored("INTELLIGENT"))
     }
 
     @Test fun `continuous keeps the GPS stream on with the screen on or off`() {
@@ -27,18 +28,23 @@ class LocationModeTest {
         assertFalse(LocationPolicy.streamWanted(LocationMode.ADAPTIVE, screenOn = false))
     }
 
+    @Test fun `smart uses bounded probes rather than a permanent GPS stream`() {
+        assertFalse(LocationPolicy.streamWanted(LocationMode.INTELLIGENT, screenOn = true))
+        assertFalse(LocationPolicy.streamWanted(LocationMode.INTELLIGENT, screenOn = false))
+    }
+
     @Test fun `continuous never limits on-demand fixes beyond the existing waits`() {
-        val gate = LocationPolicy.OnDemandGate()
-        repeat(5) { assertTrue(gate.tryAcquire(LocationMode.CONTINUOUS, 1_000L + it)) }
+        val gate = GpsPowerPolicy()
+        repeat(5) { assertTrue(gate.tryStartProbe(LocationMode.CONTINUOUS, 1_000L + it)) }
     }
 
     @Test fun `adaptive grants at most one on-demand fix per minimum interval`() {
-        val gate = LocationPolicy.OnDemandGate()
-        assertTrue(gate.tryAcquire(LocationMode.ADAPTIVE, 0L))
+        val gate = GpsPowerPolicy()
+        assertTrue(gate.tryStartProbe(LocationMode.ADAPTIVE, 0L))
         // Cambios de celda repetidos o una sospecha persistente: no piden GPS sin parar.
-        assertFalse(gate.tryAcquire(LocationMode.ADAPTIVE, 5_000L))
-        assertFalse(gate.tryAcquire(LocationMode.ADAPTIVE, LocationMode.ADAPTIVE_MIN_FIX_INTERVAL_MS - 1))
-        assertTrue(gate.tryAcquire(LocationMode.ADAPTIVE, LocationMode.ADAPTIVE_MIN_FIX_INTERVAL_MS))
+        assertFalse(gate.tryStartProbe(LocationMode.ADAPTIVE, 5_000L))
+        assertFalse(gate.tryStartProbe(LocationMode.ADAPTIVE, LocationMode.ADAPTIVE_MIN_FIX_INTERVAL_MS - 1))
+        assertTrue(gate.tryStartProbe(LocationMode.ADAPTIVE, LocationMode.ADAPTIVE_MIN_FIX_INTERVAL_MS))
     }
 
     @Test fun `the minimum interval is a minute`() {
@@ -67,21 +73,23 @@ class LocationModeTest {
 
     @Test fun `the setting, the service, the GPS controller and the export are wired together`() {
         val settings = source("ui/SettingsScreen.kt")
-        assertTrue(settings.contains("putString(com.alexisgordr.icdetector.core.LocationMode.PREF_KEY, selectedMode.storedValue)"))
+        assertTrue(settings.contains("putString(LocationMode.PREF_KEY, selectedMode.storedValue)"))
         assertTrue(settings.contains("service?.locationMode = selectedMode"))
-        assertTrue(settings.contains("if (adaptiveLocation) R.string.location_adaptive_on else R.string.location_adaptive_off"))
+        assertTrue(settings.contains("LocationMode.INTELLIGENT -> R.string.location_intelligent_description"))
 
         val service = source("service/MiniICService.kt")
         // El GPS continuo se enciende o apaga siempre según la política, nunca a mano.
         assertFalse(service.contains("locationController.startContinuousUpdates()\n                        if (collectionPausedForCriticalBattery)"))
-        assertTrue(service.contains("LocationPolicy.streamWanted(mode, isScreenOn)"))
+        assertTrue(service.contains("locationController.updateCollection(isScreenOn, enabled = !collectionPausedForCriticalBattery)"))
         assertTrue(service.contains("locationMode = { locationMode.storedValue }"))
 
         val gps = source("service/LocationCollectionController.kt")
-        assertTrue(gps.contains("onDemandGate.tryAcquire(locationMode(), android.os.SystemClock.elapsedRealtime())"))
+        assertTrue(gps.contains("powerPolicy.tryStartProbe(mode, now)"))
+        assertTrue(gps.contains("powerPolicy.periodicProbeDue(mode, now)"))
 
         val notifications = source("service/ServiceNotificationController.kt")
         assertTrue(notifications.contains("R.string.notif_monitoring_title_adaptive"))
+        assertTrue(notifications.contains("R.string.notif_monitoring_title_intelligent"))
 
         val persistence = source("service/ObservationPersistenceController.kt")
         assertTrue(persistence.contains("locationMode = row.context.locationMode"))

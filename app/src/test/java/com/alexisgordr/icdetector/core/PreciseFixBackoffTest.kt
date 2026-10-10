@@ -23,12 +23,14 @@ class PreciseFixBackoffTest {
         assertEquals(0, backoff.consecutiveFailures)
     }
 
-    @Test fun `forced requests never wait and the controller records failures and successes`() {
+    @Test fun `continuous forced requests bypass legacy waits while saving modes share a gate`() {
         val controller = listOf(
             File("src/main/java/com/alexisgordr/icdetector/service/LocationCollectionController.kt"),
             File("app/src/main/java/com/alexisgordr/icdetector/service/LocationCollectionController.kt")
         ).first { it.exists() }.readText()
-        assertTrue(controller.contains("if (!force && now - lastForcedFixTime < preciseFixBackoff.minIntervalMs()) return"))
+        assertTrue(controller.contains("mode != LocationMode.CONTINUOUS"))
+        assertTrue(controller.contains("powerPolicy.tryStartProbe(mode, now)"))
+        assertTrue(controller.contains("} else if (!force && lastForcedFixAtMs?.let"))
         assertTrue(controller.contains("preciseFixBackoff.onTimeout()"))
         assertTrue(controller.contains("preciseFixBackoff.onSuccess()"))
     }

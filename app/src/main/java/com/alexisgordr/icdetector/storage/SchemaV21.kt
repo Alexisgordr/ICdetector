@@ -2,7 +2,7 @@ package com.alexisgordr.icdetector.storage
 
 /**
  * 3.0 — Migración a esquema 21. Aditiva y no destructiva: una columna con el modo de ubicación con
- * el que se observó cada fila (`CONTINUOUS` o `ADAPTIVE`, ver
+ * el que se observó cada fila (`CONTINUOUS`, `INTELLIGENT` o `ADAPTIVE`, ver
  * [com.alexisgordr.icdetector.core.LocationMode]).
  *
  * Las filas existentes quedan con NULL, que significa "desconocido". Las de 2.10.x y de las

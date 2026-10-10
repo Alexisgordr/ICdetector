@@ -204,11 +204,13 @@ class LteBandTableTest(unittest.TestCase):
     def test_location_modes_are_counted_and_unknown_kept_apart(self):
         rows = [
             {"LocationMode": "CONTINUOUS"}, {"LocationMode": "ADAPTIVE"},
-            {"LocationMode": "ADAPTIVE"}, {"LocationMode": ""}, {}, {"LocationMode": "GPS"},
+            {"LocationMode": "ADAPTIVE"}, {"LocationMode": "INTELLIGENT"},
+            {"LocationMode": ""}, {}, {"LocationMode": "GPS"},
         ]
         modes, unknown, invalid = location_mode_summary(rows)
         self.assertEqual(1, modes["CONTINUOUS"])
         self.assertEqual(2, modes["ADAPTIVE"])
+        self.assertEqual(1, modes["INTELLIGENT"])
         self.assertEqual((2, 1), (unknown, invalid))
 
 if __name__ == "__main__":

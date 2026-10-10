@@ -112,7 +112,7 @@ data class HistoryRecord(
      * (H10 desde 2.10.9, H8 desde 2.10.10, …) fila a fila. Null en filas anteriores a 3.0.
      */
     val appVersion: String? = null,
-    /** 3.0 — Modo de ubicación de la fila (`CONTINUOUS` / `ADAPTIVE`); null = desconocido. */
+    /** 3.0 — Modo de ubicación (`CONTINUOUS` / `INTELLIGENT` / `ADAPTIVE`); null = desconocido. */
     val locationMode: String? = null
 )
 

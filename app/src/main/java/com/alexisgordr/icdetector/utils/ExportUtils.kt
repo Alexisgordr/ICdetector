@@ -25,7 +25,7 @@ object ExportUtils {
         // fichero, el teléfono y la versión de Android que hicieron el export. Sirven para separar
         // ficheros de varias personas al unirlos. Ningún identificador personal ni del aparato.
         "AppVersion,ExportDevice,ExportAndroid," +
-        // 3.0 (esquema 21) — Modo de ubicación de la fila: CONTINUOUS o ADAPTIVE. Al final, para no
+        // 3.0 (esquema 21) — Modo: CONTINUOUS, INTELLIGENT o ADAPTIVE. Al final, para no
         // mover ninguna columna anterior. Vacío en filas anteriores al esquema 21: desconocido.
         "LocationMode"
 

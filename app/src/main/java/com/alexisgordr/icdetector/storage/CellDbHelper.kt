@@ -1524,7 +1524,7 @@ class CellDbHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME, 
         gpsAccuracyM: Float? = null,
         /** 3.0 (#30) — Versión de la app que hizo la observación. */
         appVersion: String? = null,
-        /** 3.0 — Modo de ubicación con el que se observó (`CONTINUOUS` / `ADAPTIVE`). */
+        /** 3.0 — Modo de ubicación con el que se observó (`CONTINUOUS` / `INTELLIGENT` / `ADAPTIVE`). */
         locationMode: String? = null
     ): Long {
         val db = this.writableDatabase

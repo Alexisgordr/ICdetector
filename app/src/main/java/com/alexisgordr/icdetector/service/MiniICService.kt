@@ -187,7 +187,7 @@ class MiniICService : Service() {
     /** Estado real de la pantalla; se lee de PowerManager al registrar el receptor (ver allí). */
     @Volatile private var isScreenOn = true
     @Volatile private var isUiVisible = false
-    private var collectionPausedForCriticalBattery = false
+    @Volatile private var collectionPausedForCriticalBattery = false
     private var isServiceRunning = false
     
     // v2.10.9 — Android no expone a una app normal el estado de cifrado del módem: no hay fuente
@@ -467,8 +467,8 @@ class MiniICService : Service() {
             location = { getCurrentLocation()?.toObservedFix() },
             serviceState = { _serviceState.value },
             onWrite = ::noteWriteResult,
-            onPeriodicMissingLocation = { timestamp ->
-                locationController.markCoordinatesPending(timestamp)
+            onPeriodicMissingLocation = { _ ->
+                locationController.markCoordinatesPending()
                 requestHighAccuracyFix()
             },
             writeDispatcher = historyWriteDispatcher,
@@ -576,6 +576,7 @@ class MiniICService : Service() {
 
         collectionPausedForCriticalBattery = isBatteryCritical()
         if (collectionPausedForCriticalBattery) {
+            locationController.updateCollection(isScreenOn, enabled = false)
             appendLog("[SYS]", "⚠ Batería crítica (<${CollectionPowerController.CRITICAL_PERCENT} %): ubicación continua en pausa hasta conectar el cargador.")
         } else {
             ensureCollectionWakeLock()
@@ -595,7 +596,7 @@ class MiniICService : Service() {
                 try {
                     val batteryCritical = isBatteryCritical()
                     if (batteryCritical) {
-                        locationController.stopContinuousUpdates()
+                        locationController.updateCollection(isScreenOn, enabled = false)
                         releaseCollectionWakeLock()
                         if (!collectionPausedForCriticalBattery) {
                             collectionPausedForCriticalBattery = true
@@ -604,12 +605,12 @@ class MiniICService : Service() {
                         }
                     } else {
                         ensureCollectionWakeLock()
-                        // 3.0 — Continuo: GPS siempre. Adaptativo: solo con la pantalla encendida.
-                        applyLocationMode()
                         if (collectionPausedForCriticalBattery) {
                             collectionPausedForCriticalBattery = false
                             appendLog("[SYS]", "Alimentación recuperada: ubicación continua y recolección 24/7 reanudadas.")
                         }
+                        // GPS y reintentos limitados según modo, pantalla y recepción.
+                        applyLocationMode()
                     }
 
                     val isAirplaneModeOn = Settings.Global.getInt(
@@ -828,7 +829,7 @@ class MiniICService : Service() {
                         isScreenOn = true
                         // 3.0 — En adaptativo, al volver a usar el móvil se pide una ubicación
                         // fresca y vuelve el GPS continuo mientras la pantalla siga encendida.
-                        if (locationMode == com.alexisgordr.icdetector.core.LocationMode.ADAPTIVE &&
+                        if (locationMode != com.alexisgordr.icdetector.core.LocationMode.CONTINUOUS &&
                             !collectionPausedForCriticalBattery
                         ) {
                             applyLocationMode()
@@ -864,19 +865,18 @@ class MiniICService : Service() {
      */
     private fun applyLocationMode() {
         val mode = locationMode
-        if (com.alexisgordr.icdetector.core.LocationPolicy.streamWanted(mode, isScreenOn)) {
-            locationController.startContinuousUpdates()
-        } else {
-            locationController.stopContinuousUpdates()
-        }
+        locationController.updateCollection(isScreenOn, enabled = !collectionPausedForCriticalBattery)
         if (mode != loggedLocationMode) {
             loggedLocationMode = mode
             appendLog(
                 "[GPS]",
-                if (mode == com.alexisgordr.icdetector.core.LocationMode.ADAPTIVE) {
-                    "Modo de ubicación adaptativo: GPS continuo solo con la pantalla encendida."
-                } else {
-                    "Modo de ubicación continuo: GPS activo también con la pantalla apagada."
+                when (mode) {
+                    com.alexisgordr.icdetector.core.LocationMode.ADAPTIVE ->
+                        "Modo de ubicación adaptativo: GPS continuo solo con la pantalla encendida."
+                    com.alexisgordr.icdetector.core.LocationMode.INTELLIGENT ->
+                        "Modo de ubicación inteligente: intentos GPS breves cada 45 s cuando hay recepción."
+                    com.alexisgordr.icdetector.core.LocationMode.CONTINUOUS ->
+                        "Modo de ubicación continuo: GPS activo también con la pantalla apagada."
                 }
             )
         }
@@ -1830,8 +1830,8 @@ class MiniICService : Service() {
             appendLog("[RADIO]", "Handover celular completado -> Nueva celda CID: $cid ($net)")
             // Esta celda queda pendiente de coordenadas frescas hasta que un fix las rellene.
             locationController.markCoordinatesPending()
-            // El stream GPS permanece activo 24/7. Este listener puntual da prioridad al handover
-            // si todavía no existe un fix contemporáneo; conserva el debounce y single-flight.
+            // En modos con pausas, el handover puede pedir un fix acotado sin saltarse el límite
+            // compartido. El escaneo celular no depende de que esa petición consiga coordenadas.
             requestHighAccuracyFix()
             auditController.generate(cell)
 

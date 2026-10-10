@@ -60,10 +60,10 @@ internal class ServiceNotificationController(
         return NotificationCompat.Builder(context, CHANNEL_ID)
             .setContentTitle(
                 context.getString(
-                    if (locationMode() == com.alexisgordr.icdetector.core.LocationMode.ADAPTIVE) {
-                        R.string.notif_monitoring_title_adaptive
-                    } else {
-                        R.string.notif_monitoring_title
+                    when (locationMode()) {
+                        com.alexisgordr.icdetector.core.LocationMode.ADAPTIVE -> R.string.notif_monitoring_title_adaptive
+                        com.alexisgordr.icdetector.core.LocationMode.INTELLIGENT -> R.string.notif_monitoring_title_intelligent
+                        com.alexisgordr.icdetector.core.LocationMode.CONTINUOUS -> R.string.notif_monitoring_title
                     }
                 )
             )

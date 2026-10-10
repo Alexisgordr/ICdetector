@@ -28,6 +28,7 @@ import androidx.compose.material.icons.filled.Favorite
 import com.alexisgordr.icdetector.service.MiniICService
 import com.alexisgordr.icdetector.R
 import com.alexisgordr.icdetector.util.LocaleController
+import com.alexisgordr.icdetector.core.LocationMode
 import kotlin.time.Duration.Companion.milliseconds
 
 @Composable
@@ -40,13 +41,8 @@ fun SettingsPanel(service: MiniICService?, onSave: () -> Unit) {
         mutableStateOf(prefs.getBoolean("latency_detection_enabled", false))
     }
     var selectedLanguage by remember { mutableStateOf(LocaleController.selectedLanguage(context)) }
-    // 3.0 — Modo de ubicación: desactivado = continuo (predeterminado), activado = adaptativo.
-    var adaptiveLocation by remember {
-        mutableStateOf(
-            com.alexisgordr.icdetector.core.LocationMode.fromStored(
-                prefs.getString(com.alexisgordr.icdetector.core.LocationMode.PREF_KEY, null)
-            ) == com.alexisgordr.icdetector.core.LocationMode.ADAPTIVE
-        )
+    var selectedLocationMode by remember {
+        mutableStateOf(LocationMode.fromStored(prefs.getString(LocationMode.PREF_KEY, null)))
     }
 
     val scrollState = rememberScrollState()
@@ -229,49 +225,34 @@ fun SettingsPanel(service: MiniICService?, onSave: () -> Unit) {
 
             HorizontalDivider(color = Color(0xFF222222), modifier = Modifier.padding(vertical = 4.dp))
 
-            // 3.0 — Modo de ubicación. Desactivado (predeterminado): GPS continuo, el de la campaña.
-            // Activado: adaptativo, ahorra batería con la pantalla apagada.
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        stringResource(R.string.location_adaptive_title),
-                        color = Color.White,
-                        fontSize = 14.sp,
-                        fontFamily = FontFamily.Monospace
-                    )
-                    Text(
-                        stringResource(
-                            if (adaptiveLocation) R.string.location_adaptive_on else R.string.location_adaptive_off
-                        ),
-                        color = Color(0xFF666666),
-                        fontSize = 9.sp,
-                        fontFamily = FontFamily.Monospace,
-                        lineHeight = 12.sp
-                    )
+            Text(stringResource(R.string.location_mode_title), color = Color.White,
+                fontSize = 14.sp, fontFamily = FontFamily.Monospace)
+            LocationMode.entries.forEach { mode ->
+                val label = when (mode) {
+                    LocationMode.CONTINUOUS -> R.string.location_mode_continuous
+                    LocationMode.INTELLIGENT -> R.string.location_mode_intelligent
+                    LocationMode.ADAPTIVE -> R.string.location_mode_adaptive
                 }
-                Spacer(Modifier.width(8.dp))
-                Switch(
-                    checked = adaptiveLocation,
-                    onCheckedChange = { adaptiveLocation = it },
-                    colors = SwitchDefaults.colors(
-                        checkedThumbColor = Color.White,
-                        checkedTrackColor = Color(0xFF4CAF50)
-                    )
-                )
+                Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                    RadioButton(selected = selectedLocationMode == mode,
+                        onClick = { selectedLocationMode = mode })
+                    TextButton(onClick = { selectedLocationMode = mode }) {
+                        Text(stringResource(label), color = Color.White, fontFamily = FontFamily.Monospace)
+                    }
+                }
             }
+            val modeDescription = when (selectedLocationMode) {
+                LocationMode.CONTINUOUS -> R.string.location_adaptive_off
+                LocationMode.INTELLIGENT -> R.string.location_intelligent_description
+                LocationMode.ADAPTIVE -> R.string.location_adaptive_on
+            }
+            Text(stringResource(modeDescription), color = Color(0xFF888888), fontSize = 11.sp,
+                fontFamily = FontFamily.Monospace, lineHeight = 15.sp)
 
             Button(
                 onClick = {
                     val cleanToken = token.trim()
-                    val selectedMode = if (adaptiveLocation) {
-                        com.alexisgordr.icdetector.core.LocationMode.ADAPTIVE
-                    } else {
-                        com.alexisgordr.icdetector.core.LocationMode.CONTINUOUS
-                    }
+                    val selectedMode = selectedLocationMode
                     prefs.edit {
                         putString("opencellid_key", cleanToken)
                         remove("wigle_api_name")
@@ -279,7 +260,7 @@ fun SettingsPanel(service: MiniICService?, onSave: () -> Unit) {
                         remove("wigle_rate_limited_until")
                         putBoolean("proxy_enabled", proxyEnabled)
                         putBoolean("latency_detection_enabled", latencyDetectionEnabled)
-                        putString(com.alexisgordr.icdetector.core.LocationMode.PREF_KEY, selectedMode.storedValue)
+                        putString(LocationMode.PREF_KEY, selectedMode.storedValue)
                     }
                     service?.openCellIdKey = cleanToken
                     service?.isProxyEnabled = proxyEnabled
