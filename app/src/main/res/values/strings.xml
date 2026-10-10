@@ -315,4 +315,7 @@
     <string name="location_mode_intelligent">Smart · frequent location updates</string>
     <string name="location_mode_adaptive">Adaptive · fewer GPS requests</string>
     <string name="location_intelligent_description">Requests a fresh GPS fix about every 45 seconds, including with the screen off. Each attempt stops after a fix or 20 seconds (45 seconds for the first attempt). After repeated failures it checks again every 2, 5 or 10 minutes; cell changes and suspected anomalies can request a limited earlier attempt. A fresh fix restores the normal schedule. Cellular scanning continues, but a GPS position for every cell cannot be guaranteed. Battery savings depend on reception.</string>
+    <!-- 3.0 — Indicador GPS de la pantalla principal -->
+    <string name="gps_state_ok">● GPS OK</string>
+    <string name="gps_state_unavailable">● NO GPS</string>
 </resources>

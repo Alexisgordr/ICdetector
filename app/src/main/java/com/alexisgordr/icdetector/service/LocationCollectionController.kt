@@ -234,6 +234,9 @@ internal class LocationCollectionController(
         log("Recepción GPS degradada: próximo intento periódico en $seconds s. El escaneo celular continúa.")
     }
 
+    /** UI availability check: validates the cached fix without registering GPS requests. */
+    fun hasUsableGpsFix(): Boolean = gpsAvailable() && currentLocation() != null
+
     @SuppressLint("MissingPermission")
     fun currentLocation(): Location? {
         if (destroyed || !hasPermission()) return null

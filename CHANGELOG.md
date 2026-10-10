@@ -28,6 +28,11 @@ post-freeze review (#7) and the documentation of the campaign's validation limit
   messages are provided in English and Spanish. This changes GPS input availability, not rule
   weights; keep field data separated by mode.
 
+- **GPS status indicator.** Every 5 seconds while the screen is visible, checks the service's validated GPS cache and provider
+  availability instead of maintaining a separate wall-clock freshness check. Displays `GPS OK`
+  for a usable fix, otherwise `SIN GPS` / `NO GPS`. This does not start acquisition and applies
+  to all three modes; a normal pause with a usable recent fix is not a failure.
+
 - **Settings → Location mode.** Continuous remains the default. Adaptive uses a stream with the
   screen on while reception is usable, and bounded event requests with the screen off. All saving
   requests share `GpsPowerPolicy`, including suspicious episodes and periodic retries. Positions

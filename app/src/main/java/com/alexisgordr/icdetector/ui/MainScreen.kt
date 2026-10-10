@@ -3,7 +3,6 @@ package com.alexisgordr.icdetector.ui
 import android.Manifest
 import android.content.Context
 import android.content.pm.PackageManager
-import android.location.LocationManager
 import android.os.Build
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -21,6 +20,9 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.compose.LifecycleResumeEffect
+import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.repeatOnLifecycle
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -31,7 +33,6 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import com.alexisgordr.icdetector.MainActivity
 import com.alexisgordr.icdetector.R
@@ -651,26 +652,18 @@ fun SecurityScorePanel(active: CellData, dbmHistory: List<Int>, geoHistory: List
     val context = LocalContext.current
     val englishUi = androidx.compose.ui.platform.LocalConfiguration.current.locales[0].language != "es"
 
-    // GPS status — lee el valor cacheado, sin activar hardware
-    var hasGps by remember { mutableStateOf(false) }
-    LaunchedEffect(active.identityKey) {
-        while (true) {
-            hasGps = withContext(Dispatchers.IO) {
-                try {
-                    val lm = context.getSystemService(Context.LOCATION_SERVICE) as LocationManager
-                    if (ActivityCompat.checkSelfPermission(
-                            context, Manifest.permission.ACCESS_FINE_LOCATION
-                        ) == PackageManager.PERMISSION_GRANTED) {
-                        val now = System.currentTimeMillis()
-                        val maxAge = 120000L
-                        val maxAccuracy = 100f
-                        // GPS-only: coherente con el servicio y fuera de la composición.
-                        val gpsLoc = lm.getLastKnownLocation(LocationManager.GPS_PROVIDER)
-                        gpsLoc?.let { it.accuracy < maxAccuracy && (now - it.time) < maxAge } ?: false
-                    } else false
-                } catch (_: Exception) { false }
+    // El servicio valida edad monotónica, precisión y coherencia. Leerlo no activa el GPS.
+    // Se consulta solo mientras esta pantalla está visible.
+    val lifecycleOwner = LocalLifecycleOwner.current
+    var hasGps by remember(service) { mutableStateOf(false) }
+    LaunchedEffect(service, lifecycleOwner) {
+        lifecycleOwner.lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) {
+            while (true) {
+                hasGps = withContext(Dispatchers.IO) {
+                    service?.hasUsableGpsFix() == true
+                }
+                delay(5_000L)
             }
-            delay(30_000L)
         }
     }
     
@@ -842,7 +835,7 @@ fun SecurityScorePanel(active: CellData, dbmHistory: List<Int>, geoHistory: List
 
                 // Indicador GPS — derecha
                 Text(
-                    text = if (hasGps) "● GPS OK" else "● SIN GPS",
+                    text = stringResource(if (hasGps) R.string.gps_state_ok else R.string.gps_state_unavailable),
                     color = if (hasGps) Color(0xFF4CAF50) else Color(0xFFCF6679),
                     fontSize = 9.sp,
                     fontFamily = FontFamily.Monospace

@@ -37,7 +37,8 @@ of more than 2 minutes without readings breaks continuity like a signal loss (#2
 that gap, kept distinct from the 30 s stalled-modem gate and guarded by a test; the monitoring
 notification is always silent and the app warns when alarms are muted (#35); a location mode setting
 (continuous by default; smart and adaptive with bounded GPS attempts and retries of 2, 5 and 10
-minutes when reception is poor) with the mode stored per row (schema 21).
+minutes when reception is poor) with the mode stored per row (schema 21); the main-screen GPS
+indicator uses the same validated position as the analysis.
 
 ## Dataset cuts in 3.0
 

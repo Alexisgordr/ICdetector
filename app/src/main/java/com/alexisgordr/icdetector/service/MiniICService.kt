@@ -1613,6 +1613,10 @@ class MiniICService : Service() {
         } catch (_: Exception) {}
     }
 
+    /** Same position checks as analysis, plus GPS availability; never starts acquisition. */
+    fun hasUsableGpsFix(): Boolean =
+        ::locationController.isInitialized && locationController.hasUsableGpsFix()
+
     private fun getCurrentLocation(): Location? {
         return locationController.currentLocation()
     }

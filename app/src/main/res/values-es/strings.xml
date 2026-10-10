@@ -315,4 +315,7 @@
     <string name="location_mode_intelligent">Inteligente · ubicaciones frecuentes</string>
     <string name="location_mode_adaptive">Adaptativo · menos peticiones de GPS</string>
     <string name="location_intelligent_description">Pide una ubicación GPS fresca aproximadamente cada 45 segundos, también con la pantalla apagada. Cada intento termina al obtenerla o a los 20 segundos (45 segundos en el primer intento). Tras varios fallos reintenta cada 2, 5 o 10 minutos; los cambios de celda y las sospechas pueden adelantar un intento limitado. Una ubicación fresca recupera el ritmo normal. El escaneo celular continúa, pero no se garantiza una posición para cada celda. El ahorro depende de la recepción.</string>
+    <!-- 3.0 — Indicador GPS de la pantalla principal -->
+    <string name="gps_state_ok">● GPS OK</string>
+    <string name="gps_state_unavailable">● SIN GPS</string>
 </resources>

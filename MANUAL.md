@@ -110,6 +110,11 @@ app does not request the privileged battery-optimization exemption itself.
   requests a bounded high-accuracy fix. A fix is applied only to the newest coordinate-less record
   of the same complete cell identity, and only if that record is from the last 2 minutes. Otherwise
   the coordinates stay empty; the app never invents, reuses or retroactively assigns a stale position.
+- **GPS indicator:** the main screen shows **● GPS OK** when the analysis has a usable position
+  (GPS on, fix younger than 2 minutes, accurate and consistent) and **● NO GPS** (*SIN GPS*)
+  otherwise. It is checked every 5 seconds while the screen is visible and never turns the GPS on.
+  In Smart and Adaptive it stays OK between attempts while the last fix is still usable. With
+  monitoring stopped it shows NO GPS.
 - **Location mode:** **Settings → Location mode**. Names and descriptions follow the app language:
   *Continuo / Continuous*, *Inteligente / Smart*, *Adaptativo / Adaptive*.
   - **Continuous** (default): the existing GPS stream remains active with the screen on or off.
