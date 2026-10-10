@@ -127,6 +127,9 @@ post-freeze review (#7) and the documentation of the campaign's validation limit
   through the identity index (now checked with `EXPLAIN QUERY PLAN` in `tools/check_sql_affinity.py`);
   the only extra cost is sorting those rows. No limit was added on purpose: it would change which
   history H15 sees. The trust-contradiction eviction (B5) and this review close the open items of #7.
+- **Gradle configuration cache enabled.** Gradle suggested it after every build; repeated builds now
+  start faster. Problems are reported as warnings, so an incompatible plugin cannot break the build.
+  No change to the app or the APK.
 
 #### Documentation (#31)
 
