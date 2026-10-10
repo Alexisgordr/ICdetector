@@ -184,7 +184,8 @@ class MiniICService : Service() {
     /** v2.10.7 — Última promoción multiseñal escrita en el terminal (evita repetirla en cada ciclo). */
     private var lastLoggedPromotion: String? = null
     private var screenReceiver: BroadcastReceiver? = null
-    private var isScreenOn = true
+    /** Estado real de la pantalla; se lee de PowerManager al registrar el receptor (ver allí). */
+    @Volatile private var isScreenOn = true
     @Volatile private var isUiVisible = false
     private var collectionPausedForCriticalBattery = false
     private var isServiceRunning = false
@@ -811,6 +812,11 @@ class MiniICService : Service() {
         }
     }
     private fun registerScreenReceiver() {
+        // 3.0 — Bug found during testing: isScreenOn empezaba siempre en true. Si Android
+        // reiniciaba el servicio con la pantalla apagada, el modo adaptativo encendía el GPS
+        // continuo hasta el siguiente evento de apagado. Se lee el estado real antes de aplicar el
+        // modo de ubicación; los eventos de pantalla lo mantienen al día desde aquí.
+        isScreenOn = getSystemService(PowerManager::class.java)?.isInteractive ?: true
         val filter = IntentFilter().apply {
             addAction(Intent.ACTION_SCREEN_ON)
             addAction(Intent.ACTION_SCREEN_OFF)

@@ -45,6 +45,21 @@ class LocationModeTest {
         assertEquals(60_000L, LocationMode.ADAPTIVE_MIN_FIX_INTERVAL_MS)
     }
 
+    @Test fun `a service restarted with the screen off in adaptive mode starts without the GPS stream`() {
+        // El estado inicial sale de PowerManager.isInteractive, no de un true por defecto.
+        val screenOnAtStart = false
+        assertFalse(LocationPolicy.streamWanted(LocationMode.ADAPTIVE, screenOnAtStart))
+        assertTrue(LocationPolicy.streamWanted(LocationMode.CONTINUOUS, screenOnAtStart))
+        val service = source("service/MiniICService.kt")
+        val register = service.substringAfter("private fun registerScreenReceiver() {")
+        assertTrue(register.substringBefore("screenReceiver = object").contains(
+            "isScreenOn = getSystemService(PowerManager::class.java)?.isInteractive ?: true"))
+        // Y se registra (leyendo la pantalla) antes de aplicar el modo al arrancar.
+        val start = service.indexOf("registerScreenReceiver()\n")
+        assertTrue(start > 0)
+        assertTrue(start < service.indexOf("applyLocationMode()", start))
+    }
+
     private fun source(path: String) = listOf(
         File("src/main/java/com/alexisgordr/icdetector/$path"),
         File("app/src/main/java/com/alexisgordr/icdetector/$path")

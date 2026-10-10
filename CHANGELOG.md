@@ -31,6 +31,10 @@ post-freeze review (#7) and the documentation of the campaign's validation limit
   schema 21 keep it empty (unknown). The history CSV ends with a new `LocationMode` column, and
   `tools/check_export.py` counts rows per mode and warns when adaptive rows are mixed in.
 - The persistent notification title and a terminal line say which mode is active.
+- **Bug found during testing — adaptive mode after a restart with the screen off.** The service
+  assumed the screen was on until the first screen event, so if Android restarted it with the
+  screen off, adaptive mode kept the continuous GPS on until the next screen-off. The real state is
+  now read from `PowerManager.isInteractive` before the mode is applied.
 - **Dataset:** with the default (continuous) nothing changes. Rows recorded in adaptive mode have
   fewer positions with the screen off; compare H11, H13 and H16 coverage per mode before joining
   data. No rule, weight or threshold changes.
