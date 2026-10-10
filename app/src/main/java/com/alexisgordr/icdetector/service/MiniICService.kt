@@ -286,6 +286,11 @@ class MiniICService : Service() {
     var is3gAirplaneModeEnabled = true
     var isProxyEnabled = false
     var isLatencyDetectionEnabled: Boolean = false
+    /** 3.0 — Modo de ubicación (Ajustes). Continuo por defecto; adaptativo ahorra batería. */
+    @Volatile var locationMode: com.alexisgordr.icdetector.core.LocationMode =
+        com.alexisgordr.icdetector.core.LocationMode.CONTINUOUS
+    /** Último modo anotado en el terminal, para dejar constancia de cada cambio. */
+    private var loggedLocationMode: com.alexisgordr.icdetector.core.LocationMode? = null
 
     /** 3.0 (#19) — Identidad completa de la última servidora; ver ServingIdentityChange. */
     private var prevServingIdentity: com.alexisgordr.icdetector.core.ServingIdentityChange.Identity? = null
@@ -386,7 +391,7 @@ class MiniICService : Service() {
                 appendLog("[SYS]", "Captura forense restablecida.")
             }
         }
-        notificationController = ServiceNotificationController(this, MiniICService::class.java)
+        notificationController = ServiceNotificationController(this, MiniICService::class.java) { locationMode }
         databaseMaintenance = DatabaseMaintenance(dbHelper) { appendLog("[SYS]", it) }
         latencyMonitor = NetworkLatencyMonitor(
             client = latencyClient,
@@ -413,7 +418,8 @@ class MiniICService : Service() {
             onPreciseFixAccepted = { location ->
                 observeMotionFix(location)
                 persistPreciseLocation(location)
-            }
+            },
+            locationMode = { locationMode }
         )
         apiCoordinateValidator = ApiCoordinateValidator(
             db = dbHelper,
@@ -465,7 +471,8 @@ class MiniICService : Service() {
                 requestHighAccuracyFix()
             },
             writeDispatcher = historyWriteDispatcher,
-            historyGeneration = { historyEpoch.current() }
+            historyGeneration = { historyEpoch.current() },
+            locationMode = { locationMode.storedValue }
         )
         securityAlerts = SecurityAlertController(
             tone = { toneGenerator },
@@ -525,6 +532,9 @@ class MiniICService : Service() {
         collectionHealthController.restore()?.let { appendLog("[SYS]", it) }
         isProxyEnabled = prefs.getBoolean("proxy_enabled", false)
         isLatencyDetectionEnabled = prefs.getBoolean("latency_detection_enabled", false)
+        locationMode = com.alexisgordr.icdetector.core.LocationMode.fromStored(
+            prefs.getString(com.alexisgordr.icdetector.core.LocationMode.PREF_KEY, null)
+        )
         restoreTaSanityEvidence()            // evidencia de TA superviviente a reinicios (v2.5)
 
         try {
@@ -554,7 +564,10 @@ class MiniICService : Service() {
             return
         }
 
-        appendLog("[SYS]", "Ubicación continua activa (24/7). Consumo de batería elevado por diseño: las coordenadas son necesarias para H11, H13 y H16.")
+        // 3.0 — Solo en modo continuo; el adaptativo lo anota applyLocationMode().
+        if (locationMode == com.alexisgordr.icdetector.core.LocationMode.CONTINUOUS) {
+            appendLog("[SYS]", "Ubicación continua activa (24/7). Consumo de batería elevado por diseño: las coordenadas son necesarias para H11, H13 y H16.")
+        }
 
         registerTelephonyCallback()
         registerDisplayInfoCallback()
@@ -565,7 +578,7 @@ class MiniICService : Service() {
             appendLog("[SYS]", "⚠ Batería crítica (<${CollectionPowerController.CRITICAL_PERCENT} %): ubicación continua en pausa hasta conectar el cargador.")
         } else {
             ensureCollectionWakeLock()
-            locationController.startContinuousUpdates()
+            applyLocationMode()
         }
 
         scope.launch(Dispatchers.Default) {
@@ -590,7 +603,8 @@ class MiniICService : Service() {
                         }
                     } else {
                         ensureCollectionWakeLock()
-                        locationController.startContinuousUpdates()
+                        // 3.0 — Continuo: GPS siempre. Adaptativo: solo con la pantalla encendida.
+                        applyLocationMode()
                         if (collectionPausedForCriticalBattery) {
                             collectionPausedForCriticalBattery = false
                             appendLog("[SYS]", "Alimentación recuperada: ubicación continua y recolección 24/7 reanudadas.")
@@ -804,8 +818,21 @@ class MiniICService : Service() {
         screenReceiver = object : BroadcastReceiver() {
             override fun onReceive(context: Context?, intent: Intent?) {
                 when (intent?.action) {
-                    Intent.ACTION_SCREEN_ON -> isScreenOn = true
-                    Intent.ACTION_SCREEN_OFF -> isScreenOn = false
+                    Intent.ACTION_SCREEN_ON -> {
+                        isScreenOn = true
+                        // 3.0 — En adaptativo, al volver a usar el móvil se pide una ubicación
+                        // fresca y vuelve el GPS continuo mientras la pantalla siga encendida.
+                        if (locationMode == com.alexisgordr.icdetector.core.LocationMode.ADAPTIVE &&
+                            !collectionPausedForCriticalBattery
+                        ) {
+                            applyLocationMode()
+                            requestHighAccuracyFix()
+                        }
+                    }
+                    Intent.ACTION_SCREEN_OFF -> {
+                        isScreenOn = false
+                        if (!collectionPausedForCriticalBattery) applyLocationMode()
+                    }
                 }
             }
         }
@@ -824,6 +851,30 @@ class MiniICService : Service() {
 
     /** Solo protege frente al apagado inminente; cargando nunca se pausa la recolección. */
     private fun isBatteryCritical(): Boolean = collectionPower.isBatteryCritical()
+
+    /**
+     * 3.0 — Enciende o apaga el GPS continuo según el modo de ubicación y la pantalla, y deja una
+     * línea en el terminal cada vez que cambia el modo (para que la caja negra lo registre).
+     */
+    private fun applyLocationMode() {
+        val mode = locationMode
+        if (com.alexisgordr.icdetector.core.LocationPolicy.streamWanted(mode, isScreenOn)) {
+            locationController.startContinuousUpdates()
+        } else {
+            locationController.stopContinuousUpdates()
+        }
+        if (mode != loggedLocationMode) {
+            loggedLocationMode = mode
+            appendLog(
+                "[GPS]",
+                if (mode == com.alexisgordr.icdetector.core.LocationMode.ADAPTIVE) {
+                    "Modo de ubicación adaptativo: GPS continuo solo con la pantalla encendida."
+                } else {
+                    "Modo de ubicación continuo: GPS activo también con la pantalla apagada."
+                }
+            )
+        }
+    }
 
     private fun requestHighAccuracyFix(force: Boolean = false) {
         locationController.requestPreciseFix(force)

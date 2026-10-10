@@ -40,7 +40,9 @@ internal class ObservationPersistenceController(
     private val writeDispatcher: CoroutineDispatcher,
     /** Cambia con cada "Borrar historial": una escritura de antes del borrado no se guarda. */
     private val historyGeneration: () -> Long = { 0L },
-    private val clock: () -> Long = System::currentTimeMillis
+    private val clock: () -> Long = System::currentTimeMillis,
+    /** 3.0 — Modo de ubicación activo ([com.alexisgordr.icdetector.core.LocationMode.storedValue]). */
+    private val locationMode: () -> String? = { null }
 ) {
     private var lastPeriodicWrite = 0L
 
@@ -54,7 +56,8 @@ internal class ObservationPersistenceController(
     fun capture(fix: ObservedFix? = location()) = ObservationContext(
         observedAtMs = clock(),
         fix = fix,
-        service = serviceState()
+        service = serviceState(),
+        locationMode = locationMode()
     )
 
     private fun pending(cell: CellData, reason: String, context: ObservationContext) =
@@ -143,6 +146,7 @@ internal fun CellDbHelper.logObservation(row: ObservationRow, appVersion: String
         networkRoaming = service?.roaming,
         notEvaluatedHeuristics = cell.heuristicReport.notEvaluatedIds(),
         gpsAccuracyM = fix?.accuracyM,
-        appVersion = appVersion
+        appVersion = appVersion,
+        locationMode = row.context.locationMode
     )
 }

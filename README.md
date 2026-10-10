@@ -52,7 +52,7 @@
 >
 > - **Stable — v2.10.10.** Used by the ongoing field-collection campaign (dataset baseline v2.10.5).
 >   Bug fixes only; see [IMPORTANT.md](IMPORTANT.md).
-> - **In development — 3.0.0-beta4.** The 3.0 roadmap: schema 20, more accurate rule inputs and
+> - **In development — 3.0.0-beta4.** The 3.0 roadmap: schema 21, more accurate rule inputs and
 >   stricter confirmation. No APK is published; it is available as source on the
 >   [`ICdetection-v3.0.0-beta`](https://github.com/Alexisgordr/ICdetector/tree/ICdetection-v3.0.0-beta)
 >   branch ([build it yourself](#-getting-started)). **3.0 needs a clean install** from v2.10.x.
@@ -385,6 +385,11 @@ For long collection sessions the app keeps a GPS-only stream and a partial wake 
 monitoring, which increases battery use. At 5% battery or less while unplugged, both pause and resume
 after charging; where GPS keeps failing, precise fixes are retried less often.
 
+**Location mode.** *Continuous* (default) keeps that GPS stream with the screen off: more battery,
+most complete location data, the mode for campaigns. *Adaptive* (Settings → Adaptive location) uses
+less battery: with the screen off, a fix is requested only when the phone is used again, the cell
+changes or a suspicion appears, at most once a minute. Each row records its mode.
+
 ---
 
 ## 🛰️ Infrastructure verification
@@ -449,7 +454,7 @@ Stable-Site (hashed sites, neighbours, motion bands, shadow episodes) and RADIO 
 **History CSV.** One row per observation, with the cell identity, signal, Timing Advance, radio
 context, score and failed rules — and, for each row, the exact UTC instant (`ObservedAtUtc`), the
 rules that could not be evaluated (`NotEvaluatedHeuristics`), the GPS accuracy (`GpsAccuracyM`) and
-the app version that observed it (`AppVersion`). Columns that did not exist when a row was recorded
+the app version that observed it (`AppVersion`) and the location mode (`LocationMode`). Columns that did not exist when a row was recorded
 are empty: unknown, never assumed. The full column list is in the
 [manual](MANUAL.md#12-exporting-antenna-history).
 

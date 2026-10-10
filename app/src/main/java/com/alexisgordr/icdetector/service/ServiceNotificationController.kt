@@ -20,7 +20,11 @@ import com.alexisgordr.icdetector.util.LocaleController
 /** Owns notification construction and channels for the foreground service. */
 internal class ServiceNotificationController(
     private val context: Context,
-    private val serviceClass: Class<*>
+    private val serviceClass: Class<*>,
+    /** 3.0 — Modo de ubicación, para que el título diga si el GPS es continuo o adaptativo. */
+    private val locationMode: () -> com.alexisgordr.icdetector.core.LocationMode = {
+        com.alexisgordr.icdetector.core.LocationMode.CONTINUOUS
+    }
 ) {
     fun createChannels() {
         val manager = context.getSystemService(NotificationManager::class.java)
@@ -54,7 +58,15 @@ internal class ServiceNotificationController(
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
         )
         return NotificationCompat.Builder(context, CHANNEL_ID)
-            .setContentTitle(context.getString(R.string.notif_monitoring_title))
+            .setContentTitle(
+                context.getString(
+                    if (locationMode() == com.alexisgordr.icdetector.core.LocationMode.ADAPTIVE) {
+                        R.string.notif_monitoring_title_adaptive
+                    } else {
+                        R.string.notif_monitoring_title
+                    }
+                )
+            )
             .setContentText(text)
             .setSmallIcon(android.R.drawable.ic_menu_info_details)
             .setContentIntent(openApp)

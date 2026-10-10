@@ -46,6 +46,9 @@ EXPECTED_COLUMNS_V2104 = EXPECTED_COLUMNS_V21 + RADIO_CONTEXT_COLUMNS_V2104
 EXPECTED_COLUMNS_V30 = EXPECTED_COLUMNS_V2104 + [
     "ObservedAtUtc", "NotEvaluatedHeuristics", "GpsAccuracyM", "AppVersion", "ExportDevice", "ExportAndroid",
 ]
+# 3.0 (esquema 21) — Modo de ubicación de cada fila: CONTINUOUS o ADAPTIVE. Vacío = desconocido.
+EXPECTED_COLUMNS_V30_LOCATION = EXPECTED_COLUMNS_V30 + ["LocationMode"]
+LOCATION_MODES = ("CONTINUOUS", "ADAPTIVE")
 # Cortes de dataset: a partir de esta versión cambió cómo se evalúa la regla indicada.
 DATASET_CUTS = [
     ("2.10.9", "H10 (Ping-Pong)"),
@@ -295,6 +298,22 @@ def version_key(version):
             return None
         parts.append(int(p))
     return tuple(parts + [0] * (3 - len(parts))) if parts else None
+
+
+def location_mode_summary(rows):
+    """Filas por modo de ubicación; los valores vacíos se cuentan como desconocidos y los que no son
+    un modo conocido, aparte."""
+    modes = Counter()
+    unknown = invalid = 0
+    for r in rows:
+        mode = (r.get("LocationMode") or "").strip()
+        if not mode:
+            unknown += 1
+        elif mode in LOCATION_MODES:
+            modes[mode] += 1
+        else:
+            invalid += 1
+    return modes, unknown, invalid
 
 
 def dataset_cut_summary(rows):
@@ -628,6 +647,22 @@ def main(path):
                 f"El fichero une exports de {len(devices)} teléfonos/Android distintos: "
                 + "; ".join(f"{d or '?'} {a}".strip() for d, a in devices)
                 + ". Analízalos por separado."
+            )
+
+    if "LocationMode" in columns:
+        modes, unknown, invalid = location_mode_summary(rows)
+        print("\nMODO DE UBICACIÓN (3.0)")
+        for mode in LOCATION_MODES:
+            print(f"  {mode}: {modes.get(mode, 0)} filas")
+        if unknown:
+            print(f"  desconocido (anterior al esquema 21): {unknown} filas")
+        check("LocationMode es CONTINUOUS, ADAPTIVE o vacío", invalid == 0,
+              f"{invalid} filas con otro valor" if invalid else "")
+        if modes.get("ADAPTIVE"):
+            notes.append(
+                f"{modes['ADAPTIVE']} filas en modo adaptativo: con la pantalla apagada la posición "
+                "solo se pide en momentos concretos, así que H11, H13 y H16 están en N/A más a menudo. "
+                "Compara la cobertura de esas reglas por modo antes de juntar los datos."
             )
 
     if "Bands" in columns:

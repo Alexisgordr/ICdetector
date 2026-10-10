@@ -26,7 +26,11 @@ internal class LocationCollectionController(
     private val scope: CoroutineScope,
     private val log: (String) -> Unit,
     private val onStreamFixAvailable: (Location) -> Unit,
-    private val onPreciseFixAccepted: (Location) -> Unit
+    private val onPreciseFixAccepted: (Location) -> Unit,
+    /** 3.0 — Modo de ubicación elegido en Ajustes; ver [com.alexisgordr.icdetector.core.LocationMode]. */
+    private val locationMode: () -> com.alexisgordr.icdetector.core.LocationMode = {
+        com.alexisgordr.icdetector.core.LocationMode.CONTINUOUS
+    }
 ) {
     private val manager = context.getSystemService(LocationManager::class.java)
     private val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
@@ -38,6 +42,8 @@ internal class LocationCollectionController(
     private var lastForcedFixTime = 0L
     /** 3.0 (#7, O5) — Espera mínima entre intentos normales; ver PreciseFixBackoff. */
     private val preciseFixBackoff = com.alexisgordr.icdetector.core.PreciseFixBackoff(FORCED_FIX_DEBOUNCE_MS)
+    /** 3.0 — En modo adaptativo, como mucho una petición bajo demanda por minuto. */
+    private val onDemandGate = com.alexisgordr.icdetector.core.LocationPolicy.OnDemandGate()
     private var lastAcceptedLocation: Location? = null
     private var lastPersistedLocationTime = 0L
     private var awaitingFreshCoordinates = false
@@ -106,6 +112,9 @@ internal class LocationCollectionController(
             // 3.0 (#7, O5) — La espera mínima crece si los fixes precisos fallan seguidos.
             if (!force && now - lastForcedFixTime < preciseFixBackoff.minIntervalMs()) return
             if (forcedFixListener != null) return
+            // 3.0 — En adaptativo, también las forzadas (sospecha) esperan el intervalo mínimo:
+            // cambios de celda repetidos o una sospecha persistente no pueden pedir GPS sin parar.
+            if (!onDemandGate.tryAcquire(locationMode(), android.os.SystemClock.elapsedRealtime())) return
             lastForcedFixTime = now
             listener = LocationListener { location ->
                 val fresh = System.currentTimeMillis() - location.time < MAX_FIX_AGE_MS

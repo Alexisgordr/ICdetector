@@ -40,6 +40,14 @@ fun SettingsPanel(service: MiniICService?, onSave: () -> Unit) {
         mutableStateOf(prefs.getBoolean("latency_detection_enabled", false))
     }
     var selectedLanguage by remember { mutableStateOf(LocaleController.selectedLanguage(context)) }
+    // 3.0 — Modo de ubicación: desactivado = continuo (predeterminado), activado = adaptativo.
+    var adaptiveLocation by remember {
+        mutableStateOf(
+            com.alexisgordr.icdetector.core.LocationMode.fromStored(
+                prefs.getString(com.alexisgordr.icdetector.core.LocationMode.PREF_KEY, null)
+            ) == com.alexisgordr.icdetector.core.LocationMode.ADAPTIVE
+        )
+    }
 
     val scrollState = rememberScrollState()
 
@@ -219,9 +227,51 @@ fun SettingsPanel(service: MiniICService?, onSave: () -> Unit) {
                 )
             }
 
+            HorizontalDivider(color = Color(0xFF222222), modifier = Modifier.padding(vertical = 4.dp))
+
+            // 3.0 — Modo de ubicación. Desactivado (predeterminado): GPS continuo, el de la campaña.
+            // Activado: adaptativo, ahorra batería con la pantalla apagada.
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        stringResource(R.string.location_adaptive_title),
+                        color = Color.White,
+                        fontSize = 14.sp,
+                        fontFamily = FontFamily.Monospace
+                    )
+                    Text(
+                        stringResource(
+                            if (adaptiveLocation) R.string.location_adaptive_on else R.string.location_adaptive_off
+                        ),
+                        color = Color(0xFF666666),
+                        fontSize = 9.sp,
+                        fontFamily = FontFamily.Monospace,
+                        lineHeight = 12.sp
+                    )
+                }
+                Spacer(Modifier.width(8.dp))
+                Switch(
+                    checked = adaptiveLocation,
+                    onCheckedChange = { adaptiveLocation = it },
+                    colors = SwitchDefaults.colors(
+                        checkedThumbColor = Color.White,
+                        checkedTrackColor = Color(0xFF4CAF50)
+                    )
+                )
+            }
+
             Button(
                 onClick = {
                     val cleanToken = token.trim()
+                    val selectedMode = if (adaptiveLocation) {
+                        com.alexisgordr.icdetector.core.LocationMode.ADAPTIVE
+                    } else {
+                        com.alexisgordr.icdetector.core.LocationMode.CONTINUOUS
+                    }
                     prefs.edit {
                         putString("opencellid_key", cleanToken)
                         remove("wigle_api_name")
@@ -229,10 +279,12 @@ fun SettingsPanel(service: MiniICService?, onSave: () -> Unit) {
                         remove("wigle_rate_limited_until")
                         putBoolean("proxy_enabled", proxyEnabled)
                         putBoolean("latency_detection_enabled", latencyDetectionEnabled)
+                        putString(com.alexisgordr.icdetector.core.LocationMode.PREF_KEY, selectedMode.storedValue)
                     }
                     service?.openCellIdKey = cleanToken
                     service?.isProxyEnabled = proxyEnabled
                     service?.isLatencyDetectionEnabled = latencyDetectionEnabled
+                    service?.locationMode = selectedMode
                     onSave()
                 },
                 modifier = Modifier.fillMaxWidth(),

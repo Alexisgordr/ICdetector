@@ -113,6 +113,16 @@ app does not request the privileged battery-optimization exemption itself.
 - **Where GPS does not reach:** if precise fixes keep failing, the app waits longer between normal
   attempts (from 30 seconds up to 10 minutes). A suspicious episode still requests a fix
   immediately.
+- **Location mode:** **Settings → Adaptive location (battery saver)**.
+  - *Off* (default, **continuous**): uses more battery. The GPS stays active with the screen off,
+    so every observation has the most complete position data. Use it for field campaigns.
+  - *On* (**adaptive**): uses less battery. With the screen on it behaves like continuous. With the
+    screen off there is no continuous GPS: a fix is requested when you use the phone again, the
+    serving cell changes or a suspicion is detected, at most once a minute. A position older than
+    2 minutes is never used, so H11, H13 and H16 are `N/A` more often.
+
+  Each history row records the mode it was observed with (`LocationMode` in the CSV), and the
+  monitoring notification title shows the active mode.
 - **After a phone restart,** collection resumes when you open the app again. The gap is reported as
   an interrupted-collection notice, never silently hidden.
 
@@ -615,7 +625,8 @@ Timestamp, NetType, CID, MNC, TAC, MCC, DBM, Verified, SecurityScore, FailedHeur
 PCI, ARFCN, RSRQ, SINR, AnomalyConfidence, ApiLat, ApiLon, TA, TAUnit, TAMeters, Radio,
 ServingConnection, BandwidthKHz, Bands, AdditionalPlmns, CsgIndicator, CsgIdentity, CsgName,
 SecondaryCarriers, ServiceState, NetworkOperator, SimOperator, NetworkRoaming,
-ObservedAtUtc, NotEvaluatedHeuristics, GpsAccuracyM, AppVersion, ExportDevice, ExportAndroid
+ObservedAtUtc, NotEvaluatedHeuristics, GpsAccuracyM, AppVersion, ExportDevice, ExportAndroid,
+LocationMode
 ```
 
 - `Lat` / `Lon` are the phone's own GPS position at the time of the observation; `ApiLat` / `ApiLon`
@@ -634,6 +645,8 @@ ObservedAtUtc, NotEvaluatedHeuristics, GpsAccuracyM, AppVersion, ExportDevice, E
 - `AppVersion` is the version that recorded the row; use it to apply dataset cuts per row.
 - `ExportDevice` and `ExportAndroid` describe the phone that made the export (manufacturer, model,
   Android version), with no personal or hardware identifier.
+- `LocationMode` is `CONTINUOUS` or `ADAPTIVE`: the location mode the row was observed with.
+  Compare position-based rules per mode before joining data.
 
 Columns that did not exist when a row was recorded are empty — unknown, never an assumed value.
 

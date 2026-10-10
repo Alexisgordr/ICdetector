@@ -283,6 +283,7 @@
     <string name="permissions_denied_hint">Si denegaste un permiso y Android ya no lo vuelve a pedir, concédelo desde los ajustes de la app.</string>
     <string name="permissions_open_settings">Abrir ajustes de la app</string>
     <string name="notif_monitoring_title">ICdetection: monitorización · GPS continuo</string>
+    <string name="notif_monitoring_title_adaptive">ICdetection: monitorización · GPS adaptativo</string>
     <string name="notif_legacy_network_title">ICdetection: red 2G/3G detectada</string>
     <string name="notif_open_settings">ABRIR AJUSTES</string>
     <string name="channel_monitoring_name">Monitorización</string>
@@ -305,4 +306,8 @@
     <string name="alarm_muted_body_silenced">El canal Alertas de seguridad está en silencio, así que una anomalía de red confirmada no sonará. Vuelve a activarlo: ICdetection solo suena cuando se confirma una anomalía de red, y la notificación de monitorización es siempre silenciosa.</string>
     <string name="alarm_muted_body_blocked">Las notificaciones de ICdetection están desactivadas, así que no verás ni oirás una anomalía de red confirmada. Vuelve a activarlas: ICdetection solo suena cuando se confirma una anomalía de red, y la notificación de monitorización es siempre silenciosa.</string>
     <string name="alarm_muted_action">ABRIR AJUSTES DE ALERTAS</string>
+    <!-- 3.0 — Modo de ubicación -->
+    <string name="location_adaptive_title">Ubicación adaptativa (ahorro de batería)</string>
+    <string name="location_adaptive_off">DESACTIVADA · GPS continuo: gasta más batería. La ubicación sigue activa con la pantalla apagada, así que cada observación tiene la posición más completa. Recomendado para campañas de recogida de datos.</string>
+    <string name="location_adaptive_on">ACTIVADA · Gasta menos batería. Con la pantalla apagada, el GPS solo se pide al volver a usar el móvil, al cambiar de celda o al detectar una sospecha (como mucho una vez por minuto). Las reglas que usan la ubicación (H11, H13, H16) quedan en N/A más a menudo.</string>
 </resources>

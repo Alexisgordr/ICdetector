@@ -24,6 +24,7 @@ class ObservationContextPersistenceTest {
     private var gps: ObservedFix? = ObservedFix(40.4168, -3.7038, 8f)
     private var service: ServiceStateSnapshot? = state(ServiceRegistrationState.IN_SERVICE, "21407")
     private val rows = mutableListOf<ObservationRow>()
+    private var mode = "CONTINUOUS"
 
     private val cell = CellData(
         isRegistered = true, networkType = "4G LTE", cellId = "100", mnc = "07", tac = "1", dbm = -80,
@@ -41,7 +42,8 @@ class ObservationContextPersistenceTest {
         onWrite = {},
         onPeriodicMissingLocation = {},
         writeDispatcher = Dispatchers.Unconfined,
-        clock = { now }
+        clock = { now },
+        locationMode = { mode }
     )
 
     /** La lectura llega, el análisis se retiene y, mientras, cambian el GPS, el servicio y la hora. */
@@ -82,6 +84,16 @@ class ObservationContextPersistenceTest {
         persistence.recordConfirmedAlarm(cell.copy(isSuspicious = true, suspiciousReason = "H6"), context)
         assertInitialContext(rows.single())
         assertEquals("H6", rows.single().reason)
+    }
+
+    @Test fun `each row keeps the location mode of its delivery`() {
+        val persistence = controller()
+        val context = persistence.capture()
+        mode = "ADAPTIVE"                       // el usuario cambia de modo durante el análisis
+        persistence.recordHandover(cell, context)
+        assertEquals("CONTINUOUS", rows.single().context.locationMode)
+        persistence.recordConfirmedAlarm(cell, persistence.capture())
+        assertEquals("ADAPTIVE", rows.last().context.locationMode)
     }
 
     @Test fun `no fix at delivery stays unknown even if one arrives during the analysis`() {

@@ -19,7 +19,9 @@ data class ObservationContext(
     /** Posición en ese instante; null si no había un fix válido (desconocida, no "sin GPS"). */
     val fix: ObservedFix?,
     /** Último estado de servicio conocido en ese instante. */
-    val service: ServiceStateSnapshot?
+    val service: ServiceStateSnapshot?,
+    /** 3.0 — Modo de ubicación en ese instante ([LocationMode.storedValue]); null = desconocido. */
+    val locationMode: String? = null
 )
 
 /** Posición GPS de una observación. [accuracyM] null si el fix no declaraba precisión. */

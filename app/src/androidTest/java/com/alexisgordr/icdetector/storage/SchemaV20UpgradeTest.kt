@@ -41,7 +41,7 @@ class SchemaV20UpgradeTest {
 
     @Test fun upgradeKeepsOldRowsAsUnknownAndWritesNewRowsCompletely() {
         val db = CellDbHelper(context).also { helper = it }
-        assertEquals(SchemaV20.VERSION, db.readableDatabase.version)
+        assertEquals(SchemaV21.VERSION, db.readableDatabase.version)
 
         val old = db.getRecords().single()
         assertEquals("2026-09-01 10:00:00", old.timestamp)
@@ -76,7 +76,7 @@ class SchemaV20UpgradeTest {
             db.version = 18
         }
         val db = CellDbHelper(context).also { helper = it }.writableDatabase
-        assertEquals(SchemaV20.VERSION, db.version)
+        assertEquals(SchemaV21.VERSION, db.version)
         db.rawQuery("SELECT cid, observed_at_ms FROM history", null).use { c ->
             c.moveToFirst()
             assertEquals("kept", c.getString(0))
@@ -89,7 +89,7 @@ class SchemaV20UpgradeTest {
         db.rawQuery("SELECT COUNT(*) FROM incidents", null).use { c -> c.moveToFirst(); assertEquals(0, c.getInt(0)) }
     }
 
-    private companion object {
+    companion object {
         const val NAME = "icdetector_history.db"
 
         /** Esquema 19 (v2.10.10) de las tablas que toca la migración, más las que se leen al abrir. */

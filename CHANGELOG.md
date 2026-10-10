@@ -12,8 +12,28 @@ GitHub pre-release of an earlier build was withdrawn.
 ### Phase 4 — Maintenance backlog and documentation
 
 Fourth and last beta of the 3.0 roadmap (GitHub issue #27): the maintenance items from the
-post-freeze review (#7) and the documentation of the campaign's validation limits (#31). Same
-schema 20.
+post-freeze review (#7) and the documentation of the campaign's validation limits (#31). Schema
+21 (one additive column, see *Location mode*).
+
+#### Location mode (found during testing: continuous GPS drains the battery)
+
+- **New setting: Adaptive location (battery saver).** Settings → *Adaptive location*. **Off**
+  (default) keeps the continuous GPS of every earlier version: the stream stays active with the
+  screen off, which uses more battery and gives the most complete location data — the mode for
+  field campaigns. **On** (adaptive) uses less battery: with the screen off there is no continuous
+  GPS, and a fix is requested only when the phone is used again, the serving cell changes or a
+  suspicion is detected, **at most once a minute** (`LocationPolicy.OnDemandGate`), so repeated
+  cell changes or a persistent suspicion cannot keep the GPS on. A location older than 2 minutes
+  is never used, so between fixes the location-based rules (H11, H13, H16) are `N/A` instead of
+  using a stale position.
+- **Schema 21: the mode of every row.** An additive migration adds `location_mode` to the history;
+  each row stores `CONTINUOUS` or `ADAPTIVE`, captured when the reading arrived. Rows from before
+  schema 21 keep it empty (unknown). The history CSV ends with a new `LocationMode` column, and
+  `tools/check_export.py` counts rows per mode and warns when adaptive rows are mixed in.
+- The persistent notification title and a terminal line say which mode is active.
+- **Dataset:** with the default (continuous) nothing changes. Rows recorded in adaptive mode have
+  fewer positions with the screen off; compare H11, H13 and H16 coverage per mode before joining
+  data. No rule, weight or threshold changes.
 
 #### Installation
 

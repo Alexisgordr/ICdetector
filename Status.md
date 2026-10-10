@@ -9,7 +9,7 @@ The current state of the project in one page. What changed in each release is in
 | | Version | Version code | DB schema | Where |
 |---|---|---|---|---|
 | **Stable release** | v2.10.10 | 38 | 19 | GitHub Releases · used by the field campaign |
-| **Development** | 3.0.0-beta4 | 39 | 20 | Branch `ICdetection-v3.0.0-beta` · draft PR #34 · source only, no APK published |
+| **Development** | 3.0.0-beta4 | 39 | 21 | Branch `ICdetection-v3.0.0-beta` · draft PR #34 · source only, no APK published |
 | **Campaign baseline** | v2.10.5 | 33 | 19 | Day 1 of the field dataset ([IMPORTANT.md](IMPORTANT.md)) |
 
 - **App identity:** `com.alexisgordr.icdetector`, *ICdetection*, for stable releases and betas
@@ -35,7 +35,8 @@ receive and how evidence is confirmed.
 creates missing tables; time, GPS and service state captured when the reading arrives (A03); a gap
 of more than 2 minutes without readings breaks continuity like a signal loss (#20); one constant for
 that gap, kept distinct from the 30 s stalled-modem gate and guarded by a test; the monitoring
-notification is always silent and the app warns when alarms are muted (#35).
+notification is always silent and the app warns when alarms are muted (#35); a location mode setting
+(continuous by default, adaptive to save battery) with the mode stored per row (schema 21).
 
 ## Dataset cuts in 3.0
 
@@ -46,6 +47,7 @@ records the app version that observed it (`AppVersion`), so cuts can be applied 
 |---|---|---|
 | Ages and ordering | #23 | Exact UTC instant from 3.0; approximate before |
 | Context columns | A03 | Time, position and service state of the moment the reading arrived |
+| Location mode | — | Adaptive rows have fewer positions with the screen off (`LocationMode`); continuous is unchanged |
 | Confirmation (all alarms) | #20 | Restarts after a signal loss or a gap of more than 2 min |
 | H1 | #20 #28 | Isolation streak restarts after a gap; `N/A` while pending |
 | H5 | #11 | LTE neighbour placeholders read as unavailable |
@@ -71,7 +73,7 @@ records the app version that observed it (`AppVersion`), so cuts can be applied 
 Run on every push to the beta branch through draft PR #34:
 
 - JVM unit tests (`testDebugUnitTest`), Android lint and the release build.
-- Instrumented storage and migration tests on an emulator (schemas 15–19 → 20).
+- Instrumented storage and migration tests on an emulator (schemas 15–19 → 20, and 20 → 21).
 - `tools/check_export.py` regression tests, SQL affinity and query-plan checks, `when` exhaustiveness.
 
 ## Before the 3.0 release

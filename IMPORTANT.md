@@ -9,7 +9,7 @@
 > | **Database schema** | 19 |
 > | **Duration** | Approximately three months |
 >
-> **3.0 is not part of the campaign.** The 3.0 betas change the database (schema 20), the inputs of
+> **3.0 is not part of the campaign.** The 3.0 betas change the database (schema 21), the inputs of
 > several rules and how alarms are confirmed, so their data is not comparable with the campaign.
 > They are the same app as the stable release (`com.alexisgordr.icdetector`): installing one on the
 > phone that collects campaign data would upgrade and migrate its database. **Keep the campaign phone

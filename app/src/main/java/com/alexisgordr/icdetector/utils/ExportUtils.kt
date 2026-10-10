@@ -24,7 +24,10 @@ object ExportUtils {
         // 3.0 (#30) — Versión de la app de cada fila (vacía antes de 3.0) y, constantes en todo el
         // fichero, el teléfono y la versión de Android que hicieron el export. Sirven para separar
         // ficheros de varias personas al unirlos. Ningún identificador personal ni del aparato.
-        "AppVersion,ExportDevice,ExportAndroid"
+        "AppVersion,ExportDevice,ExportAndroid," +
+        // 3.0 (esquema 21) — Modo de ubicación de la fila: CONTINUOUS o ADAPTIVE. Al final, para no
+        // mover ninguna columna anterior. Vacío en filas anteriores al esquema 21: desconocido.
+        "LocationMode"
 
     /** Cabecera del CSV de eventos de servicio (pestaña Radio). */
     const val SERVICE_STATE_CSV_HEADER = "TimestampUtc,State,DataRegistered,VoiceRegistered,Searching," +
@@ -138,7 +141,8 @@ object ExportUtils {
         item.gpsAccuracyM?.let { String.format(java.util.Locale.ROOT, "%.1f", it) } ?: "",
         item.appVersion ?: "",
         export.device,
-        export.android
+        export.android,
+        item.locationMode ?: ""
     ).joinToString(",") { csvEscape(it) }
 
     /** Una fila del CSV de eventos de servicio. Pura: se puede probar sin Android. */

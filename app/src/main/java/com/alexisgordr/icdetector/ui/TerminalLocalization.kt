@@ -308,6 +308,9 @@ private val replacements = linkedMapOf(
     "sin portadoras secundarias" to "no secondary carriers",
     "Primaria declarada sin señal utilizable: ciclo en abstención." to "Declared primary has no usable signal: cycle abstains.",
     "Ubicación continua activa (24/7). Consumo de batería elevado por diseño: las coordenadas son necesarias para H11, H13 y H16." to "Continuous location active (24/7). High battery use by design: coordinates are needed for H11, H13 and H16.",
+    // 3.0 — Modo de ubicación
+    "Modo de ubicación adaptativo: GPS continuo solo con la pantalla encendida." to "Adaptive location mode: continuous GPS only while the screen is on.",
+    "Modo de ubicación continuo: GPS activo también con la pantalla apagada." to "Continuous location mode: GPS stays active with the screen off.",
     "Batería crítica (<" to "Critical battery (<",
     "%): ubicación continua en pausa hasta conectar el cargador." to "%): continuous location paused until the charger is connected.",
     "Alimentación recuperada: ubicación continua y recolección 24/7 reanudadas." to "Power restored: continuous location and 24/7 collection resumed.",

@@ -111,7 +111,9 @@ data class HistoryRecord(
      * 3.0 (#30) — Versión de la app que hizo la observación. Permite aplicar los cortes de dataset
      * (H10 desde 2.10.9, H8 desde 2.10.10, …) fila a fila. Null en filas anteriores a 3.0.
      */
-    val appVersion: String? = null
+    val appVersion: String? = null,
+    /** 3.0 — Modo de ubicación de la fila (`CONTINUOUS` / `ADAPTIVE`); null = desconocido. */
+    val locationMode: String? = null
 )
 
 /** Misma identidad completa que [CellData.identityKey], aplicada a una fila histórica. */

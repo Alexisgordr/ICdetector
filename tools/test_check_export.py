@@ -6,7 +6,7 @@ import sys
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from check_export import (
     LTE_EARFCN_RANGES, bands_outside_table, calendar_period_stats, dataset_cut_summary, evaluation_coverage, gps_accuracy_issues,
-    instant_issues, radio_context_summary, row_instant, version_key,
+    instant_issues, location_mode_summary, radio_context_summary, row_instant, version_key,
     ta_consistency_issues, ta_unit_diagnostic
 )
 
@@ -200,6 +200,16 @@ class LteBandTableTest(unittest.TestCase):
         with_bands, outside, declared = bands_outside_table(rows)
         self.assertEqual((2, 1), (with_bands, outside))
         self.assertEqual(1, declared["252"])
+
+    def test_location_modes_are_counted_and_unknown_kept_apart(self):
+        rows = [
+            {"LocationMode": "CONTINUOUS"}, {"LocationMode": "ADAPTIVE"},
+            {"LocationMode": "ADAPTIVE"}, {"LocationMode": ""}, {}, {"LocationMode": "GPS"},
+        ]
+        modes, unknown, invalid = location_mode_summary(rows)
+        self.assertEqual(1, modes["CONTINUOUS"])
+        self.assertEqual(2, modes["ADAPTIVE"])
+        self.assertEqual((2, 1), (unknown, invalid))
 
 if __name__ == "__main__":
     unittest.main()

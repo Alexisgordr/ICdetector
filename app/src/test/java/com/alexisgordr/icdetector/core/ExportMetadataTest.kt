@@ -18,15 +18,23 @@ class ExportMetadataTest {
         tac = "1", mcc = "214", dbm = -90
     )
 
-    @Test fun `the csv ends with the app version and the exporting device`() {
+    @Test fun `the csv ends with the app version, the exporting device and the location mode`() {
         val header = ExportUtils.CSV_HEADER.split(",")
-        assertEquals(listOf("AppVersion", "ExportDevice", "ExportAndroid"), header.takeLast(3))
+        assertEquals(listOf("AppVersion", "ExportDevice", "ExportAndroid", "LocationMode"), header.takeLast(4))
         val device = ExportUtils.ExportDevice("Google Pixel 8", "16 (API 36)")
         val row = ExportUtils.csvRow(base.copy(appVersion = "3.0.0-beta1"), device).split(",")
         assertEquals(header.size, row.size)
         assertEquals("3.0.0-beta1", row[header.indexOf("AppVersion")])
         assertEquals("Google Pixel 8", row[header.indexOf("ExportDevice")])
         assertEquals("16 (API 36)", row[header.indexOf("ExportAndroid")])
+    }
+
+    @Test fun `each row carries its own location mode, unknown when it was not recorded`() {
+        val header = ExportUtils.CSV_HEADER.split(",")
+        val idx = header.indexOf("LocationMode")
+        assertEquals("ADAPTIVE", ExportUtils.csvRow(base.copy(locationMode = "ADAPTIVE")).split(",")[idx])
+        assertEquals("CONTINUOUS", ExportUtils.csvRow(base.copy(locationMode = "CONTINUOUS")).split(",")[idx])
+        assertEquals("", ExportUtils.csvRow(base).split(",")[idx])
     }
 
     @Test fun `rows before 3_0 have an unknown version`() {

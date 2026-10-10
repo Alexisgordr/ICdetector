@@ -63,7 +63,7 @@ class CellDbHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME, 
             }
 
         private const val DATABASE_NAME = "icdetector_history.db"
-        private const val DATABASE_VERSION = SchemaV20.VERSION
+        private const val DATABASE_VERSION = SchemaV21.VERSION
         const val TABLE_HISTORY = "history"
         const val COLUMN_ID = "id"
         const val COLUMN_TIMESTAMP = "timestamp"
@@ -119,6 +119,8 @@ class CellDbHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME, 
         const val COLUMN_GPS_ACCURACY_M = SchemaV20.COLUMN_GPS_ACCURACY_M
         /** 3.0 (#30) — Versión de la app que observó la fila. NULL en filas anteriores. */
         const val COLUMN_APP_VERSION = SchemaV20.COLUMN_APP_VERSION
+        /** 3.0 — Modo de ubicación con el que se observó la fila (esquema 21). */
+        const val COLUMN_LOCATION_MODE = SchemaV21.COLUMN_LOCATION_MODE
         // v2.10.4 — Contexto de radio (schema 19). Solo recolección: ninguna consulta de
         // detección lee estas columnas. NULL en filas anteriores = "no se recogía", no "no había".
         const val COLUMN_CONN_STATUS = "conn_status"
@@ -338,6 +340,7 @@ class CellDbHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME, 
         createMobilityTables(db)
         createServiceStateTable(db)
         applySchemaV20(db)
+        applySchemaV21(db)
     }
 
     override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {
@@ -425,6 +428,7 @@ class CellDbHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME, 
             createServiceStateTable(db)
         }
         if (oldVersion < 20) applySchemaV20(db)
+        if (oldVersion < 21) applySchemaV21(db)
     }
 
     /**
@@ -436,6 +440,18 @@ class CellDbHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME, 
      * datos a la que le falte alguna (instalación parcial o rota) la recibe vacía, sin datos
      * inventados; antes el ALTER fallaba con "no such table" y la app no llegaba a abrir.
      */
+    /** 3.0 — Esquema 21 (ver [SchemaV21]); mismas reglas que [applySchemaV20]. */
+    private fun applySchemaV21(db: SQLiteDatabase) {
+        createHistoryTable(db)
+        SchemaV21.STATEMENTS.forEach { sql ->
+            try {
+                db.execSQL(sql)
+            } catch (e: Exception) {
+                if (e.message?.contains("duplicate column", ignoreCase = true) != true) throw e
+            }
+        }
+    }
+
     private fun applySchemaV20(db: SQLiteDatabase) {
         createHistoryTable(db)
         createIncidentTable(db)
@@ -1507,7 +1523,9 @@ class CellDbHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME, 
         /** 3.0 (#29) — Precisión del fix de [lat]/[lon], en metros. */
         gpsAccuracyM: Float? = null,
         /** 3.0 (#30) — Versión de la app que hizo la observación. */
-        appVersion: String? = null
+        appVersion: String? = null,
+        /** 3.0 — Modo de ubicación con el que se observó (`CONTINUOUS` / `ADAPTIVE`). */
+        locationMode: String? = null
     ): Long {
         val db = this.writableDatabase
         val values = ContentValues().apply {
@@ -1556,6 +1574,7 @@ class CellDbHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME, 
             // La precisión solo tiene sentido con una posición: sin lat/lon no se guarda.
             if (gpsAccuracyM != null && lat != null && lon != null) put(COLUMN_GPS_ACCURACY_M, gpsAccuracyM.toDouble())
             if (appVersion != null) put(COLUMN_APP_VERSION, appVersion)
+            if (locationMode != null) put(COLUMN_LOCATION_MODE, locationMode)
         }
         return db.insert(TABLE_HISTORY, null, values)
     }
@@ -1753,7 +1772,9 @@ class CellDbHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME, 
         val notEvaluatedIdx = cursor.getColumnIndex(COLUMN_NOT_EVALUATED)
         val accuracyIdx = cursor.getColumnIndex(COLUMN_GPS_ACCURACY_M)
         val appVersionIdx = cursor.getColumnIndex(COLUMN_APP_VERSION)
+        val locationModeIdx = cursor.getColumnIndex(COLUMN_LOCATION_MODE)
         return HistoryRecord(
+            locationMode = if (locationModeIdx >= 0 && !cursor.isNull(locationModeIdx)) cursor.getString(locationModeIdx) else null,
             appVersion = if (appVersionIdx >= 0 && !cursor.isNull(appVersionIdx)) cursor.getString(appVersionIdx) else null,
             observedAtMs = if (observedIdx >= 0 && !cursor.isNull(observedIdx)) cursor.getLong(observedIdx) else null,
             notEvaluatedHeuristics = if (notEvaluatedIdx >= 0 && !cursor.isNull(notEvaluatedIdx)) cursor.getString(notEvaluatedIdx) else null,
