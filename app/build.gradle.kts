@@ -21,6 +21,27 @@ plugins {
     id("org.jetbrains.kotlin.plugin.compose")
 }
 
+// 3.0 — Commit de esta compilación, para AppVersion (`versionName+commit`, ver core/AppBuildId.kt).
+// Desde el repositorio: `git describe` (commit corto, `-dirty` con cambios sin commitear). Desde un
+// ZIP de `git archive`: el fichero BUILD_COMMIT, que git rellena (export-subst). Si no: "nogit".
+// Con proveedores de Gradle, compatible con la caché de configuración.
+val buildCommit: String = run {
+    val commit = Regex("[0-9a-f]{7,40}(-dirty)?")
+    val fromGit = runCatching {
+        providers.exec {
+            commandLine("git", "describe", "--always", "--dirty", "--abbrev=7", "--exclude=*")
+            isIgnoreExitValue = true
+        }.standardOutput.asText.get().trim()
+    }.getOrDefault("")
+    val fromArchive = providers.fileContents(rootProject.layout.projectDirectory.file("BUILD_COMMIT"))
+        .asText.orNull?.trim().orEmpty()
+    when {
+        commit.matches(fromGit) -> fromGit
+        commit.matches(fromArchive) -> fromArchive
+        else -> "nogit"
+    }
+}
+
 android {
     namespace = "com.alexisgordr.icdetector"
 
@@ -36,9 +57,13 @@ android {
         minSdk = 29
         targetSdk = 37
 
-        versionCode = 38
-        versionName = "2.10.10"
+        versionCode = 39
+        buildConfigField("String", "BUILD_COMMIT", "\"$buildCommit\"")
+        versionName = "3.0.0-beta4"
 
+        // 3.0 — Las betas usan el mismo identificador y nombre que la versión final, para poder
+        // actualizar de beta a release. La 3.0 requiere instalación limpia (ver README/IMPORTANT);
+        // de ahí en adelante cada versión actualiza a la anterior.
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables {
@@ -64,6 +89,7 @@ android {
     }
     buildFeatures {
         compose = true
+        buildConfig = true
     }
 
     lint {
@@ -75,6 +101,13 @@ android {
     }
 
     packaging {
+        // 3.0 — libandroidx.graphics.path.so viene de Compose (androidx.graphics:graphics-path) ya
+        // compilada. Sin NDK instalado, Gradle no puede quitarle los símbolos, avisa en cada build y
+        // la empaqueta tal cual; con NDK la quitaría. Se deja SIEMPRE tal cual para que el APK sea
+        // el mismo en cualquier máquina (y para la compilación reproducible de F-Droid).
+        jniLibs {
+            keepDebugSymbols += "**/libandroidx.graphics.path.so"
+        }
         resources {
             excludes += "/META-INF/{AL2.0,LGPL2.1}"
             excludes += "/META-INF/DEPENDENCIES"
@@ -108,6 +141,9 @@ dependencies {
     implementation("org.json:json:20260522")
 
     testImplementation("junit:junit:4.13.2")
+    // 3.0 — Solo para pruebas: SQLite en la JVM para probar las migraciones de esquema contra
+    // un esquema anterior real. No entra en el APK.
+    testImplementation("org.xerial:sqlite-jdbc:3.46.1.3")
     androidTestImplementation("androidx.test.ext:junit:1.3.0")
     androidTestImplementation("androidx.test.espresso:espresso-core:3.7.0")
     androidTestImplementation(platform("androidx.compose:compose-bom:2026.05.01"))

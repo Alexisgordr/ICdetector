@@ -8,195 +8,336 @@ import android.location.Location
 import android.location.LocationListener
 import android.location.LocationManager
 import android.os.Looper
+import android.os.SystemClock
 import androidx.core.content.ContextCompat
+import com.alexisgordr.icdetector.core.GpsFixAge
 import com.alexisgordr.icdetector.core.GpsFixContinuity
+import com.alexisgordr.icdetector.core.GpsPowerPolicy
+import com.alexisgordr.icdetector.core.LocationMode
+import com.alexisgordr.icdetector.core.PreciseFixBackoff
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 /**
- * Owns the complete GNSS lifecycle: continuous GPS subscription, bounded one-shot fixes,
- * continuity validation, persisted reference state and listener cleanup.
- *
- * Network-derived location is deliberately excluded because it would use the cellular
- * infrastructure that the detector is trying to assess.
+ * GPS-only acquisition. Listener ownership and timers are confined to Main; reference validation
+ * is synchronized because currentLocation is also read by analysis workers. Network-derived
+ * positions are deliberately excluded from the independent geographic evidence.
  */
 internal class LocationCollectionController(
     private val context: Context,
     private val scope: CoroutineScope,
     private val log: (String) -> Unit,
     private val onStreamFixAvailable: (Location) -> Unit,
-    private val onPreciseFixAccepted: (Location) -> Unit
+    private val onPreciseFixAccepted: (Location) -> Unit,
+    private val locationMode: () -> LocationMode = { LocationMode.CONTINUOUS }
 ) {
     private val manager = context.getSystemService(LocationManager::class.java)
     private val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
     private val continuity = GpsFixContinuity()
-    private val forcedFixLock = Any()
+    private val referenceLock = Any()
+    private val powerPolicy = GpsPowerPolicy()
+    private val preciseFixBackoff = PreciseFixBackoff(FORCED_FIX_DEBOUNCE_MS)
 
+    @Volatile private var destroyed = false
+    private var collectionEnabled = true
+    private var screenOn = true
+    private var appliedMode: LocationMode? = null
     private var streamActive = false
+    private var streamStartedAtMs = 0L
+    private var lastLiveFixAtMs: Long? = null
     private var forcedFixListener: LocationListener? = null
-    private var lastForcedFixTime = 0L
+    private var forcedFixTimeout: Job? = null
+    private var handoverWindowExpiry: Job? = null
+    private var lastForcedFixAtMs: Long? = null
+    private var savingProbeAttempted = false
     private var lastAcceptedLocation: Location? = null
     private var lastPersistedLocationTime = 0L
     private var awaitingFreshCoordinates = false
-    private var pendingCoordinatesSince = 0L
-    private var lastScreenOffRetry = 0L
+    private var pendingCoordinatesSinceMs = 0L
+    private var lastScreenOffRetryMs: Long? = null
 
     private val streamListener = LocationListener { location ->
-        onStreamFixAvailable(Location(location))
+        if (!destroyed && collectionEnabled && streamActive && acceptCandidate(location, MAX_FIX_AGE_MS)) {
+            noteLiveFix(location)
+            onStreamFixAvailable(Location(location))
+        }
     }
 
-    init {
-        restoreReference()
+    init { restoreReference() }
+
+    /** Called by the existing collection loop and screen events; never starts a second loop. */
+    fun updateCollection(screenOn: Boolean, enabled: Boolean = true) = onMain {
+        this.screenOn = screenOn
+        collectionEnabled = enabled
+        updateOnMain()
     }
 
-    fun startContinuousUpdates() {
-        if (!hasPermission()) return
-        try {
-            if (!manager.isProviderEnabled(LocationManager.GPS_PROVIDER)) {
-                stopContinuousUpdates()
-                return
+    private fun updateOnMain() {
+        val mode = locationMode()
+        val changedMode = mode != appliedMode
+        if (changedMode) {
+            cancelPreciseFix()
+            stopContinuousUpdates()
+            clearHandoverWindow()
+            appliedMode = mode
+        }
+        if (!collectionEnabled || !gpsAvailable()) {
+            stopContinuousUpdates()
+            cancelPreciseFix()
+            clearHandoverWindow()
+            return
+        }
+        val now = SystemClock.elapsedRealtime()
+        if (mode != LocationMode.CONTINUOUS && streamActive &&
+            powerPolicy.streamHasStalled(streamStartedAtMs, lastLiveFixAtMs, now)
+        ) {
+            powerPolicy.onStreamUnavailable(now)
+            stopContinuousUpdates()
+            logDegradedReception(now)
+        }
+        if (powerPolicy.streamWanted(mode, screenOn, now)) {
+            if (mode == LocationMode.INTELLIGENT) cancelPreciseFix()
+            startContinuousUpdates()
+        } else {
+            // A completed Smart window without any new live fix counts as a failed acquisition.
+            // Mode changes, disabled GPS and critical-battery cancellation returned above.
+            if (streamActive && mode == LocationMode.INTELLIGENT && !powerPolicy.receptionDegraded &&
+                (lastLiveFixAtMs == null || lastLiveFixAtMs!! < streamStartedAtMs)
+            ) {
+                powerPolicy.onProbeFailed(now)
+                if (powerPolicy.receptionDegraded) logDegradedReception(now)
             }
-            if (streamActive) return
-            manager.requestLocationUpdates(
-                LocationManager.GPS_PROVIDER,
-                STREAM_INTERVAL_MS,
-                STREAM_MIN_DISTANCE_METERS,
-                streamListener,
-                Looper.getMainLooper()
-            )
-            streamActive = true
-        } catch (_: SecurityException) {}
-    }
-
-    fun stopContinuousUpdates() {
-        if (!streamActive) return
-        try { manager.removeUpdates(streamListener) } catch (_: Exception) {}
-        streamActive = false
-    }
-
-    fun markCoordinatesPending(now: Long = System.currentTimeMillis()) {
-        awaitingFreshCoordinates = true
-        pendingCoordinatesSince = now
-    }
-
-    fun resolvePendingCoordinates() {
-        awaitingFreshCoordinates = false
-    }
-
-    fun retryPendingCoordinatesIfDue(screenOn: Boolean, now: Long = System.currentTimeMillis()) {
-        if (screenOn || !awaitingFreshCoordinates) return
-        val pendingFor = now - pendingCoordinatesSince
-        if (pendingFor < PENDING_WINDOW_MS && now - lastScreenOffRetry > SCREEN_OFF_RETRY_MS) {
-            lastScreenOffRetry = now
-            requestPreciseFix()
+            stopContinuousUpdates()
+        }
+        if (powerPolicy.periodicProbeDue(mode, now) ||
+            (changedMode && mode == LocationMode.ADAPTIVE && !streamActive)
+        ) {
+            requestPreciseFixOnMain(force = false)
         }
     }
 
     @SuppressLint("MissingPermission")
-    fun requestPreciseFix(force: Boolean = false) {
-        val now = System.currentTimeMillis()
-        if (!hasPermission()) return
-        if (!manager.isProviderEnabled(LocationManager.GPS_PROVIDER)) return
-
-        lateinit var listener: LocationListener
-        synchronized(forcedFixLock) {
-            if (!force && now - lastForcedFixTime < FORCED_FIX_DEBOUNCE_MS) return
-            if (forcedFixListener != null) return
-            lastForcedFixTime = now
-            listener = LocationListener { location ->
-                val fresh = System.currentTimeMillis() - location.time < MAX_FIX_AGE_MS
-                if (location.accuracy > MAX_ACCURACY_METERS || !fresh || !isPlausible(location)) {
-                    return@LocationListener
-                }
-                val ownsRegistration = synchronized(forcedFixLock) {
-                    if (forcedFixListener === listener) {
-                        forcedFixListener = null
-                        true
-                    } else false
-                }
-                if (!ownsRegistration) return@LocationListener
-                try { manager.removeUpdates(listener) } catch (_: Exception) {}
-                accept(location)
-                resolvePendingCoordinates()
-                onPreciseFixAccepted(Location(location))
-            }
-            forcedFixListener = listener
-        }
-
-        log("Solicitando fix GPS preciso (fresco) para fijar coordenadas")
+    private fun startContinuousUpdates() {
+        if (streamActive || !gpsAvailable()) return
         try {
             manager.requestLocationUpdates(
-                LocationManager.GPS_PROVIDER, 0L, 0f, listener, Looper.getMainLooper()
+                LocationManager.GPS_PROVIDER, STREAM_INTERVAL_MS, 0f,
+                streamListener, Looper.getMainLooper()
             )
+            streamStartedAtMs = SystemClock.elapsedRealtime()
+            streamActive = true
         } catch (error: Exception) {
-            synchronized(forcedFixLock) {
-                if (forcedFixListener === listener) forcedFixListener = null
+            log("No se pudo registrar el GPS continuo: ${error.message}")
+        }
+    }
+
+    private fun stopContinuousUpdates() {
+        if (!streamActive) return
+        streamActive = false
+        try { manager.removeUpdates(streamListener) } catch (_: Exception) {}
+    }
+
+    fun markCoordinatesPending() = onMain {
+        awaitingFreshCoordinates = true
+        pendingCoordinatesSinceMs = SystemClock.elapsedRealtime()
+    }
+
+    fun resolvePendingCoordinates() = onMain { awaitingFreshCoordinates = false }
+
+    fun retryPendingCoordinatesIfDue(screenOn: Boolean) = onMain {
+        if (screenOn || !awaitingFreshCoordinates || powerPolicy.receptionDegraded) return@onMain
+        val now = SystemClock.elapsedRealtime()
+        if (now - pendingCoordinatesSinceMs < PENDING_WINDOW_MS &&
+            (lastScreenOffRetryMs?.let { now - it >= SCREEN_OFF_RETRY_MS } != false)
+        ) {
+            lastScreenOffRetryMs = now
+            requestPreciseFixOnMain(force = false)
+        }
+    }
+
+    fun requestPreciseFix(force: Boolean = false) = onMain { requestPreciseFixOnMain(force) }
+
+    /** Inteligente: ver [GpsPowerPolicy.onHandover] (antenas nuevas, recientes y fix fresco). */
+    fun onHandover(newCell: String, previousCell: String?) = onMain {
+        // Apply a freshly selected mode before creating its window, so mode cleanup cannot erase it.
+        updateOnMain()
+        if (!collectionEnabled || !gpsAvailable()) return@onMain
+        val action = powerPolicy.onHandover(
+            locationMode(), SystemClock.elapsedRealtime(), newCell, previousCell, lastLiveFixAtMs
+        )
+        when (action) {
+            GpsPowerPolicy.HandoverAction.NONE -> return@onMain
+            // Continuo y adaptativo, o antena reciente sin fix de los últimos 45 s: petición normal.
+            GpsPowerPolicy.HandoverAction.SHARED_GATE -> {
+                requestPreciseFixOnMain(force = false)
+                return@onMain
             }
+            GpsPowerPolicy.HandoverAction.PROBE -> {
+                requestPreciseFixOnMain(force = false)
+                return@onMain
+            }
+            // Una antena nueva siempre despierta el GPS, también con mala recepción.
+            GpsPowerPolicy.HandoverAction.BOUNDED_PROBE -> {
+                requestPreciseFixOnMain(force = false, newCellHandover = true)
+                return@onMain
+            }
+            GpsPowerPolicy.HandoverAction.WINDOW -> Unit
+        }
+        handoverWindowExpiry?.cancel()
+        updateOnMain()
+        handoverWindowExpiry = scope.launch(Dispatchers.Main.immediate) {
+            delay(GpsPowerPolicy.HANDOVER_WINDOW_MS)
+            updateOnMain()
+        }
+    }
+
+    private fun clearHandoverWindow() {
+        handoverWindowExpiry?.cancel()
+        handoverWindowExpiry = null
+        powerPolicy.clearHandoverWindow()
+    }
+
+    @SuppressLint("MissingPermission")
+    private fun requestPreciseFixOnMain(force: Boolean, newCellHandover: Boolean = false) {
+        if (!collectionEnabled || !gpsAvailable() || forcedFixListener != null) return
+        val mode = locationMode()
+        val now = SystemClock.elapsedRealtime()
+        if (mode != LocationMode.CONTINUOUS) {
+            // An existing GPS stream already supplies live fixes. Do not add overlapping probes.
+            if (streamActive) return
+            if (!powerPolicy.probeAllowed(mode, now, newCellHandover)) return
+        } else if (!force && lastForcedFixAtMs?.let {
+            now - it < preciseFixBackoff.minIntervalMs()
+        } == true) return
+
+        lastForcedFixAtMs = now
+        val timeoutMs = when {
+            mode == LocationMode.CONTINUOUS -> if (force) COLD_FIX_TIMEOUT_MS else WARM_FIX_TIMEOUT_MS
+            // El intento por antena nueva sin recepción dura como mucho 20 s, también si es el
+            // primero tras cambiar de modo.
+            newCellHandover -> GpsPowerPolicy.SAVING_PROBE_TIMEOUT_MS
+            !savingProbeAttempted -> GpsPowerPolicy.INITIAL_PROBE_TIMEOUT_MS
+            else -> GpsPowerPolicy.SAVING_PROBE_TIMEOUT_MS
+        }
+        if (mode != LocationMode.CONTINUOUS) savingProbeAttempted = true
+
+        lateinit var listener: LocationListener
+        listener = LocationListener { location ->
+            if (destroyed || forcedFixListener !== listener || !collectionEnabled) return@LocationListener
+            val fixAtMs = location.elapsedRealtimeNanos / 1_000_000L
+            // Saving-mode probes require a live fix from this attempt (small cache allowance).
+            // Re-delivery of an older cached fix must not conceal repeated acquisition failures.
+            if (mode != LocationMode.CONTINUOUS && fixAtMs < now - LIVE_FIX_MAX_AGE_MS) return@LocationListener
+            val maxAge = if (mode == LocationMode.CONTINUOUS) MAX_FIX_AGE_MS else LIVE_FIX_MAX_AGE_MS
+            if (!acceptCandidate(location, maxAge)) return@LocationListener
+            cancelPreciseFix()
+            preciseFixBackoff.onSuccess()
+            noteLiveFix(location)
+            awaitingFreshCoordinates = false
+            onPreciseFixAccepted(Location(location))
+            updateOnMain()
+        }
+        forcedFixListener = listener
+        log("Solicitando fix GPS preciso (fresco) para fijar coordenadas")
+        try {
+            manager.requestLocationUpdates(LocationManager.GPS_PROVIDER, 0L, 0f, listener, Looper.getMainLooper())
+        } catch (error: Exception) {
+            cancelPreciseFix()
             log("No se pudo registrar el fix GPS preciso: ${error.message}")
             return
         }
-
-        val timeoutMs = if (force) COLD_FIX_TIMEOUT_MS else WARM_FIX_TIMEOUT_MS
-        scope.launch {
+        // El intento ha empezado de verdad: cuenta para el control común de todos los límites.
+        if (mode != LocationMode.CONTINUOUS) powerPolicy.onProbeStarted(now)
+        forcedFixTimeout = scope.launch(Dispatchers.Main.immediate) {
             delay(timeoutMs)
-            val timedOut = synchronized(forcedFixLock) {
-                if (forcedFixListener === listener) {
-                    forcedFixListener = null
-                    true
-                } else false
+            if (destroyed || forcedFixListener !== listener) return@launch
+            cancelPreciseFix()
+            val endedAtMs = SystemClock.elapsedRealtime()
+            if (mode == LocationMode.CONTINUOUS) {
+                preciseFixBackoff.onTimeout()
+            } else {
+                powerPolicy.onProbeFailed(endedAtMs)
+                if (powerPolicy.receptionDegraded) logDegradedReception(endedAtMs)
             }
-            if (timedOut) {
-                try { manager.removeUpdates(listener) } catch (_: Exception) {}
-                log("Fix GPS preciso no disponible en ${timeoutMs / 1_000} s (timeout)")
-            }
+            log("Fix GPS preciso no disponible en ${timeoutMs / 1_000} s (timeout)")
         }
     }
+
+    private fun cancelPreciseFix() {
+        val listener = forcedFixListener
+        forcedFixListener = null
+        forcedFixTimeout?.cancel()
+        forcedFixTimeout = null
+        listener?.let { try { manager.removeUpdates(it) } catch (_: Exception) {} }
+    }
+
+    private fun noteLiveFix(location: Location) {
+        val now = SystemClock.elapsedRealtime()
+        val fixAtMs = location.elapsedRealtimeNanos / 1_000_000L
+        if (!GpsFixAge.isRecent(now, fixAtMs, LIVE_FIX_MAX_AGE_MS) ||
+            lastLiveFixAtMs?.let { fixAtMs <= it } == true
+        ) return
+        val wasDegraded = powerPolicy.receptionDegraded
+        lastLiveFixAtMs = fixAtMs
+        powerPolicy.onFreshFix(now)
+        if (wasDegraded) log("Recepción GPS recuperada: reanudando el modo de ubicación.")
+    }
+
+    private fun logDegradedReception(nowMs: Long) {
+        val seconds = (powerPolicy.nextProbeAtMs - nowMs).coerceAtLeast(0L) / 1_000L
+        log("Recepción GPS degradada: próximo intento periódico en $seconds s. El escaneo celular continúa.")
+    }
+
+    /** UI availability check: validates the cached fix without registering GPS requests. */
+    fun hasUsableGpsFix(): Boolean = gpsAvailable() && currentLocation() != null
 
     @SuppressLint("MissingPermission")
     fun currentLocation(): Location? {
-        if (!hasPermission()) return null
+        if (destroyed || !hasPermission()) return null
         return try {
-            val now = System.currentTimeMillis()
-            val candidate = manager.getLastKnownLocation(LocationManager.GPS_PROVIDER)?.takeIf {
-                it.accuracy < MAX_ACCURACY_METERS && now - it.time < MAX_FIX_AGE_MS
-            }
-            if (candidate != null && isPlausible(candidate)) {
-                accept(candidate)
-                Location(candidate)
-            } else null
+            val candidate = manager.getLastKnownLocation(LocationManager.GPS_PROVIDER)
+            candidate?.takeIf { acceptCandidate(it, MAX_FIX_AGE_MS) }?.let(::Location)
         } catch (_: Exception) { null }
     }
 
-    fun lastAcceptedLocation(): Location? = lastAcceptedLocation?.let(::Location)
+    fun lastAcceptedLocation(): Location? = synchronized(referenceLock) { lastAcceptedLocation?.let(::Location) }
 
+    /** Service.onDestroy is on Main; cleanup still runs after its coroutine scope was cancelled. */
     fun destroy() {
+        destroyed = true
+        clearHandoverWindow()
         stopContinuousUpdates()
-        val pending = synchronized(forcedFixLock) {
-            forcedFixListener.also { forcedFixListener = null }
-        }
-        pending?.let { try { manager.removeUpdates(it) } catch (_: Exception) {} }
+        cancelPreciseFix()
+    }
+
+    private fun onMain(action: () -> Unit) {
+        scope.launch(Dispatchers.Main.immediate) { if (!destroyed) action() }
     }
 
     private fun hasPermission(): Boolean = ContextCompat.checkSelfPermission(
         context, Manifest.permission.ACCESS_FINE_LOCATION
     ) == PackageManager.PERMISSION_GRANTED
 
-    private fun isPlausible(candidate: Location): Boolean {
-        fun Location.asFix() = GpsFixContinuity.Fix(latitude, longitude, time, accuracy)
-        return continuity.accept(lastAcceptedLocation?.asFix(), candidate.asFix())
-    }
+    private fun gpsAvailable(): Boolean = try {
+        hasPermission() && manager.isProviderEnabled(LocationManager.GPS_PROVIDER)
+    } catch (_: Exception) { false }
 
-    private fun accept(location: Location) {
-        lastAcceptedLocation = Location(location)
-        if (location.time <= lastPersistedLocationTime) return
-        lastPersistedLocationTime = location.time
-        try {
-            prefs.edit().putString(
-                KEY_LAST_LOCATION,
-                "${location.latitude},${location.longitude},${location.time}"
-            ).apply()
-        } catch (_: Exception) {}
+    private fun acceptCandidate(candidate: Location, maxAgeMs: Long): Boolean = synchronized(referenceLock) {
+        if (!candidate.hasAccuracy() || candidate.accuracy >= MAX_ACCURACY_METERS ||
+            !GpsFixAge.isRecent(SystemClock.elapsedRealtime(), candidate.elapsedRealtimeNanos / 1_000_000L, maxAgeMs)
+        ) return@synchronized false
+        fun Location.asFix() = GpsFixContinuity.Fix(latitude, longitude, time, accuracy)
+        if (!continuity.accept(lastAcceptedLocation?.asFix(), candidate.asFix())) return@synchronized false
+        lastAcceptedLocation = Location(candidate)
+        if (candidate.time > lastPersistedLocationTime) {
+            lastPersistedLocationTime = candidate.time
+            prefs.edit().putString(KEY_LAST_LOCATION,
+                "${candidate.latitude},${candidate.longitude},${candidate.time}").apply()
+        }
+        true
     }
 
     private fun restoreReference() {
@@ -206,8 +347,7 @@ internal class LocationCollectionController(
             val lat = parts[0].toDoubleOrNull() ?: return
             val lon = parts[1].toDoubleOrNull() ?: return
             val time = parts[2].toLongOrNull() ?: return
-            val age = System.currentTimeMillis() - time
-            if (age !in 0..REFERENCE_MAX_AGE_MS) return
+            if (System.currentTimeMillis() - time !in 0..REFERENCE_MAX_AGE_MS) return
             lastAcceptedLocation = Location(LocationManager.GPS_PROVIDER).apply {
                 latitude = lat
                 longitude = lon
@@ -221,10 +361,8 @@ internal class LocationCollectionController(
         const val PREFS_NAME = "miniic_prefs"
         const val KEY_LAST_LOCATION = "last_accepted_loc"
         const val STREAM_INTERVAL_MS = 15_000L
-        // Stable motion needs periodic fixes while the device is stationary. A distance gate
-        // would suppress precisely those samples; the 15 s time gate remains the power bound.
-        const val STREAM_MIN_DISTANCE_METERS = 0f
         const val MAX_FIX_AGE_MS = 120_000L
+        const val LIVE_FIX_MAX_AGE_MS = 10_000L
         const val MAX_ACCURACY_METERS = 100f
         const val FORCED_FIX_DEBOUNCE_MS = 30_000L
         const val WARM_FIX_TIMEOUT_MS = 20_000L

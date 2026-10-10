@@ -14,6 +14,14 @@ package com.alexisgordr.icdetector.models
  */
 const val SUBTHRESHOLD_PREFIX = "[sub-umbral]"
 
+/**
+ * 3.0 (#7, B4) — Prefijo de los motivos de Stable-Site cuando la protección está activa. Como
+ * [SUBTHRESHOLD_PREFIX], se guarda en castellano y la interfaz en inglés lo muestra como
+ * `[site-unverified]`. Antes se guardaba en inglés y no tenía traducción. Con la protección en
+ * modo sombra (STABLE_SITE_ENFORCEMENT_ENABLED = false) nunca se ha llegado a guardar.
+ */
+const val SITE_UNVERIFIED_PREFIX = "[sitio-sin-verificar]"
+
 data class HistoryRecord(
     val timestamp: String,
     val netType: String,
@@ -34,7 +42,8 @@ data class HistoryRecord(
     /**
      * Confianza de anomalía calculada por BayesianScorer en el momento de la observación (0..95).
      *
-     * Se persiste y se exporta para poder RECALIBRAR los likelihood ratios con datos reales —
+     * Se persiste y se exporta para poder REVISAR los likelihood ratios con datos reales (3.0:
+     * con datos solo benignos no basta para recalibrarlos; hacen falta también ataques reales) —
      * antes se calculaba en cada ciclo y se perdía al salir de la UI, así que no había nada que
      * calibrar (roadmap #7). No es una probabilidad medida: ver [CellData.anomalyConfidence].
      */
@@ -83,7 +92,28 @@ data class HistoryRecord(
     val serviceState: String? = null,
     val networkOperator: String? = null,
     val simOperator: String? = null,
-    val networkRoaming: Boolean? = null
+    val networkRoaming: Boolean? = null,
+    /**
+     * 3.0 (#23) — Instante de la observación en milisegundos desde epoch (UTC). [timestamp] es
+     * texto local sin zona y se repite en el cambio de hora de otoño; este valor no. Null en las
+     * filas anteriores a 3.0: su zona nunca se guardó y no se reconstruye.
+     */
+    val observedAtMs: Long? = null,
+    /**
+     * 3.0 (#29) — Reglas que se abstuvieron en esta observación (`H1;H6;H9`), o `NONE` si todas se
+     * evaluaron. Null en filas anteriores a 3.0: entonces no se guardaba y es desconocido, nunca
+     * "evaluada".
+     */
+    val notEvaluatedHeuristics: String? = null,
+    /** 3.0 (#29) — Precisión en metros del fix de [lat]/[lon]. Null sin fix o en filas anteriores. */
+    val gpsAccuracyM: Float? = null,
+    /**
+     * 3.0 (#30) — Versión de la app que hizo la observación. Permite aplicar los cortes de dataset
+     * (H10 desde 2.10.9, H8 desde 2.10.10, …) fila a fila. Null en filas anteriores a 3.0.
+     */
+    val appVersion: String? = null,
+    /** 3.0 — Modo de ubicación (`CONTINUOUS` / `INTELLIGENT` / `ADAPTIVE`); null = desconocido. */
+    val locationMode: String? = null
 )
 
 /** Misma identidad completa que [CellData.identityKey], aplicada a una fila histórica. */

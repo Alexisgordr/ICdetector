@@ -42,6 +42,99 @@ RADIO_CONTEXT_COLUMNS_V2104 = [
     "SimOperator", "NetworkRoaming",
 ]
 EXPECTED_COLUMNS_V2104 = EXPECTED_COLUMNS_V21 + RADIO_CONTEXT_COLUMNS_V2104
+# 3.0 (#23) — Instante inequívoco en UTC. Vacío en filas anteriores a 3.0 (desconocido).
+EXPECTED_COLUMNS_V30 = EXPECTED_COLUMNS_V2104 + [
+    "ObservedAtUtc", "NotEvaluatedHeuristics", "GpsAccuracyM", "AppVersion", "ExportDevice", "ExportAndroid",
+]
+# 3.0 (esquema 21) — Modo de ubicación: CONTINUOUS, INTELLIGENT o ADAPTIVE. Vacío = desconocido.
+EXPECTED_COLUMNS_V30_LOCATION = EXPECTED_COLUMNS_V30 + ["LocationMode"]
+LOCATION_MODES = ("CONTINUOUS", "INTELLIGENT", "ADAPTIVE")
+# Cortes de dataset: a partir de esta versión cambió cómo se evalúa la regla indicada.
+DATASET_CUTS = [
+    ("2.10.9", "H10 (Ping-Pong)"),
+    ("2.10.10", "H8 (frecuencia)"),
+    ("3.0.0", "instante UTC y cobertura por fila (metodología)"),
+]
+HEURISTIC_IDS = [f"H{i}" for i in range(1, 17)]
+# 3.0 (#32) — Rangos EARFCN de bajada por banda, iguales que BandPlan.kt (lo comprueba un test).
+LTE_EARFCN_RANGES = {
+    1: (0, 599),
+    2: (600, 1199),
+    3: (1200, 1949),
+    4: (1950, 2399),
+    5: (2400, 2649),
+    7: (2750, 3449),
+    8: (3450, 3799),
+    9: (3800, 4149),
+    10: (4150, 4749),
+    11: (4750, 4949),
+    12: (5010, 5179),
+    13: (5180, 5279),
+    14: (5280, 5379),
+    17: (5730, 5849),
+    18: (5850, 5999),
+    19: (6000, 6149),
+    20: (6150, 6449),
+    21: (6450, 6599),
+    22: (6600, 7399),
+    24: (7700, 8039),
+    25: (8040, 8689),
+    26: (8690, 9039),
+    27: (9040, 9209),
+    28: (9210, 9659),
+    29: (9660, 9769),
+    30: (9770, 9869),
+    31: (9870, 9919),
+    32: (9920, 10359),
+    33: (36000, 36199),
+    34: (36200, 36349),
+    35: (36350, 36949),
+    36: (36950, 37549),
+    37: (37550, 37749),
+    38: (37750, 38249),
+    39: (38250, 38649),
+    40: (38650, 39649),
+    41: (39650, 41589),
+    42: (41590, 43589),
+    43: (43590, 45589),
+    44: (45590, 46589),
+    45: (46590, 46789),
+    46: (46790, 54539),
+    47: (54540, 55239),
+    48: (55240, 56739),
+    49: (56740, 58239),
+    50: (58240, 59089),
+    51: (59090, 59139),
+    52: (59140, 60139),
+    53: (60140, 60254),
+    54: (60255, 60304),
+    65: (65536, 66435),
+    66: (66436, 67335),
+    67: (67336, 67535),
+    68: (67536, 67835),
+    69: (67836, 68335),
+    70: (68336, 68585),
+    71: (68586, 68935),
+    72: (68936, 68985),
+    73: (68986, 69035),
+    74: (69036, 69465),
+    75: (69466, 70315),
+    76: (70316, 70365),
+    85: (70366, 70545),
+    87: (70546, 70595),
+    88: (70596, 70645),
+    103: (70646, 70655),
+    106: (70656, 70705),
+    107: (70706, 71105),
+    108: (71106, 73385),
+    111: (73386, 73485),
+    112: (73486, 74865),
+    113: (74866, 75785),
+}
+# La app no acepta fixes con una precisión peor que esta (LocationCollectionController).
+MAX_ACCEPTED_ACCURACY_M = 100.0
+VAGUE_ACCURACY_M = 50.0
+UTC_FORMAT = "%Y-%m-%dT%H:%M:%S.%fZ"
 SERVING_CONNECTION_VALUES = {"PRIMARY_SERVING", "SECONDARY_SERVING", "NONE", "UNKNOWN"}
 SERVICE_STATE_VALUES = {"IN_SERVICE", "OUT_OF_SERVICE", "EMERGENCY_ONLY", "POWER_OFF", "UNKNOWN"}
 
@@ -92,6 +185,153 @@ def load(path):
     with open(path, newline="", encoding="utf-8") as fh:
         reader = csv.DictReader(fh)
         return reader.fieldnames or [], list(reader)
+
+
+def row_instant(row):
+    """Instante UTC de la fila (datetime sin zona, en UTC), o None en filas anteriores a 3.0."""
+    raw = (row.get("ObservedAtUtc") or "").strip()
+    if not raw:
+        return None
+    try:
+        return datetime.strptime(raw, UTC_FORMAT)
+    except ValueError:
+        return None
+
+
+def instant_issues(rows):
+    """
+    Filas cuyo texto local no encaja con su instante UTC. La diferencia entre ambos es la
+    zona horaria del momento: tiene que estar entre -14 h y +14 h y ser múltiplo de 15 min.
+    Una fila con ObservedAtUtc ilegible también cuenta como problema.
+    """
+    issues = []
+    for r in rows:
+        raw = (r.get("ObservedAtUtc") or "").strip()
+        if not raw:
+            continue
+        utc = row_instant(r)
+        try:
+            local = datetime.strptime(r.get("Timestamp") or "", TS_FORMAT)
+        except ValueError:
+            local = None
+        if utc is None or local is None:
+            issues.append(r)
+            continue
+        offset_s = (local - utc.replace(microsecond=0)).total_seconds()
+        if abs(offset_s) > 14 * 3600 or round(offset_s) % 900 != 0:
+            issues.append(r)
+    return issues
+
+
+def lte_band_of(earfcn):
+    for band, (lo, hi) in LTE_EARFCN_RANGES.items():
+        if lo <= earfcn <= hi:
+            return band
+    return None
+
+
+def bands_outside_table(rows):
+    """
+    3.0 (#32) — Filas LTE con `Bands` informado por el módem pero cuyo EARFCN no está en la tabla
+    de la app. Antes de 3.0 esas filas dejaban H14 en N/A; desde 3.0 se usa la banda declarada.
+    Devuelve (filas LTE con Bands, de ellas fuera de tabla, Counter de bandas declaradas fuera).
+    """
+    with_bands, outside, declared = 0, 0, Counter()
+    for r in rows:
+        if (r.get("Radio") or "") != "LTE" or not (r.get("Bands") or "").strip():
+            continue
+        with_bands += 1
+        earfcn = fnum(r, "ARFCN")
+        if earfcn is None or lte_band_of(int(earfcn)) is None:
+            outside += 1
+            declared[(r.get("Bands") or "").strip()] += 1
+    return with_bands, outside, declared
+
+
+def evaluation_coverage(rows):
+    """
+    3.0 (#29) — Por regla: (filas en que se evaluó, filas con el dato). Solo cuentan las filas
+    con NotEvaluatedHeuristics informado; las anteriores a 3.0 lo tienen vacío y son
+    desconocidas, no "evaluadas". `NONE` significa que se evaluaron todas.
+    """
+    known = 0
+    evaluated = {h: 0 for h in HEURISTIC_IDS}
+    for r in rows:
+        raw = (r.get("NotEvaluatedHeuristics") or "").strip()
+        if not raw:
+            continue
+        known += 1
+        skipped = set() if raw == "NONE" else {x.strip() for x in raw.split(";") if x.strip()}
+        for h in HEURISTIC_IDS:
+            if h not in skipped:
+                evaluated[h] += 1
+    return {h: (evaluated[h], known) for h in HEURISTIC_IDS}
+
+
+def gps_accuracy_issues(rows):
+    """
+    3.0 (#29) — Filas 3.0 con posición pero sin precisión, o con una precisión que la app nunca
+    acepta (>= 100 m, negativa o ilegible). Las filas anteriores a 3.0 no se juzgan.
+    """
+    issues = []
+    for r in rows:
+        if not (r.get("ObservedAtUtc") or "").strip():
+            continue
+        has_fix = fnum(r, "Lat") is not None and fnum(r, "Lon") is not None
+        raw = (r.get("GpsAccuracyM") or "").strip()
+        if not raw:
+            if has_fix:
+                issues.append(r)
+            continue
+        acc = fnum(r, "GpsAccuracyM")
+        if not has_fix or acc is None or acc < 0 or acc >= MAX_ACCEPTED_ACCURACY_M:
+            issues.append(r)
+    return issues
+
+
+def version_key(version):
+    """'3.0.0-beta1' -> (3, 0, 0). Una pre-versión cuenta como su versión base, y lo que va tras
+    '+' (el commit de la compilación, 3.0) no cuenta: '3.0.0+6bb5ed3' -> (3, 0, 0)."""
+    base = (version or "").strip().split("+")[0].split("-")[0]
+    parts = []
+    for p in base.split("."):
+        if not p.isdigit():
+            return None
+        parts.append(int(p))
+    return tuple(parts + [0] * (3 - len(parts))) if parts else None
+
+
+def location_mode_summary(rows):
+    """Filas por modo de ubicación; los valores vacíos se cuentan como desconocidos y los que no son
+    un modo conocido, aparte."""
+    modes = Counter()
+    unknown = invalid = 0
+    for r in rows:
+        mode = (r.get("LocationMode") or "").strip()
+        if not mode:
+            unknown += 1
+        elif mode in LOCATION_MODES:
+            modes[mode] += 1
+        else:
+            invalid += 1
+    return modes, unknown, invalid
+
+
+def dataset_cut_summary(rows):
+    """
+    3.0 (#30) — Filas por versión de la app y, por cada corte, cuántas filas con versión quedan
+    antes y después. Las filas sin AppVersion (anteriores a 3.0) se cuentan aparte: su versión
+    es desconocida y el corte solo se les puede aplicar por fecha.
+    """
+    versions = Counter((r.get("AppVersion") or "").strip() for r in rows)
+    unknown = versions.pop("", 0)
+    cuts = []
+    for cut, rule in DATASET_CUTS:
+        ck = version_key(cut)
+        before = sum(n for v, n in versions.items() if version_key(v) is not None and version_key(v) < ck)
+        after = sum(n for v, n in versions.items() if version_key(v) is not None and version_key(v) >= ck)
+        cuts.append((cut, rule, before, after))
+    return versions, unknown, cuts
 
 
 def calendar_period_stats(times, row_count):
@@ -262,30 +502,53 @@ def main(path):
     # ---- 3. Saltos físicamente imposibles ---------------------------------------------------
     # Lat/Lon es la posición del dispositivo. Entre dos observaciones consecutivas no puede
     # implicar una velocidad terrestre absurda.
-    fixes = []
+    # 3.0 (#23) — Las filas con instante UTC se ordenan por él (sin saltos falsos en el cambio
+    # de hora); las anteriores, por su texto local como antes. Las dos series no se mezclan.
+    legacy_fixes, instant_fixes = [], []
     for r in rows:
         lat, lon = fnum(r, "Lat"), fnum(r, "Lon")
         if lat is None or lon is None:
+            continue
+        instant = row_instant(r)
+        if instant is not None:
+            instant_fixes.append((instant, lat, lon, r.get("Timestamp", "")))
             continue
         try:
             ts = datetime.strptime(r["Timestamp"], TS_FORMAT)
         except (ValueError, KeyError):
             continue
-        fixes.append((ts, lat, lon, r["Timestamp"]))
-    fixes.sort(key=lambda x: x[0])
+        legacy_fixes.append((ts, lat, lon, r["Timestamp"]))
 
     jumps = []
-    for (t1, la1, lo1, s1), (t2, la2, lo2, s2) in zip(fixes, fixes[1:]):
-        dt = max((t2 - t1).total_seconds(), 1.0)
-        kmh = (haversine_m(la1, lo1, la2, lo2) / dt) * 3.6
-        if kmh > 400:
-            jumps.append((s1, s2, round(kmh)))
+    for fixes in (legacy_fixes, instant_fixes):
+        fixes.sort(key=lambda x: x[0])
+        for (t1, la1, lo1, s1), (t2, la2, lo2, s2) in zip(fixes, fixes[1:]):
+            dt = max((t2 - t1).total_seconds(), 1.0)
+            kmh = (haversine_m(la1, lo1, la2, lo2) / dt) * 3.6
+            if kmh > 400:
+                jumps.append((s1, s2, round(kmh)))
     check(
         "Ningún salto entre fixes por encima de 400 km/h",
         not jumps,
         f"{len(jumps)} saltos (el primero {jumps[0][0]} -> {jumps[0][1]}: {jumps[0][2]} km/h)"
         if jumps else "",
     )
+
+    # ---- 3b. Instante UTC (3.0) ----------------------------------------------------------
+    if "ObservedAtUtc" in columns:
+        bad_instant = instant_issues(rows)
+        check(
+            "ObservedAtUtc coherente con la hora local (zona entre -14 h y +14 h)",
+            not bad_instant,
+            f"{len(bad_instant)} filas (p. ej. {bad_instant[0].get('Timestamp')} / "
+            f"{bad_instant[0].get('ObservedAtUtc')!r})" if bad_instant else "",
+        )
+        without = sum(1 for r in rows if not (r.get("ObservedAtUtc") or "").strip())
+        if without:
+            notes.append(
+                f"{without} filas sin ObservedAtUtc: son anteriores a 3.0 y su instante es "
+                "desconocido (solo hay hora local sin zona). No se reconstruye."
+            )
 
     # ---- 4. Rangos físicos ------------------------------------------------------------------
     bad_dbm = [r for r in rows if not (-145 <= fnum_or(r, "DBM", -90) <= -30)]
@@ -336,6 +599,82 @@ def main(path):
           f"{len(na_identity)} filas")
 
     # ---- Resumen de madurez -----------------------------------------------------------------
+    if "NotEvaluatedHeuristics" in columns:
+        bad_acc = gps_accuracy_issues(rows)
+        check(
+            "GpsAccuracyM presente con cada posición 3.0 y por debajo de 100 m",
+            not bad_acc,
+            f"{len(bad_acc)} filas (p. ej. {bad_acc[0].get('Timestamp')} "
+            f"GpsAccuracyM={bad_acc[0].get('GpsAccuracyM')!r})" if bad_acc else "",
+        )
+
+        coverage = evaluation_coverage(rows)
+        known = next(iter(coverage.values()))[1]
+        print("\nCOBERTURA DE EVALUACIÓN (3.0)")
+        if known == 0:
+            print("  Ninguna fila con NotEvaluatedHeuristics: todas son anteriores a 3.0.")
+        else:
+            print(f"  Filas con el dato: {known} de {len(rows)} (el resto es anterior a 3.0: desconocido)")
+            for h in HEURISTIC_IDS:
+                ev, total = coverage[h]
+                print(f"    {h:>3}: evaluada en {100 * ev / total:5.1f} % ({ev}/{total})")
+        accuracies = [fnum(r, "GpsAccuracyM") for r in rows if fnum(r, "GpsAccuracyM") is not None]
+        if accuracies:
+            vague = sum(1 for a in accuracies if a > VAGUE_ACCURACY_M)
+            print(f"  Precisión GPS: {len(accuracies)} filas; > {VAGUE_ACCURACY_M:.0f} m: {vague} "
+                  f"({100 * vague / len(accuracies):.1f} %)")
+            if vague:
+                notes.append(
+                    f"{vague} posiciones con precisión peor que {VAGUE_ACCURACY_M:.0f} m. La detección "
+                    "ya las limita (H16 exige <= 75 m y Stable-Site <= 50 m), pero conviene filtrarlas "
+                    "al analizar la geometría."
+                )
+
+    if "AppVersion" in columns:
+        versions, unknown, cuts = dataset_cut_summary(rows)
+        print("\nVERSIONES Y CORTES DE DATASET (3.0)")
+        for v, n in sorted(versions.items(), key=lambda kv: version_key(kv[0]) or ()):
+            print(f"  {v}: {n} filas")
+        if unknown:
+            print(f"  desconocida (anterior a 3.0): {unknown} filas — el corte solo se aplica por fecha")
+        for cut, rule, before, after in cuts:
+            if before and after:
+                print(f"  Corte {cut} ({rule}): {before} filas antes y {after} después — no mezclarlas")
+        devices = Counter(
+            ((r.get("ExportDevice") or "").strip(), (r.get("ExportAndroid") or "").strip()) for r in rows
+        )
+        if len(devices) > 1:
+            notes.append(
+                f"El fichero une exports de {len(devices)} teléfonos/Android distintos: "
+                + "; ".join(f"{d or '?'} {a}".strip() for d, a in devices)
+                + ". Analízalos por separado."
+            )
+
+    if "LocationMode" in columns:
+        modes, unknown, invalid = location_mode_summary(rows)
+        print("\nMODO DE UBICACIÓN (3.0)")
+        for mode in LOCATION_MODES:
+            print(f"  {mode}: {modes.get(mode, 0)} filas")
+        if unknown:
+            print(f"  desconocido (anterior al esquema 21): {unknown} filas")
+        check("LocationMode es CONTINUOUS, INTELLIGENT, ADAPTIVE o vacío", invalid == 0,
+              f"{invalid} filas con otro valor" if invalid else "")
+        if modes.get("ADAPTIVE") or modes.get("INTELLIGENT"):
+            notes.append(
+                f"{modes['ADAPTIVE'] + modes['INTELLIGENT']} filas en modos con pausas GPS: "
+                "la posición se pide en ventanas acotadas o momentos concretos, así que H11, H13 "
+                "y H16 pueden estar en N/A más a menudo. "
+                "Compara la cobertura de esas reglas por modo antes de juntar los datos."
+            )
+
+    if "Bands" in columns:
+        with_bands, outside, declared = bands_outside_table(rows)
+        if with_bands:
+            print("\nBANDAS LTE (3.0)")
+            print(f"  Filas LTE con Bands del módem: {with_bands}; con EARFCN fuera de la tabla: {outside}")
+            for b, n in declared.most_common(5):
+                print(f"    Bands={b}: {n} filas")
+
     print("\nMADUREZ DEL HISTORIAL")
     per_cell = Counter((r["CID"], r["MNC"], r["TAC"], r["MCC"]) for r in rows)
     counts = sorted(per_cell.values())

@@ -283,6 +283,8 @@
     <string name="permissions_denied_hint">Si denegaste un permiso y Android ya no lo vuelve a pedir, concédelo desde los ajustes de la app.</string>
     <string name="permissions_open_settings">Abrir ajustes de la app</string>
     <string name="notif_monitoring_title">ICdetection: monitorización · GPS continuo</string>
+    <string name="notif_monitoring_title_adaptive">ICdetection: monitorización · GPS adaptativo</string>
+    <string name="notif_monitoring_title_intelligent">ICdetection: monitorización · GPS inteligente</string>
     <string name="notif_legacy_network_title">ICdetection: red 2G/3G detectada</string>
     <string name="notif_open_settings">ABRIR AJUSTES</string>
     <string name="channel_monitoring_name">Monitorización</string>
@@ -295,4 +297,25 @@
     <string name="alarm_notification_body_format">CID %1$s · %2$s · %3$s</string>
     <string name="baseline_waiting">EN ESPERA</string>
     <string name="baseline_needs_days">NECESITA 2 DÍAS</string>
+    <!-- 3.0 (#26) — Indicador de latencia de red -->
+    <string name="latency_state_ok">● RED OK</string>
+    <string name="latency_state_anomalous">● RED ANÓMALA</string>
+    <string name="latency_state_learning">● RED APRENDIENDO</string>
+    <string name="latency_state_not_measured">● RED N/A</string>
+    <!-- 3.0 (#35) — Alarmas silenciadas -->
+    <string name="alarm_muted_title">⚠ ALARMAS SILENCIADAS</string>
+    <string name="alarm_muted_body_silenced">El canal Alertas de seguridad está en silencio, así que la notificación de una anomalía de red confirmada llegará sin sonido. Vuelve a darle sonido: ICdetection solo suena cuando se confirma una anomalía de red, y la notificación de monitorización es siempre silenciosa. El pitido corto de alerta es aparte y sigue sonando salvo con el móvil en silencio, vibración o No molestar.</string>
+    <string name="alarm_muted_body_blocked">Las notificaciones de ICdetection están desactivadas, así que una anomalía de red confirmada no aparecerá como notificación. Vuelve a activarlas: ICdetection solo suena cuando se confirma una anomalía de red, y la notificación de monitorización es siempre silenciosa. El pitido corto de alerta es aparte y sigue sonando salvo con el móvil en silencio, vibración o No molestar.</string>
+    <string name="alarm_muted_action">ABRIR AJUSTES DE ALERTAS</string>
+    <!-- 3.0 — Modo de ubicación -->
+    <string name="location_adaptive_off">Mantiene las peticiones de GPS con la pantalla encendida y apagada. Recomendado para campañas donde importa la continuidad de ubicación. Gasta más batería, también donde la recepción GPS es mala.</string>
+    <string name="location_adaptive_on">GPS continuo con pantalla encendida y recepción disponible. Con pantalla apagada, las peticiones se limitan a cambios de celda, sospechas y volver a usar el móvil. Tras varios fallos se pausa y vuelve a comprobar cada 2, 5 o 10 minutos. Las reglas que necesitan ubicación pueden quedar en N/A más a menudo.</string>
+    <string name="location_mode_title">Modo de ubicación</string>
+    <string name="location_mode_continuous">Continuo · campañas de campo</string>
+    <string name="location_mode_intelligent">Inteligente · ubicaciones frecuentes</string>
+    <string name="location_mode_adaptive">Adaptativo · menos peticiones de GPS</string>
+    <string name="location_intelligent_description">Pide una ubicación GPS fresca aproximadamente cada 45 segundos, también con la pantalla apagada. Un cambio a una antena nueva siempre despierta el GPS y lo mantiene activo hasta 60 segundos después de la última antena nueva, así que sigue encendido durante un trayecto; los saltos entre antenas conocidas estando quieto no lo mantienen encendido. Fuera de esas ventanas, cada intento termina al obtener una posición o a los 20 segundos (45 segundos en el primero). Tras varios fallos reintenta cada 2, 5 o 10 minutos; una antena nueva sigue teniendo un intento corto, como mucho uno por minuto. Una ubicación fresca recupera el ritmo normal. El escaneo celular continúa, pero no se garantiza una posición para cada celda. El ahorro depende de la recepción.</string>
+    <!-- 3.0 — Indicador GPS de la pantalla principal -->
+    <string name="gps_state_ok">● GPS OK</string>
+    <string name="gps_state_unavailable">● SIN GPS</string>
 </resources>

@@ -11,6 +11,7 @@ import android.content.Intent
 import android.provider.Settings
 import androidx.core.app.NotificationCompat
 import com.alexisgordr.icdetector.MainActivity
+import com.alexisgordr.icdetector.core.AlarmAudibility
 import com.alexisgordr.icdetector.models.CellData
 import com.alexisgordr.icdetector.ui.localizeTerminalLine
 import com.alexisgordr.icdetector.util.AppLanguage
@@ -19,7 +20,11 @@ import com.alexisgordr.icdetector.util.LocaleController
 /** Owns notification construction and channels for the foreground service. */
 internal class ServiceNotificationController(
     private val context: Context,
-    private val serviceClass: Class<*>
+    private val serviceClass: Class<*>,
+    /** 3.0 — Modo de ubicación, para que el título diga si el GPS es continuo o adaptativo. */
+    private val locationMode: () -> com.alexisgordr.icdetector.core.LocationMode = {
+        com.alexisgordr.icdetector.core.LocationMode.CONTINUOUS
+    }
 ) {
     fun createChannels() {
         val manager = context.getSystemService(NotificationManager::class.java)
@@ -53,11 +58,24 @@ internal class ServiceNotificationController(
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
         )
         return NotificationCompat.Builder(context, CHANNEL_ID)
-            .setContentTitle(context.getString(R.string.notif_monitoring_title))
+            .setContentTitle(
+                context.getString(
+                    when (locationMode()) {
+                        com.alexisgordr.icdetector.core.LocationMode.ADAPTIVE -> R.string.notif_monitoring_title_adaptive
+                        com.alexisgordr.icdetector.core.LocationMode.INTELLIGENT -> R.string.notif_monitoring_title_intelligent
+                        com.alexisgordr.icdetector.core.LocationMode.CONTINUOUS -> R.string.notif_monitoring_title
+                    }
+                )
+            )
             .setContentText(text)
             .setSmallIcon(android.R.drawable.ic_menu_info_details)
             .setContentIntent(openApp)
             .setOngoing(true)
+            // 3.0 (#35) — Se repinta cada ~2 s: nunca debe sonar ni vibrar, aunque el usuario
+            // haya dado sonido al canal. Si pitaba, la salida lógica era silenciar la app entera,
+            // y con ella las alarmas confirmadas.
+            .setOnlyAlertOnce(true)
+            .setSilent(true)
             .addAction(android.R.drawable.ic_menu_close_clear_cancel, context.getString(R.string.stop), stopService)
             .build()
     }
@@ -128,5 +146,35 @@ internal class ServiceNotificationController(
         const val NOTIFICATION_ID = 202
         const val AIRPLANE_ACTION_NOTIFICATION_ID = 204
         const val CONFIRMED_ALARM_NOTIFICATION_ID = 205
+
+        /** 3.0 (#35) — ¿Sonaría ahora la notificación de una alarma confirmada? */
+        fun alarmAudibility(context: Context): AlarmAudibility.AlarmSound {
+            val manager = context.getSystemService(NotificationManager::class.java)
+            val channel = manager.getNotificationChannel(ALERT_CHANNEL_ID)
+            val sound = channel?.sound
+            return AlarmAudibility.evaluate(
+                notificationsEnabled = manager.areNotificationsEnabled(),
+                alertChannelImportance = channel?.importance,
+                // Sonido "Ninguno": null o Uri.EMPTY, según la versión de Android.
+                alertChannelHasSound = sound != null && sound != android.net.Uri.EMPTY
+            )
+        }
+
+        /**
+         * 3.0 (#35) — Ajustes del canal de alertas; si las notificaciones de la app están
+         * desactivadas, los ajustes de notificaciones de la app (el canal no se puede tocar).
+         */
+        fun alarmSettingsIntent(context: Context): Intent {
+            val manager = context.getSystemService(NotificationManager::class.java)
+            val intent = if (manager.areNotificationsEnabled()) {
+                Intent(Settings.ACTION_CHANNEL_NOTIFICATION_SETTINGS)
+                    .putExtra(Settings.EXTRA_CHANNEL_ID, ALERT_CHANNEL_ID)
+            } else {
+                Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS)
+            }
+            return intent
+                .putExtra(Settings.EXTRA_APP_PACKAGE, context.packageName)
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        }
     }
 }

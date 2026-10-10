@@ -20,6 +20,8 @@ private val replacements = linkedMapOf(
     // v2.10.8 — Prefijo de las observaciones sub-umbral. El dato guardado sigue en castellano
     // (SUBTHRESHOLD_PREFIX); solo se traduce al mostrarlo.
     "[sub-umbral]" to "[sub-threshold]",
+    // 3.0 (#7, B4) — Prefijo de Stable-Site (SITE_UNVERIFIED_PREFIX).
+    "[sitio-sin-verificar]" to "[site-unverified]",
     // v2.10.4 — Líneas [RADIO] y [SERVICIO]. Van antes que las genéricas ("Celda ", etc.)
     // y las frases largas antes que las cortas que contienen.
     "[SERVICIO]" to "[SERVICE]",
@@ -50,6 +52,11 @@ private val replacements = linkedMapOf(
     "Solicitando fix GPS preciso" to "Requesting precise GPS fix",
     "Fix GPS preciso no disponible" to "Precise GPS fix unavailable",
     "Handover celular completado" to "Cellular handover completed",
+    // 3.0 (#20)
+    "Continuidad interrumpida por pérdida de señal: la confirmación vuelve a empezar." to
+        "Continuity interrupted by signal loss: confirmation starts again.",
+    "Continuidad interrumpida por un hueco sin lecturas: la confirmación vuelve a empezar." to
+        "Continuity interrupted by a gap without readings: confirmation starts again.",
     "Nueva celda" to "New cell",
     "Ping-Pong observado" to "Ping-pong observed",
     "Sin credenciales configuradas" to "No credentials configured",
@@ -252,10 +259,16 @@ private val replacements = linkedMapOf(
     "identidad celular insuficiente para comparar" to "insufficient cell identity for comparison",
     "Wi-Fi/VPN impide atribuir la latencia al enlace celular" to "Wi-Fi/VPN prevents attributing latency to the cellular link",
     "la sonda de latencia todavía no tiene una medición válida" to "the latency probe does not yet have a valid measurement",
+    // 3.0 (#28)
+    "sin vecinas, pendiente de confirmar" to "no neighbours, pending confirmation",
+    " entregas)" to " deliveries)",
+    // 3.0 (#26)
+    "la sonda de latencia aún aprende la referencia de esta celda" to "the latency probe is still learning this cell's reference",
     "el módem no entrega RSRQ ni SINR" to "the modem provides neither RSRQ nor SINR",
     "faltan datos cruzados del ciclo" to "cross-signal data is unavailable for this cycle",
     "baseline en aprendizaje; se necesitan muestras históricas compatibles" to "baseline still learning; compatible historical samples are required",
-    "falta una banda LTE anterior válida para comparar" to "a previous valid LTE band is unavailable for comparison",
+    "falta una banda anterior válida (LTE o 5G) de la misma tecnología para comparar" to
+        "no previous valid band (LTE or 5G) of the same technology to compare with",
     "la tecnología o banda actual no permite la comparación" to "the current technology or band does not allow comparison",
     "historial RF insuficiente" to "insufficient RF history",
     "observaciones" to "observations",
@@ -295,6 +308,14 @@ private val replacements = linkedMapOf(
     "sin portadoras secundarias" to "no secondary carriers",
     "Primaria declarada sin señal utilizable: ciclo en abstención." to "Declared primary has no usable signal: cycle abstains.",
     "Ubicación continua activa (24/7). Consumo de batería elevado por diseño: las coordenadas son necesarias para H11, H13 y H16." to "Continuous location active (24/7). High battery use by design: coordinates are needed for H11, H13 and H16.",
+    // 3.0 — Modo de ubicación
+    "Modo de ubicación adaptativo: GPS continuo solo con la pantalla encendida." to "Adaptive location mode: continuous GPS only while the screen is on.",
+    "Modo de ubicación continuo: GPS activo también con la pantalla apagada." to "Continuous location mode: GPS stays active with the screen off.",
+    "Modo de ubicación inteligente: intentos GPS breves cada 45 s cuando hay recepción." to "Smart location mode: short GPS attempts every 45 s when reception is available.",
+    "Recepción GPS recuperada: reanudando el modo de ubicación." to "GPS reception recovered: resuming the location mode.",
+    "Recepción GPS degradada: próximo intento periódico en " to "Poor GPS reception: next periodic attempt in ",
+    "El escaneo celular continúa." to "Cellular scanning continues.",
+    "No se pudo registrar el GPS continuo: " to "Could not register continuous GPS: ",
     "Batería crítica (<" to "Critical battery (<",
     "%): ubicación continua en pausa hasta conectar el cargador." to "%): continuous location paused until the charger is connected.",
     "Alimentación recuperada: ubicación continua y recolección 24/7 reanudadas." to "Power restored: continuous location and 24/7 collection resumed.",

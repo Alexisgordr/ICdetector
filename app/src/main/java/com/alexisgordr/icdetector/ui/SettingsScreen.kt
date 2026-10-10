@@ -28,6 +28,7 @@ import androidx.compose.material.icons.filled.Favorite
 import com.alexisgordr.icdetector.service.MiniICService
 import com.alexisgordr.icdetector.R
 import com.alexisgordr.icdetector.util.LocaleController
+import com.alexisgordr.icdetector.core.LocationMode
 import kotlin.time.Duration.Companion.milliseconds
 
 @Composable
@@ -40,6 +41,9 @@ fun SettingsPanel(service: MiniICService?, onSave: () -> Unit) {
         mutableStateOf(prefs.getBoolean("latency_detection_enabled", false))
     }
     var selectedLanguage by remember { mutableStateOf(LocaleController.selectedLanguage(context)) }
+    var selectedLocationMode by remember {
+        mutableStateOf(LocationMode.fromStored(prefs.getString(LocationMode.PREF_KEY, null)))
+    }
 
     val scrollState = rememberScrollState()
 
@@ -219,9 +223,36 @@ fun SettingsPanel(service: MiniICService?, onSave: () -> Unit) {
                 )
             }
 
+            HorizontalDivider(color = Color(0xFF222222), modifier = Modifier.padding(vertical = 4.dp))
+
+            Text(stringResource(R.string.location_mode_title), color = Color.White,
+                fontSize = 14.sp, fontFamily = FontFamily.Monospace)
+            LocationMode.entries.forEach { mode ->
+                val label = when (mode) {
+                    LocationMode.CONTINUOUS -> R.string.location_mode_continuous
+                    LocationMode.INTELLIGENT -> R.string.location_mode_intelligent
+                    LocationMode.ADAPTIVE -> R.string.location_mode_adaptive
+                }
+                Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                    RadioButton(selected = selectedLocationMode == mode,
+                        onClick = { selectedLocationMode = mode })
+                    TextButton(onClick = { selectedLocationMode = mode }) {
+                        Text(stringResource(label), color = Color.White, fontFamily = FontFamily.Monospace)
+                    }
+                }
+            }
+            val modeDescription = when (selectedLocationMode) {
+                LocationMode.CONTINUOUS -> R.string.location_adaptive_off
+                LocationMode.INTELLIGENT -> R.string.location_intelligent_description
+                LocationMode.ADAPTIVE -> R.string.location_adaptive_on
+            }
+            Text(stringResource(modeDescription), color = Color(0xFF888888), fontSize = 11.sp,
+                fontFamily = FontFamily.Monospace, lineHeight = 15.sp)
+
             Button(
                 onClick = {
                     val cleanToken = token.trim()
+                    val selectedMode = selectedLocationMode
                     prefs.edit {
                         putString("opencellid_key", cleanToken)
                         remove("wigle_api_name")
@@ -229,10 +260,12 @@ fun SettingsPanel(service: MiniICService?, onSave: () -> Unit) {
                         remove("wigle_rate_limited_until")
                         putBoolean("proxy_enabled", proxyEnabled)
                         putBoolean("latency_detection_enabled", latencyDetectionEnabled)
+                        putString(LocationMode.PREF_KEY, selectedMode.storedValue)
                     }
                     service?.openCellIdKey = cleanToken
                     service?.isProxyEnabled = proxyEnabled
                     service?.isLatencyDetectionEnabled = latencyDetectionEnabled
+                    service?.locationMode = selectedMode
                     onSave()
                 },
                 modifier = Modifier.fillMaxWidth(),

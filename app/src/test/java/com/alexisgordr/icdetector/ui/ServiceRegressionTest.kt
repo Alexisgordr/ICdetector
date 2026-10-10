@@ -34,7 +34,8 @@ class ServiceRegressionTest {
         assertTrue(service.contains("?.identityKey ?: return"))
         // El reset compara la identidad completa, no solo el CID.
         assertTrue(service.contains("val identity = cell.identityKey"))
-        assertTrue(service.contains("latencyMonitor.onCellChanged(identity, idleLatencyState())"))
+        // 3.0 (#26) — Celda nueva: "no medida", nunca un OK sin medir.
+        assertTrue(service.contains("latencyMonitor.onCellChanged(identity, NetworkLatencyMonitor.STATE_NOT_MEASURED)"))
         assertFalse(service.contains("activeRaw.cellId != prevCid) {\n                latencyMonitor.reset"))
         assertTrue(service.contains("latencyMonitor.check(activeCellKey)"))
     }
@@ -66,7 +67,7 @@ class ServiceRegressionTest {
 
     @Test fun `stable-site writes are not on the main thread`() {
         val service = source("service/MiniICService.kt")
-        val mainBlock = service.substringAfter("withContext(Dispatchers.Main) {\n                    // v2.10.4 — La servidora va siempre primero")
+        val mainBlock = service.substringAfter("if (!collectionGeneration.mayPublish(cycleTicket)) return@withContext")
             .substringBefore("stableSitePreviousIdentity = active.identityKey")
         assertFalse(mainBlock.contains("recordStableSiteContext"))
         assertTrue(service.contains("dbHelper.recordStableSiteContext("))
@@ -82,7 +83,8 @@ class ServiceRegressionTest {
     @Test fun `gps backfill is limited to a recent row`() {
         val db = source("storage/CellDbHelper.kt")
         assertTrue(db.contains("COORDINATE_BACKFILL_WINDOW_MS = 2L * 60_000L"))
-        assertTrue(db.contains("AND \$COLUMN_TIMESTAMP >= ? AND \$COLUMN_TIMESTAMP <= ?"))
+        // 3.0 (#23) — La ventana se mide con el instante de la fila (texto local solo en filas antiguas).
+        assertTrue(db.contains("AND \${observedSince()} AND \${ObservationTime.untilClause(COLUMN_OBSERVED_AT_MS, COLUMN_TIMESTAMP)}"))
         val service = source("service/MiniICService.kt")
         assertEquals(2, Regex("fixTimeMs = (loc|location)\\.time").findAll(service).count())
     }

@@ -17,7 +17,7 @@ object GeometryExporter {
         // v2.10.6 — Sin tope: la exportación lleva todas las rutas y trayectos guardados.
         // v2.10.10 — Transiciones y trayectos en la misma instantánea.
         val snapshot = db.readConsistently { db.getMobilityGeometrySnapshot(limit = null) }
-        val files = buildFiles(snapshot, info.versionName ?: "unknown", info.longVersionCode, Instant.now())
+        val files = buildFiles(snapshot, com.alexisgordr.icdetector.core.AppBuildId.current(info.versionName) ?: "unknown", info.longVersionCode, Instant.now())
         context.contentResolver.openOutputStream(uri)?.use { raw ->
             ZipOutputStream(raw).use { zip -> files.forEach { (name, bytes) ->
                 zip.putNextEntry(ZipEntry(name)); zip.write(bytes); zip.closeEntry()

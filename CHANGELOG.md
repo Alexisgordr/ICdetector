@@ -3,7 +3,365 @@
 Every notable change to ICdetection, newest first. Releases inside the field-collection freeze only
 fix bugs; a fix that changes how a rule is evaluated is marked as a **dataset cut** for that rule.
 Version numbers follow the app's `versionName`; the Android `versionCode` is given where it matters.
-The 3.0 betas are documented on the `ICdetection-v3.0.0-beta` branch.
+
+## 3.0.0-beta4 (development beta, source only)
+
+Available as source on the `ICdetection-v3.0.0-beta` branch; no APK is published. A short-lived
+GitHub pre-release of an earlier build was withdrawn.
+
+### Phase 4 — Maintenance backlog and documentation
+
+Fourth and last beta of the 3.0 roadmap (GitHub issue #27): the maintenance items from the
+post-freeze review (#7) and the documentation of the campaign's validation limits (#31). Schema
+21 (one additive column, see *Location mode*).
+
+#### Location mode (found during testing: continuous GPS drains the battery)
+
+- **Smart location / Ubicación inteligente.** Adds a third mode with GPS-only
+  acquisition windows outside handover windows: attempts roughly every 45 seconds, stops on success or a 20-second timeout
+  (45 seconds for the first saving-mode attempt). Smart and Adaptive pause after repeated failed
+  probes or empty Smart windows; both saving modes also pause a stream with no fresh usable fix for 3 minutes. Periodic retries
+  wait 2, 5 and 10 minutes; event requests are limited to one per 2 minutes while reception is
+  poor. Only a live fix restores the normal schedule. Listener ownership is confined to Main,
+  all probes have cleanup and age checks use elapsed realtime. The selected mode is stored as
+  `INTELLIGENT` using schema 21, and the CSV checker accepts it. Names, descriptions and terminal
+  messages are provided in English and Spanish. This changes GPS input availability, not rule
+  weights; keep field data separated by mode.
+
+- **Smart handover window (found during testing: new cells were left without a position).** In
+  Smart, a handover to a cell not seen in the last 10 minutes always wakes the GPS: it opens or
+  extends one continuous window until 60 seconds after that change, without the 30-second probe
+  limit, so GPS stays active during a journey; a recent fix never skips that window. With poor
+  reception the new cell gets an attempt of at most 20 seconds (also the first one after a mode
+  change) without the 2-minute wait, only if the last attempt of any kind started at least a minute
+  earlier; every attempt that actually starts counts towards one shared limit, so a run of new
+  cells or a mix of handovers and periodic attempts cannot keep the GPS searching. To keep the battery saving at rest, a
+  change back to a cell seen in the last 10 minutes does not open or extend the window (it reuses a
+  fix younger than 45 s and otherwise asks for one). Cells are compared by full identity; times use
+  the monotonic clock. Three empty windows, or 3 minutes
+  without a fresh stream fix, activate the poor-reception backoff. Continuous and Adaptive are
+  unchanged.
+
+- **GPS status indicator.** Every 5 seconds while the screen is visible, checks the service's validated GPS cache and provider
+  availability instead of maintaining a separate wall-clock freshness check. Displays `GPS OK`
+  for a usable fix, otherwise `SIN GPS` / `NO GPS`. This does not start acquisition and applies
+  to all three modes; a normal pause with a usable recent fix is not a failure.
+
+- **Settings → Location mode.** Continuous remains the default. Adaptive uses a stream with the
+  screen on while reception is usable, and bounded event requests with the screen off. All saving
+  requests share `GpsPowerPolicy`, including suspicious episodes and periodic retries. Positions
+  older than 2 minutes are unavailable; location-dependent rules can be `N/A` between fixes.
+- **Schema 21: the mode of every row.** An additive migration adds `location_mode` to the history;
+  each row stores `CONTINUOUS`, `INTELLIGENT` or `ADAPTIVE`, captured when the reading arrived. Rows from before
+  schema 21 keep it empty (unknown). The history CSV ends with a new `LocationMode` column, and
+  `tools/check_export.py` counts rows per mode and warns when rows with GPS pauses are mixed in.
+- The persistent notification title and a terminal line say which mode is active.
+- **Bug found during testing — adaptive mode after a restart with the screen off.** The service
+  assumed the screen was on until the first screen event, so if Android restarted it with the
+  screen off, adaptive mode kept the continuous GPS on until the next screen-off. The real state is
+  now read from `PowerManager.isInteractive` before the mode is applied.
+- **Dataset:** Continuous keeps its permanent GPS subscription; fix freshness now uses elapsed
+  realtime in every mode. Smart and Adaptive may supply fewer positions; compare H11, H13 and H16
+  coverage per mode and app version before joining data. No rule, weight or threshold changes.
+
+#### Installation
+
+- **Same app for betas and release, clean install for 3.0.** Betas build the same app as the
+  release (`com.alexisgordr.icdetector`, *ICdetection*), so a beta updates to the final 3.0. An
+  earlier beta setting (a separate `.beta` app called *ICdetection β*) was removed before any
+  release. **3.0 requires a clean install:** export your data, uninstall v2.10.x, then install 3.0.
+  Installing over v2.10.x still upgrades the database safely, but mixing data from both sides of
+  the methodology cuts is not supported. From 3.0 on, every version updates the previous one.
+- **Version code 39 for every 3.0 beta.** The betas used 39, 40, 41 and 42, but none is published
+  on F-Droid, so the 3.0 release would have skipped from 38 to 43. All betas now
+  use 39, the next after v2.10.10 (38), and the release keeps it. The four store notes are merged
+  into `fastlane/.../changelogs/39.txt` (EN/ES); 40–42 are removed so a later 3.0.x cannot pick up a
+  beta note. A test phone with a local beta built as 40–42 must uninstall it first.
+
+#### Bugs found during testing
+
+- **The monitoring notification could beep on every update, and muting it muted alarms (#35).**
+  The persistent notification is redrawn about every 2 seconds and was built without
+  `setOnlyAlertOnce` / `setSilent`, so a phone whose *Monitoring* channel had sound beeped on every
+  update. Silencing the app to stop it also silenced *Security alerts*, and a confirmed alarm then
+  arrived without sound with nothing to say so. The monitoring notification is now always silent,
+  and the main screen shows a warning with a shortcut to the alert settings when ICdetection
+  notifications are off or the *Security alerts* channel is silenced (`AlarmAudibility`). Only a
+  confirmed network anomaly makes a sound. No detection or data change. Follow-up found in review:
+  a high-importance channel whose sound is *None* (`channel.sound` null or `Uri.EMPTY`) also counts
+  as silenced, and the warning now says it is about the notification — the separate alert tone
+  still plays unless the phone is on silent, vibrate or Do Not Disturb.
+- **A history row could carry the context of a later moment (A03).** The time, GPS position and
+  service state of a row were read when the row was saved, which happens after the analysis
+  publishes its result. With a slow analysis, a cell reading was stored with the time, position
+  and service state of a later moment. They are now captured when the reading arrives and travel
+  with it to the history row; the analysis uses the same position. Rows written by earlier 3.0
+  betas may carry a context up to one analysis cycle late (**dataset cut** for `ObservedAtMs`,
+  position, `GpsAccuracyM` and service-state columns).
+- **A long gap without readings did not break continuity (#20 follow-up).** Only a reported
+  signal loss (empty list, abstention) reset H1's isolation streak and H14's previous band. If no
+  readings arrived for several minutes (Doze, sleeping modem) and the same cell came back with no
+  empty list in between, H1 kept its streak and H14 compared with a band from before the gap. A gap
+  of more than 2 minutes between published observations now breaks continuity like a signal loss
+  (`CoverageContinuity`), and the terminal says which one happened. The confirmation streak
+  (`TemporalConfidence`) now measures its 2-minute gap with `SystemClock.elapsedRealtime()`: the
+  previous clock stops in deep sleep, so a long Doze gap could look like zero seconds
+  (**dataset cut** for H1, H14 and confirmation methodology).
+- **Schema 20 migration failed on a database missing a table.** The migration altered `history`,
+  `incidents` and `forensic_cases` without checking they existed. A partial or damaged database
+  without one of them stopped with `no such table` and the app could not open; the instrumented
+  migration tests, which build such partial databases, failed the same way. The migration now
+  creates any of the three tables that is missing, empty, before adding columns; no row is
+  invented. A real v2.10.x database (schema 19) and a fresh install were not affected. The
+  instrumented tests now expect schema 20.
+
+#### Maintenance (#7)
+
+- **Stable-Site prefix not translated (B4).** The `[site-unverified]` prefix was stored in English and
+  had no translation, unlike every other stored prefix. It is now stored in Spanish
+  (`[sitio-sin-verificar]`, like `[sub-umbral]`) and shown as `[site-unverified]` in the English
+  interface. Stable-Site enforcement is still off (shadow mode), so no stored row is affected.
+- **A cell seen every day could be forgotten first (B5).** The trust-contradiction tracker keeps the
+  last state of up to 500 identities and evicted them in insertion order, so the home cell — among
+  the first to enter — could be evicted on a busy day even if it had just been seen, and a later
+  change was then recorded as `ON_START` instead of `TRANSITION`. It now evicts the identity unseen
+  for longest (LRU).
+- **Each rule had three unconnected names (O2).** A rule's id (`H5`), its key in the Bayesian scorer
+  (`tacDev`) and its multi-signal episode family (identity) lived in three places with nothing tying
+  them together: a new rule without a weight would silently count as neutral. `HeuristicCatalog` now
+  declares all three once per rule; the episode tracker uses it directly and a test checks that the
+  report, the scorer weights and groups, and the keys emitted by the analyzer all match it. No
+  behaviour change.
+- **Precise GPS fixes were retried at the same pace when they kept failing (O5).** Each handover could
+  start a new 20 s precise-fix attempt. Where GPS does not reach (indoors, tunnels, garages) all of
+  them failed, keeping the GPS on for nothing. After each consecutive failure the minimum interval
+  between normal attempts now doubles (30 s, 1, 2, 4, 8 min, capped at 10 min) and returns to 30 s
+  with the first accepted fix. Forced requests (suspicious episode, leaving airplane mode) never wait.
+- **H15's history scan reviewed (O1).** The query reads only the rows of the current cell for 30 days
+  through the identity index (now checked with `EXPLAIN QUERY PLAN` in `tools/check_sql_affinity.py`);
+  the only extra cost is sorting those rows. No limit was added on purpose: it would change which
+  history H15 sees. The trust-contradiction eviction (B5) and this review close the open items of #7.
+- **The build commit in `AppVersion` (found during testing: builds of one beta could not be told
+  apart).** Every build of a beta shares `versionName` and version code, so rows recorded before and
+  after a change looked identical. `AppVersion` (history rows, CSV and the forensic, topology and
+  geometry exports) is now `versionName+commit`, e.g. `3.0.0-beta4+6bb5ed3`; `-dirty` marks
+  uncommitted changes and `nogit` an unknown commit. Gradle reads the commit with `git describe`,
+  or from `BUILD_COMMIT`, which `git archive` fills in for ZIPs. The version itself, the version
+  code and the schema do not change; `tools/check_export.py` ignores the part after `+` when it
+  compares versions.
+- **Gradle configuration cache enabled.** Gradle suggested it after every build; repeated builds now
+  start faster. Problems are reported as warnings, so an incompatible plugin cannot break the build.
+  No change to the app or the APK.
+
+#### Documentation (#31)
+
+- **The limits of the campaign are now written down.** README (new section *What the field campaign
+  can and cannot show*), IMPORTANT and MANUAL state that there is no ground truth (the warning rate
+  can be measured and possible false positives studied, but the absence of a known attack does not
+  make every warning false, and detection cannot be measured), no negative control (one phone cannot
+  tell a network anomaly from a detector fault) and limited coverage (one phone, one operator, mostly
+  one area), and what the campaign is for: measuring how often each rule warns, studying possible
+  false positives and, with the 3.0 coverage columns, how long each rule was evaluable. The likelihood
+  ratios are not recalibrated from benign data alone.
+
+## 3.0.0-beta3 (development beta, not published)
+
+### Phase 3 — Confirmation and rule behaviour
+
+Third beta of 3.0 (roadmap: GitHub issue #27). With correct inputs in place, this phase adjusts how
+evidence is confirmed and how some rules behave. Schema 20.
+The LTE band table was also checked against 3GPP TS 36.104 V19.2.0, which confirms every band and
+makes bands 53–113 resolvable by EARFCN (follow-up to #32).
+
+#### Bugs found during testing
+
+- **A confirmation could span a coverage gap (#20).** When the serving cell was lost (empty list,
+  abstention, airplane mode) the screen was cleared, but the confirmation streak survived. Two
+  suspicious cycles, ten minutes without signal and one more suspicious cycle of the same cell could
+  complete a confirmation as if they were consecutive; the multi-signal episode window, H1's
+  "no neighbours" streak and H14's previous band also survived the gap. A signal loss now restarts
+  the confirmation streak, the episode correlation and H1's isolation streak and clears the band
+  context (H14 is `N/A` until a new previous band exists),
+  and the terminal records "Continuity interrupted by signal loss" so the gap is visible in the
+  forensic black box. Independently, two accepted observations more than 2 minutes apart are no
+  longer consecutive. A normal handover or a manual refresh does not count as a gap. **Methodology
+  cut:** affects when any alarm is confirmed.
+- **H14 flagged band changes inside the same base station (#10).** In the first week of field data,
+  all 9 sub-threshold "Band downgrade" warnings were carrier changes inside one site: the eNodeB
+  (`Cell ID >> 8`) was the same before and after, e.g. `79360544 → 79360545` (eNB `310002`). That is
+  the base station moving the phone to another of its carriers, not a forced downgrade. H14 no longer
+  penalises a change between cells of the same eNodeB in the same network (known MCC and MNC);
+  without a known network the exception does not apply. A loss of signal also clears the stored
+  site. **Dataset cut for H14.**
+- **Latency showed OK before measuring anything (#26).** After a cell change the network indicator
+  was set to OK while the probe could run, before the new cell had any measurement; while the
+  baseline was being learnt it stayed OK; and a measured OK had no expiry. H12 treated that OK as an
+  available measurement. The latency state now has four explicit values: not measured (`N/A`),
+  learning (`APRENDIENDO`, fewer than 5 samples for this cell), OK and anomalous. A measured result is
+  valid for 90 s; with no new measurement it returns to not measured (an isolated failed probe does not
+  make it flicker). The expiry runs on every periodic cycle, even when no check can run (airplane
+  mode, no registered cell), and a signal loss resets the latency to not measured. H12 is evaluated only with OK or anomalous; while learning it is `N/A` with its own
+  explanation. The network indicator on the main screen shows the learning state (amber) and is now
+  translated (`NET` in English, `RED` in Spanish). The optional latency feature is off by default.
+  **Dataset cut for H12.**
+- **H1 said "passed" while isolation was still unconfirmed (#28).** With no neighbours, strong signal
+  and Wi-Fi off, H1 only fails after 3 consecutive fresh deliveries confirm the isolation. During the
+  first 1–2 deliveries it reported PASSED, claiming "not isolated" when the app did not know yet. It is
+  now `N/A`, and the diagnostics panel explains "no neighbours, pending confirmation (1/3 deliveries)".
+  With no neighbours and a weak signal (worse than −80 dBm) H1 stays evaluated and passed: the data is
+  there and the condition the rule looks for — a strong lone cell — is absent. Score and alarms are
+  unchanged (only failures add points); the H1 status in diagnostics, coverage counts and forensic
+  snapshots changes. **Dataset cut for H1 status.**
+- **5G SA had less coverage than LTE (#8).** On a 5G Standalone serving cell H14 (band downgrade) was
+  always `N/A`, because the band table is LTE-only. In NR one NR-ARFCN can belong to several
+  overlapping bands (632448 is in n77 and n78), so a band table would not help; what H14 needs is
+  whether the carrier is high or low, and the NR-ARFCN gives the exact downlink frequency (TS 38.104
+  global raster). H14 now evaluates NR → NR changes with the same conditions as LTE; a change between
+  LTE and NR is not evaluated, and there is no same-site exception in NR (the gNB ID length is not
+  fixed). **H6 on NR stays `N/A`:** Android's NR Timing Advance has no defensible conversion to metres
+  (the documentation does not settle whether it is one-way or round-trip, and no field data has NR and
+  LTE TA at the same site), so the raw value keeps being recorded as `NR_RAW` for later study.
+  Regression tests cover an NR serving cell (H8 passes, H14 evaluated or `N/A`, H6 `N/A`). The H14
+  diagnostic now mentions LTE or 5G. **Dataset cut for H14 on 5G SA.**
+
+## 3.0.0-beta2 (development beta, not published)
+
+### Phase 2 — Correct inputs to the rules
+
+Second beta of 3.0 (roadmap: GitHub issue #27). It makes sure each rule receives true data before
+any rule is tuned. No database schema
+change (still 20).
+
+#### Bugs found during testing
+
+- **A handover was detected by Cell ID only (#19).** Two cells with the same number on another
+  operator, another tracking area or another technology (LTE/NR) were treated as the same cell: the
+  handover row was not written, the state of the previous cell was not reset and H10 (Ping-Pong) did
+  not count the change. A handover is now a change of the full serving identity (MCC, MNC, TAC, Cell
+  ID and technology), and that one definition is used for the handover row, the alarm episode and
+  H10. A field the modem did not fill in (`N/A`) on one side does not count as a change, so a modem
+  that briefly drops MCC/MNC does not create handovers that never happened. **Dataset cut for H10
+  and handover rows:** from 3.0.0-beta2 they also include changes of operator, tracking area or
+  technology with the same Cell ID.
+- **Placeholder neighbour values counted as real (#11).** Some modems (seen on Xiaomi/Redmi/POCO
+  phones with a MediaTek modem) fill every LTE neighbour with TAC 65535 and Cell ID 268435455 instead
+  of leaving them empty. H5 compared the serving TAC with 65535, never matched and failed on every
+  cycle; in one field case that false signal helped confirm a false alarm. Stable-Site also counted
+  those neighbours as full identities. Both values are now read as unavailable (`N/A`) in LTE
+  neighbours, as v2.10.5 already did for neighbour MCC/MNC: H5 is `N/A` when no neighbour has a real
+  TAC, and those neighbours count as RF-only. The serving cell keeps what the modem reports, and NR is
+  unchanged (65535 is a valid NR TAC). Rows already stored are not changed. **Dataset cut for H5**
+  on affected devices. These devices remain outside the supported AOSP-like set.
+- **EARFCN 0 was dropped from learning (#22).** H8 accepted EARFCN 0 as a valid LTE frequency
+  (lowest Band 1 channel), but the history learning used `> 0`, so a real Band 1 carrier on channel
+  0 could not learn its known PCIs for local trust, and H15 grouped it with rows that really have no
+  frequency. Learning also accepted any PCI up to 1007 for every technology. There is now one
+  validator per technology (`RadioChannels`): EARFCN 0..262143, NR-ARFCN 0..3279165, UARFCN
+  0..16383, GSM 0..1023; PCI LTE 0..503, NR 0..1007, PSC UMTS 0..511; Android's "unavailable" value
+  is never valid. Local trust, H15, Stable-Site and H8 use it. **Dataset cut for local trust and H15**
+  on carriers using EARFCN 0, and for LTE rows with an impossible PCI (504..1007), which no longer
+  count as learnt values. H8's results are unchanged for every value Android can report.
+- **H14 could not see most LTE bands (#32).** The band table had 17 bands. A cell on any other band
+  left H14 (band downgrade) as `N/A`, and the band the modem declared could not be used either,
+  because the high/low classification came from the same table. The table also gave Band 71 the
+  upper limit of Band 74, so EARFCNs of bands 72–74 were taken as Band 71 (600 MHz, low) although
+  Band 74 is at 1475 MHz. The table now has every band of 3GPP TS 36.101 (1–71 resolvable by EARFCN,
+  72–255 for classification only), checked against an independent implementation, with one
+  definition for band and high/low class. The band is resolved from the EARFCN when it is in the table
+  (each EARFCN belongs to one band, so the measurement wins over what the modem declares); otherwise
+  from `CellIdentityLte.getBands()` (Android 11+): one declared band is used as is, several only when
+  they are all of the same class. Same-eNodeB band changes stay a separate issue (#10).
+  `tools/check_export.py` counts LTE rows whose declared band is outside the table. **Dataset cut for
+  H14.**
+- **Timing Advance could be borrowed from another transmitter (#21).** When the serving cell had no
+  TA, the app copied it from another list entry with the same Cell ID and TAC, without checking the
+  technology or the physical cell. LTE and NR can share numbers and measure TA in different units:
+  the unit was copied, but the value belonged to another transmitter and fed H6, the highest penalty
+  in the system. The TA is now copied only from a duplicate of the same cell: same technology, same
+  Cell ID and TAC, matching or unreported MCC/MNC, and at least one physical field (PCI or frequency)
+  valid in both and equal. PCI and frequency are checked with the shared validator first, so
+  Android's "unavailable" value (or an out-of-range value) on both sides is never taken as a match.
+  A field the modem omits is not required; with none valid to compare, the app abstains. **Dataset cut for H6.**
+- **One technology's Timing Advance hid another's stub zero (#33).** The evidence that decides whether
+  a TA of 0 is a measurement or an unfilled field was one latch for the whole phone: the first
+  non-zero TA of any technology set it for good. A modem whose LTE path reports real values could
+  never be detected returning a constant 0 on GSM or NR, and that 0 reached H6's proximity branch as a
+  real distance. The evidence is now kept per declared unit (LTE, GSM, NR, unknown), each with its own
+  latch and its own list of cells seen at 0, and is saved per unit. The evidence saved by earlier
+  versions does not say which technology it came from, so it is not read: every unit starts empty
+  and is re-derived within minutes of use. A single TA of 0 is still legitimate and a missing TA still
+  gives no evidence. Found by reading the code, not yet seen in the field. **Dataset cut for H6 and
+  `TAUnit`.**
+
+## 3.0.0-beta1 (development beta, not published)
+
+### Phase 1 — Data foundations
+
+First beta of 3.0, built after the field-collection freeze. It follows the ordered roadmap in
+GitHub issue #27. Database schema **20**: the migration only adds columns, and every row recorded
+before 3.0 keeps the new columns empty, meaning **unknown** — nothing is filled in with an assumed
+value.
+
+#### Bugs found during testing
+
+- **Times were ambiguous (#23).** History, incident and forensic times were stored only as local
+  text without a time zone. Travelling across zones changed the age the app computed, and at the
+  autumn clock change the repeated hour gave two different moments the same text, so H15's ordering
+  inside that hour was undefined. Every new row now also stores the instant of the observation in
+  milliseconds since epoch (UTC). Windows (30/90 days, 48 h, the 2-minute GPS backfill), the
+  verification TTL, retention and H15's ordering use that instant. Rows recorded before 3.0 have no
+  instant (their zone was never stored and is not reconstructed); they keep the previous
+  approximate comparison on their local text. The local text is still written: it is what the
+  screens show and it still defines the "day" of the evidence-by-days counts. The history CSV gains
+  an `ObservedAtUtc` column (ISO-8601, UTC) at the end, empty for rows before 3.0, and
+  `tools/check_export.py` uses it for the impossible-jump check and verifies it against the local
+  time. **Methodology cut:** age and ordering are exact from 3.0 on; before 3.0 they remain
+  approximate around clock changes and zone changes.
+
+- **The history could not tell "passed" from "not evaluated" (#29).** Each row stored only the
+  failed rules, so a rule that never had the data it needs looked the same as a rule that passed,
+  and after the campaign it was impossible to say how long each rule was actually evaluable. Rows
+  also kept the position without its GPS accuracy, so precise fixes could not be separated from
+  vague ones in the analysis. Each new row now stores `not_evaluated_heuristics` (the rules that
+  abstained, e.g. `H1;H6;H9`, or `NONE` when every rule was evaluated) and `gps_accuracy_m` (the
+  accuracy of the fix used for that row, also when the position is filled in later). Both are
+  exported at the end of the history CSV as `NotEvaluatedHeuristics` and `GpsAccuracyM`, empty for
+  rows before 3.0 (unknown, never "evaluated"). `tools/check_export.py` now prints the evaluation
+  coverage of each rule and checks that every 3.0 position has an accuracy below 100 m; positions
+  worse than 50 m are reported so they can be filtered. Detection is unchanged: the app already
+  discarded fixes worse than 100 m, H16 requires 75 m or better and Stable-Site 50 m or better.
+
+- **Exports did not say which app version or phone produced them (#30).** Dataset cuts are per
+  version (H10 from 2.10.9, H8 from 2.10.10, more in 3.0), but no export recorded the app version,
+  so the cuts could only be applied by install date. Files from several people could not be told
+  apart once joined. Each new history row now stores the app version that observed it, and the
+  history CSV ends with `AppVersion` (per row, empty before 3.0), `ExportDevice` (manufacturer and
+  model) and `ExportAndroid` (Android version and API level) of the phone that made the export. No
+  personal or hardware identifier is exported (no IMEI, serial number or account).
+  `tools/check_export.py` lists the rows per app version, shows which dataset cuts the file crosses
+  and warns when a file joins exports from several phones.
+
+- **"Most recent row" meant "last row written" (#25).** Since 2.10.10 each row keeps the
+  context of the moment it was observed, but the app still picked "the latest row" by its row id
+  (`MAX(id)`, `ORDER BY id DESC`). With several writers the last row written can be an earlier
+  observation, so a verification result or a GPS backfill could land on the wrong row and the
+  recent-sample windows of H11, H13, H15 and the local baselines could take an older sample as the
+  newest. Every "most recent" choice now uses the observation instant (#23); rows before 3.0, which
+  have no instant, come after all newer rows and keep their previous order by id. The history screen
+  and the CSV are listed in the same order.
+
+- **A slow analysis cycle could publish after the signal was lost (#24).** A cycle was only
+  checked when it started; an empty cell list or an abstention did not even count as something
+  newer. A cycle still analysing in the background could therefore show a cell, alert, write
+  history, incidents and black-box samples, and feed the confirmation counters after the signal had
+  been lost or the serving cell had changed. Each cycle now carries a ticket (`CollectionGeneration`)
+  that is checked again just before it publishes; an empty list or abstention invalidates it. A
+  newer delivery of the **same** cell does not invalidate it, so the app cannot stop publishing when
+  deliveries arrive faster than they are analysed, but any interruption — an empty list, an
+  abstention, airplane mode, a forced refresh or a change of serving cell — invalidates every earlier
+  cycle for good, even if the same cell comes back (A → loss → A, A → B → A). Observations the cycle already recorded (Timing
+  Advance evidence, the per-minute Stable-Site context) are kept: they describe a real moment.
+
 
 ## 2.10.10
 

@@ -18,7 +18,7 @@ object ForensicExporter {
         val files = buildFiles(
             forensicCase = forensicCase,
             samples = db.getForensicSamples(forensicCase.id),
-            appVersion = packageInfo.versionName ?: "unknown",
+            appVersion = com.alexisgordr.icdetector.core.AppBuildId.current(packageInfo.versionName) ?: "unknown",
             appVersionCode = packageInfo.longVersionCode
         )
         context.contentResolver.openOutputStream(uri)?.use { raw ->

@@ -2,6 +2,7 @@ package com.alexisgordr.icdetector.core
 
 import com.alexisgordr.icdetector.models.CellData
 import com.alexisgordr.icdetector.models.RadioTech
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -35,8 +36,10 @@ class BandDowngradeTest {
         active: CellData,
         previousBand: Int?,
         previousDbm: Int?,
-        recentDbm: List<Int>
+        recentDbm: List<Int>,
+        previousBandSite: String? = null
     ) = ThreatAnalyzer.analyzeThreats(
+        previousBandSite = previousBandSite,
         active = active,
         neighbors = emptyList(),
         isHardwareCipheringActive = false,
@@ -172,4 +175,43 @@ class BandDowngradeTest {
         )
         assertTrue(result.heuristicReport.bandDowngradePassed)
     }
+
+    // ---------- 3.0 (#10): mismo eNodeB ----------
+
+    private fun fieldCell(cid: String, mcc: String = "214", mnc: String = "07") =
+        lowBandCell().copy(cellId = cid, mcc = mcc, mnc = mnc)
+
+    @Test
+    fun `NO dispara si la banda cambia dentro del mismo eNodeB (caso de campo 79360544 a 79360545)`() {
+        val previous = LteSite.key(fieldCell("79360544").copy(arfcn = 3000))
+        val result = analyze(fieldCell("79360545"), previousBand = 7, previousDbm = -80,
+            recentDbm = emptyList(), previousBandSite = previous)
+        assertEquals("310002", previous?.substringAfterLast('-'))
+        assertTrue("misma estación base: no es un downgrade forzado", result.heuristicReport.bandDowngradePassed)
+    }
+
+    @Test
+    fun `sigue disparando si el eNodeB es otro`() {
+        val previous = LteSite.key(fieldCell("79360544"))
+        val result = analyze(fieldCell("79400000"), previousBand = 7, previousDbm = -80,
+            recentDbm = emptyList(), previousBandSite = previous)
+        assertFalse(result.heuristicReport.bandDowngradePassed)
+    }
+
+    @Test
+    fun `sin red conocida no se aplica la excepcion`() {
+        assertEquals(null, LteSite.key(fieldCell("79360544", mcc = "N/A")))
+        val result = analyze(fieldCell("79360545"), previousBand = 7, previousDbm = -80,
+            recentDbm = emptyList(), previousBandSite = LteSite.key(fieldCell("79360544", mnc = "N/A")))
+        assertFalse(result.heuristicReport.bandDowngradePassed)
+    }
+
+    @Test
+    fun `mismo eNodeB en otra red no es la misma estacion`() {
+        val previous = LteSite.key(fieldCell("79360544", mnc = "01"))
+        val result = analyze(fieldCell("79360545"), previousBand = 7, previousDbm = -80,
+            recentDbm = emptyList(), previousBandSite = previous)
+        assertFalse(result.heuristicReport.bandDowngradePassed)
+    }
 }
+

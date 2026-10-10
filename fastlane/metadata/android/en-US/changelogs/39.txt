@@ -1,0 +1,9 @@
+3.0.0 — bugs found in testing. Clean install required.
+
+• Exact UTC time, GPS accuracy, app version and unevaluated rules per row (schema 20).
+• Handovers use the full cell identity; every LTE band known; 5G SA in H14.
+• Timing Advance only from the same transmitter.
+• Alarm confirmation restarts after a signal loss.
+• Latency: not measured / learning / measured. H1 "pending" until confirmed.
+
+Weights and thresholds unchanged; dataset cuts per rule.

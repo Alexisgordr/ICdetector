@@ -1,5 +1,6 @@
 package com.alexisgordr.icdetector.ui
 
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -102,4 +103,12 @@ class TerminalLocalizationTest {
         assertTrue(radio.contains("connection state=PRIMARY_SERVING"))
         assertTrue(radio.contains("no secondary carriers"))
     }
+
+    @Test
+    fun `stable-site prefix is stored in Spanish and shown in English`() {
+        val stored = "${com.alexisgordr.icdetector.models.SITE_UNVERIFIED_PREFIX} NO_SITE_DATA"
+        assertEquals("[sitio-sin-verificar] NO_SITE_DATA", stored)
+        assertEquals("[site-unverified] NO_SITE_DATA", localizeTerminalLine(stored))
+    }
 }
+

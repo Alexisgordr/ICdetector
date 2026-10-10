@@ -23,7 +23,21 @@ import java.util.concurrent.ConcurrentHashMap
 class TemporalConfidence(
     private val confirmationCycles: Int = 3,
     private val minObservationSpacingMs: Long = 2_000L,
-    private val maxObservationStallMs: Long = 30_000L,
+    private val maxObservationStallMs: Long = MAX_OBSERVATION_STALL_MS,
+    /**
+     * 3.0 (#20) — Hueco máximo entre dos observaciones aceptadas para seguir contándolas como
+     * consecutivas. Pasado el hueco, la racha vuelve a empezar. Es el mismo valor que usa
+     * [CoverageContinuity] para H1 y el contexto de bandas: una sola constante,
+     * [CoverageContinuity.MAX_GAP_MS] (120 s; ahí está su porqué).
+     *
+     * No confundir con [maxObservationStallMs] (30 s), que es otra cosa: la salida de emergencia
+     * para aceptar una lectura nueva cuando el módem repite un timestamp congelado. Por qué 120 y
+     * no 30: con lecturas cada 10 s (pantalla apagada), 30 s son 3 lecturas perdidas, lo normal
+     * con un módem atascado, y ahí hay que dejar pasar una muestra real sin romper nada; 120 s son
+     * 12, un hueco de cobertura de verdad, y ahí sí hay que romper la continuidad. La relación la
+     * fija CoverageContinuityTest, no solo este comentario.
+     */
+    private val maxContinuityGapMs: Long = CoverageContinuity.MAX_GAP_MS,
     private val elapsedRealtimeMs: () -> Long = { System.nanoTime() / 1_000_000L }
 ) {
 
@@ -31,6 +45,13 @@ class TemporalConfidence(
     private var lastStreakKey = ""
     private var lastObservationToken: Long? = null
     private var lastAcceptedAtMs: Long? = null
+
+    /**
+     * 3.0 (#20) — Pérdida de la servidora utilizable (lista vacía, abstención, modo avión). Dos
+     * ciclos sospechosos, un hueco sin señal y otro ciclo de la misma celda ya no completan una
+     * confirmación como si fueran seguidos.
+     */
+    fun interrupt() = reset()
 
     /** Olvida todas las rachas. Útil al reiniciar el servicio o entre escenarios de test. */
     fun reset() {
@@ -88,6 +109,8 @@ class TemporalConfidence(
         if (observationToken != null && (previousToken == null || observationToken > previousToken)) {
             lastObservationToken = observationToken
         }
+        // 3.0 (#20) — Demasiado tiempo desde la última observación aceptada: no son consecutivas.
+        if (lastAcceptedAtMs?.let { now - it > maxContinuityGapMs } == true) anomalyStreaks.clear()
         lastAcceptedAtMs = now
 
         val currentStreak = if (cell.isSuspicious) {
@@ -146,5 +169,14 @@ class TemporalConfidence(
             report.transitionCoherence // H16: handover físicamente incoherente
         ).count { it == HeuristicStatus.FAILED }
         return if (cell.isSuspicious && strongFailures >= 2) 2 else confirmationCycles
+    }
+
+    companion object {
+        /**
+         * Tiempo tras el que una entrega fresca se acepta aunque el módem repita un timestamp
+         * congelado: 3 lecturas perdidas con la pantalla apagada (cada 10 s). Debe ser menor que
+         * [CoverageContinuity.MAX_GAP_MS]; ver CoverageContinuityTest.
+         */
+        const val MAX_OBSERVATION_STALL_MS = 30_000L
     }
 }

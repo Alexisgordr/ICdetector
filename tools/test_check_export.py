@@ -5,7 +5,9 @@ import sys
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from check_export import (
-    calendar_period_stats, radio_context_summary, ta_consistency_issues, ta_unit_diagnostic
+    LTE_EARFCN_RANGES, bands_outside_table, calendar_period_stats, dataset_cut_summary, evaluation_coverage, gps_accuracy_issues,
+    instant_issues, location_mode_summary, radio_context_summary, row_instant, version_key,
+    ta_consistency_issues, ta_unit_diagnostic
 )
 
 
@@ -87,5 +89,136 @@ class RadioContextSummaryTest(unittest.TestCase):
         self.assertEqual(1, summary["invalid_service"])
 
 
+
+
+class ObservedInstantTest(unittest.TestCase):
+    """3.0 (#23) — El instante UTC desambigua la hora repetida del cambio de hora de otoño."""
+
+    def test_repeated_autumn_hour_has_two_distinct_instants(self):
+        # Madrid, 25-10-2026: las 02:30 locales ocurren dos veces (CEST +2 y CET +1).
+        first = {"Timestamp": "2026-10-25 02:30:00", "ObservedAtUtc": "2026-10-25T00:30:00.000Z"}
+        second = {"Timestamp": "2026-10-25 02:30:00", "ObservedAtUtc": "2026-10-25T01:30:00.000Z"}
+        self.assertLess(row_instant(first), row_instant(second))
+        self.assertEqual([], instant_issues([first, second]))
+
+    def test_rows_before_3_0_have_no_instant_and_are_not_flagged(self):
+        legacy = {"Timestamp": "2026-09-01 10:00:00", "ObservedAtUtc": ""}
+        self.assertIsNone(row_instant(legacy))
+        self.assertEqual([], instant_issues([legacy]))
+
+    def test_impossible_offsets_and_unreadable_instants_are_flagged(self):
+        rows = [
+            {"Timestamp": "2026-10-09 12:00:00", "ObservedAtUtc": "2026-10-08T12:00:00.000Z"},
+            {"Timestamp": "2026-10-09 12:07:00", "ObservedAtUtc": "2026-10-09T10:00:00.000Z"},
+            {"Timestamp": "2026-10-09 12:00:00", "ObservedAtUtc": "yesterday"},
+        ]
+        self.assertEqual(3, len(instant_issues(rows)))
+
+    def test_half_hour_zones_are_valid(self):
+        row = {"Timestamp": "2026-10-09 17:30:00", "ObservedAtUtc": "2026-10-09T12:00:00.250Z"}
+        self.assertEqual([], instant_issues([row]))
+
+
+class EvaluationCoverageTest(unittest.TestCase):
+    """3.0 (#29) — Cuánto tiempo fue evaluable cada regla, sin contar las filas antiguas."""
+
+    def test_coverage_counts_only_rows_that_recorded_it(self):
+        rows = [
+            {"NotEvaluatedHeuristics": "H1;H9"},
+            {"NotEvaluatedHeuristics": "H9"},
+            {"NotEvaluatedHeuristics": "NONE"},
+            {"NotEvaluatedHeuristics": ""},          # anterior a 3.0: desconocido
+        ]
+        coverage = evaluation_coverage(rows)
+        self.assertEqual((2, 3), coverage["H1"])
+        self.assertEqual((1, 3), coverage["H9"])
+        self.assertEqual((3, 3), coverage["H5"])
+
+    def test_no_rows_with_the_column_means_unknown_not_evaluated(self):
+        coverage = evaluation_coverage([{"NotEvaluatedHeuristics": ""}, {}])
+        self.assertEqual((0, 0), coverage["H1"])
+
+
+class GpsAccuracyTest(unittest.TestCase):
+    NEW = "2026-10-09T10:00:00.000Z"
+
+    def test_accepted_fixes_and_rows_without_position_pass(self):
+        rows = [
+            {"ObservedAtUtc": self.NEW, "Lat": "40.4", "Lon": "-3.7", "GpsAccuracyM": "12.0"},
+            {"ObservedAtUtc": self.NEW, "Lat": "", "Lon": "", "GpsAccuracyM": ""},
+            {"ObservedAtUtc": "", "Lat": "40.4", "Lon": "-3.7", "GpsAccuracyM": ""},  # anterior a 3.0
+        ]
+        self.assertEqual([], gps_accuracy_issues(rows))
+
+    def test_missing_or_impossible_accuracy_is_flagged(self):
+        rows = [
+            {"ObservedAtUtc": self.NEW, "Lat": "40.4", "Lon": "-3.7", "GpsAccuracyM": ""},
+            {"ObservedAtUtc": self.NEW, "Lat": "40.4", "Lon": "-3.7", "GpsAccuracyM": "150.0"},
+            {"ObservedAtUtc": self.NEW, "Lat": "", "Lon": "", "GpsAccuracyM": "10.0"},
+        ]
+        self.assertEqual(3, len(gps_accuracy_issues(rows)))
+
+
+class DatasetCutTest(unittest.TestCase):
+    """3.0 (#30) — Con la versión por fila, cada corte de dataset se aplica fila a fila."""
+
+    def test_pre_release_counts_as_its_base_version(self):
+        self.assertEqual((3, 0, 0), version_key("3.0.0-beta1"))
+        self.assertEqual((2, 10, 10), version_key("2.10.10"))
+        # 3.0 — El commit de la compilación tras "+" no cambia la versión.
+        self.assertEqual((3, 0, 0), version_key("3.0.0-beta4+6bb5ed3"))
+        self.assertEqual((3, 0, 0), version_key("3.0.0+6bb5ed3-dirty"))
+        self.assertEqual((3, 0, 0), version_key("3.0.0+nogit"))
+        self.assertIsNone(version_key(""))
+        self.assertIsNone(version_key("unknown"))
+
+    def test_rows_are_split_by_each_cut_and_legacy_rows_stay_unknown(self):
+        rows = [{"AppVersion": "3.0.0-beta1"}, {"AppVersion": "3.0.0-beta1"},
+                {"AppVersion": "3.1.0"}, {"AppVersion": ""}]
+        versions, unknown, cuts = dataset_cut_summary(rows)
+        self.assertEqual(1, unknown)
+        self.assertEqual(2, versions["3.0.0-beta1"])
+        by_cut = {cut: (before, after) for cut, _, before, after in cuts}
+        self.assertEqual((0, 3), by_cut["3.0.0"])
+        self.assertEqual((0, 3), by_cut["2.10.10"])
+
+
+class LteBandTableTest(unittest.TestCase):
+    """3.0 (#32) — La tabla del validador es la misma que la de la app."""
+
+    def test_python_table_matches_bandplan_kt(self):
+        import re
+        source = (Path(__file__).resolve().parent.parent /
+                  "app/src/main/java/com/alexisgordr/icdetector/core/BandPlan.kt").read_text(encoding="utf-8")
+        kotlin = {int(b): (int(lo), int(hi))
+                  for b, lo, hi in re.findall(r"LteBand\((\d+), [\d.]+, (\d+), (\d+)\)", source)}
+        self.assertEqual(kotlin, LTE_EARFCN_RANGES)
+
+    def test_rows_with_declared_bands_outside_the_table_are_counted(self):
+        rows = [
+            {"Radio": "LTE", "Bands": "3", "ARFCN": "1500"},
+            {"Radio": "LTE", "Bands": "252", "ARFCN": "255500"},
+            {"Radio": "LTE", "Bands": "", "ARFCN": "255500"},
+            {"Radio": "NR", "Bands": "78", "ARFCN": "632448"},
+        ]
+        with_bands, outside, declared = bands_outside_table(rows)
+        self.assertEqual((2, 1), (with_bands, outside))
+        self.assertEqual(1, declared["252"])
+
+    def test_location_modes_are_counted_and_unknown_kept_apart(self):
+        rows = [
+            {"LocationMode": "CONTINUOUS"}, {"LocationMode": "ADAPTIVE"},
+            {"LocationMode": "ADAPTIVE"}, {"LocationMode": "INTELLIGENT"},
+            {"LocationMode": ""}, {}, {"LocationMode": "GPS"},
+        ]
+        modes, unknown, invalid = location_mode_summary(rows)
+        self.assertEqual(1, modes["CONTINUOUS"])
+        self.assertEqual(2, modes["ADAPTIVE"])
+        self.assertEqual(1, modes["INTELLIGENT"])
+        self.assertEqual((2, 1), (unknown, invalid))
+
 if __name__ == "__main__":
     unittest.main()
+
+
+

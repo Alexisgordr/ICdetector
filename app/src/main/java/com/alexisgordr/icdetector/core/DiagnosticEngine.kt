@@ -13,6 +13,10 @@ object DiagnosticEngine {
         val locationAvailable: Boolean,
         val historyWithLocation: Int,
         val latencyAvailable: Boolean,
+        /** 3.0 (#28) — Entregas sin vecinas ya vistas / necesarias, mientras H1 está pendiente. */
+        val isolationProgress: Pair<Int, Int>? = null,
+        /** 3.0 (#26) — La sonda mide, pero aún aprende la referencia de esta celda. */
+        val latencyLearning: Boolean = false,
         val cipheringAvailable: Boolean,
         val previousBandAvailable: Boolean,
         val signalBaseline: SignalBaseline?,
@@ -40,7 +44,12 @@ object DiagnosticEngine {
         }
         return listOf(
             HeuristicDiagnostic(1, "Celda aislada", r.isolatedCell,
-                explanation(r.isolatedCell, if (i.wifiActive) "N/A: Wi-Fi activo; se evita atribuir el contexto de red al enlace celular." else "N/A: sin lectura celular válida.")),
+                explanation(r.isolatedCell, when {
+                    i.wifiActive -> "N/A: Wi-Fi activo; se evita atribuir el contexto de red al enlace celular."
+                    i.neighborCount == 0 && i.isolationProgress != null ->
+                        "N/A: sin vecinas, pendiente de confirmar (${i.isolationProgress.first}/${i.isolationProgress.second} entregas)."
+                    else -> "N/A: sin lectura celular válida."
+                })),
             HeuristicDiagnostic(2, "Estabilidad de potencia", r.powerJump,
                 explanation(r.powerJump, "N/A: hacen falta celdas vecinas con potencia para comparar.")),
             HeuristicDiagnostic(3, "Consistencia MCC", r.mccConsistency,
@@ -68,6 +77,7 @@ object DiagnosticEngine {
             HeuristicDiagnostic(12, "Correlación latencia + RF", r.latencyCorrelation,
                 explanation(r.latencyCorrelation, when {
                     i.wifiActive -> "N/A: Wi-Fi/VPN impide atribuir la latencia al enlace celular."
+                    i.latencyLearning -> "N/A: la sonda de latencia aún aprende la referencia de esta celda."
                     !i.latencyAvailable -> "N/A: la sonda de latencia todavía no tiene una medición válida."
                     cell.rsrq == null && cell.sinr == null -> "N/A: el módem no entrega RSRQ ni SINR."
                     else -> "N/A: faltan datos cruzados del ciclo."
@@ -75,7 +85,7 @@ object DiagnosticEngine {
             HeuristicDiagnostic(13, "Baseline y huella RF", r.signalBaseline,
                 explanation(r.signalBaseline, "N/A: baseline en aprendizaje; se necesitan muestras históricas compatibles.")),
             HeuristicDiagnostic(14, "Downgrade de banda", r.bandDowngrade,
-                explanation(r.bandDowngrade, if (!i.previousBandAvailable) "N/A: falta una banda LTE anterior válida para comparar." else "N/A: la tecnología o banda actual no permite la comparación.")),
+                explanation(r.bandDowngrade, if (!i.previousBandAvailable) "N/A: falta una banda anterior válida (LTE o 5G) de la misma tecnología para comparar." else "N/A: la tecnología o banda actual no permite la comparación.")),
             HeuristicDiagnostic(15, "Estabilidad de identidad RF", r.rfStability,
                 explanation(r.rfStability, "N/A: historial RF insuficiente (${i.rfStability?.totalObservations ?: 0}/4 observaciones).")),
             HeuristicDiagnostic(16, "Coherencia de transición celular", r.transitionCoherence,

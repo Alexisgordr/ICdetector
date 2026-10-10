@@ -38,7 +38,6 @@ import java.text.SimpleDateFormat
 import java.util.*
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.CopyOnWriteArrayList
-import java.util.concurrent.atomic.AtomicLong
 import java.util.concurrent.TimeUnit
 
 class MiniICService : Service() {
@@ -185,9 +184,10 @@ class MiniICService : Service() {
     /** v2.10.7 — Última promoción multiseñal escrita en el terminal (evita repetirla en cada ciclo). */
     private var lastLoggedPromotion: String? = null
     private var screenReceiver: BroadcastReceiver? = null
-    private var isScreenOn = true
+    /** Estado real de la pantalla; se lee de PowerManager al registrar el receptor (ver allí). */
+    @Volatile private var isScreenOn = true
     @Volatile private var isUiVisible = false
-    private var collectionPausedForCriticalBattery = false
+    @Volatile private var collectionPausedForCriticalBattery = false
     private var isServiceRunning = false
     
     // v2.10.9 — Android no expone a una app normal el estado de cifrado del módem: no hay fuente
@@ -199,7 +199,11 @@ class MiniICService : Service() {
 
     // v2.1: la confirmación temporal vive en core/TemporalConfidence para poder testearla de
     // extremo a extremo (ver ScenarioTest). El servicio solo la usa.
-    private val temporalConfidence = com.alexisgordr.icdetector.core.TemporalConfidence(CONFIRMATION_CYCLES)
+    // 3.0 (#20) — Reloj que cuenta el tiempo dormido: un hueco en Doze no puede parecer de 0 s.
+    private val temporalConfidence = com.alexisgordr.icdetector.core.TemporalConfidence(
+        CONFIRMATION_CYCLES,
+        elapsedRealtimeMs = SystemClock::elapsedRealtime
+    )
     private val threatEpisodeTracker = com.alexisgordr.icdetector.core.ThreatEpisodeTracker()
     private val isolatedCellConfidence = com.alexisgordr.icdetector.core.IsolatedCellConfidence()
     @Volatile private var intensiveMonitoringUntilMs = 0L
@@ -207,7 +211,8 @@ class MiniICService : Service() {
     // Todas las lecturas comparten cachés, transición y confirmación temporal. Serializarlas evita
     // que dos callbacks publiquen la firma de una celda con el historial calculado para otra.
     private val cellProcessingMutex = Mutex()
-    private val enqueuedCellProcessing = AtomicLong(0L)
+    /** 3.0 (#24) — Entregas, pérdidas de señal y ciclos en curso. Ver CollectionGeneration. */
+    private val collectionGeneration = com.alexisgordr.icdetector.core.CollectionGeneration()
     private var lastIncidentIdentity: String? = null
     // v2.1 — ¿el TA de este módem es una medida o un campo sin rellenar? Ver TimingAdvanceSanity.
     private val taSanity = com.alexisgordr.icdetector.core.TimingAdvanceSanity()
@@ -282,14 +287,26 @@ class MiniICService : Service() {
     var is3gAirplaneModeEnabled = true
     var isProxyEnabled = false
     var isLatencyDetectionEnabled: Boolean = false
+    /** 3.0 — Modo de ubicación (Ajustes). Continuo por defecto; adaptativo ahorra batería. */
+    @Volatile var locationMode: com.alexisgordr.icdetector.core.LocationMode =
+        com.alexisgordr.icdetector.core.LocationMode.CONTINUOUS
+    /** Último modo anotado en el terminal, para dejar constancia de cada cambio. */
+    private var loggedLocationMode: com.alexisgordr.icdetector.core.LocationMode? = null
 
-    private var prevCid: String? = null
+    /** 3.0 (#19) — Identidad completa de la última servidora; ver ServingIdentityChange. */
+    private var prevServingIdentity: com.alexisgordr.icdetector.core.ServingIdentityChange.Identity? = null
     // Fix #1: guarda el cellId cuya alarma ya se ha persistido en el episodio actual, para no
     // registrar la misma evidencia en cada ciclo. Se resetea en cada cambio de celda (handover).
     // Estado para heurística 14 (band downgrade intra-LTE). Guardan la última celda
     // REGISTRADA analizada; el buffer de tendencia sobrevive al handover para detectar si
     // la señal venía degradándose progresivamente (excepción del garaje/sótano).
     private var prevBand: Int? = null
+    /** 3.0 (#10) — eNodeB de la celda en la que se midió [prevBand]. */
+    private var prevBandSite: String? = null
+    /** 3.0 (#8) — NR-ARFCN de la servidora anterior si era NR (H14 en 5G SA). */
+    private var prevNrArfcn: Int? = null
+    /** 3.0 (#20) — Continuidad de cobertura: pérdidas de señal y huecos sin lecturas. */
+    private val coverageContinuity = com.alexisgordr.icdetector.core.CoverageContinuity()
     private var prevRegisteredDbm: Int? = null
     private val recentRegisteredDbmTrend = CopyOnWriteArrayList<Int>()
     private val cellChangeHistory = CopyOnWriteArrayList<Pair<String, Long>>()
@@ -298,7 +315,20 @@ class MiniICService : Service() {
         fun getService(): MiniICService = this@MiniICService
     }
 
+    /**
+     * 3.0 (#20, #26) — Pérdida de la servidora utilizable: invalida los ciclos en curso, rompe la
+     * continuidad de la confirmación y deja la latencia en "no medida" (una medición de antes del
+     * hueco ya no describe la celda a la que se vuelva).
+     */
+    private fun onSignalLost() {
+        collectionGeneration.lose()
+        latencyMonitor.reset()
+    }
+
     fun forceRefresh() {
+        // 3.0 (#24) — La pantalla se vacía: un ciclo en curso no puede volver a pintarla. No es una
+        // pérdida de señal (#20): la confirmación en curso no vuelve a empezar.
+        collectionGeneration.lose(signalLost = false)
         _cellFlow.value = emptyList()
         requestFreshCellInfo()
     }
@@ -362,7 +392,7 @@ class MiniICService : Service() {
                 appendLog("[SYS]", "Captura forense restablecida.")
             }
         }
-        notificationController = ServiceNotificationController(this, MiniICService::class.java)
+        notificationController = ServiceNotificationController(this, MiniICService::class.java) { locationMode }
         databaseMaintenance = DatabaseMaintenance(dbHelper) { appendLog("[SYS]", it) }
         latencyMonitor = NetworkLatencyMonitor(
             client = latencyClient,
@@ -389,7 +419,8 @@ class MiniICService : Service() {
             onPreciseFixAccepted = { location ->
                 observeMotionFix(location)
                 persistPreciseLocation(location)
-            }
+            },
+            locationMode = { locationMode }
         )
         apiCoordinateValidator = ApiCoordinateValidator(
             db = dbHelper,
@@ -429,18 +460,23 @@ class MiniICService : Service() {
             requestFreshCellInfo = ::requestFreshCellInfo,
             historyEpoch = historyEpoch
         )
+        // 3.0 — `versionName+commit`: separa en los datos las filas de compilaciones distintas.
+        val appVersion = com.alexisgordr.icdetector.core.AppBuildId.current(
+            runCatching { packageManager.getPackageInfo(packageName, 0).versionName }.getOrNull()
+        )
         observationPersistence = ObservationPersistenceController(
             scope = scope,
-            db = dbHelper,
-            location = { getCurrentLocation() },
+            insert = { row -> dbHelper.logObservation(row, appVersion) },
+            location = { getCurrentLocation()?.toObservedFix() },
             serviceState = { _serviceState.value },
             onWrite = ::noteWriteResult,
-            onPeriodicMissingLocation = { timestamp ->
-                locationController.markCoordinatesPending(timestamp)
+            onPeriodicMissingLocation = { _ ->
+                locationController.markCoordinatesPending()
                 requestHighAccuracyFix()
             },
             writeDispatcher = historyWriteDispatcher,
-            historyGeneration = { historyEpoch.current() }
+            historyGeneration = { historyEpoch.current() },
+            locationMode = { locationMode.storedValue }
         )
         securityAlerts = SecurityAlertController(
             tone = { toneGenerator },
@@ -500,6 +536,9 @@ class MiniICService : Service() {
         collectionHealthController.restore()?.let { appendLog("[SYS]", it) }
         isProxyEnabled = prefs.getBoolean("proxy_enabled", false)
         isLatencyDetectionEnabled = prefs.getBoolean("latency_detection_enabled", false)
+        locationMode = com.alexisgordr.icdetector.core.LocationMode.fromStored(
+            prefs.getString(com.alexisgordr.icdetector.core.LocationMode.PREF_KEY, null)
+        )
         restoreTaSanityEvidence()            // evidencia de TA superviviente a reinicios (v2.5)
 
         try {
@@ -529,7 +568,10 @@ class MiniICService : Service() {
             return
         }
 
-        appendLog("[SYS]", "Ubicación continua activa (24/7). Consumo de batería elevado por diseño: las coordenadas son necesarias para H11, H13 y H16.")
+        // 3.0 — Solo en modo continuo; el adaptativo lo anota applyLocationMode().
+        if (locationMode == com.alexisgordr.icdetector.core.LocationMode.CONTINUOUS) {
+            appendLog("[SYS]", "Ubicación continua activa (24/7). Consumo de batería elevado por diseño: las coordenadas son necesarias para H11, H13 y H16.")
+        }
 
         registerTelephonyCallback()
         registerDisplayInfoCallback()
@@ -537,10 +579,11 @@ class MiniICService : Service() {
 
         collectionPausedForCriticalBattery = isBatteryCritical()
         if (collectionPausedForCriticalBattery) {
+            locationController.updateCollection(isScreenOn, enabled = false)
             appendLog("[SYS]", "⚠ Batería crítica (<${CollectionPowerController.CRITICAL_PERCENT} %): ubicación continua en pausa hasta conectar el cargador.")
         } else {
             ensureCollectionWakeLock()
-            locationController.startContinuousUpdates()
+            applyLocationMode()
         }
 
         scope.launch(Dispatchers.Default) {
@@ -556,7 +599,7 @@ class MiniICService : Service() {
                 try {
                     val batteryCritical = isBatteryCritical()
                     if (batteryCritical) {
-                        locationController.stopContinuousUpdates()
+                        locationController.updateCollection(isScreenOn, enabled = false)
                         releaseCollectionWakeLock()
                         if (!collectionPausedForCriticalBattery) {
                             collectionPausedForCriticalBattery = true
@@ -565,11 +608,12 @@ class MiniICService : Service() {
                         }
                     } else {
                         ensureCollectionWakeLock()
-                        locationController.startContinuousUpdates()
                         if (collectionPausedForCriticalBattery) {
                             collectionPausedForCriticalBattery = false
                             appendLog("[SYS]", "Alimentación recuperada: ubicación continua y recolección 24/7 reanudadas.")
                         }
+                        // GPS y reintentos limitados según modo, pantalla y recepción.
+                        applyLocationMode()
                     }
 
                     val isAirplaneModeOn = Settings.Global.getInt(
@@ -578,6 +622,8 @@ class MiniICService : Service() {
                     ) != 0
 
                     if (isAirplaneModeOn) {
+                        // 3.0 (#24) — Modo avión: invalida el ciclo que siga analizando.
+                        onSignalLost()
                         _cellFlow.value = emptyList()
                         updateNotificationText(getString(R.string.no_signal_airplane))
                         appendLog("[SYS]", "⚠️ Modo Avión activo. Suspendiendo escaneo.")
@@ -736,7 +782,8 @@ class MiniICService : Service() {
         val identity = cell.identityKey
         if (identity == latencyCellIdentity) return
         latencyCellIdentity = identity
-        latencyMonitor.onCellChanged(identity, idleLatencyState())
+        // 3.0 (#26) — Celda nueva: todavía no medida. Antes se mostraba "OK" sin medir nada.
+        latencyMonitor.onCellChanged(identity, NetworkLatencyMonitor.STATE_NOT_MEASURED)
     }
 
     private fun checkLatencyAnomaly() {
@@ -744,6 +791,9 @@ class MiniICService : Service() {
             latencyMonitor.reset()
             return
         }
+        // 3.0 (#26) — La caducidad corre en cada vuelta del ciclo periódico, aunque no se pueda
+        // medir (sin celda registrada): un OK/ANOMALA no sobrevive más de 90 s sin medición nueva.
+        latencyMonitor.expireIfStale()
         // v2.10.9 — Identidad completa: dos celdas con el mismo CID en otra red o tecnología no
         // comparten la media de latencia.
         val activeCellKey = _cellFlow.value.firstOrNull { it.isRegistered }?.identityKey ?: return
@@ -766,6 +816,11 @@ class MiniICService : Service() {
         }
     }
     private fun registerScreenReceiver() {
+        // 3.0 — Bug found during testing: isScreenOn empezaba siempre en true. Si Android
+        // reiniciaba el servicio con la pantalla apagada, el modo adaptativo encendía el GPS
+        // continuo hasta el siguiente evento de apagado. Se lee el estado real antes de aplicar el
+        // modo de ubicación; los eventos de pantalla lo mantienen al día desde aquí.
+        isScreenOn = getSystemService(PowerManager::class.java)?.isInteractive ?: true
         val filter = IntentFilter().apply {
             addAction(Intent.ACTION_SCREEN_ON)
             addAction(Intent.ACTION_SCREEN_OFF)
@@ -773,8 +828,21 @@ class MiniICService : Service() {
         screenReceiver = object : BroadcastReceiver() {
             override fun onReceive(context: Context?, intent: Intent?) {
                 when (intent?.action) {
-                    Intent.ACTION_SCREEN_ON -> isScreenOn = true
-                    Intent.ACTION_SCREEN_OFF -> isScreenOn = false
+                    Intent.ACTION_SCREEN_ON -> {
+                        isScreenOn = true
+                        // 3.0 — En adaptativo, al volver a usar el móvil se pide una ubicación
+                        // fresca y vuelve el GPS continuo mientras la pantalla siga encendida.
+                        if (locationMode != com.alexisgordr.icdetector.core.LocationMode.CONTINUOUS &&
+                            !collectionPausedForCriticalBattery
+                        ) {
+                            applyLocationMode()
+                            requestHighAccuracyFix()
+                        }
+                    }
+                    Intent.ACTION_SCREEN_OFF -> {
+                        isScreenOn = false
+                        if (!collectionPausedForCriticalBattery) applyLocationMode()
+                    }
                 }
             }
         }
@@ -794,6 +862,29 @@ class MiniICService : Service() {
     /** Solo protege frente al apagado inminente; cargando nunca se pausa la recolección. */
     private fun isBatteryCritical(): Boolean = collectionPower.isBatteryCritical()
 
+    /**
+     * 3.0 — Enciende o apaga el GPS continuo según el modo de ubicación y la pantalla, y deja una
+     * línea en el terminal cada vez que cambia el modo (para que la caja negra lo registre).
+     */
+    private fun applyLocationMode() {
+        val mode = locationMode
+        locationController.updateCollection(isScreenOn, enabled = !collectionPausedForCriticalBattery)
+        if (mode != loggedLocationMode) {
+            loggedLocationMode = mode
+            appendLog(
+                "[GPS]",
+                when (mode) {
+                    com.alexisgordr.icdetector.core.LocationMode.ADAPTIVE ->
+                        "Modo de ubicación adaptativo: GPS continuo solo con la pantalla encendida."
+                    com.alexisgordr.icdetector.core.LocationMode.INTELLIGENT ->
+                        "Modo de ubicación inteligente: intentos GPS breves cada 45 s cuando hay recepción."
+                    com.alexisgordr.icdetector.core.LocationMode.CONTINUOUS ->
+                        "Modo de ubicación continuo: GPS activo también con la pantalla apagada."
+                }
+            )
+        }
+    }
+
     private fun requestHighAccuracyFix(force: Boolean = false) {
         locationController.requestPreciseFix(force)
     }
@@ -804,7 +895,8 @@ class MiniICService : Service() {
             val updated = dbHelper.updateNullCoordinates(
                 cell.cellId, cell.mnc, cell.tac, cell.mcc, cell.radioTech,
                 location.latitude, location.longitude,
-                fixTimeMs = location.time
+                fixTimeMs = location.time,
+                accuracyM = location.takeIf { it.hasAccuracy() }?.accuracy
             )
             appendLog(
                 "[GPS]",
@@ -904,6 +996,8 @@ class MiniICService : Service() {
             }
 
             if (list.isEmpty()) {
+                // 3.0 (#24) — Una pérdida de señal invalida el ciclo que aún esté analizando.
+                onSignalLost()
                 _cellFlow.value = emptyList()
                 updateNotificationText(getString(R.string.no_signal_airplane))
                 return
@@ -920,6 +1014,7 @@ class MiniICService : Service() {
                 // Si el módem declaró una primaria pero no proporcionó una señal utilizable,
                 // abstenerse: una secundaria nunca puede heredar el historial de la primaria.
                 val declaredPrimary = com.alexisgordr.icdetector.core.ServingCellSelection.hasDeclaredPrimary(list)
+                onSignalLost()
                 _cellFlow.value = com.alexisgordr.icdetector.core.ServingCellSelection.abstentionPublication()
                 if (declaredPrimary) logUnusablePrimaryAbstention()
                 updateNotificationText(getString(R.string.searching_network))
@@ -935,9 +1030,21 @@ class MiniICService : Service() {
             list.addAll(servingFirst)
             logRadioContext(list.firstOrNull()?.takeIf { it.isRegistered }, list.count { it.isRegistered })
 
-            // Solo una entrega con trabajo real puede invalidar otra que esté esperando el mutex.
-            // Un callback vacío ya no crea una secuencia fantasma que haga perder el ciclo válido.
-            val processingSequence = enqueuedCellProcessing.incrementAndGet()
+            // Una entrega con trabajo real invalida a otra que esté esperando el mutex. 3.0 (#24):
+            // la lista vacía y la abstención también invalidan, pero solo a la hora de PUBLICAR
+            // (ver collectionGeneration.lose() arriba): un ciclo en curso no puede pintar ni
+            // alertar sobre una celda que ya se perdió.
+            val cycleTicket = collectionGeneration.deliver(
+                list.firstOrNull { it.isRegistered }?.identityKey ?: "N/A"
+            )
+            // 3.0 (A03) — Hora, posición y estado de servicio de ESTA lectura, fijados al recibirla.
+            // El análisis puede tardar; la fila del historial y el propio análisis usan este
+            // contexto, no el del momento en que termine. El estado de servicio ya se ha
+            // sondeado al principio de esta entrega.
+            val deliveryLocation = getCurrentLocation()
+            val observationContext = observationPersistence.capture(deliveryLocation?.toObservedFix())
+            // 3.0 (#20) — Instante monotónico de la entrega, para medir huecos sin lecturas.
+            val deliveredAtElapsedMs = SystemClock.elapsedRealtime()
 
             // v2.1 — EL TIMING ADVANCE NO SE COMPARTE ENTRE CELDAS.
             //
@@ -953,15 +1060,10 @@ class MiniICService : Service() {
             val activeIndex = list.indexOfFirst { it.isRegistered }
             if (activeIndex >= 0) {
                 val activeCell = list[activeIndex]
-                if (activeCell.timingAdvance == null && activeCell.cellId != "N/A") {
-                    val sameCellWithTa = list.firstOrNull { c ->
-                        !c.isRegistered &&
-                            c.timingAdvance != null && c.timingAdvance >= 0 &&
-                            c.cellId == activeCell.cellId &&
-                            (c.mnc == activeCell.mnc || c.mnc == "N/A") &&
-                            c.tac == activeCell.tac &&
-                            (c.mcc == activeCell.mcc || c.mcc == "N/A")
-                    }
+                // 3.0 (#21) — Solo de la MISMA celda duplicada: misma tecnología y mismo emisor
+                // físico (PCI/frecuencia). Ver TimingAdvanceBorrowing.
+                run {
+                    val sameCellWithTa = com.alexisgordr.icdetector.core.TimingAdvanceBorrowing.source(activeCell, list)
                     if (sameCellWithTa != null) {
                         list[activeIndex] = activeCell.copy(
                             timingAdvance = sameCellWithTa.timingAdvance,
@@ -981,7 +1083,8 @@ class MiniICService : Service() {
                 // v2.5 — La evidencia sobrevive a los reinicios del servicio; sin esto, la misma
                 // lectura de TA=0 se etiquetaba LTE_INDEX o STUB_ZERO según cuánto llevara vivo el
                 // proceso, y el historial dejaba de ser autoconsistente (medido: 319 vs 394 filas).
-                if (taSanity.observe(taKey, current.timingAdvance)) persistTaSanityEvidence()
+                // 3.0 (#33) — Evidencia por unidad: un LTE que reporta no oculta un GSM/NR a cero.
+                if (taSanity.observe(current.timingAdvanceUnit, taKey, current.timingAdvance)) persistTaSanityEvidence()
                 val effectiveUnit = taSanity.effectiveUnit(current.timingAdvanceUnit, current.timingAdvance)
                 if (effectiveUnit != current.timingAdvanceUnit) {
                     list[activeIndex] = current.copy(timingAdvanceUnit = effectiveUnit)
@@ -1000,8 +1103,24 @@ class MiniICService : Service() {
 
             scope.launch(Dispatchers.IO) {
                 cellProcessingMutex.withLock {
-                if (processingSequence < enqueuedCellProcessing.get()) return@withLock
-                val currentLocation = getCurrentLocation()
+                if (!collectionGeneration.isLatest(cycleTicket)) return@withLock
+                // 3.0 (#20) — Tras una pérdida de señal, el contexto de banda de antes del hueco no
+                // sirve para comparar: H14 queda N/A hasta tener una banda previa nueva.
+                val signalLosses = collectionGeneration.losses
+                // También un hueco de más de 2 min sin lecturas, aunque no llegara una lista vacía.
+                val continuityBreak = coverageContinuity.check(signalLosses, deliveredAtElapsedMs)
+                val continuityBroken = continuityBreak != com.alexisgordr.icdetector.core.CoverageContinuity.Break.NONE
+                if (continuityBroken) {
+                    // 3.0 (#20) — La racha de "sin vecinas" de H1 tampoco cruza el hueco: dos
+                    // muestras antes y una después no confirman el aislamiento.
+                    isolatedCellConfidence.reset()
+                    prevBand = null
+                    prevBandSite = null
+                    prevNrArfcn = null
+                    prevRegisteredDbm = null
+                    recentRegisteredDbmTrend.clear()
+                }
+                val currentLocation = deliveryLocation
                 // Cellular polling only reads motion. New evidence enters from real Location
                 // callbacks, so a repeated lastKnownLocation cannot manufacture static time.
                 val motionEvidence = stableSiteMotion.current(System.currentTimeMillis()).also {
@@ -1218,11 +1337,14 @@ class MiniICService : Service() {
                             currentLocation = currentLocation,
                             preloadedHistory = preloadedHistory,
                             isWifiActive = wifiActive,
-                            isNetworkLatencyAnomalous = networkLatencyState.value == "ANOMALA",
-                            isNetworkLatencyAvailable = networkLatencyState.value != "N/A",
+                            isNetworkLatencyAnomalous = networkLatencyState.value == NetworkLatencyMonitor.STATE_ANOMALOUS,
+                            // 3.0 (#26) — Solo una medición contra la referencia (OK/ANOMALA) cuenta.
+                            isNetworkLatencyAvailable = NetworkLatencyMonitor.isMeasured(networkLatencyState.value),
                             signalBaseline = signalBaseline,
                             previousBand = prevBand,
                             previousDbm = prevRegisteredDbm,
+                            previousBandSite = prevBandSite,
+                            previousNrArfcn = prevNrArfcn,
                             recentRegisteredDbm = recentRegisteredDbmTrend.toList(),
                             rfStability = rfStability,
                             reputation = reputation,
@@ -1260,6 +1382,27 @@ class MiniICService : Service() {
                 }
 
                 withContext(Dispatchers.Main) {
+                    // 3.0 (#24) — Tras analizar: si mientras tanto se perdió la señal o cambió la
+                    // servidora, este resultado ya no describe el presente. No se publica, no
+                    // alerta, no se guarda en historial/incidentes/caja negra ni alimenta los
+                    // contadores de confirmación. Las entregas llegan por el hilo principal, así
+                    // que nada puede cambiar entre esta comprobación y el resto del bloque.
+                    if (!collectionGeneration.mayPublish(cycleTicket)) return@withContext
+                    // 3.0 (#20) — La confirmación temporal y los episodios empiezan de nuevo después
+                    // de un hueco de cobertura. La línea del terminal deja constancia en la caja negra.
+                    coverageContinuity.acknowledge(signalLosses, deliveredAtElapsedMs)
+                    if (continuityBroken) {
+                        temporalConfidence.interrupt()
+                        threatEpisodeTracker.interrupt()
+                        appendLog(
+                            "[SEC]",
+                            if (continuityBreak == com.alexisgordr.icdetector.core.CoverageContinuity.Break.GAP) {
+                                "Continuidad interrumpida por un hueco sin lecturas: la confirmación vuelve a empezar."
+                            } else {
+                                "Continuidad interrumpida por pérdida de señal: la confirmación vuelve a empezar."
+                            }
+                        )
+                    }
                     // v2.10.4 — La servidora va siempre primero; nunca se reordena por potencia.
                     val analyzedServing = analyzedList.firstOrNull()?.takeIf { it.isRegistered }
                     val sorted = listOfNotNull(analyzedServing) +
@@ -1338,11 +1481,13 @@ class MiniICService : Service() {
                         val diagnosticInputs = com.alexisgordr.icdetector.core.DiagnosticEngine.Inputs(
                             neighborCount = neighbors.size,
                             wifiActive = isWifiConnected(),
+                            isolationProgress = isolatedCellConfidence.progress to isolatedCellConfidence.required,
                             locationAvailable = currentLocation != null,
                             historyWithLocation = preloadedHistory.count { it.lat != null && it.lon != null },
-                            latencyAvailable = networkLatencyState.value != "N/A",
+                            latencyAvailable = NetworkLatencyMonitor.isMeasured(networkLatencyState.value),
+                            latencyLearning = networkLatencyState.value == NetworkLatencyMonitor.STATE_LEARNING,
                             cipheringAvailable = isHardwareCipheringAvailable,
-                            previousBandAvailable = prevBand != null && prevRegisteredDbm != null,
+                            previousBandAvailable = (prevBand != null || prevNrArfcn != null) && prevRegisteredDbm != null,
                             signalBaseline = signalBaseline,
                             rfFingerprint = rfFingerprint,
                             rfStability = rfStability,
@@ -1391,7 +1536,7 @@ class MiniICService : Service() {
                         }
 
                         // 2. Lanzar alertas y registro con el estado actual
-                        checkAlerts(confirmedActive.copy(verified = knownStatus), confirmed = true)
+                        checkAlerts(confirmedActive.copy(verified = knownStatus), confirmed = true, context = observationContext)
 
                         // 3. Iniciar proceso de verificación (solo si es necesario)
                         verificationController.verify(active)
@@ -1410,6 +1555,8 @@ class MiniICService : Service() {
                         prevBand = if (isLteActive) {
                             active.band ?: active.arfcn?.let { com.alexisgordr.icdetector.core.BandPlan.earfcnToBandLte(it) }
                         } else null
+                        prevBandSite = com.alexisgordr.icdetector.core.LteSite.key(active)
+                        prevNrArfcn = active.arfcn.takeIf { active.radioTech == RadioTech.NR }
                         prevRegisteredDbm = active.dbm
                         if (active.dbm != Int.MAX_VALUE && active.dbm != -999) {
                             recentRegisteredDbmTrend.add(active.dbm)
@@ -1439,11 +1586,15 @@ class MiniICService : Service() {
     private fun restoreTaSanityEvidence() {
         try {
             val p = getSharedPreferences("miniic_prefs", MODE_PRIVATE)
-            val seenReal = p.getBoolean(KEY_TA_SEEN_REAL, false)
-            val cells = p.getStringSet(KEY_TA_ZERO_CELLS, emptySet()).orEmpty()
-            if (!seenReal && cells.isEmpty()) return
-            taSanity.restore(seenReal, cells)
-            if (taSanity.isStub) {
+            // 3.0 (#33) — Una clave por unidad. Las claves globales de versiones anteriores
+            // (ta_seen_real_value, ta_zero_only_cells) no dicen de qué tecnología vinieron y NO se
+            // leen: cada unidad empieza vacía y se rederiva en unos minutos de uso.
+            com.alexisgordr.icdetector.core.TimingAdvanceSanity.EVIDENCE_UNITS.forEach { unit ->
+                val seenReal = p.getBoolean(KEY_TA_SEEN_REAL_PREFIX + unit.name, false)
+                val cells = p.getStringSet(KEY_TA_ZERO_CELLS_PREFIX + unit.name, emptySet()).orEmpty()
+                if (seenReal || cells.isNotEmpty()) taSanity.restore(unit, seenReal, cells)
+            }
+            if (taSanity.anyStub) {
                 appendLog(
                     "[TA]",
                     "Diagnóstico de TA recuperado del arranque anterior: el módem no rellena el campo " +
@@ -1456,16 +1607,29 @@ class MiniICService : Service() {
     /** Guarda la evidencia de TA. Se llama solo cuando [TimingAdvanceSanity.observe] dice que cambió. */
     private fun persistTaSanityEvidence() {
         try {
-            getSharedPreferences("miniic_prefs", MODE_PRIVATE).edit()
-                .putBoolean(KEY_TA_SEEN_REAL, taSanity.hasSeenRealValue)
-                .putStringSet(KEY_TA_ZERO_CELLS, taSanity.zeroOnlyCellKeys)
-                .apply()
+            val editor = getSharedPreferences("miniic_prefs", MODE_PRIVATE).edit()
+            com.alexisgordr.icdetector.core.TimingAdvanceSanity.EVIDENCE_UNITS.forEach { unit ->
+                editor.putBoolean(KEY_TA_SEEN_REAL_PREFIX + unit.name, taSanity.hasSeenRealValue(unit))
+                    .putStringSet(KEY_TA_ZERO_CELLS_PREFIX + unit.name, taSanity.zeroOnlyCellKeys(unit))
+            }
+            editor.apply()
         } catch (_: Exception) {}
     }
+
+    /** Same position checks as analysis, plus GPS availability; never starts acquisition. */
+    fun hasUsableGpsFix(): Boolean =
+        ::locationController.isInitialized && locationController.hasUsableGpsFix()
 
     private fun getCurrentLocation(): Location? {
         return locationController.currentLocation()
     }
+
+    /** 3.0 (A03) — Posición de una observación, sin depender de Android a partir de aquí. */
+    private fun Location.toObservedFix() = com.alexisgordr.icdetector.core.ObservedFix(
+        latitude = latitude,
+        longitude = longitude,
+        accuracyM = if (hasAccuracy()) accuracy else null
+    )
 
     private fun observeMotionFix(location: Location) {
         latestMotionEvidence = stableSiteMotion.observe(
@@ -1534,9 +1698,6 @@ class MiniICService : Service() {
     private fun isLatencyProbeActive(): Boolean =
         isLatencyDetectionEnabled && !isWifiConnected() && !isVpnActive() && !isProxyEnabled
 
-    // Estado "idle" del indicador tras un handover: "OK" solo si la sonda puede medir;
-    // si no, "N/A" para no afirmar un estado de red sin verificación.
-    private fun idleLatencyState(): String = if (isLatencyProbeActive()) "OK" else "N/A"
 
     private fun onGpsAvailable() {
         val now = System.currentTimeMillis()
@@ -1583,7 +1744,8 @@ class MiniICService : Service() {
                         currentCell.radioTech,
                         loc.latitude,
                         loc.longitude,
-                        fixTimeMs = loc.time
+                        fixTimeMs = loc.time,
+                        accuracyM = loc.takeIf { it.hasAccuracy() }?.accuracy
                     )
                     if (updated > 0) {
                         appendLog("[GPS]", "Coordenadas frescas rellenadas en $updated registro(s)")
@@ -1652,7 +1814,7 @@ class MiniICService : Service() {
         }
     }
 
-    private fun checkAlerts(cell: CellData, confirmed: Boolean = false) {
+    private fun checkAlerts(cell: CellData, confirmed: Boolean, context: com.alexisgordr.icdetector.core.ObservationContext) {
         val cid = cell.cellId
         val dbm = cell.dbm
         val net = cell.networkType
@@ -1666,19 +1828,22 @@ class MiniICService : Service() {
         // nueva volverá a "OK"/"ANOMALA" según sus propias mediciones una vez aprenda su baseline.
         resetLatencyIfCellChanged(cell)
 
-        if (cid != prevCid) {
+        // 3.0 (#19) — Handover = cambia la identidad completa (MCC, MNC, TAC, CID o tecnología),
+        // no solo el CID. Un campo desconocido en un lado no cuenta como cambio.
+        val servingIdentity = com.alexisgordr.icdetector.core.ServingIdentityChange.of(cell)
+        if (com.alexisgordr.icdetector.core.ServingIdentityChange.isHandover(prevServingIdentity, servingIdentity)) {
             telemetryHistory.onHandover()
             securityAlerts.resetAlarmEpisode()
             appendLog("[RADIO]", "Handover celular completado -> Nueva celda CID: $cid ($net)")
             // Esta celda queda pendiente de coordenadas frescas hasta que un fix las rellene.
             locationController.markCoordinatesPending()
-            // El stream GPS permanece activo 24/7. Este listener puntual da prioridad al handover
-            // si todavía no existe un fix contemporáneo; conserva el debounce y single-flight.
-            requestHighAccuracyFix()
+            // Inteligente: una antena nueva abre o alarga una ventana de GPS de 60 s (con mala
+            // recepción, un intento corto); una antena reciente no encadena ventanas.
+            locationController.onHandover(servingIdentity.key, prevServingIdentity?.key)
             auditController.generate(cell)
 
             val currentTime = System.currentTimeMillis()
-            cellChangeHistory.add(Pair(cid, currentTime))
+            cellChangeHistory.add(Pair(servingIdentity.key, currentTime))
             cellChangeHistory.removeAll { currentTime - it.second > ThreatAnalyzer.PING_PONG_WINDOW_MS }
 
             // El informe de heurísticas es la observación cruda del ciclo. No debe producir un
@@ -1702,19 +1867,19 @@ class MiniICService : Service() {
                 }
             }
 
-            observationPersistence.recordHandover(cell)
+            observationPersistence.recordHandover(cell, context)
 
-            prevCid = cid
+            prevServingIdentity = servingIdentity
         } else if (confirmed) {
             // Misma celda que en el ciclo anterior: muestreo periódico (ver más abajo). Solo en la
             // ruta del bucle principal (confirmed = true), nunca en la de re-análisis tras la API,
             // para no duplicar filas por el mismo instante.
-            observationPersistence.recordPeriodicIfDue(cell, isScreenOn)
+            observationPersistence.recordPeriodicIfDue(cell, isScreenOn, context)
         }
 
         telemetryHistory.record(cell)
 
-        securityAlerts.evaluate(cell, confirmed)
+        securityAlerts.evaluate(cell, confirmed, context)
     }
 
     private fun updateNotification(cell: CellData) {
@@ -1804,8 +1969,9 @@ class MiniICService : Service() {
         const val MAX_TRACKED_CELLS = 500
         // v2.5 — Evidencia del diagnóstico de Timing Advance, superviviente a reinicios del
         // servicio. Ver TimingAdvanceSanity: se guarda la evidencia, nunca el veredicto.
-        private const val KEY_TA_SEEN_REAL = "ta_seen_real_value"
-        private const val KEY_TA_ZERO_CELLS = "ta_zero_only_cells"
+        // 3.0 (#33) — Por unidad: ta_seen_real_LTE_INDEX, ta_zero_cells_GSM_INDEX, …
+        private const val KEY_TA_SEEN_REAL_PREFIX = "ta_seen_real_"
+        private const val KEY_TA_ZERO_CELLS_PREFIX = "ta_zero_cells_"
         // Ciclos consecutivos de sospecha necesarios para confirmar una alarma.
         private const val CONFIRMATION_CYCLES = 3
         private const val INTENSIVE_MONITORING_TAIL_MS = 60_000L

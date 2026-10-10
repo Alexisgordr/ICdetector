@@ -52,12 +52,11 @@
 >
 > - **Stable — v2.10.10.** Used by the ongoing field-collection campaign (dataset baseline v2.10.5).
 >   Bug fixes only; see [IMPORTANT.md](IMPORTANT.md).
-> - **🧪 Beta available — 3.0.0-beta4.** The next version is ready for testing: database schema 20
->   (exact UTC time, rule coverage, GPS accuracy and app version on every row), more accurate rule
->   inputs and confirmation that restarts after coverage gaps. It is published as **source only** on
->   the [`ICdetection-v3.0.0-beta`](https://github.com/Alexisgordr/ICdetector/tree/ICdetection-v3.0.0-beta)
->   branch ([how to build it](#-getting-started)). 3.0 needs a clean install from v2.10.x; do not
->   install it on a phone that collects campaign data.
+> - **In development — 3.0.0-beta4.** The 3.0 roadmap: schema 21, more accurate rule inputs and
+>   stricter confirmation. No APK is published; it is available as source on the
+>   [`ICdetection-v3.0.0-beta`](https://github.com/Alexisgordr/ICdetector/tree/ICdetection-v3.0.0-beta)
+>   branch ([build it yourself](#-getting-started)). **3.0 needs a clean install** from v2.10.x.
+>   Do not install it on a phone that collects campaign data.
 >
 > Details: [Status.md](Status.md) · [CHANGELOG.md](CHANGELOG.md)
 
@@ -129,8 +128,10 @@ imposed by Android.
 
 - **No root, no baseband access** — everything comes from public Android telephony APIs.
 - **Conservative by design** — anomalies must persist across consecutive observations before they
-  are confirmed.
+  are confirmed, and a coverage gap starts confirmation again.
 - **Honest diagnostics** — unavailable data is reported as `N/A`, never assumed to be safe.
+- **Self-describing data** — every history row records the exact UTC instant, which rules could not
+  be evaluated, its GPS accuracy and the app version that observed it.
 - **Local-first privacy** — no cloud, no analytics, no ads, no hidden telemetry.
 - **Forensic exports** — CSV, ZIP cases and GraphML with SHA-256 checksums and privacy notes.
 - **Self-validating data** — `tools/check_export.py` checks the invariants the design guarantees.
@@ -153,8 +154,7 @@ imposed by Android.
 
    3.0 changes the database and the methodology, so it needs a clean install: export what you want
    to keep and uninstall v2.10.x first (a build signed with your own key cannot update the published
-   APK anyway). Do not use the phone that collects campaign data. The beta's own README and manual
-   are on its branch.
+   APK anyway). Do not use the phone that collects campaign data.
 3. **Grant location permission.** Android only shares cell identities with apps that have location
    access, and GPS enables the geographic checks.
 4. **Exclude the app from battery optimisation** for long sessions:
@@ -177,7 +177,8 @@ rules (H1–H16) are evaluated on every cycle; each one passes, fails or reports
 
 #### Isolated Cell Detection (H1)
 Detects serving cells operating without coherent neighbouring infrastructure. Useful against amateur
-rogue BTS deployments or isolated SDR setups, but it can also occur in rural areas.
+rogue BTS deployments or isolated SDR setups, but it can also occur in rural areas. The isolation must
+be confirmed over three fresh deliveries; until then H1 shows *pending confirmation*.
 
 #### Signal Dominance Analysis (H2)
 Detects abnormal power jumps and dominance deltas between the serving cell and its neighbours,
@@ -192,13 +193,14 @@ Flags unusually high operator-code diversity. Weak evidence: MVNOs, roaming, tra
 border regions produce legitimate diversity. Requires neighbours that report their own MNC.
 
 #### TAC Regional Consistency (H5)
-Validates Tracking Area Code coherence against surrounding infrastructure. Operator maintenance and
-regional changes can also produce unusual values. `N/A` when no neighbour reports a TAC.
+Validates Tracking Area Code coherence against surrounding infrastructure. `N/A` when no neighbour
+reports a real TAC; placeholder values some modems report (TAC `65535`) are read as unavailable.
 
 #### Timing Advance Geometric Analysis (H6)
 Correlates Timing Advance distance estimates with tower-position validation when enough data exists.
-Highly device-dependent; a TA is never borrowed from another cell, and modems that report a constant
-zero are detected as `STUB_ZERO` and excluded from geometry.
+A missing TA is only taken from a duplicate of the same cell, never from another transmitter. Modems
+that always report zero are detected per technology (`STUB_ZERO`) and excluded from geometry. TA on
+5G NR is not converted to distance.
 
 #### Ghost Neighbour Detection (H7)
 Detects a very strong serving cell while every visible neighbour is extremely weak — possibly an
@@ -213,8 +215,9 @@ Android does not give a regular app access to the modem's ciphering state, so H9
 never assumed to be `PASSED`. ICdetection does not claim null-cipher or IMSI-disclosure detection.
 
 #### Anti Ping-Pong Analysis (H10)
-Detects aggressive reselection loops: three cell changes within 10 s while the phone is not moving
-fast. Without a GPS speed it reports `N/A` instead of assuming you are stationary.
+Detects aggressive reselection loops: three changes of the full serving identity (MCC, MNC, TAC,
+Cell ID or technology) within 10 s while the phone is not moving fast. Without a GPS speed it reports
+`N/A` instead of assuming you are stationary.
 
 #### Geographic Consistency Analysis (H11)
 Validates Cell IDs against a local GPS history built from the device's own observations, revealing
@@ -222,8 +225,8 @@ the same Cell ID appearing from physically inconsistent locations. It does not r
 databases.
 
 #### Latency Correlation (H12, optional)
-Compares network latency with this cell's own reference when the optional latency check is enabled;
-`N/A` when it is off or there is no measurement.
+Compares network latency with this cell's own learned reference. Evaluated only on a real
+measurement; `N/A` while learning or when latency detection is off.
 
 #### Signal Baseline Anomaly (H13)
 Learns each cell's typical signal level at a given location and flags readings anomalously
@@ -231,8 +234,10 @@ Learns each cell's typical signal level at a given location and flags readings a
 them.
 
 #### Band Downgrade Analysis (H14)
-Detects suspicious intra-LTE shifts from high-frequency capacity bands to sub-GHz bands when the
-previous signal was strong and there was no progressive degradation.
+Detects suspicious shifts from high-frequency capacity bands to sub-GHz bands when the previous
+signal was strong and there was no progressive degradation. Every 3GPP LTE band is known; band
+changes within the same LTE base station (eNodeB) are not penalised; NR → NR downgrades on 5G SA are
+evaluated from the exact NR-ARFCN frequency.
 
 #### RF Identity Stability (H15)
 Looks for **repeated alternation** between PCI values within the same carrier. A PCI run counts as
@@ -291,7 +296,8 @@ are logged but do not raise alarms, which reduces false-positive fatigue.
 
 Two independent high-value failures in the same observation (H11, H13, H15, H16) confirm in two
 phases instead of three. A repeated delivery of the same modem sample never counts as a new phase.
-A rule may move between `N/A`, `PASS` and `FAIL` as Android starts or stops exposing its data.
+Confirmation **starts again** after a signal loss or a gap of more than 2 minutes without readings,
+and the terminal records which one happened.
 
 ---
 
@@ -377,7 +383,17 @@ Local Cell Trust, temporal confidence, alerts or forensic decisions.
 
 For long collection sessions the app keeps a GPS-only stream and a partial wake lock active while
 monitoring, which increases battery use. At 5% battery or less while unplugged, both pause and resume
-after charging.
+after charging; where GPS keeps failing, precise fixes are retried less often.
+
+**Location mode.** Settings offers *Continuous* (default), *Smart* and *Adaptive*, with names and
+descriptions also available in Spanish. Continuous retains the permanent GPS stream for campaigns.
+Smart uses short acquisition windows roughly every 45 seconds; a handover to a cell not seen in the
+last 10 minutes opens or extends a continuous GPS window until 60 seconds after that change, so GPS
+stays active during a journey, while hopping between known cells at rest does not. Smart and Adaptive pause after
+repeated acquisition failures and retry after 2, 5 and 10 minutes; cell changes and suspected
+anomalies may request an earlier bounded attempt. Cellular scanning continues independently.
+GPS positions for every cell and a particular battery saving cannot be guaranteed. Each row records
+its selected mode; see the [manual](MANUAL.md) for timing and coverage.
 
 ---
 
@@ -440,9 +456,12 @@ does not by itself establish legal chain of custody.
 Stable-Site (hashed sites, neighbours, motion bands, shadow episodes) and RADIO service-state changes
 (CSV).
 
-**History CSV.** One row per observation, with the cell identity, signal, RSRQ/SINR, Timing Advance,
-GPS and antenna positions, radio context, verification label, score and failed rules. The full
-column list is in the [manual](MANUAL.md#12-exporting-antenna-history).
+**History CSV.** One row per observation, with the cell identity, signal, Timing Advance, radio
+context, score and failed rules — and, for each row, the exact UTC instant (`ObservedAtUtc`), the
+rules that could not be evaluated (`NotEvaluatedHeuristics`), the GPS accuracy (`GpsAccuracyM`) and
+the app version that observed it (`AppVersion`) and the location mode (`LocationMode`). Columns that did not exist when a row was recorded
+are empty: unknown, never assumed. The full column list is in the
+[manual](MANUAL.md#12-exporting-antenna-history).
 
 Validate any export with:
 
@@ -451,14 +470,13 @@ python3 tools/check_export.py <file.csv>
 ```
 
 It checks the invariants the design guarantees, applies technology-specific physical-ID ranges (LTE
-PCI `0..503`, NR PCI `0..1007`, UMTS PSC `0..511`), reports calendar coverage and maturity,
-summarises the radio context and flags legacy `LTE_INDEX` / `TA=0` stub patterns.
+PCI `0..503`, NR PCI `0..1007`, UMTS PSC `0..511`), reports calendar and rule-evaluation coverage,
+GPS accuracy, app versions and the dataset cuts a file crosses, and flags legacy `TA=0` stub patterns.
 
 Key points for analysis:
 
-- **`Lat` / `Lon` are always the device's own GPS position.** The OpenCellID antenna position is in
-  `ApiLat` / `ApiLon`. A row saved without GPS is filled later only if the fix arrives within
-  2 minutes; otherwise it stays empty rather than receiving a later position.
+- **`Lat` / `Lon` are always the device's own GPS position**, taken when the reading arrived. The
+  OpenCellID antenna position is in `ApiLat` / `ApiLon`.
 - **`[sub-umbral]`** entries in `FailedHeuristics` failed without reaching the alarm threshold; they
   are kept on purpose so false positives can be studied (shown as `[sub-threshold]` in English).
 - **`Verified` is a label, not a verdict:** `VERIFIED`, `NOT_FOUND`, `REJECTED`, `ERROR` or `PENDING`.
@@ -493,14 +511,15 @@ the brand:
 | Google Pixel | Google Tensor (Samsung modem) | ✅ Works well. Main development device |
 | POCO F6 Pro | Qualcomm Snapdragon | ✅ Reported to work well, no false alarms |
 | Honor (model not recorded) | — | ✅ Reported to work well. Neighbour cells reported honestly as `N/A` |
-| Xiaomi Redmi Note 10 5G | MediaTek Dimensity | ⚠️ Not reliable. The modem fills every neighbour cell with placeholder values (TAC `65535`, Cell ID `268435455`), causing permanent false TAC-deviation warnings and occasional false alarms ([#11](https://github.com/Alexisgordr/ICdetector/issues/11)) |
+| Xiaomi Redmi Note 10 5G | MediaTek Dimensity | ⚠️ Not reliable. The modem fills every neighbour cell with placeholder values (TAC `65535`, Cell ID `268435455`) ([#11](https://github.com/Alexisgordr/ICdetector/issues/11)) |
 
 Phones with Qualcomm or Google Tensor modems have behaved well, and at least one MediaTek phone has
 not. This is based on a handful of devices, so treat it as a trend, not a rule.
 
 **Quick check:** if neighbour cells show as `NEIGHBOR (N/A)`, your modem reports honestly. If every
-neighbour shows the same number (e.g. `268435455`), your device is affected: on v2.10.x it produces
-permanent false TAC warnings (fixed in 3.0). Reports from more devices are welcome in the issues.
+neighbour shows the same number (e.g. `268435455`), your device fills placeholders; ICdetection reads
+them as unavailable, but these devices remain outside the supported set. Reports from more devices
+are welcome in the issues.
 
 | Android | Support |
 |---|---|
@@ -541,8 +560,9 @@ design limits, not bugs, and they apply to any conclusion drawn from the data:
 | **Limited coverage** | Mostly one phone, one operator and one area. Thresholds are not validated for rural areas, roaming, borders or other modem vendors. |
 | **Self-collected** | The person running the app chose where and when to collect. The data describes those routes, not a representative sample. |
 
-**What it is for:** measuring how often each rule warns on ordinary networks and studying possible
-false positives case by case. That evidence can inform later reviews of thresholds and weights, but it is not
+**What it is for:** measuring how often each rule warns on ordinary networks, studying possible false
+positives case by case and, with the per-row coverage column, measuring how long each rule was
+actually evaluable. That evidence can inform later reviews of thresholds and weights, but it is not
 enough on its own to recalibrate the likelihood ratios, which would also need data from real attacks.
 A rule that "passes" most of the time because it is `N/A` most of the time is not shown to work.
 
@@ -581,7 +601,7 @@ These limitations are inherent to Android userland restrictions.
 |---|---|
 | [MANUAL.md](MANUAL.md) | How to install and use the app: screens, rules, phases, exports and troubleshooting |
 | [CHANGELOG.md](CHANGELOG.md) | Every release in detail, including each dataset cut |
-| [Status.md](Status.md) | Current versions, dataset cuts, the 3.0 beta and open items |
+| [Status.md](Status.md) | Current versions, the 3.0 roadmap, dataset cuts in 3.0 and open items |
 | [IMPORTANT.md](IMPORTANT.md) | The field-collection campaign: baseline, dataset cuts and recommended reset |
 | [docs/history/](docs/history/) | Archived per-release status notes, including the v2.1 field notes |
 
@@ -649,9 +669,8 @@ addressed where possible.
 > **Nota para los usuarios:** gracias por vuestra paciencia con la frecuencia de actualizaciones
 > durante el desarrollo; fueron necesarias para corregir problemas encontrados en pruebas reales. La
 > campaña de recogida de datos usa la versión estable y solo recibe correcciones de errores; cada
-> corrección que cambia cómo se evalúa una regla se documenta como corte del dataset. La beta de la
-> 3.0 ya está disponible como código fuente en su rama y requiere una instalación limpia. Todos los
-> detalles están en
+> corrección que cambia cómo se evalúa una regla se documenta como corte del dataset. La 3.0 es la
+> siguiente etapa y requiere una instalación limpia. Todos los detalles están en
 > [IMPORTANT.md](IMPORTANT.md) y [CHANGELOG.md](CHANGELOG.md).
 
 <div align="center">

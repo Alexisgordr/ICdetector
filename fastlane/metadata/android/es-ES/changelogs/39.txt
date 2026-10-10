@@ -1,0 +1,9 @@
+3.0.0 — fallos de pruebas. Requiere instalación limpia.
+
+• Hora UTC exacta, precisión GPS, versión y reglas no evaluadas por fila (esquema 20).
+• Traspasos con identidad completa; todas las bandas LTE; 5G SA en H14.
+• Timing Advance solo del mismo emisor.
+• La confirmación de alarmas se reinicia tras perder la señal.
+• Latencia: no medida / aprendiendo / medida. H1 "pendiente" hasta confirmar.
+
+Pesos y umbrales sin cambios; cortes de dataset por regla.

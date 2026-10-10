@@ -139,6 +139,10 @@ object ThreatAnalyzer {
         signalBaseline: SignalBaseline? = null,
         previousBand: Int? = null,
         previousDbm: Int? = null,
+        /** 3.0 (#10) — Estación base ([LteSite.key]) de la celda en la que se midió [previousBand]. */
+        previousBandSite: String? = null,
+        /** 3.0 (#8) — NR-ARFCN de la servidora NR anterior (5G SA), para H14 en NR. */
+        previousNrArfcn: Int? = null,
         recentRegisteredDbm: List<Int> = emptyList(),
         rfStability: CellRfStability? = null,
         reputation: CellReputation? = null,
@@ -184,10 +188,19 @@ object ThreatAnalyzer {
         val eTransitionCoherence = transitionCoherence.status != HeuristicStatus.NOT_EVALUATED
 
         // 1. Neighbor analysis
-        if (!isWifiActive && neighbors.isEmpty() && active.dbm >= -80 && isolatedCellConfirmed) {
-            hIsolated = false
-            reasons.add("Celda aislada")
-            score -= 15
+        //
+        // 3.0 (#28) — Sin vecinas y con señal fuerte, mientras IsolatedCellConfidence no haya
+        // confirmado 3 entregas seguidas, la regla todavía no sabe: N/A, no "superada".
+        // Sin vecinas y con señal débil sí se evalúa: los datos están y la condición (celda
+        // FUERTE y sola) no se da; una celda débil y sola es normal en zona rural.
+        if (!isWifiActive && neighbors.isEmpty() && active.dbm >= -80) {
+            if (isolatedCellConfirmed) {
+                hIsolated = false
+                reasons.add("Celda aislada")
+                score -= 15
+            } else {
+                eIsolated = false
+            }
         }
 
         // 2. Signal Gap analysis
@@ -311,17 +324,20 @@ object ThreatAnalyzer {
         // frecuencia. Antes ese valor entraba como "frecuencia sospechosa" y restaba 15 puntos:
         // se confundía no tener el dato con tener un dato imposible. Ahora H8 queda N/A. Un valor
         // medido fuera de rango sigue fallando como antes. Corte de dataset solo para H8.
+        //
+        // 3.0 (#22) — Los rangos vienen de RadioChannels, el mismo validador que usa el
+        // aprendizaje. El NR-ARFCN 0 no lo usa ninguna banda y H8 lo sigue tratando como sospechoso.
         active.arfcn?.takeUnless { it == ARFCN_UNAVAILABLE }?.let { arfcn ->
             if (active.radioTech == RadioTech.NR) {
                 eArfcn = true
-                if (arfcn > 3279165 || arfcn == 0) {
+                if (!RadioChannels.isValidChannel(RadioTech.NR, arfcn) || arfcn == 0) {
                     hArfcn = false
                     reasons.add("Frecuencia (ARFCN) 5G sospechosa")
                     score -= 15
                 }
             } else if (active.radioTech == RadioTech.LTE) {
                 eArfcn = true
-                if (arfcn > 262143) {  // EARFCN 0 es válido (Banda 1, 2110 MHz); el "no disponible" llega como > 262143
+                if (!RadioChannels.isValidChannel(RadioTech.LTE, arfcn)) {  // EARFCN 0 es válido (Banda 1, 2110 MHz)
                     hArfcn = false
                     reasons.add("Frecuencia (EARFCN) 4G sospechosa")
                     score -= 15
@@ -476,11 +492,37 @@ object ThreatAnalyzer {
                 val newStrong = active.dbm >= -95
                 val notCoverageFallback = previousDbm != null && active.dbm >= previousDbm
 
-                if (prevStrong && newStrong && notCoverageFallback && !degrading) {
+                // 3.0 (#10) — Mismo eNodeB: la propia estación base pasa el móvil a otra de sus
+                // portadoras. En los primeros datos de campo, los 9 avisos de H14 fueron así
+                // (79360544 -> 79360545, eNB 310002). No es un downgrade forzado: no se penaliza.
+                val sameSite = previousBandSite != null && previousBandSite == LteSite.key(active)
+
+                if (prevStrong && newStrong && notCoverageFallback && !degrading && !sameSite) {
                     hBandDowngrade = false
                     val from = BandPlan.approxFreqMhz(previousBand) ?: 0
                     val to = BandPlan.approxFreqMhz(curBand) ?: 0
                     reasons.add("Downgrade de banda forzado (${from}MHz→${to}MHz, B$previousBand→B$curBand)")
+                    score -= 25
+                }
+            }
+        }
+
+        // 14b. 3.0 (#8) — Downgrade de banda en 5G SA (NR → NR). Misma regla y mismas
+        // condiciones que en LTE, con la clase alta/baja sacada de la frecuencia del NR-ARFCN
+        // (las bandas NR se solapan, así que no se usa un número de banda). Sin excepción de
+        // "misma estación": el gNB ID tiene longitud variable y no se puede extraer del NCI.
+        // Un cambio entre LTE y NR no se evalúa (N/A).
+        if (active.radioTech == RadioTech.NR) {
+            val curMhz = NrFrequency.dlMhz(active.arfcn)
+            val prevMhz = NrFrequency.dlMhz(previousNrArfcn)
+            eBandDowngrade = curMhz != null && prevMhz != null && previousDbm != null
+            if (eBandDowngrade && NrFrequency.isHigh(previousNrArfcn) && NrFrequency.isLow(active.arfcn)) {
+                val prevStrong = previousDbm!! >= -90
+                val newStrong = active.dbm >= -95
+                val notCoverageFallback = active.dbm >= previousDbm
+                if (prevStrong && newStrong && notCoverageFallback && !isSignalDegrading(recentRegisteredDbm)) {
+                    hBandDowngrade = false
+                    reasons.add("Downgrade de banda forzado (5G ${prevMhz!!.toInt()}MHz→${curMhz!!.toInt()}MHz)")
                     score -= 25
                 }
             }

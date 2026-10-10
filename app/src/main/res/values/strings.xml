@@ -283,6 +283,8 @@
     <string name="permissions_denied_hint">If you denied a permission and Android no longer asks, grant it from the app settings.</string>
     <string name="permissions_open_settings">Open app settings</string>
     <string name="notif_monitoring_title">ICdetection: monitoring · continuous GPS</string>
+    <string name="notif_monitoring_title_adaptive">ICdetection: monitoring · adaptive GPS</string>
+    <string name="notif_monitoring_title_intelligent">ICdetection: monitoring · smart GPS</string>
     <string name="notif_legacy_network_title">ICdetection: 2G/3G network detected</string>
     <string name="notif_open_settings">OPEN SETTINGS</string>
     <string name="channel_monitoring_name">Monitoring</string>
@@ -295,4 +297,25 @@
     <string name="alarm_notification_body_format">CID %1$s · %2$s · %3$s</string>
     <string name="baseline_waiting">WAITING</string>
     <string name="baseline_needs_days">NEEDS 2 DAYS</string>
+    <!-- 3.0 (#26) — Network latency indicator -->
+    <string name="latency_state_ok">● NET OK</string>
+    <string name="latency_state_anomalous">● NET ANOMALOUS</string>
+    <string name="latency_state_learning">● NET LEARNING</string>
+    <string name="latency_state_not_measured">● NET N/A</string>
+    <!-- 3.0 (#35) — Alarmas silenciadas -->
+    <string name="alarm_muted_title">⚠ ALARMS ARE MUTED</string>
+    <string name="alarm_muted_body_silenced">The Security alerts channel is silent, so the notification of a confirmed network anomaly will arrive without sound. Turn its sound back on: ICdetection only makes a sound when a network anomaly is confirmed, and the monitoring notification is always silent. The short alert tone is separate and still plays unless the phone is on silent, vibrate or Do Not Disturb.</string>
+    <string name="alarm_muted_body_blocked">ICdetection notifications are turned off, so a confirmed network anomaly will not appear as a notification. Turn them back on: ICdetection only makes a sound when a network anomaly is confirmed, and the monitoring notification is always silent. The short alert tone is separate and still plays unless the phone is on silent, vibrate or Do Not Disturb.</string>
+    <string name="alarm_muted_action">OPEN ALERT SETTINGS</string>
+    <!-- 3.0 — Modo de ubicación -->
+    <string name="location_adaptive_off">Keeps GPS requests active with the screen on or off. Recommended for field campaigns where location continuity matters. Uses more battery, including where GPS reception is poor.</string>
+    <string name="location_adaptive_on">Continuous GPS while the screen is on and reception is available. With the screen off, requests are limited to cell changes, suspected anomalies and returning to the phone. After repeated failures it pauses and checks again every 2, 5 or 10 minutes. Location-dependent rules may be N/A more often.</string>
+    <string name="location_mode_title">Location mode</string>
+    <string name="location_mode_continuous">Continuous · field campaigns</string>
+    <string name="location_mode_intelligent">Smart · frequent location updates</string>
+    <string name="location_mode_adaptive">Adaptive · fewer GPS requests</string>
+    <string name="location_intelligent_description">Requests a fresh GPS fix about every 45 seconds, including with the screen off. A change to a new cell always wakes the GPS and keeps it active until 60 seconds after the last new cell, so it stays on during a journey; hopping between known cells at rest does not keep it on. Outside these windows, each attempt stops after a fix or 20 seconds (45 seconds for the first). After repeated failures it checks again every 2, 5 or 10 minutes; a new cell still gets a short attempt, at most one per minute. A fresh fix restores the normal schedule. Cellular scanning continues, but a GPS position for every cell cannot be guaranteed. Battery savings depend on reception.</string>
+    <!-- 3.0 — Indicador GPS de la pantalla principal -->
+    <string name="gps_state_ok">● GPS OK</string>
+    <string name="gps_state_unavailable">● NO GPS</string>
 </resources>

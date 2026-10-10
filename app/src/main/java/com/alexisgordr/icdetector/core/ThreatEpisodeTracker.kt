@@ -105,6 +105,12 @@ class ThreatEpisodeTracker(
         return Evaluation(promotedCell, watching, started, promote, accumulatedFamilies)
     }
 
+    /**
+     * 3.0 (#20) — Pérdida de señal: la evidencia de antes del hueco no se correlaciona con la de
+     * después, aunque siga dentro de la ventana de 90 s.
+     */
+    fun interrupt() = reset()
+
     fun reset() {
         evidence.clear()
         lastAcceptedToken = null
@@ -112,23 +118,11 @@ class ThreatEpisodeTracker(
         promotedUntilMs = 0L
     }
 
-    private fun familiesOf(cell: CellData): Set<Family> = buildSet {
-        val h = cell.heuristicReport
-        fun failed(vararg values: HeuristicStatus) = values.any { it == HeuristicStatus.FAILED }
-
-        if (failed(h.isolatedCell, h.powerJump, h.ghostNeighbors, h.signalBaseline)) {
-            add(Family.RF_DOMINANCE)
-        }
-        if (failed(h.mccConsistency, h.mncCount, h.tacDeviation, h.arfcnSanity, h.rfStability)) {
-            add(Family.IDENTITY)
-        }
-        if (failed(h.taDistance, h.pingPong, h.mobileCellId, h.bandDowngrade, h.transitionCoherence)) {
-            add(Family.MOBILITY)
-        }
-        if (failed(h.hardwareCiphering, h.latencyCorrelation)) {
-            add(Family.CROSS_LAYER)
-        }
-    }
+    // 3.0 (#7, O2) — Las familias salen de la lista canónica de reglas (HeuristicCatalog).
+    private fun familiesOf(cell: CellData): Set<Family> =
+        HeuristicCatalog.values()
+            .filter { it.status(cell.heuristicReport) == HeuristicStatus.FAILED }
+            .mapTo(linkedSetOf()) { it.episodeFamily }
 
     private companion object {
         const val EPISODE_ALARM_SCORE = 69

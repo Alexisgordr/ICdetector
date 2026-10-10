@@ -73,4 +73,80 @@ class BandPlanTest {
         assertEquals(2620, BandPlan.approxFreqMhz(7)) // B7 ~ 2600 MHz
         assertNull(BandPlan.approxFreqMhz(999))       // banda inexistente
     }
+
+    // ---------- 3.0 (#32) ----------
+
+    @Test
+    fun `bandas antes omitidas se resuelven y clasifican`() {
+        assertEquals(66, BandPlan.earfcnToBandLte(66_500)); assertTrue(BandPlan.isHighBand(66))
+        assertEquals(25, BandPlan.earfcnToBandLte(8_100)); assertTrue(BandPlan.isHighBand(25))
+        assertEquals(14, BandPlan.earfcnToBandLte(5_300)); assertTrue(BandPlan.isLowBand(14))
+        assertEquals(42, BandPlan.earfcnToBandLte(42_000)); assertTrue(BandPlan.isHighBand(42))
+        assertEquals(44, BandPlan.earfcnToBandLte(46_000)); assertTrue(BandPlan.isLowBand(44))
+    }
+
+    @Test
+    fun `limites de EARFCN de cada banda`() {
+        BandPlan.BANDS.filter { it.earfcnMin != null }.forEach { band ->
+            assertEquals("primer canal B${band.number}", band.number, BandPlan.earfcnToBandLte(band.earfcnMin!!))
+            assertEquals("ultimo canal B${band.number}", band.number, BandPlan.earfcnToBandLte(band.earfcnMax!!))
+            val after = BandPlan.earfcnToBandLte(band.earfcnMax!! + 1)
+            assertTrue("canal tras B${band.number}", after != band.number)
+        }
+    }
+
+    @Test
+    fun `la B71 ya no se come los EARFCN de las bandas 72 a 74`() {
+        assertEquals(71, BandPlan.earfcnToBandLte(68_935))
+        assertEquals(72, BandPlan.earfcnToBandLte(68_936))   // B72 (450 MHz)
+        assertEquals(74, BandPlan.earfcnToBandLte(69_465))   // B74 (1475 MHz): antes se daba por B71, baja
+        assertTrue(BandPlan.isHighBand(74))
+    }
+
+    @Test
+    fun `los rangos no se solapan y cada banda es alta o baja, nunca las dos`() {
+        val ranges = BandPlan.BANDS.filter { it.earfcnMin != null }.sortedBy { it.earfcnMin }
+        ranges.zipWithNext().forEach { (a, b) -> assertTrue("B${a.number}/B${b.number}", a.earfcnMax!! < b.earfcnMin!!) }
+        BandPlan.BANDS.forEach { band ->
+            assertTrue("B${band.number}", BandPlan.isLowBand(band.number) != BandPlan.isHighBand(band.number))
+        }
+    }
+
+    @Test
+    fun `el EARFCN de la tabla manda sobre la banda declarada`() {
+        assertEquals(3, BandPlan.resolveLteBand(1_500, listOf(3)))
+        assertEquals(3, BandPlan.resolveLteBand(1_500, listOf(20)))     // discrepancia: gana la medida
+        assertEquals(3, BandPlan.resolveLteBand(1_500, emptyList()))    // API 29: solo EARFCN
+    }
+
+    @Test
+    fun `fuera de tabla se usa la banda declarada`() {
+        assertEquals(252, BandPlan.resolveLteBand(255_500, listOf(252)))   // LAA: fuera de tabla
+        assertEquals(74, BandPlan.resolveLteBand(null, listOf(74)))
+        assertNull(BandPlan.resolveLteBand(255_500, emptyList()))
+        assertNull(BandPlan.resolveLteBand(null, listOf(0, -1)))
+    }
+
+    @Test
+    fun `varias bandas declaradas solo valen si son de la misma clase`() {
+        assertEquals(72, BandPlan.resolveLteBand(null, listOf(73, 72)))   // las dos bajas
+        assertNull(BandPlan.resolveLteBand(null, listOf(72, 74)))         // baja y alta: N/A
+        assertEquals(252, BandPlan.resolveLteBand(null, listOf(255, 252))) // las dos altas
+        assertNull(BandPlan.resolveLteBand(null, listOf(74, 999)))        // una desconocida: N/A
+    }
+
+    @Test
+    fun `una celda en banda antes omitida ya permite evaluar H14`() {
+        val b66 = com.alexisgordr.icdetector.models.CellData(
+            isRegistered = true, networkType = "4G LTE", cellId = "1", mnc = "07", tac = "1", dbm = -75,
+            mcc = "214", radioTech = com.alexisgordr.icdetector.models.RadioTech.LTE, arfcn = 6_300
+        )
+        val report = ThreatAnalyzer.analyzeThreats(
+            active = b66, neighbors = emptyList(), isHardwareCipheringActive = false,
+            cellChangeHistory = emptyList(), currentLocation = null,
+            previousBand = BandPlan.earfcnToBandLte(66_500), previousDbm = -80, recentRegisteredDbm = emptyList()
+        ).heuristicReport
+        assertEquals(com.alexisgordr.icdetector.models.HeuristicStatus.FAILED, report.bandDowngrade)
+    }
 }
+

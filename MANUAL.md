@@ -66,14 +66,20 @@ is presentation context; an NSA icon cannot make its LTE anchor behave like a ph
 
 ### Installing
 
-Stable versions are published as an APK on the project's GitHub Releases page. Every release is the
+Stable versions are published as an APK on the project's GitHub Releases page. Betas are published
+as source only: build them from their branch with `./gradlew assembleDebug`. Every version is the
 same app (`com.alexisgordr.icdetector`, *ICdetection*), so a newer release installs over an older one
-and keeps its data. Versions older than v2.1.1 were signed with a different key and must be
-uninstalled first.
+and keeps its data; a build signed with your own key cannot update the published APK, so uninstall
+first.
 
-The 3.0 beta is published as source only, on the `ICdetection-v3.0.0-beta` branch, and needs a clean
-install; its own manual is on that branch. If you take part in the field-collection campaign, keep
-that phone on v2.10.x; see [IMPORTANT.md](IMPORTANT.md).
+**Moving from v2.10.x to 3.0 requires a clean install.** Export anything you want to keep (history
+CSV, forensic cases), **uninstall v2.10.x** and then install 3.0. History, settings and the
+OpenCellID key start empty. Installing 3.0 over v2.10.x would still upgrade the old database safely
+(old rows keep the new fields empty), but mixing data from both sides of the 3.0 methodology changes
+is not supported. From 3.0 on, every version updates the previous one normally.
+
+> If you take part in the field-collection campaign, keep that phone on v2.10.x; see
+> [IMPORTANT.md](IMPORTANT.md).
 
 ### Permissions
 
@@ -104,8 +110,70 @@ app does not request the privileged battery-optimization exemption itself.
   requests a bounded high-accuracy fix. A fix is applied only to the newest coordinate-less record
   of the same complete cell identity, and only if that record is from the last 2 minutes. Otherwise
   the coordinates stay empty; the app never invents, reuses or retroactively assigns a stale position.
+- **GPS indicator:** the main screen shows **● GPS OK** when the analysis has a usable position
+  (GPS on, fix younger than 2 minutes, accurate and consistent) and **● NO GPS** (*SIN GPS*)
+  otherwise. It is checked every 5 seconds while the screen is visible and never turns the GPS on.
+  In Smart and Adaptive it stays OK between attempts while the last fix is still usable. With
+  monitoring stopped it shows NO GPS.
+- **Location mode:** **Settings → Location mode**. Names and descriptions follow the app language:
+  *Continuo / Continuous*, *Inteligente / Smart*, *Adaptativo / Adaptive*.
+  - **Continuous** (default): the existing GPS stream remains active with the screen on or off.
+    Use it for field campaigns where location continuity matters. Failed normal precise-fix
+    requests retain their existing backoff; forced requests retain their existing behavior.
+  - **Smart**: attempts a GPS fix roughly 45 seconds after the previous successful fix or the
+    end of an unsuccessful attempt. A probe stops on success or after 20 seconds; the first
+    saving-mode probe after service startup gets 45 seconds for acquisition. Requests caused by
+    suspected anomalies or screen events share a minimum 30-second interval and cannot overlap.
+    **Handovers:** a change to a cell not seen in the last 10 minutes always wakes the GPS: it opens
+    or extends one continuous window until 60 seconds after that change, also with the screen off,
+    so the GPS stays active during a journey; a recent fix never skips that window. With poor
+    reception, a new cell gets a short 20-second attempt instead, without waiting for the 2-minute
+    limit, and only if the last attempt of any kind started at least a minute earlier: at most 20
+    seconds of searching per minute, so a run of new cells (a train in a tunnel) cannot keep the
+    GPS searching. Every attempt that actually starts counts towards one shared limit. A change back to a cell seen in the last 10 minutes (the phone hopping between
+    two cells while you are still) does not open or extend the window; it reuses a fix younger than
+    45 seconds and otherwise asks for one. This keeps the battery saving at rest. Cells are compared
+    by full identity and all times use the monotonic clock.
+  - **Adaptive**: retains continuous GPS with the screen on while reception is usable. With the
+    screen off, it requests fixes on relevant events, at most once a minute.
+
+  **Poor reception:** Smart and Adaptive pause repeated acquisition after three failed probes
+  (or Smart windows without any new live fix). Either saving mode also stops a continuous stream
+  after three minutes without a new usable GPS fix; further handovers cannot extend that search.
+  Periodic retries wait 2, then 5, then at most 10 minutes after failure. A cell change, screen
+  event or suspected anomaly can request an earlier probe, at most once every 2 minutes during
+  poor reception; events do not reset the failure count. One newly delivered usable fix restores
+  the normal policy. GPS reception loss suggests an obstruction, not necessarily a building:
+  tunnels, garages and other conditions can behave similarly. Repeated cached positions cannot
+  clear the poor-reception state. No Wi-Fi/cellular position provider is added.
+
+  Cellular scanning continues while GPS acquisition pauses. Fresh coordinates for every cell
+  cannot be guaranteed, especially in fast travel or indoors. Fix age is checked using elapsed
+  realtime, so changing the clock does not make an old position fresh. The existing 2-minute age
+  limit remains. Location-dependent rules can be `N/A`; battery savings require measurement on
+  the device. Switching to a saving mode changes the availability of detector inputs.
+
+  Each history row records the selected mode it was observed with (`CONTINUOUS`, `INTELLIGENT` or
+  `ADAPTIVE` in the CSV), and the
+  monitoring notification title shows the active mode.
 - **After a phone restart,** collection resumes when you open the app again. The gap is reported as
   an interrupted-collection notice, never silently hidden.
+
+### Notifications and sound
+
+ICdetection uses two notification channels, which you can configure separately in
+**Settings → Apps → ICdetection → Notifications**:
+
+| Channel | What it shows | Sound |
+|---|---|---|
+| **Monitoring** | The persistent notification (cell, signal, verification), updated every few seconds | Always silent, whatever the channel setting |
+| **Security alerts** | A confirmed network anomaly, once per episode | Keep it alerting so you hear an alarm |
+
+Only a confirmed network anomaly makes a sound, so there is no need to silence the app. If
+notifications are off, or *Security alerts* is silenced or has its sound set to *None*, the main
+screen shows **ALARMS ARE MUTED** with a button that opens the alert settings. That warning is about
+the notification: the short alert tone is separate, plays at notification volume and respects only
+silent, vibrate and Do Not Disturb.
 
 ### External verification
 
@@ -128,9 +196,16 @@ over Wi-Fi, a VPN or the SOCKS5 proxy), the app sends an HTTPS `HEAD` request ro
 data, but they reveal your IP address to those services. Together with optional OpenCellID
 verification, these are the only network connections the app makes.
 
-The network indicator on the main screen shows `RED OK` (green), `RED ANÓMALA` (red) or `RED N/A`
-(grey: not measured, because latency detection is off or traffic leaves over Wi-Fi, a VPN or Tor).
-A latency result is discarded when the cell changes.
+The network indicator on the main screen shows one of four states:
+
+| Indicator | Meaning |
+|---|---|
+| `NET N/A` | Not measured (disabled, not on mobile data, or no recent result) |
+| `NET LEARNING` (amber) | Learning this cell's reference latency; H12 is `N/A` meanwhile |
+| `NET OK` | Measured and normal |
+| `NET ANOMALOUS` | Measured and anomalous for this cell |
+
+A result is valid for 90 seconds and is reset when the cell changes or the signal is lost.
 
 ### Mobility Familiarity and Geometry (experimental)
 
@@ -207,8 +282,21 @@ have the same value.
 **Dynamic states.** A rule may move from `N/A` to `PASS` once GPS, neighbour data, latency or an API
 result becomes available, and later to `FAIL` if a new measurement becomes inconsistent.
 
-**Observation context.** Each history row stores the time, GPS position and service state of the
-moment it was recorded, and rows are written in order through a single queue.
+**Continuity.** Confirmation counts consecutive observations of the same cell. It starts again — and
+the terminal says why — after:
+
+- a **signal loss** (empty cell list, abstention, airplane mode): *"Continuity interrupted by signal
+  loss"*;
+- a **gap of more than 2 minutes without readings**, even when no loss was reported (for example in
+  deep sleep): *"Continuity interrupted by a gap without readings"*.
+
+After either, the `1/3`, `2/3` phases, H1's isolation streak and H14's previous band start from
+scratch. A normal handover or the refresh button does not interrupt anything.
+
+**Results always belong to their reading.** The time, GPS position and service state of each history
+row are those of the moment the reading arrived, not of the moment the analysis finished. If the
+signal is lost or the serving cell changes while an analysis is still running, its result is
+discarded instead of being shown, alerting or being stored.
 
 **Interruptions.** If the service stops or the device restarts while an incident or forensic capture
 is open, the record is closed as `INTERRUPTED`. The app never describes an unobserved period as
@@ -253,7 +341,8 @@ transitions and no recent alternation with the previous PCI on the same carrier.
 | SINR | Signal-to-interference-plus-noise ratio, when available |
 | TA | Timing Advance, when the modem provides a usable value |
 
-Blank or unavailable data is preferable to an invented measurement.
+Blank or unavailable data is preferable to an invented measurement. Some modems fill LTE neighbours
+with placeholder values (TAC `65535`, Cell ID `268435455`); ICdetection shows those as `N/A`.
 
 ### Radio context
 
@@ -300,6 +389,9 @@ inaccurate; external tower coordinates are unavailable; the baseline is not matu
 observations exist; a network request is pending or failed; Android does not expose ciphering
 information. `N/A` is an honest abstention, not a defect — the explanation names the missing
 prerequisite.
+
+**H1 (isolated cell)** with no neighbours and strong signal shows *"pending confirmation (x/3
+deliveries)"* until three fresh deliveries confirm the isolation; only then can it fail.
 
 ### H16: mobility sanity
 
@@ -381,8 +473,9 @@ ICdetection does not confirm a threat from one suspicious cycle:
 A single or weak anomaly needs three distinct modem observations. If two or more independent
 high-value checks — geographic consistency (H11), signal baseline (H13), RF identity stability (H15)
 and transition coherence (H16) — fail in the same observation, two are enough. Repeated delivery of
-the same modem sample never counts as another phase. An alarm episode closes after 60 s without
-alarm; a new alarm in the same cell afterwards is notified again.
+the same modem sample never counts as another phase, and a continuity break (section 3) starts
+again from zero. An alarm episode closes after 60 s without alarm; a new alarm in the same cell
+afterwards is notified again.
 
 If the condition returns to normal before `3/3`, the episode stays in incident history but is not
 presented as a confirmed threat.
@@ -410,9 +503,10 @@ closer or stronger than expected. Movement, handovers, line-of-sight changes and
 also cause abrupt shifts. Weaker-than-usual readings are not treated as suspicious.
 
 **Timing Advance and geometry (H6).** When Timing Advance has a known unit, its implied range is
-compared with geographic context. A Timing Advance is never borrowed from another cell; it is only
-copied between duplicate entries of the same cell. Many modems omit TA or always return zero; that
-"always 0" behaviour is detected (`STUB_ZERO`) and never read as a real distance of zero metres.
+compared with geographic context. A missing TA is only taken from a duplicate of the same cell (same
+technology and physical cell), never from another transmitter. Many modems omit TA or always return
+zero; that "always 0" behaviour is detected per technology and never read as a real distance of zero
+metres. TA on 5G NR is not converted to distance, so H6 is `N/A` there.
 
 **Channel sanity (H8).** Impossible or malformed channel values fail, using technology-specific
 limits. When the modem does not report the frequency at all, H8 is `N/A`: a missing value is not an
@@ -421,7 +515,8 @@ impossible one.
 **Ciphering visibility (H9).** Regular Android apps cannot inspect the modem's ciphering state, so H9
 is always `N/A`. ICdetection does not claim null-cipher or IMSI-disclosure detection.
 
-**Ping-Pong (H10).** Three serving-cell changes within 10 s while the phone is not moving fast. Without a GPS speed it cannot tell
+**Ping-Pong (H10).** Three changes of the full serving identity (MCC, MNC, TAC, Cell ID or
+technology) within 10 s while the phone is not moving fast. Without a GPS speed it cannot tell
 whether you are stationary, so it reports `N/A`.
 
 **Geographic consistency (H11).** The phone's own GPS history can reveal a Cell ID appearing in
@@ -434,8 +529,11 @@ considered.
 tower-database results, network reachability and enough samples, and may legitimately remain `N/A`.
 
 **Band downgrade (H14).** Suspicious moves from high-frequency capacity bands to sub-GHz bands when
-the previous signal was strong and there was no progressive degradation, within LTE. Coverage
-optimisation, congestion, indoor movement and operator policy can produce similar transitions.
+the previous signal was strong and there was no progressive degradation. Every 3GPP LTE band is
+known; outside the table the band declared by the phone (Android 11+) is used. Band changes between
+cells of the same LTE base station (eNodeB) are not penalised, and NR → NR downgrades on 5G SA are
+evaluated from the exact NR-ARFCN frequency. Coverage optimisation, congestion, indoor movement and
+operator policy can produce similar transitions.
 
 **RF identity / PCI (H15).** Repeated alternation between PCI values on the same carrier. A PCI run
 counts as one episode however many samples Android reports, and a stable one-way change is handled
@@ -560,20 +658,35 @@ metrics, Timing Advance, verification, scores, sample count and observation rang
 Timestamp, NetType, CID, MNC, TAC, MCC, DBM, Verified, SecurityScore, FailedHeuristics, Lat, Lon,
 PCI, ARFCN, RSRQ, SINR, AnomalyConfidence, ApiLat, ApiLon, TA, TAUnit, TAMeters, Radio,
 ServingConnection, BandwidthKHz, Bands, AdditionalPlmns, CsgIndicator, CsgIdentity, CsgName,
-SecondaryCarriers, ServiceState, NetworkOperator, SimOperator, NetworkRoaming
+SecondaryCarriers, ServiceState, NetworkOperator, SimOperator, NetworkRoaming,
+ObservedAtUtc, NotEvaluatedHeuristics, GpsAccuracyM, AppVersion, ExportDevice, ExportAndroid,
+LocationMode
 ```
 
 - `Lat` / `Lon` are the phone's own GPS position at the time of the observation; `ApiLat` / `ApiLon`
   are coordinates returned by OpenCellID.
-- `Timestamp` is the local time of the observation.
+- `Timestamp` is local time; `ObservedAtUtc` is the observation instant in UTC (ISO-8601).
 - `TA` is the raw Timing Advance, `TAUnit` how it was interpreted, and `TAMeters` is empty when a
   conversion is not defensible.
 - `Radio` comes from Android's cellular information, not only the status-bar label.
 - `FailedHeuristics` entries marked `[sub-umbral]` failed without reaching the alarm threshold; they
   are kept on purpose so false positives can be studied (shown as `[sub-threshold]` in English).
 - `AnomalyConfidence` is uncalibrated analytical output, not a measured probability.
-- Neighbour MCC/MNC in Stable-Site exports is empty when the modem did not report it; rows written
-  before v2.10.5 may contain your own operator's values instead.
+- `NotEvaluatedHeuristics` lists the rules that could not be evaluated (`H1;H6;H9`), or `NONE`. A
+  rule listed here neither passed nor failed.
+- `GpsAccuracyM` is the accuracy of the row's fix in metres; filter large values before analysing
+  geometry.
+- `AppVersion` is the version that recorded the row; use it to apply dataset cuts per row. From
+  3.0 it also names the build: `versionName+commit`, for example `3.0.0-beta4+6bb5ed3`, so rows
+  from different builds of the same beta can be separated. `-dirty` means the build had
+  uncommitted changes; `nogit` means the commit could not be known (built without git and not from
+  a `git archive` ZIP). The part after `+` does not change the version.
+- `ExportDevice` and `ExportAndroid` describe the phone that made the export (manufacturer, model,
+  Android version), with no personal or hardware identifier.
+- `LocationMode` is `CONTINUOUS`, `INTELLIGENT` or `ADAPTIVE`: the location mode the row was observed with.
+  Compare position-based rules per mode before joining data.
+
+Columns that did not exist when a row was recorded are empty — unknown, never an assumed value.
 
 Validate a CSV from the project directory with:
 
@@ -582,8 +695,8 @@ python3 tools/check_export.py path/to/export.csv
 ```
 
 The validator checks the invariants the design guarantees, applies technology-specific physical-ID
-ranges, reports calendar coverage and maturity, summarises the radio context and flags legacy
-`LTE_INDEX` / `TA=0` stub patterns.
+ranges, and reports calendar coverage, the evaluation coverage of each rule, GPS accuracy, app
+versions and the dataset cuts the file crosses. It warns when a file joins several phones.
 
 Exports can contain precise locations, network identifiers, device information and security
 observations. Redact sensitive information before sharing publicly.
@@ -653,8 +766,8 @@ Android; it cannot guarantee detection.
   Comparing with a second phone at the same place is the strongest check you can make.
 - **Your coverage only:** results describe your phone, your operator and your routes; thresholds may
   behave differently elsewhere.
-- **`N/A` is not `PASS`:** a rule that rarely fails because it is rarely evaluable has not been shown
-  to work. Read its results together with its diagnostic explanations.
+- **Coverage matters:** `NotEvaluatedHeuristics` shows when each rule could not run. Read a rule's
+  "passed" rate together with how often it was evaluated.
 
 ---
 
@@ -665,8 +778,8 @@ explanations, and allow time for baselines to mature. Some measurements stay una
 modem; H3, H4 and H5 in particular remain `N/A` on modems that do not report neighbour identities.
 
 **Every neighbour shows the same number** (for example `268435455`). Your modem fills neighbours with
-placeholder values, as some MediaTek modems do. On v2.10.x this causes permanent false TAC (H5)
-warnings; the device is outside the supported set (see the [README](README.md)).
+placeholder values, as some MediaTek modems do. ICdetection reads them as unavailable, but such
+devices are less reliable; see the compatibility notes in the [README](README.md).
 
 **A rule alternates between `N/A` and `PASS`.** Its input is intermittent. Check GPS, neighbour
 reporting, latency or API availability. This alone is not a threat.

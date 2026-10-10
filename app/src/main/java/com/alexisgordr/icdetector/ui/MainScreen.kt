@@ -3,7 +3,6 @@ package com.alexisgordr.icdetector.ui
 import android.Manifest
 import android.content.Context
 import android.content.pm.PackageManager
-import android.location.LocationManager
 import android.os.Build
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -20,6 +19,10 @@ import androidx.compose.material.pullrefresh.rememberPullRefreshState
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.compose.LifecycleResumeEffect
+import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.repeatOnLifecycle
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -30,7 +33,6 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import com.alexisgordr.icdetector.MainActivity
 import com.alexisgordr.icdetector.R
@@ -307,6 +309,9 @@ fun MainScreenContent(dbHelper: CellDbHelper, service: MiniICService?) {
                         VerificationStatus.ERROR -> stringResource(R.string.public_db_error)
                         null -> null
                     }
+
+                    // 3.0 (#35) — Si las alarmas están silenciadas, decirlo antes que nada.
+                    AlarmMutedWarning()
 
                     // STICKY: Card de estado
                     Card(
@@ -647,26 +652,18 @@ fun SecurityScorePanel(active: CellData, dbmHistory: List<Int>, geoHistory: List
     val context = LocalContext.current
     val englishUi = androidx.compose.ui.platform.LocalConfiguration.current.locales[0].language != "es"
 
-    // GPS status — lee el valor cacheado, sin activar hardware
-    var hasGps by remember { mutableStateOf(false) }
-    LaunchedEffect(active.identityKey) {
-        while (true) {
-            hasGps = withContext(Dispatchers.IO) {
-                try {
-                    val lm = context.getSystemService(Context.LOCATION_SERVICE) as LocationManager
-                    if (ActivityCompat.checkSelfPermission(
-                            context, Manifest.permission.ACCESS_FINE_LOCATION
-                        ) == PackageManager.PERMISSION_GRANTED) {
-                        val now = System.currentTimeMillis()
-                        val maxAge = 120000L
-                        val maxAccuracy = 100f
-                        // GPS-only: coherente con el servicio y fuera de la composición.
-                        val gpsLoc = lm.getLastKnownLocation(LocationManager.GPS_PROVIDER)
-                        gpsLoc?.let { it.accuracy < maxAccuracy && (now - it.time) < maxAge } ?: false
-                    } else false
-                } catch (_: Exception) { false }
+    // El servicio valida edad monotónica, precisión y coherencia. Leerlo no activa el GPS.
+    // Se consulta solo mientras esta pantalla está visible.
+    val lifecycleOwner = LocalLifecycleOwner.current
+    var hasGps by remember(service) { mutableStateOf(false) }
+    LaunchedEffect(service, lifecycleOwner) {
+        lifecycleOwner.lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) {
+            while (true) {
+                hasGps = withContext(Dispatchers.IO) {
+                    service?.hasUsableGpsFix() == true
+                }
+                delay(5_000L)
             }
-            delay(30_000L)
         }
     }
     
@@ -799,13 +796,17 @@ fun SecurityScorePanel(active: CellData, dbmHistory: List<Int>, geoHistory: List
                 val latencyFlow = remember(service) { service?.networkLatencyState ?: MutableStateFlow("N/A") }
                 val netState by latencyFlow.collectAsStateWithLifecycle()
 
-                // Tres estados: OK (verde) / ANÓMALA (rojo) / N/A (gris, sin medir:
-                // latencia desactivada, o WiFi/VPN/Tor activos). El gris evita afirmar
-                // un "OK" que ninguna medición respalda.
+                // Cuatro estados: OK (verde) / ANÓMALA (rojo) / APRENDIENDO (ámbar: mide, pero
+                // aún sin referencia de esta celda) / N/A (gris, sin medir: latencia desactivada,
+                // WiFi/VPN/Tor, celda recién cambiada o resultado caducado). 3.0 (#26).
                 val (netText, netColor) = when (netState) {
-                    "OK" -> "● RED OK" to Color(0xFF4CAF50)
-                    "ANOMALA" -> "● RED ANÓMALA" to Color(0xFFCF6679)
-                    else -> "● RED N/A" to Color(0xFF888888)
+                    com.alexisgordr.icdetector.service.NetworkLatencyMonitor.STATE_OK ->
+                        stringResource(R.string.latency_state_ok) to Color(0xFF4CAF50)
+                    com.alexisgordr.icdetector.service.NetworkLatencyMonitor.STATE_ANOMALOUS ->
+                        stringResource(R.string.latency_state_anomalous) to Color(0xFFCF6679)
+                    com.alexisgordr.icdetector.service.NetworkLatencyMonitor.STATE_LEARNING ->
+                        stringResource(R.string.latency_state_learning) to Color(0xFFFFB74D)
+                    else -> stringResource(R.string.latency_state_not_measured) to Color(0xFF888888)
                 }
                 Text(
                     text = netText,
@@ -834,7 +835,7 @@ fun SecurityScorePanel(active: CellData, dbmHistory: List<Int>, geoHistory: List
 
                 // Indicador GPS — derecha
                 Text(
-                    text = if (hasGps) "● GPS OK" else "● SIN GPS",
+                    text = stringResource(if (hasGps) R.string.gps_state_ok else R.string.gps_state_unavailable),
                     color = if (hasGps) Color(0xFF4CAF50) else Color(0xFFCF6679),
                     fontSize = 9.sp,
                     fontFamily = FontFamily.Monospace
@@ -906,5 +907,56 @@ private fun BaselineMaturityRow(
             stringResource(R.string.samples_format, level.name, samples)
         }
         Text(value, color = color, fontFamily = FontFamily.Monospace, fontSize = 9.sp)
+    }
+}
+
+/**
+ * 3.0 (#35) — Aviso cuando una alarma confirmada no sonaría: notificaciones de la app desactivadas o
+ * canal de alertas silenciado. La app no puede reactivar el sonido; abre los ajustes del canal. Se
+ * vuelve a comprobar cada vez que la pantalla vuelve al primer plano.
+ */
+@Composable
+private fun AlarmMutedWarning() {
+    val context = LocalContext.current
+    var state by remember {
+        mutableStateOf(com.alexisgordr.icdetector.service.ServiceNotificationController.alarmAudibility(context))
+    }
+    LifecycleResumeEffect(Unit) {
+        state = com.alexisgordr.icdetector.service.ServiceNotificationController.alarmAudibility(context)
+        onPauseOrDispose { }
+    }
+    if (state == com.alexisgordr.icdetector.core.AlarmAudibility.AlarmSound.AUDIBLE) return
+    val warning = Color(0xFFFFB74D)
+    Card(
+        modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
+        colors = CardDefaults.cardColors(containerColor = warning.copy(alpha = 0.08f)),
+        border = BorderStroke(1.dp, warning.copy(alpha = 0.4f)),
+        shape = RoundedCornerShape(4.dp)
+    ) {
+        Column(modifier = Modifier.padding(12.dp)) {
+            Text(
+                stringResource(R.string.alarm_muted_title),
+                color = warning, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Bold, fontSize = 12.sp
+            )
+            Text(
+                stringResource(
+                    if (state == com.alexisgordr.icdetector.core.AlarmAudibility.AlarmSound.BLOCKED) R.string.alarm_muted_body_blocked
+                    else R.string.alarm_muted_body_silenced
+                ),
+                color = Color(0xFFBBBBBB), fontFamily = FontFamily.Monospace, fontSize = 11.sp
+            )
+            TextButton(
+                onClick = {
+                    runCatching {
+                        context.startActivity(
+                            com.alexisgordr.icdetector.service.ServiceNotificationController.alarmSettingsIntent(context)
+                        )
+                    }
+                },
+                colors = ButtonDefaults.textButtonColors(contentColor = warning)
+            ) {
+                Text(stringResource(R.string.alarm_muted_action), fontFamily = FontFamily.Monospace, fontSize = 11.sp)
+            }
+        }
     }
 }
