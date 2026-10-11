@@ -20,6 +20,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
@@ -48,6 +49,8 @@ import kotlinx.coroutines.withContext
 @Composable
 fun BackupSection() {
     val context = LocalContext.current
+    // Textos fuera de la composición (callbacks): con LocalResources, no con el Context.
+    val resources = LocalResources.current
     val scope = rememberCoroutineScope()
     var busy by remember { mutableStateOf(false) }
     var message by remember { mutableStateOf<String?>(null) }
@@ -71,10 +74,10 @@ fun BackupSection() {
             val result = withContext(Dispatchers.IO) { BackupController.exportTo(context, uri) }
             busy = false
             message = when (result) {
-                is BackupExporter.Result.Ok -> context.getString(
+                is BackupExporter.Result.Ok -> resources.getString(
                     R.string.backup_export_ok, BackupController.displayName(context, uri) ?: ""
                 )
-                is BackupExporter.Result.Failed -> context.getString(R.string.backup_export_failed, result.reason)
+                is BackupExporter.Result.Failed -> resources.getString(R.string.backup_export_failed, result.reason)
             }
         }
     }
@@ -94,7 +97,7 @@ fun BackupSection() {
             } else {
                 busy = false
                 val reason = (result as BackupExporter.Result.Failed).reason
-                cancelRestore(context.getString(R.string.restore_pre_backup_failed, reason))
+                cancelRestore(resources.getString(R.string.restore_pre_backup_failed, reason))
             }
         }
     }
@@ -107,7 +110,7 @@ fun BackupSection() {
             busy = false
             when (result) {
                 is RestoreStager.Result.Staged -> staged = result.manifest
-                is RestoreStager.Result.Rejected -> message = context.getString(rejectionText(result.reason))
+                is RestoreStager.Result.Rejected -> message = resources.getString(rejectionText(result.reason))
             }
         }
     }
@@ -156,7 +159,7 @@ fun BackupSection() {
                             preBackupLauncher.launch(BackupController.suggestedName("ICdetection-before-restore"))
                         } else {
                             BackupController.discardStaged(context)
-                            message = context.getString(R.string.restore_drain_failed)
+                            message = resources.getString(R.string.restore_drain_failed)
                         }
                     }
                 }) { Text(stringResource(R.string.restore_confirm_continue)) }

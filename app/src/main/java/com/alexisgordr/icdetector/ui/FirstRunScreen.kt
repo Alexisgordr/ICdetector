@@ -25,6 +25,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
@@ -49,6 +50,8 @@ import kotlinx.coroutines.withContext
 @Composable
 fun FirstRunScreen(onStartedFresh: () -> Unit) {
     val context = LocalContext.current
+    // Textos fuera de la composición (callbacks): con LocalResources, no con el Context.
+    val resources = LocalResources.current
     val scope = rememberCoroutineScope()
     var busy by remember { mutableStateOf(false) }
     var message by remember { mutableStateOf<String?>(null) }
@@ -64,7 +67,7 @@ fun FirstRunScreen(onStartedFresh: () -> Unit) {
             busy = false
             when (result) {
                 is RestoreStager.Result.Staged -> staged = result.manifest
-                is RestoreStager.Result.Rejected -> message = context.getString(rejectionText(result.reason))
+                is RestoreStager.Result.Rejected -> message = resources.getString(rejectionText(result.reason))
             }
         }
     }
@@ -75,7 +78,7 @@ fun FirstRunScreen(onStartedFresh: () -> Unit) {
             val done = withContext(Dispatchers.IO) { FirstRun.startFresh(context) }
             busy = false
             // Solo si se borró todo y se guardó la decisión; si no, la pregunta sigue pendiente.
-            if (done) onStartedFresh() else message = context.getString(R.string.first_run_fresh_failed)
+            if (done) onStartedFresh() else message = resources.getString(R.string.first_run_fresh_failed)
         }
     }
 

@@ -83,7 +83,7 @@ class FirstRunPolicyTest {
         assertTrue(firstRun.indexOf("deleteDatabase") < firstRun.indexOf("freshCleanupComplete("))
         assertTrue(firstRun.indexOf("if (!complete) return false") < firstRun.indexOf("Decision.FRESH.name"))
         assertTrue(firstRun.contains("val prefsCleared = editor.commit()"))
-        assertTrue(screen.contains("if (done) onStartedFresh() else message = context.getString(R.string.first_run_fresh_failed)"))
+        assertTrue(screen.contains("if (done) onStartedFresh() else message = resources.getString(R.string.first_run_fresh_failed)"))
         val app = read("$main/ICDetectionApp.kt")
         assertTrue(app.indexOf("RestoreStartup.run(this)") < app.indexOf("FirstRun.resolveAtStart(this, restore.outcome)"))
     }
