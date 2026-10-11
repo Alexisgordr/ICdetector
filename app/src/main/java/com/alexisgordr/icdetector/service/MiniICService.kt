@@ -93,7 +93,7 @@ class MiniICService : Service() {
             _serviceState.value = snapshot
         }
         if (!::dbHelper.isInitialized) return
-        scope.launch(serviceStateDispatcher) {
+        writeGate.launch(scope, serviceStateDispatcher) {
             serviceStatePersistence.persist(
                 snapshot = snapshot,
                 insert = dbHelper::insertServiceStateEvent
@@ -162,6 +162,11 @@ class MiniICService : Service() {
     private val forensicDispatcher = Dispatchers.IO.limitedParallelism(1)
     /** v2.10.10 — Escrituras del historial en orden, en una sola cola. */
     private val historyWriteDispatcher = Dispatchers.IO.limitedParallelism(1)
+    /**
+     * 3.0 — Todas las escrituras (y los ciclos de análisis que escriben) pasan por aquí, para poder
+     * terminarlas antes de una restauración: ver [quiesceForRestore].
+     */
+    private val writeGate = com.alexisgordr.icdetector.core.WriteGate()
     /** v2.10.10 — Cambia con cada "Borrar historial"; ver [clearHistory] y [HistoryEpoch]. */
     private val historyEpoch = com.alexisgordr.icdetector.core.HistoryEpoch()
     private lateinit var notificationController: ServiceNotificationController
@@ -378,7 +383,7 @@ class MiniICService : Service() {
             .registerOnSharedPreferenceChangeListener(languageListener)
         dbHelper = CellDbHelper.getInstance(this)
         mobilityFamiliarity = com.alexisgordr.icdetector.core.MobilityFamiliarityEngine(dbHelper)
-        scope.launch(Dispatchers.IO) {
+        writeGate.launch(scope, Dispatchers.IO) {
             val recovery = mobilityFamiliarity.recover(System.currentTimeMillis())
             recovery.event?.let { appendLog("[MOBILITY]", "$it id=${recovery.tripId}") }
         }
@@ -475,6 +480,7 @@ class MiniICService : Service() {
                 requestHighAccuracyFix()
             },
             writeDispatcher = historyWriteDispatcher,
+            writeGate = writeGate,
             historyGeneration = { historyEpoch.current() },
             locationMode = { locationMode.storedValue }
         )
@@ -505,13 +511,13 @@ class MiniICService : Service() {
         // y se encola antes de que llegue ningún ciclo: así se ejecuta siempre ANTES de la primera
         // muestra nueva. Antes iba por su cuenta en IO y, si se retrasaba, podía marcar como
         // interrumpido un caso que el servicio nuevo acababa de abrir.
-        scope.launch(forensicDispatcher) {
+        writeGate.launch(scope, forensicDispatcher) {
             try {
                 dbHelper.closeOpenIncidents(activeIdentity = null, interrupted = true)
                 dbHelper.interruptOpenForensicCases()
             } catch (_: Exception) {}
         }
-        scope.launch(Dispatchers.IO) { databaseMaintenance.run() }
+        writeGate.launch(scope, Dispatchers.IO) { databaseMaintenance.run() }
         
         val prefs = getSharedPreferences("miniic_prefs", MODE_PRIVATE)
         collectionHealthController = CollectionHealthController(
@@ -671,7 +677,7 @@ class MiniICService : Service() {
     /** Aplica retención y límite forense también en servicios que permanecen vivos durante meses. */
     private fun scheduleDailyDatabaseMaintenance() {
         if (databaseMaintenance.claimRun()) {
-            scope.launch(Dispatchers.IO) { databaseMaintenance.run() }
+            writeGate.launch(scope, Dispatchers.IO) { databaseMaintenance.run() }
         }
     }
 
@@ -891,7 +897,7 @@ class MiniICService : Service() {
 
     private fun persistPreciseLocation(location: Location) {
         val cell = _cellFlow.value.firstOrNull { it.isRegistered } ?: return
-        scope.launch(Dispatchers.IO) {
+        writeGate.launch(scope, Dispatchers.IO) {
             val updated = dbHelper.updateNullCoordinates(
                 cell.cellId, cell.mnc, cell.tac, cell.mcc, cell.radioTech,
                 location.latitude, location.longitude,
@@ -927,6 +933,15 @@ class MiniICService : Service() {
     }
 
     override fun onBind(intent: Intent?): IBinder = binder
+
+    /**
+     * 3.0 — Antes de restaurar: no se aceptan escrituras nuevas y se espera a que terminen todas las
+     * que ya estaban en cola o en marcha. False si no terminan a tiempo: entonces no se restaura.
+     */
+    suspend fun quiesceForRestore(timeoutMs: Long = 30_000L): Boolean = writeGate.closeAndDrain(timeoutMs)
+
+    /** 3.0 — La restauración se canceló antes de reemplazar nada: se vuelve a escribir. */
+    fun resumeWritesAfterCancelledRestore() = writeGate.reopen()
 
     override fun onDestroy() {
         super.onDestroy()
@@ -1101,7 +1116,7 @@ class MiniICService : Service() {
             // en el primer ciclo de la nueva, antes de que tenga su propio baseline.
             if (activeRaw != null && activeRaw.cellId != "N/A") resetLatencyIfCellChanged(activeRaw)
 
-            scope.launch(Dispatchers.IO) {
+            writeGate.launchSource(scope, Dispatchers.IO) {
                 cellProcessingMutex.withLock {
                 if (!collectionGeneration.isLatest(cycleTicket)) return@withLock
                 // 3.0 (#20) — Tras una pérdida de señal, el contexto de banda de antes del hueco no
@@ -1505,7 +1520,7 @@ class MiniICService : Service() {
                         // cierra el episodio al recuperarse o al cambiar de identidad.
                         val previousIncidentIdentity = lastIncidentIdentity
                         lastIncidentIdentity = if (confirmedActive.temporalProgress.active) cacheKey else null
-                        scope.launch(forensicDispatcher) {
+                        writeGate.launch(scope, forensicDispatcher) {
                             if (previousIncidentIdentity != null && previousIncidentIdentity != cacheKey) {
                                 dbHelper.closeOpenIncidents(previousIncidentIdentity, interrupted = true)
                             }
@@ -1524,7 +1539,7 @@ class MiniICService : Service() {
                         // mutex interno del grabador los ordena, pero no garantiza EN QUÉ orden, y
                         // un caso cuyo prebúfer se vuelca detrás de la muestra que lo disparó deja
                         // de ser una línea de tiempo. Un solo hilo serializa la escritura de verdad.
-                        scope.launch(forensicDispatcher) {
+                        writeGate.launch(scope, forensicDispatcher) {
                             forensicRecorder.observe(
                                 active = confirmedActive.copy(verified = knownStatus),
                                 neighbors = neighbors,
@@ -1735,7 +1750,7 @@ class MiniICService : Service() {
             val coordAgeMs = System.currentTimeMillis() - loc.time
             if (coordAgeMs < 15000L) {
                 locationController.resolvePendingCoordinates()
-                scope.launch(Dispatchers.IO) {
+                writeGate.launch(scope, Dispatchers.IO) {
                     val updated = dbHelper.updateNullCoordinates(
                         currentCell.cellId,
                         currentCell.mnc,

@@ -83,7 +83,8 @@ def main():
             tiene_null = re.search(r"^\s*null\s*->", cuerpo, re.M) is not None
             cubierto = False
             for nombre, valores in enums.items():
-                usados = set(re.findall(rf"{nombre}\.([A-Z][A-Z0-9_]*)\s*->", cuerpo))
+                # Nombre completo: "Outcome" no debe casar dentro de "RestoreOutcome".
+                usados = set(re.findall(rf"(?<![A-Za-z0-9_]){nombre}\.([A-Z][A-Z0-9_]*)\s*->", cuerpo))
                 if not usados:
                     continue
                 cubierto = True

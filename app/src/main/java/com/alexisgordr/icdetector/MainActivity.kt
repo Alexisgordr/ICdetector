@@ -29,6 +29,8 @@ class MainActivity : ComponentActivity() {
     private var isBound = false
     private var isBinding = false
     private var isActivityVisible = false
+    /** 3.0 — Mientras se prepara una restauración, nada vuelve a arrancar la monitorización. */
+    private var restoreInProgress = false
     private lateinit var dbHelper: CellDbHelper
 
     private val connection = object : ServiceConnection {
@@ -68,6 +70,7 @@ class MainActivity : ComponentActivity() {
                 )
             ) {
                 MainLayout(context = this, dbHelper = dbHelper, service = service)
+                com.alexisgordr.icdetector.ui.RestoreResultDialog()
             }
         }
     }
@@ -76,7 +79,7 @@ class MainActivity : ComponentActivity() {
         // Guard: evita un doble bindService() si esto se llama dos veces antes de que la conexión
         // se establezca (puede ocurrir entre el callback de permisos y el LaunchedEffect). Sin él,
         // dos binds quedarían con un solo unbind al cerrar (fuga de ciclo de vida).
-        if (isBound || isBinding) return
+        if (isBound || isBinding || restoreInProgress) return
 
         val intent = Intent(this, MiniICService::class.java)
         // startForegroundService() puede lanzar ForegroundServiceStartNotAllowedException (Android
@@ -98,6 +101,41 @@ class MainActivity : ComponentActivity() {
             stopService(intent)
             android.util.Log.e("MainActivity", "No se pudo iniciar/enlazar el servicio: ${e.message}", e)
         }
+    }
+
+    /**
+     * 3.0 — Antes de guardar la copia de los datos actuales y restaurar: para la monitorización y
+     * TERMINA las escrituras que ya estaban en cola o en marcha (parar el servicio a secas cancelaría
+     * su scope y descartaría las no empezadas). False si no se pueden terminar: no se restaura.
+     */
+    suspend fun stopMonitoringForRestore(): Boolean {
+        restoreInProgress = true
+        // Enlazándose todavía: no hay forma de vaciar su cola. Mejor no seguir.
+        if (isBinding && service == null) {
+            restoreInProgress = false
+            return false
+        }
+        val running = service
+        if (running != null && !running.quiesceForRestore()) {
+            running.resumeWritesAfterCancelledRestore()
+            restoreInProgress = false
+            return false
+        }
+        if (isBound || isBinding) {
+            try { unbindService(connection) } catch (_: IllegalArgumentException) {}
+            isBound = false
+            isBinding = false
+        }
+        service = null
+        stopService(Intent(this, MiniICService::class.java))
+        return true
+    }
+
+    /** 3.0 — La restauración se ha cancelado o ha fallado antes de reemplazar nada. */
+    fun resumeMonitoringAfterRestoreCancelled() {
+        if (!restoreInProgress) return
+        restoreInProgress = false
+        startAndBindService()
     }
 
     override fun onStart() {

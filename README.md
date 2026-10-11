@@ -416,6 +416,14 @@ automatic cloud backup and phone-to-phone transfer exclude every app file (`allo
 disabled and the extraction rules exclude all data), so a vendor transfer tool following
 Android's rules does not copy the database to another phone.
 
+**Backup and restore (3.0).** *Settings → Backup* saves everything in one file (without the
+OpenCelliD key) and restores it on another install. Restoring replaces the current data after you
+save a copy of it, and is safe against interruptions; backups from v2.10.x are refused to keep the
+campaign data separate. It is meant for moving data right away (a new phone, or before and
+after a reset), not as a long-term archive: restoring an old backup replaces everything recorded
+since and brings back outdated learning; use the exports to archive. See the
+[manual](MANUAL.md#backup-and-restore-30).
+
 **Complete local reset.** *Delete history* removes antenna history, incidents, forensic cases,
 transitions, service-state events, Stable-Site learning and route-familiarity trips in a single
 transaction, safely even while monitoring is running.

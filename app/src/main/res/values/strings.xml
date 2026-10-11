@@ -318,4 +318,31 @@
     <!-- 3.0 — Indicador GPS de la pantalla principal -->
     <string name="gps_state_ok">● GPS OK</string>
     <string name="gps_state_unavailable">● NO GPS</string>
+    <!-- 3.0 — Copia de seguridad -->
+    <string name="backup_section_title">Backup</string>
+    <string name="backup_section_body">Saves all ICdetection data (history, antennas, incidents, forensic cases, Stable-Site and trips) and your settings in one file, except the OpenCelliD key. The file is not encrypted and contains your location history: keep it private.</string>
+    <string name="backup_export">EXPORT BACKUP</string>
+    <string name="backup_import">RESTORE BACKUP</string>
+    <string name="backup_import_replaces">Restoring REPLACES all current data. Before replacing anything, you save a copy of your current data wherever you choose.</string>
+    <string name="backup_working">Working…</string>
+    <string name="backup_export_ok">Backup saved: %1$s</string>
+    <string name="backup_export_failed">Could not create the backup (%1$s). Nothing was changed.</string>
+    <string name="restore_confirm_title">Replace all data?</string>
+    <string name="restore_confirm_body">This backup (version %1$s, created %2$s) will REPLACE all current data.\n\nMonitoring stops, and next you choose where to save a copy of your current data. Only if that copy is saved does the app restart and restore the backup. If anything fails, your current data is kept.</string>
+    <string name="restore_confirm_continue">CONTINUE</string>
+    <string name="restore_cancelled">Restore cancelled. Nothing was changed.</string>
+    <string name="restore_pre_backup_failed">Could not save a copy of your current data (%1$s). Nothing was replaced.</string>
+    <string name="restore_rejected_not_backup">This file is not an ICdetection backup.</string>
+    <string name="restore_rejected_not_icdetection">This backup was made by another app.</string>
+    <string name="restore_rejected_unknown_format">This backup uses a format this version does not know. Update ICdetection and try again.</string>
+    <string name="restore_rejected_missing_version">This backup does not say which version made it, so it cannot be checked.</string>
+    <string name="restore_rejected_campaign">This backup is from v2.10.x. 3.0 data is not mixed with the field-campaign data, so it cannot be restored here.</string>
+    <string name="restore_rejected_future">This backup was made by a newer version of ICdetection. Update the app and try again.</string>
+    <string name="restore_rejected_damaged">This backup is damaged or incomplete. Nothing was changed.</string>
+    <string name="restore_result_title">Restore</string>
+    <string name="restore_result_ok">Backup restored. A copy of your previous data was saved as %1$s.</string>
+    <string name="restore_result_ok_no_name">Backup restored.</string>
+    <string name="restore_result_rolled_back">The restore could not be completed (%1$s). Your previous data is intact.</string>
+    <string name="restore_result_pending">The restore was interrupted and will be completed when the app starts again (%1$s).</string>
+    <string name="restore_drain_failed">Monitoring could not finish saving its pending data, so the restore was not started. Nothing was changed; try again in a moment.</string>
 </resources>

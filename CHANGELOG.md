@@ -155,6 +155,31 @@ post-freeze review (#7) and the documentation of the campaign's validation limit
   reference values) could reach a new phone without any check. The rules now exclude every domain
   for cloud backup, device transfer and the legacy full backup. A vendor tool that ignores
   Android's rules cannot be ruled out.
+- **Backup and restore (Settings → Backup).** Exports all data and the user settings (never the
+  OpenCelliD key) to one `.icdbackup` file, consistent while monitoring runs (exclusive transaction,
+  main file plus WAL, consolidated and checked with `integrity_check`). Restoring replaces the
+  current data: the backup is validated and migrated in a separate directory first; only backups
+  in a known format, made by 3.0 or later (all 3.0 betas explicitly) and with a database version
+  between 20 and the current one are accepted, so v2.10.x backups are refused even if they could
+  be migrated. Monitoring stops and the user must save a copy of the current data before anything
+  is replaced. The app then restarts and installs the backup before anything opens the database,
+  following a journal written before each step (complete, verified checkpoint; old files moved,
+  never deleted; atomic rename; reopen and verify by an identifier written into the database
+  header). Any failure or interruption before verification puts the previous database back
+  intact; after DONE the new database is never undone and a failed cleanup is retried at the
+  next start; an unreadable journal or two indistinguishable main files leave everything
+  untouched and the restore pending (monitoring stays blocked). Before the copy of the current
+  data, the service finishes its work in two phases (WriteGate): new analysis cycles are refused
+  and the accepted ones finish with all the writes they produce; then outside writes are refused
+  and every accepted write (including writes launched by accepted work) finishes. If that cannot
+  finish, the restore does not start. Tests
+  cover every cut, including between moving a file and recording it, errors after DONE and an
+  unreadable journal after installing.
+- Documentation: a backup is meant for moving data right away (new phone, or around a reset),
+  not as a long-term archive; restoring an old one replaces everything recorded since and brings
+  back outdated learning. Long-term archiving uses the read-only exports.
+- `tools/check_when_exhaustive.py`: an enum name no longer matches inside a longer name
+  (`Outcome` inside `RestoreOutcome`).
 - **Gradle configuration cache enabled.** Gradle suggested it after every build; repeated builds now
   start faster. Problems are reported as warnings, so an incompatible plugin cannot break the build.
   No change to the app or the APK.

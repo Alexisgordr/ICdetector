@@ -62,7 +62,7 @@ class ServiceRegressionTest {
     @Test fun `startup recovery runs on the forensic queue before new samples`() {
         val service = source("service/MiniICService.kt")
         val recovery = service.substringBefore("dbHelper.interruptOpenForensicCases()").takeLast(400)
-        assertTrue(recovery.contains("scope.launch(forensicDispatcher)"))
+        assertTrue(recovery.contains("writeGate.launch(scope, forensicDispatcher)"))
     }
 
     @Test fun `stable-site writes are not on the main thread`() {
@@ -76,7 +76,7 @@ class ServiceRegressionTest {
     @Test fun `history writes snapshot their context and go through one ordered queue`() {
         val persistence = source("service/ObservationPersistenceController.kt")
         assertTrue(persistence.contains("observedAtMs = clock()"))
-        assertTrue(persistence.contains("scope.launch(writeDispatcher)"))
+        assertTrue(persistence.contains("writeGate.launch(scope, writeDispatcher)"))
         assertFalse(persistence.contains("Dispatchers.IO"))
     }
 

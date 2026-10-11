@@ -741,6 +741,50 @@ auditable chain of custody, trustworthy time evidence, corroboration and expert 
 Obtain appropriate legal and technical advice; the forensic export assists an investigation but does
 not satisfy legal requirements by itself.
 
+### Backup and restore (3.0)
+
+**Settings → Backup** saves all ICdetection data in one `.icdbackup` file: history, antennas and
+their learned trust, incidents, forensic cases, Stable-Site, trips, and the language, location mode,
+proxy and latency settings. The OpenCelliD key is never included. The file is **not encrypted** and
+contains your location history: keep it private. The backup is consistent even while monitoring
+is running.
+
+**When to use it.** A backup is meant to **move the data right away**: to a new phone, or to put
+it back on the same phone after a reset or reinstall. Make it just before, restore it just after.
+It is not a long-term archive. Restoring a backup kept for weeks or months can cause problems:
+
+- It **replaces everything** recorded since the backup was made; those days or months are lost.
+- What the app had learned (trusted antennas, reference values, Stable-Site, trips) is as old as
+  the backup. Operators change antennas and frequencies, so old trust and references can produce
+  false alerts or miss real changes until they are relearned, and parts older than the rules'
+  windows (for example the 30 days of H11) are ignored anyway.
+- The history has a gap for the whole time the backup was stored, which matters if you analyse
+  the data.
+- A future version may no longer accept a backup that old (for example after a format change).
+- The longer the file is kept, the longer your location history sits outside the phone.
+
+To keep data for a long time, use the **exports** (history CSV, forensic cases, topology,
+geometry, Stable-Site): they are read-only and meant for analysis and archiving.
+
+**Restore** replaces all current data. Step by step:
+
+1. Choose a backup. It is checked without touching anything: it must be an ICdetection backup in a
+   known format, made by 3.0 or later (every 3.0 beta counts), with an intact database and a
+   database version not newer than the app. Backups from v2.10.x are refused even though they could
+   be migrated: 3.0 data is not mixed with the field-campaign data.
+2. Confirm. Monitoring stops in two phases: first no new readings are analysed and the ones
+   already accepted finish, together with everything they write (history, incidents, forensic
+   samples); then every remaining write finishes. If that cannot finish, the restore does not
+   start and nothing changes.
+3. Choose where to save a copy of your current data (for example Downloads or a cloud folder, so it
+   survives uninstalling the app). If you cancel or the copy fails, nothing is replaced.
+4. The app restarts and installs the backup before anything opens the database. If anything goes
+   wrong before the new database is verified, including a power cut, your previous data is put
+   back intact. Once it is verified it is never undone: a failed cleanup is retried at the next
+   start. If the app cannot tell which state the files are in (for example, an unreadable restore
+   journal), it touches nothing, keeps monitoring blocked and says the restore is pending. A
+   message tells you how it ended and the name of the copy of your previous data.
+
 ---
 
 ## 15. Technical limitations

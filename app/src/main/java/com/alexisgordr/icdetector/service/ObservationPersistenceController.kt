@@ -38,6 +38,8 @@ internal class ObservationPersistenceController(
     private val onPeriodicMissingLocation: (Long) -> Unit,
     /** Cola de un solo hilo: las filas se guardan en el orden en que se observaron. */
     private val writeDispatcher: CoroutineDispatcher,
+    /** 3.0 — Ver MiniICService.quiesceForRestore. */
+    private val writeGate: com.alexisgordr.icdetector.core.WriteGate = com.alexisgordr.icdetector.core.WriteGate(),
     /** Cambia con cada "Borrar historial": una escritura de antes del borrado no se guarda. */
     private val historyGeneration: () -> Long = { 0L },
     private val clock: () -> Long = System::currentTimeMillis,
@@ -83,7 +85,7 @@ internal class ObservationPersistenceController(
         lastPeriodicWrite = now
 
         val pending = pending(cell, cell.suspiciousReason ?: "OK", context)
-        scope.launch(writeDispatcher) {
+        writeGate.launch(scope, writeDispatcher) {
             val rowId = write(pending) ?: return@launch
             onWrite(rowId)
             if (rowId != -1L && context.fix == null && !screenOn) onPeriodicMissingLocation(context.observedAtMs)
@@ -93,7 +95,7 @@ internal class ObservationPersistenceController(
     private fun record(cell: CellData, context: ObservationContext, reason: String = cell.suspiciousReason ?: "OK") {
         if (!isRecordable(cell)) return
         val pending = pending(cell, reason, context)
-        scope.launch(writeDispatcher) {
+        writeGate.launch(scope, writeDispatcher) {
             write(pending)?.let(onWrite)
         }
     }

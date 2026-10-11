@@ -37,6 +37,7 @@
 
     <!-- memtagMode="sync" enforces MTE on GrapheneOS / MTE devices to prevent memory corruption attacks -->
     <application
+        android:name="com.alexisgordr.icdetector.ICDetectionApp"
         android:allowBackup="false"
         android:dataExtractionRules="@xml/data_extraction_rules"
         android:fullBackupContent="@xml/backup_rules"
@@ -57,6 +58,15 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+
+        <!-- 3.0 — Reinicio tras confirmar una restauración (proceso aparte). -->
+        <activity
+            android:name="com.alexisgordr.icdetector.backup.RestartActivity"
+            android:process=":restart"
+            android:exported="false"
+            android:excludeFromRecents="true"
+            android:noHistory="true"
+            android:theme="@android:style/Theme.Translucent.NoTitleBar" />
 
         <service
             android:name="com.alexisgordr.icdetector.service.MiniICService"

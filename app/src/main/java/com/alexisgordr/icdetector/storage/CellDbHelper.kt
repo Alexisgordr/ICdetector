@@ -48,7 +48,14 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 
-class CellDbHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME, null, DATABASE_VERSION), ForensicStore, MobilityFamiliarityStore {
+/**
+ * [databaseName]: 3.0 — por defecto la base de la app. La restauración de copias abre con este mismo
+ * helper una copia preparada (ruta absoluta) para migrarla antes de instalarla; nada más lo cambia.
+ */
+class CellDbHelper(
+    context: Context,
+    databaseName: String = DATABASE_NAME
+) : SQLiteOpenHelper(context, databaseName, null, DATABASE_VERSION), ForensicStore, MobilityFamiliarityStore {
     companion object {
         @Volatile private var instance: CellDbHelper? = null
 
@@ -62,8 +69,8 @@ class CellDbHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME, 
                 instance ?: CellDbHelper(context.applicationContext).also { instance = it }
             }
 
-        private const val DATABASE_NAME = "icdetector_history.db"
-        private const val DATABASE_VERSION = SchemaV21.VERSION
+        const val DATABASE_NAME = "icdetector_history.db"
+        const val DATABASE_VERSION = SchemaV21.VERSION
         const val TABLE_HISTORY = "history"
         const val COLUMN_ID = "id"
         const val COLUMN_TIMESTAMP = "timestamp"

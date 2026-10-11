@@ -277,6 +277,11 @@ fun SettingsPanel(service: MiniICService?, onSave: () -> Unit) {
 
             HorizontalDivider(color = Color(0xFF1A1A1A), modifier = Modifier.padding(vertical = 4.dp))
 
+            // 3.0 — Copia de seguridad: exportar y restaurar todos los datos.
+            BackupSection()
+
+            HorizontalDivider(color = Color(0xFF1A1A1A), modifier = Modifier.padding(vertical = 4.dp))
+
             Text(stringResource(R.string.technical_notice), color = Color(0xFFCF6679), fontSize = 12.sp, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Bold)
             Text(
                 stringResource(R.string.technical_notice_body),

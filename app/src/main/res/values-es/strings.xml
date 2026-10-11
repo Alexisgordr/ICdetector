@@ -318,4 +318,31 @@
     <!-- 3.0 — Indicador GPS de la pantalla principal -->
     <string name="gps_state_ok">● GPS OK</string>
     <string name="gps_state_unavailable">● SIN GPS</string>
+    <!-- 3.0 — Copia de seguridad -->
+    <string name="backup_section_title">Copia de seguridad</string>
+    <string name="backup_section_body">Guarda en un fichero todos los datos de ICdetection (historial, antenas, incidentes, casos forenses, Stable-Site y trayectos) y tus ajustes, salvo la clave de OpenCelliD. El fichero no va cifrado y contiene tu historial de ubicaciones: guárdalo en privado.</string>
+    <string name="backup_export">EXPORTAR COPIA</string>
+    <string name="backup_import">RESTAURAR COPIA</string>
+    <string name="backup_import_replaces">Restaurar SUSTITUYE todos los datos actuales. Antes de reemplazar nada, guardas una copia de tus datos actuales donde elijas.</string>
+    <string name="backup_working">Trabajando…</string>
+    <string name="backup_export_ok">Copia guardada: %1$s</string>
+    <string name="backup_export_failed">No se pudo crear la copia (%1$s). No se ha cambiado nada.</string>
+    <string name="restore_confirm_title">¿Sustituir todos los datos?</string>
+    <string name="restore_confirm_body">Esta copia (versión %1$s, creada %2$s) SUSTITUIRÁ todos los datos actuales.\n\nLa monitorización se para y después eliges dónde guardar una copia de tus datos actuales. Solo si esa copia se guarda, la app se reinicia y restaura la copia. Si algo falla, tus datos actuales se conservan.</string>
+    <string name="restore_confirm_continue">CONTINUAR</string>
+    <string name="restore_cancelled">Restauración cancelada. No se ha cambiado nada.</string>
+    <string name="restore_pre_backup_failed">No se pudo guardar la copia de tus datos actuales (%1$s). No se ha reemplazado nada.</string>
+    <string name="restore_rejected_not_backup">Este fichero no es una copia de seguridad de ICdetection.</string>
+    <string name="restore_rejected_not_icdetection">Esta copia la hizo otra app.</string>
+    <string name="restore_rejected_unknown_format">Esta copia usa un formato que esta versión no conoce. Actualiza ICdetection y vuelve a intentarlo.</string>
+    <string name="restore_rejected_missing_version">Esta copia no indica qué versión la hizo, así que no se puede comprobar.</string>
+    <string name="restore_rejected_campaign">Esta copia es de la v2.10.x. Los datos de la 3.0 no se mezclan con los de la campaña, así que no se puede restaurar aquí.</string>
+    <string name="restore_rejected_future">Esta copia la hizo una versión más nueva de ICdetection. Actualiza la app y vuelve a intentarlo.</string>
+    <string name="restore_rejected_damaged">Esta copia está dañada o incompleta. No se ha cambiado nada.</string>
+    <string name="restore_result_title">Restauración</string>
+    <string name="restore_result_ok">Copia restaurada. Tus datos anteriores se guardaron como %1$s.</string>
+    <string name="restore_result_ok_no_name">Copia restaurada.</string>
+    <string name="restore_result_rolled_back">La restauración no se pudo completar (%1$s). Tus datos anteriores están intactos.</string>
+    <string name="restore_result_pending">La restauración se interrumpió y se completará al volver a abrir la app (%1$s).</string>
+    <string name="restore_drain_failed">La monitorización no pudo terminar de guardar sus datos pendientes, así que la restauración no ha empezado. No se ha cambiado nada; vuelve a intentarlo en un momento.</string>
 </resources>
