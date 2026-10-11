@@ -345,4 +345,16 @@
     <string name="restore_result_rolled_back">The restore could not be completed (%1$s). Your previous data is intact.</string>
     <string name="restore_result_pending">The restore was interrupted and will be completed when the app starts again (%1$s).</string>
     <string name="restore_drain_failed">Monitoring could not finish saving its pending data, so the restore was not started. Nothing was changed; try again in a moment.</string>
+    <!-- 3.0 — Primera apertura -->
+    <string name="first_run_title">Welcome to ICdetection 3.0</string>
+    <string name="first_run_body">Do you want to restore a backup? Nothing is recorded until you choose.</string>
+    <string name="first_run_foreign_data">This phone already has ICdetection data that did not come from this install (for example, copied by a transfer tool). Starting from scratch deletes it; restoring a backup replaces it. It is kept if a restore fails.</string>
+    <string name="first_run_restore">RESTORE A BACKUP</string>
+    <string name="first_run_fresh">START FROM SCRATCH</string>
+    <string name="first_run_restore_confirm_title">Restore this backup?</string>
+    <string name="first_run_restore_confirm_body">Backup version %1$s, created %2$s. The app restarts and restores it. If anything fails, you return to this question.</string>
+    <string name="first_run_restore_confirm_replace">Backup version %1$s, created %2$s. The app restarts and the backup REPLACES the data already on this phone. If anything fails, that data is kept and you return to this question.</string>
+    <string name="first_run_fresh_failed">Not everything could be deleted, so nothing was decided. Try again.</string>
+    <string name="first_run_fresh_confirm_title">Delete the existing data?</string>
+    <string name="first_run_fresh_confirm_body">Starting from scratch deletes all ICdetection data already on this phone. This cannot be undone.</string>
 </resources>

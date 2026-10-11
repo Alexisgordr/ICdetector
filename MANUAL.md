@@ -81,6 +81,22 @@ is not supported. From 3.0 on, every version updates the previous one normally.
 > If you take part in the field-collection campaign, keep that phone on v2.10.x; see
 > [IMPORTANT.md](IMPORTANT.md).
 
+**First start (3.0).** A new install first asks *"Do you want to restore a backup?"* with two
+options, **Restore a backup** and **Start from scratch**. Nothing is recorded until you choose: the
+app does not start monitoring, and the monitoring service refuses to start by any other route.
+- *Restore a backup* checks the file (see [Backup and restore](#backup-and-restore-30)), restarts
+  the app and restores it. If you cancel the file picker, or the restore fails, you are back at the
+  question and nothing has been decided.
+- *Start from scratch* begins with empty data. The answer is stored only after checking that
+  every database, file and setting was really deleted; if not, you stay on the question and can
+  try again.
+- If the phone already has ICdetection data that did not come from this install (for example,
+  copied by a transfer tool), the question says so: starting from scratch deletes that data,
+  restoring replaces it, and a failed restore keeps it intact.
+The answer is stored only after the restore has finished and been verified, or after the deletion
+has finished; an interruption brings the question back. Installs that already existed before this
+version are not asked.
+
 ### Permissions
 
 Grant the permissions the app requests. Location permission is essential because Android protects

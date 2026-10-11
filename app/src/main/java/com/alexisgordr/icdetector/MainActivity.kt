@@ -29,6 +29,8 @@ class MainActivity : ComponentActivity() {
     private var isBound = false
     private var isBinding = false
     private var isActivityVisible = false
+    /** 3.0 — Pregunta de la primera apertura sin resolver: no se muestra la app ni se recoge nada. */
+    private var firstRunPending by mutableStateOf(false)
     /** 3.0 — Mientras se prepara una restauración, nada vuelve a arrancar la monitorización. */
     private var restoreInProgress = false
     private lateinit var dbHelper: CellDbHelper
@@ -56,6 +58,7 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         dbHelper = CellDbHelper.getInstance(this)
+        firstRunPending = com.alexisgordr.icdetector.backup.FirstRun.isPending(this)
         
         // No iniciamos el servicio aquí directamente para evitar crasheos por permisos en Android 14+
         // El inicio del servicio se gestionará desde el MainLayout cuando los permisos sean otorgados.
@@ -69,7 +72,11 @@ class MainActivity : ComponentActivity() {
                     error = Color(0xFFCF6679)
                 )
             ) {
-                MainLayout(context = this, dbHelper = dbHelper, service = service)
+                if (firstRunPending) {
+                    com.alexisgordr.icdetector.ui.FirstRunScreen(onStartedFresh = { firstRunPending = false })
+                } else {
+                    MainLayout(context = this, dbHelper = dbHelper, service = service)
+                }
                 com.alexisgordr.icdetector.ui.RestoreResultDialog()
             }
         }
@@ -80,6 +87,7 @@ class MainActivity : ComponentActivity() {
         // se establezca (puede ocurrir entre el callback de permisos y el LaunchedEffect). Sin él,
         // dos binds quedarían con un solo unbind al cerrar (fuga de ciclo de vida).
         if (isBound || isBinding || restoreInProgress) return
+        if (com.alexisgordr.icdetector.backup.FirstRun.isPending(this)) return
 
         val intent = Intent(this, MiniICService::class.java)
         // startForegroundService() puede lanzar ForegroundServiceStartNotAllowedException (Android

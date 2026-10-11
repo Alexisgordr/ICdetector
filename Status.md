@@ -40,8 +40,9 @@ notification is always silent and the app warns when alarms are muted (#35); a l
 minutes when reception is poor; in smart, a handover to a new cell opens a 60 s GPS window) with the
 mode stored per row (schema 21); the main-screen GPS
 indicator uses the same validated position as the analysis; backup and restore from Settings
-(validated, journaled and safe against interruptions; v2.10.x backups refused), and no app data in
-Android's backup or phone-to-phone transfer.
+(validated, journaled and safe against interruptions; v2.10.x backups refused), a first-start
+question that blocks collection until answered, and no app data in Android's backup or
+phone-to-phone transfer.
 
 ## Dataset cuts in 3.0
 

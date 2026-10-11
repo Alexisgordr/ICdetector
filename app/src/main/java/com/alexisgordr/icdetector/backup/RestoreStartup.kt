@@ -10,9 +10,9 @@ import java.io.File
  */
 object RestoreStartup {
     /** Resultado de la última restauración: `RESTORED`, `ROLLED_BACK:<motivo>` o `PENDING:<motivo>`. */
-    const val PREF_LAST_RESULT = "restore_last_result"
+    const val PREF_LAST_RESULT = FirstRunPolicy.PREF_RESTORE_RESULT
     /** Nombre del fichero donde el usuario guardó la copia de sus datos antes de restaurar. */
-    const val PREF_PRE_BACKUP_NAME = "restore_pre_backup_name"
+    const val PREF_PRE_BACKUP_NAME = FirstRunPolicy.PREF_PRE_BACKUP_NAME
 
     fun engine(context: Context, onRestored: (File) -> Unit = {}): RestoreEngine {
         val database = context.getDatabasePath(CellDbHelper.DATABASE_NAME)

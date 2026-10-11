@@ -345,4 +345,16 @@
     <string name="restore_result_rolled_back">La restauración no se pudo completar (%1$s). Tus datos anteriores están intactos.</string>
     <string name="restore_result_pending">La restauración se interrumpió y se completará al volver a abrir la app (%1$s).</string>
     <string name="restore_drain_failed">La monitorización no pudo terminar de guardar sus datos pendientes, así que la restauración no ha empezado. No se ha cambiado nada; vuelve a intentarlo en un momento.</string>
+    <!-- 3.0 — Primera apertura -->
+    <string name="first_run_title">Bienvenido a ICdetection 3.0</string>
+    <string name="first_run_body">¿Quieres restaurar una copia de seguridad? No se graba nada hasta que elijas.</string>
+    <string name="first_run_foreign_data">Este móvil ya tiene datos de ICdetection que no salieron de esta instalación (por ejemplo, copiados por una herramienta de transferencia). Empezar de cero los borra; restaurar una copia los sustituye. Si la restauración falla, se conservan.</string>
+    <string name="first_run_restore">RESTAURAR UNA COPIA</string>
+    <string name="first_run_fresh">EMPEZAR DE CERO</string>
+    <string name="first_run_restore_confirm_title">¿Restaurar esta copia?</string>
+    <string name="first_run_restore_confirm_body">Copia de la versión %1$s, creada %2$s. La app se reinicia y la restaura. Si algo falla, vuelves a esta pregunta.</string>
+    <string name="first_run_restore_confirm_replace">Copia de la versión %1$s, creada %2$s. La app se reinicia y la copia SUSTITUYE los datos que ya hay en este móvil. Si algo falla, esos datos se conservan y vuelves a esta pregunta.</string>
+    <string name="first_run_fresh_failed">No se pudo borrar todo, así que no se ha decidido nada. Vuelve a intentarlo.</string>
+    <string name="first_run_fresh_confirm_title">¿Borrar los datos que hay?</string>
+    <string name="first_run_fresh_confirm_body">Empezar de cero borra todos los datos de ICdetection que ya hay en este móvil. No se puede deshacer.</string>
 </resources>

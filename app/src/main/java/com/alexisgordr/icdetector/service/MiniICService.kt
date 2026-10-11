@@ -376,8 +376,23 @@ class MiniICService : Service() {
         }
     }
 
+    /**
+     * 3.0 — True si el servicio se arrancó con la pregunta de la primera apertura pendiente o con una
+     * restauración a medias: no ha abierto la base ni recoge nada, y se detiene.
+     */
+    @Volatile var collectionBlocked = false
+        private set
+
     override fun onCreate() {
         super.onCreate()
+        // 3.0 — Antes de abrir la base o registrar nada. Cubre cualquier vía de arranque (la
+        // pantalla, un reinicio START_STICKY, otra app): sin decisión inicial, nada se recoge.
+        if (!com.alexisgordr.icdetector.backup.FirstRun.allowsCollection(this)) {
+            collectionBlocked = true
+            Log.w("MiniIC", "Monitorización bloqueada: falta la decisión inicial o hay una restauración pendiente.")
+            stopSelf()
+            return
+        }
         isServiceRunning = true
         getSharedPreferences(LocaleController.PREFS, MODE_PRIVATE)
             .registerOnSharedPreferenceChangeListener(languageListener)
@@ -925,6 +940,10 @@ class MiniICService : Service() {
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        if (collectionBlocked) {
+            stopSelf()
+            return START_NOT_STICKY
+        }
         if (intent?.action == ACTION_STOP) {
             stopSelf()
             return START_NOT_STICKY
@@ -945,6 +964,8 @@ class MiniICService : Service() {
 
     override fun onDestroy() {
         super.onDestroy()
+        // Bloqueado en onCreate: no se inicializó nada que haya que cerrar.
+        if (collectionBlocked) return
         isServiceRunning = false
         getSharedPreferences(LocaleController.PREFS, MODE_PRIVATE)
             .unregisterOnSharedPreferenceChangeListener(languageListener)

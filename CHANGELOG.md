@@ -175,6 +175,14 @@ post-freeze review (#7) and the documentation of the campaign's validation limit
   finish, the restore does not start. Tests
   cover every cut, including between moving a file and recording it, errors after DONE and an
   unreadable journal after installing.
+- **First start asks whether to restore a backup.** Until the user chooses *Restore a backup* or
+  *Start from scratch*, nothing is recorded: the screen does not start monitoring and the service
+  itself refuses to start (any start route) while the question is pending or a restore is
+  unfinished, before opening the database. Cancelling the file picker returns to the question
+  without storing a decision. The decision is stored only after a verified restore or after
+  *Start from scratch* has deleted everything, including data that reached the phone by another
+  route, and the deletion and every preference commit have been checked. Installs that existed
+  before (they have their own preferences, which never travel) are not asked.
 - Documentation: a backup is meant for moving data right away (new phone, or around a reset),
   not as a long-term archive; restoring an old one replaces everything recorded since and brings
   back outdated learning. Long-term archiving uses the read-only exports.
