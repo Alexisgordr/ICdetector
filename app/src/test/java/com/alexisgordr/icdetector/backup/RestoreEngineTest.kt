@@ -207,7 +207,7 @@ class RestoreEngineTest {
 
     @Test fun `an unreadable journal touches nothing and stays pending`() {
         givenOldDatabase()
-        val journal = File(dir, "${RestoreEngine.WORK_DIR}/${RestoreEngine.JOURNAL_NAME}").apply { parentFile.mkdirs(); writeText("{broken") }
+        val journal = File(dir, "${RestoreEngine.WORK_DIR}/${RestoreEngine.JOURNAL_NAME}").apply { parentFile!!.mkdirs(); writeText("{broken") }
         repeat(2) {
             val result = engine().recover()
             assertEquals(RestoreOutcome.PENDING, result.outcome)

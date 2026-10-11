@@ -124,7 +124,7 @@ class ObservationContextPersistenceTest {
         val capture = service.indexOf("val observationContext = observationPersistence.capture(deliveryLocation?.toObservedFix())")
         assertTrue(capture > 0)
         // El ciclo de análisis de esta entrega empieza después de capturar.
-        val cycle = service.indexOf("scope.launch(Dispatchers.IO) {", capture)
+        val cycle = service.indexOf("writeGate.launchSource(scope, Dispatchers.IO) {", capture)
         assertTrue(cycle > capture)
         assertTrue(service.indexOf("cellProcessingMutex.withLock {", cycle) > cycle)
         // El estado de servicio se sondea al principio de la entrega, antes de capturar.
