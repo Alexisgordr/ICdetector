@@ -149,6 +149,12 @@ post-freeze review (#7) and the documentation of the campaign's validation limit
   or from `BUILD_COMMIT`, which `git archive` fills in for ZIPs. The version itself, the version
   code and the schema do not change; `tools/check_export.py` ignores the part after `+` when it
   compares versions.
+- **No app data in Android's cloud backup or phone-to-phone transfer (found during testing).**
+  On Android 12 and later `allowBackup="false"` does not turn off device-to-device transfer, and
+  the extraction rules only excluded the preferences, so the database (history, antenna trust,
+  reference values) could reach a new phone without any check. The rules now exclude every domain
+  for cloud backup, device transfer and the legacy full backup. A vendor tool that ignores
+  Android's rules cannot be ruled out.
 - **Gradle configuration cache enabled.** Gradle suggested it after every build; repeated builds now
   start faster. Problems are reported as warnings, so an incompatible plugin cannot break the build.
   No change to the app or the APK.

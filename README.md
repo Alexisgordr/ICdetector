@@ -411,8 +411,10 @@ Verification is a **label, not a verdict**: its result never changes the securit
 ## 🔒 Privacy & networking
 
 **Local-first design.** No cloud synchronization, no analytics, no advertising SDKs, no hidden
-telemetry and no user tracking. All history stays on the device unless you export it, and
-`allowBackup` is disabled.
+telemetry and no user tracking. All history stays on the device unless you export it. Android's
+automatic cloud backup and phone-to-phone transfer exclude every app file (`allowBackup` is
+disabled and the extraction rules exclude all data), so a vendor transfer tool following
+Android's rules does not copy the database to another phone.
 
 **Complete local reset.** *Delete history* removes antenna history, incidents, forensic cases,
 transitions, service-state events, Stable-Site learning and route-familiarity trips in a single

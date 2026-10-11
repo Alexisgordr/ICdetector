@@ -732,6 +732,9 @@ security events.
 - Use encrypted storage for sensitive cases.
 - Redact GPS coordinates and credentials before public sharing.
 - Never publish API tokens, signing keys or private keystores.
+- Android's automatic cloud backup and phone-to-phone transfer exclude every ICdetection file, so
+  setting up a new phone does not bring the history with it. A vendor transfer tool that ignores
+  Android's rules cannot be ruled out.
 
 Formal evidential use normally requires documented acquisition, preservation of originals, an
 auditable chain of custody, trustworthy time evidence, corroboration and expert interpretation.
