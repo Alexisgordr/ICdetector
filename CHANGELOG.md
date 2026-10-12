@@ -22,6 +22,13 @@ unchanged.
 - **Route detail.** Tapping a Topology route shows its data and the Stable-Site episodes with the same
   stored A→B identities (2-minute query margin); they relate to the aggregated route, not to one
   transition. Several sites stay apart; no match reads "No associated Stable-Site context".
+- **Plain presentation.** Places read *Learning this place*, *Reference being prepared*, *Reference
+  prepared* or *Not enough data*, with the missing requirement in plain words, met/pending
+  requirements from the policy constants (no countdown) and *Analysis only: it does not change
+  alarms*. Keys, internal codes, counters, dates, cells and RF fingerprints move to a collapsible
+  *View technical details*; no information is removed. Episodes read *Observed change* or *Novelty
+  recorded in shadow* (the episode's kept mark), apart from the last saved evaluation, whose reason
+  and movement are translated; missing data reads *Not enough information*.
 - Paged lists with loading, empty and error states with retry; pending loads are cancelled on site
   or filter change. `tools/check_when_exhaustive.py` no longer reads enum constructor arguments as
   enum values.

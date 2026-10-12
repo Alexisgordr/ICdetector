@@ -283,14 +283,23 @@ context data. A transmitter present throughout the first days can influence the 
 local history cannot establish external truth.
 
 **Viewing it in the app.** **History → Topology → VIEW STABLE-SITE** shows what Stable-Site has
-learned, read only. Sites appear by their stored key (no names, no coordinates) with their
-**current** state, computed with the same maturity policy as the export. `ACTIVE` means a mature
-site, not that any protection is applied; Stable-Site stays in shadow mode. A site's detail shows
-progress towards `ACTIVE`, the neighbour capability, the full-identity cells, the RF fingerprints
-(local context, not cell identities) and its episodes. Episodes are serving-cell changes; only those
-marked *recorded in shadow* met the shadow conditions, and none is an alarm. Each episode shows its
-**last saved evaluation** and the site state recorded then, which is not the initial evidence nor
-the site's current state; missing values are shown as not available.
+learned, read only, in two levels:
+
+- **Plain view.** Each place shows *Learning this place* (`BOOTSTRAP`/`LEARNING`), *Reference being
+  prepared* (`SHADOW_READY`), *Reference prepared* (`ACTIVE`) or *Not enough data* (`UNAVAILABLE`),
+  with the requirement still missing and the line *Analysis only: it does not change alarms*. A
+  prepared reference is not a protection: Stable-Site stays in shadow mode. The detail lists the
+  requirements (days connected, days still, days with nearby cells, observations of the connected
+  cell) as met or pending against the same constants as the maturity policy; it is not a countdown.
+- **View technical details** (collapsible): stored key (no names, no coordinates), internal state
+  and reason codes, neighbour capability, progress bars, dates, full-identity cells and RF
+  fingerprints (local context, not cell identities). Nothing is removed; only the layout changes.
+
+Cell changes in a place are its episodes. *Observed change* means the cell changed;
+*Novelty recorded in shadow* means it was marked as a novelty at some point of the episode (no
+alarm). That mark is kept for the whole episode and is shown apart from the **last saved
+evaluation**, whose date, place state at that moment, reason and movement are translated as stored;
+missing values read *Not enough information*. None of this names a cause or is an alarm.
 
 **Routes.** Tapping a route in Topology opens its own detail view (back with the arrow or the
 phone's back) with **Stable-Site episodes of this route**, paged per site with *Load more*:

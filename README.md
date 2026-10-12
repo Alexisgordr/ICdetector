@@ -369,9 +369,11 @@ Local Cell Trust, temporal confidence, alerts or forensic decisions.
 - **Maturity:** `ACTIVE` requires seven distinct serving days, three confirmed static days, thirty
   serving observations and three independent neighbour-evidence days. Sample volume from one day
   cannot replace elapsed days.
-- **In the app:** *History → Topology → VIEW STABLE-SITE* lists sites, their current state, progress,
-  cells, RF fingerprints and episodes, read only; tapping a route shows the Stable-Site episodes with
-  the same stored A→B change. `ACTIVE` means a mature site, not an applied protection.
+- **In the app:** *History → Topology → VIEW STABLE-SITE*, read only. A plain view per place
+  (*Learning this place*, *Reference being prepared*, *Reference prepared*, *Not enough data*), what
+  is still missing and its cell changes; keys, codes, counters, cells and RF fingerprints sit under
+  *View technical details*. Tapping a route shows the Stable-Site episodes with the same stored A→B
+  change. A prepared reference (`ACTIVE`) is not an applied protection.
 
 ---
 
