@@ -1243,13 +1243,25 @@ class CellDbHelper(
             put("state", ForensicCaseState.CAPTURING.name); put("cell_identity", cell.identityKey)
             put("highest_phase", cell.temporalProgress.phase); put("confirmed", 0)
         }
-        val id = db.insertOrThrow(TABLE_FORENSIC_CASES, null, provisional)
-        val date = now.take(10)
-        db.update(TABLE_FORENSIC_CASES, ContentValues().apply {
-            val prefix = if (origin == ForensicCaseOrigin.TRUST_CONTRADICTION) "ICD-OBS" else "ICD"
-            put("case_code", "$prefix-$date-${id.toString().padStart(4, '0')}")
-        }, "id=?", arrayOf(id.toString()))
-        return id
+        // 3.0 — Insert provisional y case_code definitivo en UNA transacción: si el update falla o no
+        // toca exactamente una fila, se revierte todo y no queda un caso "PENDING" huérfano. El ID
+        // solo se devuelve tras confirmar. El error se propaga al manejo existente del grabador
+        // (antes un fallo del update dejaba el caso a medias). Si un llamador ya tuviera una
+        // transacción abierta, esta se anida en ella (SQLiteDatabase lo admite).
+        db.beginTransaction()
+        try {
+            val id = db.insertOrThrow(TABLE_FORENSIC_CASES, null, provisional)
+            val date = now.take(10)
+            val updated = db.update(TABLE_FORENSIC_CASES, ContentValues().apply {
+                val prefix = if (origin == ForensicCaseOrigin.TRUST_CONTRADICTION) "ICD-OBS" else "ICD"
+                put("case_code", "$prefix-$date-${id.toString().padStart(4, '0')}")
+            }, "id=?", arrayOf(id.toString()))
+            check(updated == 1) { "case_code de un caso forense nuevo: $updated filas actualizadas" }
+            db.setTransactionSuccessful()
+            return id
+        } finally {
+            db.endTransaction()
+        }
     }
 
     /**
