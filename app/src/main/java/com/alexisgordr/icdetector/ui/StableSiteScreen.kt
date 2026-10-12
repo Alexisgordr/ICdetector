@@ -179,7 +179,7 @@ private fun BackRow(label: Int, onBack: () -> Unit) {
 }
 
 @Composable
-private fun line(text: String, color: Color = Body, size: Int = 9) =
+private fun InfoLine(text: String, color: Color = Body, size: Int = 9) =
     Text(text, color = color, fontFamily = FontFamily.Monospace, fontSize = size.sp, lineHeight = (size + 3).sp)
 
 /**
@@ -210,9 +210,9 @@ fun StableSitePanel(dbHelper: CellDbHelper, modifier: Modifier = Modifier, onBac
                 Text(stringResource(R.string.stable_site_simple_title), color = Color.White, fontFamily = FontFamily.Monospace,
                     fontWeight = FontWeight.Bold, fontSize = 12.sp)
                 AnalysisOnly()
-                line(stringResource(R.string.stable_site_simple_intro), Dim)
-                line(stringResource(R.string.stable_site_view_shadow_note), Dim)
-                line(stringResource(R.string.stable_site_view_key_note), Dim)
+                InfoLine(stringResource(R.string.stable_site_simple_intro), Dim)
+                InfoLine(stringResource(R.string.stable_site_view_shadow_note), Dim)
+                InfoLine(stringResource(R.string.stable_site_view_key_note), Dim)
             }
         }
         item {
@@ -230,7 +230,7 @@ fun StableSitePanel(dbHelper: CellDbHelper, modifier: Modifier = Modifier, onBac
 
 /** «Solo análisis: no modifica las alarmas», siempre visible en las vistas de Stable-Site. */
 @Composable
-private fun AnalysisOnly() = line(stringResource(R.string.stable_site_analysis_only), Accent, 10)
+private fun AnalysisOnly() = InfoLine(stringResource(R.string.stable_site_analysis_only), Accent, 10)
 
 @Composable
 private fun SiteCard(site: StableSiteSummary, onOpen: () -> Unit) {
@@ -241,9 +241,9 @@ private fun SiteCard(site: StableSiteSummary, onOpen: () -> Unit) {
         Column(Modifier.fillMaxWidth().padding(11.dp), verticalArrangement = Arrangement.spacedBy(3.dp)) {
             Text(stringResource(simpleStateLabel(simple)), color = stateColor(m.state), fontFamily = FontFamily.Monospace,
                 fontWeight = FontWeight.Bold, fontSize = 11.sp)
-            line(stringResource(missingLabel(StableSitePresentation.missing(m.reason))), Body)
-            line(shortKey(site.siteKey), Dim, 9)
-            line(stringResource(R.string.stable_site_simple_place_seen, formatMs(site.lastSeenMs) ?: stringResource(R.string.stable_site_no_info)), Dim)
+            InfoLine(stringResource(missingLabel(StableSitePresentation.missing(m.reason))), Body)
+            InfoLine(shortKey(site.siteKey), Dim, 9)
+            InfoLine(stringResource(R.string.stable_site_simple_place_seen, formatMs(site.lastSeenMs) ?: stringResource(R.string.stable_site_no_info)), Dim)
         }
     }
 }
@@ -288,8 +288,8 @@ private fun StableSiteDetail(dbHelper: CellDbHelper, site: StableSiteSummary, mo
             Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 Text(stringResource(simpleStateLabel(simple)), color = stateColor(m.state), fontFamily = FontFamily.Monospace,
                     fontWeight = FontWeight.Bold, fontSize = 13.sp)
-                line(stringResource(simpleStateNote(simple)), Body)
-                line(stringResource(missingLabel(StableSitePresentation.missing(m.reason))), Body)
+                InfoLine(stringResource(simpleStateNote(simple)), Body)
+                InfoLine(stringResource(missingLabel(StableSitePresentation.missing(m.reason))), Body)
                 AnalysisOnly()
             }
         }
@@ -298,10 +298,10 @@ private fun StableSiteDetail(dbHelper: CellDbHelper, site: StableSiteSummary, mo
                 Text(stringResource(R.string.stable_site_requirements_title), color = Color.White, fontFamily = FontFamily.Monospace,
                     fontWeight = FontWeight.Bold, fontSize = 9.sp)
                 StableSitePresentation.requirements(site).forEach { r ->
-                    line(stringResource(if (r.met) R.string.stable_site_requirement_met else R.string.stable_site_requirement_pending,
+                    InfoLine(stringResource(if (r.met) R.string.stable_site_requirement_met else R.string.stable_site_requirement_pending,
                         stringResource(requirementLabel(r.kind)), r.value, r.target), if (r.met) Accent else Body)
                 }
-                line(stringResource(R.string.stable_site_requirements_note), Dim)
+                InfoLine(stringResource(R.string.stable_site_requirements_note), Dim)
             }
         }
         // 2. Detalles técnicos, desplegables.
@@ -314,18 +314,18 @@ private fun StableSiteDetail(dbHelper: CellDbHelper, site: StableSiteSummary, mo
         if (technical) {
             item {
                 Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    line(site.siteKey, Color.White)
-                    line(stringResource(R.string.stable_site_view_current_state, stringResource(stateLabel(m.state)), m.reason), stateColor(m.state))
-                    line(stringResource(R.string.stable_site_view_active_note), Dim)
-                    line(stringResource(capabilityLabel(m.capability)) + " (" + m.capability.name + ") — " + stringResource(capabilityNote(m.capability)), Body)
+                    InfoLine(site.siteKey, Color.White)
+                    InfoLine(stringResource(R.string.stable_site_view_current_state, stringResource(stateLabel(m.state)), m.reason), stateColor(m.state))
+                    InfoLine(stringResource(R.string.stable_site_view_active_note), Dim)
+                    InfoLine(stringResource(capabilityLabel(m.capability)) + " (" + m.capability.name + ") — " + stringResource(capabilityNote(m.capability)), Body)
                     Text(stringResource(R.string.stable_site_view_progress), color = Color.White, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Bold, fontSize = 9.sp)
                     Progress(R.string.stable_site_view_serving_days, StableSiteProgress.servingDays(site))
                     Progress(R.string.stable_site_view_static_days, StableSiteProgress.staticDays(site))
                     Progress(R.string.stable_site_view_full_neighbour_days, StableSiteProgress.fullNeighbourDays(site))
                     Progress(R.string.stable_site_view_rf_neighbour_days, StableSiteProgress.rfNeighbourDays(site))
                     Progress(R.string.stable_site_view_serving_observations, StableSiteProgress.servingObservations(site))
-                    line(stringResource(R.string.stable_site_view_neighbour_rule), Dim)
-                    line(stringResource(R.string.stable_site_view_seen, formatMs(site.firstSeenMs) ?: "-", formatMs(site.lastSeenMs) ?: "-"), Dim)
+                    InfoLine(stringResource(R.string.stable_site_view_neighbour_rule), Dim)
+                    InfoLine(stringResource(R.string.stable_site_view_seen, formatMs(site.firstSeenMs) ?: "-", formatMs(site.lastSeenMs) ?: "-"), Dim)
                     Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                         listOf(R.string.stable_site_view_section_cells, R.string.stable_site_view_section_rf).forEachIndexed { i, label ->
                             FilterChip(selected = techSection == i, onClick = { techSection = i }, label = { Text(stringResource(label), fontSize = 10.sp) })
@@ -337,7 +337,7 @@ private fun StableSiteDetail(dbHelper: CellDbHelper, site: StableSiteSummary, mo
                 pagedItems(cells, R.string.stable_site_view_no_cells, key = { "cell|" + it.rowKey },
                     onRetryFirst = { cells.reset("cells|${site.siteKey}"); loadCells(true) }, onMore = { loadCells(false) }) { CellRow(it) }
             } else {
-                item { line(stringResource(R.string.stable_site_view_rf_note), Dim) }
+                item { InfoLine(stringResource(R.string.stable_site_view_rf_note), Dim) }
                 pagedItems(rf, R.string.stable_site_view_no_rf, key = { "rf|" + it.fingerprint },
                     onRetryFirst = { rf.reset("rf|${site.siteKey}"); loadRf(true) }, onMore = { loadRf(false) }) { RfRow(it) }
             }
@@ -348,7 +348,7 @@ private fun StableSiteDetail(dbHelper: CellDbHelper, site: StableSiteSummary, mo
                 HorizontalDivider(color = Color(0xFF222222))
                 Text(stringResource(R.string.stable_site_changes_title), color = Color.White, fontFamily = FontFamily.Monospace,
                     fontWeight = FontWeight.Bold, fontSize = 10.sp)
-                line(stringResource(R.string.stable_site_changes_note), Dim)
+                InfoLine(stringResource(R.string.stable_site_changes_note), Dim)
                 Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     FilterChip(selected = episodeFilter == StableSiteQuery.EpisodeFilter.ALL, onClick = { episodeFilter = StableSiteQuery.EpisodeFilter.ALL },
                         label = { Text(stringResource(R.string.stable_site_changes_all), fontSize = 10.sp) })
@@ -366,7 +366,7 @@ private fun StableSiteDetail(dbHelper: CellDbHelper, site: StableSiteSummary, mo
 @Composable
 private fun Progress(label: Int, item: StableSiteProgress.Item) {
     Column {
-        line(stringResource(label) + ": ${item.value}/${item.target}", Body)
+        InfoLine(stringResource(label) + ": ${item.value}/${item.target}", Body)
         LinearProgressIndicator(progress = { item.fraction }, modifier = Modifier.fillMaxWidth().height(3.dp),
             color = Accent, trackColor = Color(0xFF252525))
     }
@@ -375,17 +375,17 @@ private fun Progress(label: Int, item: StableSiteProgress.Item) {
 @Composable
 private fun CellRow(c: StableSiteCell) {
     Column(Modifier.fillMaxWidth().padding(horizontal = 4.dp)) {
-        line(c.identity + " · " + stringResource(if (c.role == "SERVING") R.string.stable_site_view_role_serving else R.string.stable_site_view_role_neighbour), Color.White)
-        line(stringResource(R.string.stable_site_view_cell_counts, c.observations, c.days, formatMs(c.lastSeenMs) ?: "-"), Dim)
+        InfoLine(c.identity + " · " + stringResource(if (c.role == "SERVING") R.string.stable_site_view_role_serving else R.string.stable_site_view_role_neighbour), Color.White)
+        InfoLine(stringResource(R.string.stable_site_view_cell_counts, c.observations, c.days, formatMs(c.lastSeenMs) ?: "-"), Dim)
     }
 }
 
 @Composable
 private fun RfRow(r: StableSiteRfFingerprint) {
     Column(Modifier.fillMaxWidth().padding(horizontal = 4.dp)) {
-        line("${r.radio.name} · ARFCN ${r.arfcn} · PCI ${r.pci}" +
+        InfoLine("${r.radio.name} · ARFCN ${r.arfcn} · PCI ${r.pci}" +
             (if (r.mcc != null && r.mnc != null) " · ${r.mcc}-${r.mnc}" else "") + (r.tac?.let { " · TAC $it" } ?: ""), Color.White)
-        line(stringResource(R.string.stable_site_view_cell_counts, r.observations, r.days, formatMs(r.lastSeenMs) ?: "-"), Dim)
+        InfoLine(stringResource(R.string.stable_site_view_cell_counts, r.observations, r.days, formatMs(r.lastSeenMs) ?: "-"), Dim)
     }
 }
 
@@ -413,17 +413,17 @@ private fun EpisodeCard(e: StableSiteEpisode) {
                 Text(stringResource(if (novelty) R.string.stable_site_kind_novelty else R.string.stable_site_kind_observed),
                     color = border, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Bold, fontSize = 9.sp)
             }
-            line(stringResource(if (novelty) R.string.stable_site_kind_novelty_note else R.string.stable_site_kind_observed_note), Body)
+            InfoLine(stringResource(if (novelty) R.string.stable_site_kind_novelty_note else R.string.stable_site_kind_observed_note), Body)
             HorizontalDivider(color = Color(0xFF222222))
             Text(stringResource(R.string.stable_site_view_last_evaluation), color = Color.White, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Bold, fontSize = 8.sp)
             if (e.evaluatedMs == null) {
-                line(noInfo, Dim)
+                InfoLine(noInfo, Dim)
             } else {
-                line(stringResource(R.string.stable_site_view_evaluated_at, formatMs(e.evaluatedMs) ?: noInfo), Dim)
-                line(stringResource(R.string.stable_site_state_then, StableSitePresentation.simpleStateOf(e.featureStateAtEpisode)
+                InfoLine(stringResource(R.string.stable_site_view_evaluated_at, formatMs(e.evaluatedMs) ?: noInfo), Dim)
+                InfoLine(stringResource(R.string.stable_site_state_then, StableSitePresentation.simpleStateOf(e.featureStateAtEpisode)
                     ?.let { stringResource(simpleStateLabel(it)) } ?: noInfo), Body)
-                line(stringResource(episodeReasonLabel(StableSitePresentation.episodeReason(e.reason))), Body)
-                line(stringResource(R.string.stable_site_motion_then, stringResource(motionLabel(StableSitePresentation.motion(e.motionState)))), Body)
+                InfoLine(stringResource(episodeReasonLabel(StableSitePresentation.episodeReason(e.reason))), Body)
+                InfoLine(stringResource(R.string.stable_site_motion_then, stringResource(motionLabel(StableSitePresentation.motion(e.motionState)))), Body)
             }
             TextButton(onClick = { technical = !technical }) {
                 Text(stringResource(if (technical) R.string.stable_site_hide_technical else R.string.stable_site_show_technical),
@@ -431,13 +431,13 @@ private fun EpisodeCard(e: StableSiteEpisode) {
             }
             if (technical) {
                 val na = stringResource(R.string.profile_history_not_available)
-                line((e.previousIdentity ?: na) + "  →  " + e.candidateIdentity, Body)
-                line(e.siteKey ?: stringResource(R.string.stable_site_view_no_site), Dim)
-                line(stringResource(R.string.stable_site_view_episode_period, formatMs(e.lastSeenMs) ?: "-",
+                InfoLine((e.previousIdentity ?: na) + "  →  " + e.candidateIdentity, Body)
+                InfoLine(e.siteKey ?: stringResource(R.string.stable_site_view_no_site), Dim)
+                InfoLine(stringResource(R.string.stable_site_view_episode_period, formatMs(e.lastSeenMs) ?: "-",
                     formatMs(e.closedMs) ?: stringResource(R.string.stable_site_view_episode_open)), Dim)
-                line("shadow_recorded=${if (e.shadowRecorded) 1 else 0} · feature_state=${e.featureStateAtEpisode ?: "-"} · " +
+                InfoLine("shadow_recorded=${if (e.shadowRecorded) 1 else 0} · feature_state=${e.featureStateAtEpisode ?: "-"} · " +
                     "motion_state=${e.motionState ?: "-"} · reason=${e.reason ?: "-"}", Dim)
-                line(stringResource(R.string.stable_site_view_episode_flags, yesNo(e.knownAtSite), yesNo(e.globallyKnown), yesNo(e.seenAsNeighbour),
+                InfoLine(stringResource(R.string.stable_site_view_episode_flags, yesNo(e.knownAtSite), yesNo(e.globallyKnown), yesNo(e.seenAsNeighbour),
                     e.servingDays?.toString() ?: na, e.neighbourDays?.toString() ?: na, yesNo(e.corroborated)), Dim)
             }
         }
@@ -499,7 +499,7 @@ fun RouteDetailPanel(
             Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 Text(stringResource(R.string.stable_site_route_simple, route.observations), color = Color.White, fontFamily = FontFamily.Monospace,
                     fontWeight = FontWeight.Bold, fontSize = 11.sp)
-                line(stringResource(R.string.route_detail_last_seen, formatMs(route.lastSeenMs) ?: "-"), Dim)
+                InfoLine(stringResource(R.string.route_detail_last_seen, formatMs(route.lastSeenMs) ?: "-"), Dim)
                 AnalysisOnly()
                 TextButton(onClick = { technical = !technical }) {
                     Text(stringResource(if (technical) R.string.stable_site_hide_technical else R.string.stable_site_show_technical),
@@ -507,24 +507,24 @@ fun RouteDetailPanel(
                 }
                 if (technical) {
                     Text(stringResource(R.string.handover_route), color = Dim, fontFamily = FontFamily.Monospace, fontSize = 8.sp)
-                    line(stringResource(R.string.route_detail_identities, route.fromIdentity, route.toIdentity), Color.White)
-                    line(stringResource(R.string.route_detail_counts, route.observations, route.trustedObservations, statusText, route.tripCount), Body)
+                    InfoLine(stringResource(R.string.route_detail_identities, route.fromIdentity, route.toIdentity), Color.White)
+                    InfoLine(stringResource(R.string.route_detail_counts, route.observations, route.trustedObservations, statusText, route.tripCount), Body)
                 }
                 HorizontalDivider(color = Color(0xFF222222))
                 Text(stringResource(R.string.stable_site_route_title), color = Color.White, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Bold, fontSize = 9.sp)
-                line(stringResource(R.string.stable_site_route_note), Dim)
+                InfoLine(stringResource(R.string.stable_site_route_note), Dim)
             }
         }
         val g = groups
         when {
             failed -> item {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    line(stringResource(R.string.stable_site_view_error), Color(0xFFFFA000))
+                    InfoLine(stringResource(R.string.stable_site_view_error), Color(0xFFFFA000))
                     TextButton(onClick = { attempt++ }) { Text(stringResource(R.string.profile_history_retry), fontFamily = FontFamily.Monospace, fontSize = 9.sp) }
                 }
             }
-            g == null -> item { line(stringResource(R.string.profile_history_loading), Dim) }
-            g.isEmpty() -> item { line(stringResource(R.string.stable_site_route_none), Body) }
+            g == null -> item { InfoLine(stringResource(R.string.profile_history_loading), Dim) }
+            g.isEmpty() -> item { InfoLine(stringResource(R.string.stable_site_route_none), Body) }
             else -> g.forEach { group ->
                 val list = listFor(group.siteKey)
                 item(key = "header|${group.siteKey}") {

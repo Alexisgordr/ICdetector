@@ -1,10 +1,14 @@
 package com.alexisgordr.icdetector.backup
 
+import android.annotation.SuppressLint
 import android.content.Context
 import com.alexisgordr.icdetector.storage.CellDbHelper
 import java.io.File
 
 /** 3.0 — Lado Android de [FirstRunPolicy]. */
+// commit() a propósito: estas escrituras deben estar en disco antes del paso siguiente (reinicio del
+// proceso, apertura de la base o instalación de una copia). apply() podría perderlas.
+@SuppressLint("ApplySharedPref")
 object FirstRun {
 
     private fun prefs(context: Context) = RestoreStartup.prefs(context)

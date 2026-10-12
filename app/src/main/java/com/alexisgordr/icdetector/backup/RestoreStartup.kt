@@ -1,5 +1,6 @@
 package com.alexisgordr.icdetector.backup
 
+import android.annotation.SuppressLint
 import android.content.Context
 import com.alexisgordr.icdetector.storage.CellDbHelper
 import java.io.File
@@ -8,6 +9,9 @@ import java.io.File
  * 3.0 — Al arrancar el proceso principal (ICDetectionApp.onCreate), antes de que nada abra la base:
  * termina, completa o deshace una restauración pendiente y guarda el resultado para mostrarlo una vez.
  */
+// commit() a propósito: estas escrituras deben estar en disco antes del paso siguiente (reinicio del
+// proceso, apertura de la base o instalación de una copia). apply() podría perderlas.
+@SuppressLint("ApplySharedPref")
 object RestoreStartup {
     /** Resultado de la última restauración: `RESTORED`, `ROLLED_BACK:<motivo>` o `PENDING:<motivo>`. */
     const val PREF_LAST_RESULT = FirstRunPolicy.PREF_RESTORE_RESULT

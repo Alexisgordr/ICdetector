@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<resources>
+<resources xmlns:tools="http://schemas.android.com/tools">
     <string name="settings_title">SETTINGS</string>
     <string name="settings_language">LANGUAGE</string>
     <string name="language_spanish">Español</string>
@@ -37,7 +37,7 @@
     <string name="history_delete_title">Delete history?</string>
     <string name="history_delete_prompt">Type %1$s to confirm:</string>
     <string name="delete_all">DELETE ALL</string>
-    <string name="cancel">CANCEL</string>
+    <string name="cancel" tools:ignore="ButtonCase">CANCEL</string>
     <string name="tab_antennas">CELLS</string>
     <string name="tab_incidents">INCIDENTS</string>
     <string name="tab_forensics">FORENSICS</string>
@@ -59,9 +59,9 @@
     <string name="handover_route">HANDOVER ROUTE</string>
     <string name="export_forensic_title">Export forensic case</string>
     <string name="forensic_privacy_warning">The package may contain precise GPS location, radio data, device model and technical logs. Review it before sharing; it never contains API keys, IMSI or IMEI.</string>
-    <string name="no_forensic_cases">NO FORENSIC CASES\nCapture starts automatically at 1/3</string>
+    <string name="no_forensic_cases" tools:ignore="TypographyFractions">NO FORENSIC CASES\nCapture starts automatically at 1/3</string>
     <string name="forensic_phase_format">Highest phase %1$d/3 · %2$d samples</string>
-    <string name="in_progress">IN PROGRESS</string>
+    <string name="case_in_progress">IN PROGRESS</string>
     <string name="export_forensic_case">EXPORT FORENSIC CASE</string>
     <string name="automatic_capture_running">AUTOMATIC CAPTURE IN PROGRESS</string>
     <string name="no_incidents">NO RECORDED INCIDENTS</string>

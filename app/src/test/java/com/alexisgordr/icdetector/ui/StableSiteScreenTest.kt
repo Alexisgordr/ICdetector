@@ -163,7 +163,7 @@ class StableSiteScreenTest {
         listOf("e.candidateIdentity", "e.reason ?:", "shadow_recorded=").forEach { assertFalse("$it fuera de los detalles técnicos", cardSimple.contains(it)) }
         // El episodio: tipo por su marca, última evaluación aparte, nada del estado actual del sitio.
         assertTrue(card.contains("StableSitePresentation.episodeKind(e)"))
-        assertTrue(card.contains("if (e.evaluatedMs == null) {\n                line(noInfo, Dim)"))
+        assertTrue(card.contains("if (e.evaluatedMs == null) {\n                InfoLine(noInfo, Dim)"))
         assertTrue(card.contains("StableSitePresentation.simpleStateOf(e.featureStateAtEpisode)"))
         listOf("site.", "maturity", "StableSiteMaturityPolicy", "System.currentTimeMillis").forEach { assertFalse("la tarjeta usa $it", card.contains(it)) }
         // Las rutas conservan los grupos por sitio y «Sin sitio asociado».

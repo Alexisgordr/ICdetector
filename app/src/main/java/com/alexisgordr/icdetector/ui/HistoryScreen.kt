@@ -889,7 +889,7 @@ private fun ForensicCaseList(
                                 fontWeight = FontWeight.Bold
                             )
                         }
-                        Text("${fc.createdAt} → ${fc.closedAt ?: stringResource(R.string.in_progress)}", color = Color(0xFF777777), fontFamily = FontFamily.Monospace, fontSize = 9.sp)
+                        Text("${fc.createdAt} → ${fc.closedAt ?: stringResource(R.string.case_in_progress)}", color = Color(0xFF777777), fontFamily = FontFamily.Monospace, fontSize = 9.sp)
                         if (fc.state == ForensicCaseState.READY || fc.state == ForensicCaseState.INTERRUPTED) {
                             OutlinedButton(onClick = {
                                 selectedForExport = fc
@@ -971,7 +971,7 @@ private fun IncidentList(
                         }
                         Text("${incident.highestPhase}/${incident.requiredPhases} $stateLabel", color = stateColor, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Bold, fontSize = 10.sp)
                     }
-                    Text("${incident.startedAt} → ${incident.endedAt ?: stringResource(R.string.in_progress)}", color = Color(0xFF777777), fontFamily = FontFamily.Monospace, fontSize = 9.sp)
+                    Text("${incident.startedAt} → ${incident.endedAt ?: stringResource(R.string.case_in_progress)}", color = Color(0xFF777777), fontFamily = FontFamily.Monospace, fontSize = 9.sp)
                     Text(stringResource(R.string.score_confidence_format, incident.score, String.format(java.util.Locale.ROOT, "%.1f", incident.anomalyConfidence)), color = Color(0xFFAAAAAA), fontFamily = FontFamily.Monospace, fontSize = 9.sp)
                     if (expanded) {
                         HorizontalDivider(color = Color(0xFF222222))

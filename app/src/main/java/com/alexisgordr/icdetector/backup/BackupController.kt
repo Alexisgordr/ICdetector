@@ -1,5 +1,6 @@
 package com.alexisgordr.icdetector.backup
 
+import android.annotation.SuppressLint
 import android.content.Context
 import android.net.Uri
 import android.provider.OpenableColumns
@@ -12,6 +13,9 @@ import java.time.format.DateTimeFormatter
  * 3.0 — Operaciones de copia de seguridad que lanza la interfaz. Todas bloquean: se llaman desde
  * un hilo de E/S.
  */
+// commit() a propósito: estas escrituras deben estar en disco antes del paso siguiente (reinicio del
+// proceso, apertura de la base o instalación de una copia). apply() podría perderlas.
+@SuppressLint("ApplySharedPref")
 object BackupController {
 
     fun suggestedName(prefix: String, now: LocalDateTime = LocalDateTime.now()): String =
