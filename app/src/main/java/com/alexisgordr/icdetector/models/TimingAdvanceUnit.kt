@@ -42,27 +42,16 @@ enum class TimingAdvanceUnit {
      * dónde salió el número sin afirmar en qué unidad está, porque eso es exactamente lo que no se
      * puede afirmar.
      *
-     * Hay dos lecturas en circulación y ninguna sobrevive al contraste:
-     *
-     *  - **"Son microsegundos."** Es lo que dice la documentación oficial, literalmente: *"the
-     *    timing advance value for a one way trip from cell to device for NR in microseconds"*,
-     *    `Range: 0 us to 1282 us`. Pero entonces el extremo del rango serían 1282 µs · 300 m/µs ≈
-     *    **384 km**, más de tres veces el alcance de cualquier celda terrestre. La física la
-     *    desmiente.
-     *  - **"Es el índice TA bruto de NR."** Encaja mejor con el rango —0..1282 es, exactamente, el
-     *    rango del índice TA de **LTE**, y 1282 · 78,12 m ≈ 100 km sí es el máximo real— y explica
-     *    que la documentación cite `3GPP TS 36.213`, una especificación de **LTE**, para un valor
-     *    de NR. Pero ninguna fuente oficial consultable dice eso; es una inferencia, no un hecho.
-     *    Y aunque fuera un índice de NR, tampoco habría un metraje fijo: 3GPP TS 38.213 §4.2
-     *    define N_TA = T_A · 16 · 64 / 2^µ, así que el paso depende de la numerología (µ) de la
-     *    portadora, que esta app no puede obtener de forma fiable.
-     *
-     * Súmese que el valor llega **por reflexión**, sobre un método cuyo comportamiento real varía
-     * según el fabricante y que no hay forma de verificar sin hardware NR SA en mano.
-     *
-     * Bautizarlo `NR_MICROS` afirmaba la primera lectura; bautizarlo `NR_RAW_INDEX` afirmaría la
-     * segunda. Las dos son afirmaciones que no se sostienen, y cambiar una por otra no es una
-     * mejora. `NR_RAW` dice la verdad: es el valor crudo de NR, y no sabemos qué mide.
+     * 3.0 — La documentación vigente de Android lo aclara: pese al nombre del método, el valor es
+     * el **índice T_A crudo** de 3GPP TS 38.213 §4.2, no microsegundos, con rango **0..3846**
+     * (antes la documentación decía "microseconds, 0..1282" citando TS 36.213, de LTE). Aun siendo
+     * un índice, no hay un metraje fijo: TS 38.213 §4.2 define N_TA = T_A · 16 · 64 / 2^µ, así que
+     * el paso depende de la numerología (µ) de la portadora, que esta app no puede obtener de forma
+     * fiable. Por eso sigue sin convertirse a distancia, y cada fabricante puede implementarlo a su
+     * manera (no hay forma de verificarlo sin hardware NR SA).
+
+     * `NR_RAW` registra de dónde sale el número (el getter público) sin afirmar una distancia; no se
+     * renombra para no cambiar el valor de `TAUnit` en las filas ya exportadas.
      *
      * Se conserva como variante propia —en vez de tratarlo como [UNKNOWN]— porque registrar la
      * procedencia tiene valor forense: si algún día aparece TA de NR junto a TA de LTE en el mismo

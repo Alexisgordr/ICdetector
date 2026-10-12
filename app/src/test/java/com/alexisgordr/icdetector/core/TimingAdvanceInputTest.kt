@@ -27,10 +27,13 @@ class TimingAdvanceInputTest {
         odd.forEach { assertNull("$it", TimingAdvanceInput.gsm(it)) }
     }
 
-    @Test fun `NR public getter keeps 0 to 1282 without implying a distance`() {
+    @Test fun `NR public getter keeps the documented raw index 0 to 3846 without implying a distance`() {
         assertEquals(0, TimingAdvanceInput.nr(0))
-        assertEquals(1282, TimingAdvanceInput.nr(1282))
-        assertNull(TimingAdvanceInput.nr(1283))
+        assertEquals(1282, TimingAdvanceInput.nr(1282))   // antes era el máximo: ahora es un valor normal
+        assertEquals(1283, TimingAdvanceInput.nr(1283))
+        assertEquals(3846, TimingAdvanceInput.nr(3846))
+        assertNull(TimingAdvanceInput.nr(3847))
+        assertNull(TimingAdvanceUnit.NR_RAW.toMeters(3846))
         odd.forEach { assertNull("$it", TimingAdvanceInput.nr(it)) }
         assertNull(TimingAdvanceUnit.NR_RAW.toMeters(5))
     }
@@ -56,10 +59,11 @@ class TimingAdvanceInputTest {
         assertEquals(7, TimingAdvanceInput.scrapedNr("CellSignalStrengthNr: ssRsrp=-90 ta=7 csiRsrp=-95"))
         assertEquals(12, TimingAdvanceInput.scrapedNr("{timingAdvance=12, x=1}"))
         assertEquals(0, TimingAdvanceInput.scrapedNr("ta=0"))
+        assertEquals(3846, TimingAdvanceInput.scrapedNr("ta=3846"))
         listOf(
             "data=0", "delta=0", "mData=5 delta=3", "beta=4", "x_ta=3", "ta2=5",
             "ta=12.5", "ta=-1", "ta=12abc", "ta=", "ta= 3",
-            "ta=99999999999999999999", "ta=2147483647", "ta=1283", "timingAdvanceMicros=9"
+            "ta=99999999999999999999", "ta=2147483647", "ta=3847", "timingAdvanceMicros=9"
         ).forEach { assertNull(it, TimingAdvanceInput.scrapedNr(it)) }
         assertNull(TimingAdvanceInput.scrapedNr(null))
         // Una coincidencia inválida no tapa una válida posterior.
@@ -78,5 +82,19 @@ class TimingAdvanceInputTest {
         assertTrue(nr.contains("TimingAdvanceInput.nr(strength.timingAdvanceMicros)"))
         assertTrue(nr.contains("TimingAdvanceInput.scrapedNr(info.toString())"))
         assertTrue(parser.contains("TimingAdvanceInput.gsm(info.cellSignalStrength.timingAdvance)"))
+    }
+
+    @Test fun `getter and manufacturer text stay separate`() {
+        // Mismo máximo por ahora, pero constantes y unidades distintas: el getter es NR_RAW, el texto UNKNOWN.
+        assertEquals(0..3846, TimingAdvanceInput.NR_GETTER_RANGE)
+        assertEquals(0..3846, TimingAdvanceInput.NR_TEXT_RANGE)
+        val parser = listOf(File("src/main/java"), File("app/src/main/java")).first { it.exists() }
+            .walkTopDown().first { it.name == "CellParser.kt" }.readText()
+        val nr = parser.substringAfter("is CellInfoNr -> {").substringBefore("is CellInfoWcdma -> {")
+        val getter = nr.substringAfter("TimingAdvanceInput.nr(strength.timingAdvanceMicros)").substringBefore("if (ta == null)")
+        assertTrue(getter.contains("taUnit = TimingAdvanceUnit.NR_RAW"))
+        val text = nr.substringAfter("TimingAdvanceInput.scrapedNr(info.toString())").substringBefore("val rsrq")
+        assertFalse("el texto nunca es NR_RAW", text.contains("NR_RAW"))
+        assertTrue(nr.contains("var taUnit = TimingAdvanceUnit.UNKNOWN"))
     }
 }

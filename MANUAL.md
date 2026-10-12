@@ -658,7 +658,8 @@ zero; that "always 0" behaviour is detected per technology and never read as a r
 metres. TA on 5G NR is not converted to distance, so H6 is `N/A` there. Only values in range are
 used: LTE index 0–1282, GSM index 0–219 (also when converting older rows). LTE TA comes only from
 Android's getter; the app no longer reads it from the manufacturer's text, so some phones show less
-TA than before. NR TA comes from Android's public getter (Android 14+) and is kept as raw context;
+TA than before. NR TA comes from Android's public getter (Android 14+): despite its name it is the raw 3GPP
+T_A index (0–3846), not microseconds, and it is kept as raw context without a distance;
 a value read from text, only for NR, is marked `UNKNOWN`.
 
 **Channel sanity (H8).** Impossible or malformed channel values fail, using technology-specific

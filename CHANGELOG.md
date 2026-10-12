@@ -16,8 +16,9 @@ GitHub pre-release of an earlier build was withdrawn.
   limits, so older rows or other inputs cannot produce a distance from an impossible index or
   overflow. LTE no longer scrapes the manufacturer's `toString()`: its pattern also matched `data=0`
   or `delta=0` and turned them into "TA 0". Expect **less TA coverage** on phones whose getter gave
-  nothing. NR reads the public `getTimingAdvanceMicros()` (API 34+) instead of reflection, still as
-  `NR_RAW` with no distance; text scraping remains only for NR, as `UNKNOWN` context, with delimited
+  nothing. NR reads the public `getTimingAdvanceMicros()` (API 34+) instead of reflection, accepting
+  its documented range 0…3846 (a raw 3GPP T_A index despite the name), still as `NR_RAW` with no
+  distance; text scraping remains only for NR, as `UNKNOWN` context, with delimited
   field names and whole numbers. New rows are identified by the app version column (`AppVersion`,
   which carries the build commit); earlier rows are not rewritten. This is a data-quality fix, not a
   calibration or a demonstrated detection improvement.
