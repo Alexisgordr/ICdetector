@@ -2,6 +2,7 @@ package com.alexisgordr.icdetector.storage
 
 import android.database.Cursor
 import android.database.sqlite.SQLiteDatabase
+import com.alexisgordr.icdetector.core.RouteSiteGroup
 import com.alexisgordr.icdetector.core.StableSiteCell
 import com.alexisgordr.icdetector.core.StableSiteEpisode
 import com.alexisgordr.icdetector.core.StableSiteQuery
@@ -64,9 +65,20 @@ object StableSiteReadStore {
             cursorOf = { PageCursor(it.firstSeenMs, it.episodeId) }
         )
 
-    /** Candidatos por identidades para una ruta; la comprobación de tiempo la hace RouteAssociation. */
-    fun routeEpisodeCandidates(db: SQLiteDatabase, fromIdentity: String, toIdentity: String): List<StableSiteEpisode> =
-        query(db, StableSiteQuery.routeEpisodesSql(fromIdentity, toIdentity), ::episode)
+    /** Sitios con episodios de la ruta y su número (criterio de tiempo aplicado en SQL). */
+    fun routeSites(db: SQLiteDatabase, fromIdentity: String, toIdentity: String, routeLastSeenMs: Long): List<RouteSiteGroup> =
+        query(db, StableSiteQuery.routeSitesSql(fromIdentity, toIdentity, routeLastSeenMs)) { c ->
+            RouteSiteGroup(c.str("site_key"), c.int("episodes") ?: 0)
+        }
+
+    /** Una página de episodios de la ruta en un sitio (null: sin sitio asociado). */
+    fun routeEpisodes(
+        db: SQLiteDatabase, fromIdentity: String, toIdentity: String, routeLastSeenMs: Long, siteKey: String?, start: PageCursor?
+    ): Page<StableSiteEpisode> = StableSiteQuery.filteredPage(
+        start = start,
+        fetch = { after -> query(db, StableSiteQuery.routeEpisodesSql(fromIdentity, toIdentity, routeLastSeenMs, siteKey, after), ::episode) },
+        cursorOf = { PageCursor(it.firstSeenMs, it.episodeId) }
+    )
 
     private fun episode(c: Cursor) = StableSiteEpisode(
         episodeId = c.str("episode_id")!!, siteKey = c.str("site_key"), previousIdentity = c.str("previous_identity"),

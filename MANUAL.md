@@ -292,7 +292,8 @@ marked *recorded in shadow* met the shadow conditions, and none is an alarm. Eac
 **last saved evaluation** and the site state recorded then, which is not the initial evidence nor
 the site's current state; missing values are shown as not available.
 
-**Routes.** Tapping a route in Topology opens its detail with **Stable-Site episodes of this route**:
+**Routes.** Tapping a route in Topology opens its own detail view (back with the arrow or the
+phone's back) with **Stable-Site episodes of this route**, paged per site with *Load more*:
 episodes with the same stored previous and new cell (A→B) that start no later than the last time the
 route was seen (a 2-minute query margin, not proof of association). They relate to the route as a
 whole: a route is an aggregate without the time of each handover, so an episode cannot be attributed

@@ -43,7 +43,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.alexisgordr.icdetector.R
 import com.alexisgordr.icdetector.core.NeighbourEvidenceCapability
-import com.alexisgordr.icdetector.core.RouteAssociation
+import com.alexisgordr.icdetector.core.RouteSiteGroup
 import com.alexisgordr.icdetector.core.StableSiteCell
 import com.alexisgordr.icdetector.core.StableSiteEpisode
 import com.alexisgordr.icdetector.core.StableSiteFeatureState
@@ -390,47 +390,84 @@ private fun EpisodeCard(e: StableSiteEpisode) {
 private fun yesNo(v: Boolean?): String = stringResource(when (v) { true -> R.string.stable_site_view_yes; false -> R.string.stable_site_view_no; null -> R.string.profile_history_not_available })
 
 /**
- * Detalle de una ruta de Topología: «Episodios Stable-Site de esta ruta». Solo episodios con la misma
- * celda anterior y nueva (A→B) y que no empiezan después de la última vez de la ruta (margen de
- * consulta). Se relacionan con la ruta agregada, no con una transición concreta. Separados por sitio.
+ * Detalle de una ruta de Topología, como vista propia (LazyColumn, nunca todos los episodios a la vez):
+ * los datos guardados de la ruta y «Episodios Stable-Site de esta ruta». Primero se leen los sitios
+ * con episodios de la ruta (identidades A→B y criterio de tiempo en SQL) y cada sitio pagina sus
+ * episodios por separado, con «Cargar más». Se relacionan con la ruta agregada, no con una transición.
  */
 @Composable
-fun RouteStableSiteSection(dbHelper: CellDbHelper, route: CellTransitionSummary) {
-    // LaunchedEffect cancela la consulta pendiente al cambiar de ruta o reintentar.
-    val key = "${route.fromIdentity}>${route.toIdentity}"
-    var groups by remember(key) { mutableStateOf<List<RouteAssociation.SiteGroup>?>(null) }
-    var failed by remember(key) { mutableStateOf(false) }
-    var attempt by remember(key) { mutableIntStateOf(0) }
-    LaunchedEffect(key, attempt) {
+fun RouteDetailPanel(
+    dbHelper: CellDbHelper,
+    route: CellTransitionSummary,
+    statusText: String,
+    modifier: Modifier = Modifier,
+    onBack: () -> Unit
+) {
+    androidx.activity.compose.BackHandler(onBack = onBack)
+    val cs = rememberCoroutineScope()
+    val routeKey = "${route.fromIdentity}>${route.toIdentity}@${route.lastSeenMs}"
+    var groups by remember(routeKey) { mutableStateOf<List<RouteSiteGroup>?>(null) }
+    var failed by remember(routeKey) { mutableStateOf(false) }
+    var attempt by remember(routeKey) { mutableIntStateOf(0) }
+    // Una lista paginada por sitio (null = sin sitio asociado), creada al conocer los grupos.
+    val lists = remember(routeKey) { mutableMapOf<String?, PagedList<StableSiteEpisode>>() }
+    fun listFor(site: String?) = lists.getOrPut(site) { PagedList { it.episodeId } }
+    fun loadGroup(site: String?, first: Boolean) = listFor(site).load(cs, first) { after ->
+        StableSiteReadStore.routeEpisodes(dbHelper.readableDatabase, route.fromIdentity, route.toIdentity, route.lastSeenMs, site, after)
+    }
+    DisposableEffect(routeKey) { onDispose { lists.values.forEach { it.job?.cancel() } } }
+    LaunchedEffect(routeKey, attempt) {
         failed = false
         groups = null
         val result = try {
             Result.success(withContext(Dispatchers.IO) {
-                StableSiteReadStore.routeEpisodeCandidates(dbHelper.readableDatabase, route.fromIdentity, route.toIdentity)
+                StableSiteReadStore.routeSites(dbHelper.readableDatabase, route.fromIdentity, route.toIdentity, route.lastSeenMs)
             })
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
             Result.failure(e)
         }
-        result.onSuccess { groups = RouteAssociation.associate(route.fromIdentity, route.toIdentity, route.lastSeenMs, it) }
-            .onFailure { failed = true }
+        result.onSuccess { found ->
+            found.forEach { g -> listFor(g.siteKey).reset("route|$routeKey|${g.siteKey}"); loadGroup(g.siteKey, first = true) }
+            groups = found
+        }.onFailure { failed = true }
     }
-    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-        Text(stringResource(R.string.stable_site_route_title), color = Color.White, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Bold, fontSize = 9.sp)
-        line(stringResource(R.string.stable_site_route_note), Dim)
+
+    LazyColumn(modifier, verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        item { BackRow(R.string.stable_site_view_back_topology, onBack) }
+        item {
+            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Text(stringResource(R.string.handover_route), color = Dim, fontFamily = FontFamily.Monospace, fontSize = 8.sp)
+                line(stringResource(R.string.route_detail_identities, route.fromIdentity, route.toIdentity), Color.White, 10)
+                line(stringResource(R.string.route_detail_counts, route.observations, route.trustedObservations, statusText, route.tripCount), Body)
+                line(stringResource(R.string.route_detail_last_seen, formatMs(route.lastSeenMs) ?: "-"), Dim)
+                HorizontalDivider(color = Color(0xFF222222))
+                Text(stringResource(R.string.stable_site_route_title), color = Color.White, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Bold, fontSize = 9.sp)
+                line(stringResource(R.string.stable_site_route_note), Dim)
+            }
+        }
         val g = groups
         when {
-            failed -> Row(verticalAlignment = Alignment.CenterVertically) {
-                line(stringResource(R.string.stable_site_view_error), Color(0xFFFFA000))
-                TextButton(onClick = { attempt++ }) { Text(stringResource(R.string.profile_history_retry), fontFamily = FontFamily.Monospace, fontSize = 9.sp) }
+            failed -> item {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    line(stringResource(R.string.stable_site_view_error), Color(0xFFFFA000))
+                    TextButton(onClick = { attempt++ }) { Text(stringResource(R.string.profile_history_retry), fontFamily = FontFamily.Monospace, fontSize = 9.sp) }
+                }
             }
-            g == null -> line(stringResource(R.string.profile_history_loading), Dim)
-            g.isEmpty() -> line(stringResource(R.string.stable_site_route_none), Body)
+            g == null -> item { line(stringResource(R.string.profile_history_loading), Dim) }
+            g.isEmpty() -> item { line(stringResource(R.string.stable_site_route_none), Body) }
             else -> g.forEach { group ->
-                Text(group.siteKey?.let { stringResource(R.string.stable_site_view_episode_site, shortKey(it)) } ?: stringResource(R.string.stable_site_view_no_site),
-                    color = Accent, fontFamily = FontFamily.Monospace, fontSize = 9.sp)
-                group.episodes.forEach { EpisodeCard(it) }
+                val list = listFor(group.siteKey)
+                item(key = "header|${group.siteKey}") {
+                    Text((group.siteKey?.let { stringResource(R.string.stable_site_view_episode_site, shortKey(it)) }
+                        ?: stringResource(R.string.stable_site_view_no_site)) + " · " +
+                        stringResource(R.string.stable_site_route_group_count, group.episodes),
+                        color = Accent, fontFamily = FontFamily.Monospace, fontSize = 9.sp)
+                }
+                pagedItems(list, R.string.stable_site_view_no_episodes, key = { "${group.siteKey}|${it.episodeId}" },
+                    onRetryFirst = { list.reset("route|$routeKey|${group.siteKey}"); loadGroup(group.siteKey, first = true) },
+                    onMore = { loadGroup(group.siteKey, first = false) }) { EpisodeCard(it) }
             }
         }
     }

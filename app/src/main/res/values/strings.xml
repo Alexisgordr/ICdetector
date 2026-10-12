@@ -485,6 +485,8 @@
     <string name="stable_site_capability_full_note">neighbours with a complete cell identity were seen.</string>
     <string name="stable_site_capability_rf_note">only RF fingerprints without Cell ID were seen.</string>
     <string name="stable_site_capability_none_note">the phone reported no usable neighbours at this site.</string>
+    <string name="route_detail_last_seen">Last seen %1$s</string>
+    <string name="stable_site_route_group_count">%1$d episodes</string>
     <string name="route_detail_identities">From %1$s to %2$s</string>
     <string name="route_detail_counts">%1$d handovers · %2$d trusted · last verdict %3$s · %4$d trips</string>
 </resources>

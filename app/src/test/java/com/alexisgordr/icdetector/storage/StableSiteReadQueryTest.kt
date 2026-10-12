@@ -96,10 +96,51 @@ class StableSiteReadQueryTest {
         assertEquals(listOf("e1"), paged)
     }
 
-    @Test fun `route candidates include episodes without a site, kept as stored`() {
-        val ids = rows(StableSiteQuery.routeEpisodesSql("214-07-1-100-LTE", "214-07-1-999-LTE")) {
-            it.getString("episode_id") + ":" + (it.getString("site_key") ?: "-") + ":" + (it.getString("feature_state") ?: "-")
+    @Test fun `route groups include episodes without a site, kept as stored`() {
+        val sites = rows(StableSiteQuery.routeSitesSql("214-07-1-100-LTE", "214-07-1-999-LTE", 9_000)) { (it.getString("site_key") ?: "-") + ":" + it.getInt("episodes") }
+        assertEquals(listOf("mature:1", "-:1"), sites)
+        val noSite = rows(StableSiteQuery.routeEpisodesSql("214-07-1-100-LTE", "214-07-1-999-LTE", 9_000, null, null)) { it.getString("episode_id") }
+        assertEquals(listOf("e3"), noSite)
+        // Ruta vista por última vez antes de que empezaran los episodios (incluido el margen): ninguno.
+        val before = 5_000L - StableSiteQuery.ROUTE_ASSOCIATION_TOLERANCE_MS - 1
+        assertTrue("posteriores a la ruta", rows(StableSiteQuery.routeSitesSql("214-07-1-100-LTE", "214-07-1-999-LTE", before)) { it.getString(1) }.isEmpty())
+    }
+
+    @Test fun `more than 200 route episodes are all reachable through the pages, none twice`() {
+        exec("DELETE FROM site_shadow_triggers")
+        val from = "214-07-1-1-LTE"; val to = "214-07-1-2-LTE"; val routeLastSeen = 1_000_000L
+        val expected = mutableSetOf<String>()
+        fun episode(id: String, site: String?, prev: String, cand: String, at: Long) = exec(
+            "INSERT INTO site_shadow_triggers (episode_id, site_key, previous_identity, candidate_identity, first_seen_ms, last_seen_ms) " +
+                "VALUES ('$id', ${site?.let { "'$it'" } ?: "NULL"}, '$prev', '$cand', $at, $at)")
+        // 120 en A, 100 en B y 50 sin sitio; varios comparten milisegundo (desempate por id).
+        listOf("A" to 120, "B" to 100, null to 50).forEach { (site, n) ->
+            repeat(n) { i -> val id = "${site ?: "none"}-$i"; episode(id, site, from, to, 10_000L + (i / 3) * 1_000L); expected += id }
         }
-        assertEquals(listOf("e3:-:-", "e1:mature:SHADOW_READY"), ids)
+        // Fuera: posterior al margen de la ruta, otra ruta, otra celda anterior.
+        repeat(30) { i -> episode("late-$i", "A", from, to, routeLastSeen + StableSiteQuery.ROUTE_ASSOCIATION_TOLERANCE_MS + 1 + i) }
+        repeat(20) { i -> episode("other-$i", "A", from, "214-07-1-3-LTE", 20_000L + i) }
+        repeat(20) { i -> episode("prev-$i", "B", "214-07-1-9-LTE", to, 20_000L + i) }
+
+        val groups = rows(StableSiteQuery.routeSitesSql(from, to, routeLastSeen)) { it.getString("site_key") to it.getInt("episodes") }
+        assertEquals(listOf("A" to 120, "B" to 100, null to 50), groups)
+        val seen = mutableListOf<String>()
+        groups.forEach { (site, _) ->
+            var cursor: PageCursor? = null
+            var pages = 0
+            do {
+                val page = rows(StableSiteQuery.routeEpisodesSql(from, to, routeLastSeen, site, cursor, limit = 50)) {
+                    Triple(it.getString("episode_id"), it.getLong("first_seen_ms"), it.getString("site_key"))
+                }
+                val shown = page.take(50)
+                assertTrue(shown.all { it.third == site })
+                seen += shown.map { it.first }
+                cursor = shown.lastOrNull()?.let { PageCursor(it.second, it.first) }
+                assertTrue("la paginación no avanza", ++pages <= 5)
+            } while (page.size > 50)
+        }
+        assertEquals(270, seen.size)
+        assertEquals("ninguno repetido", seen.size, seen.toSet().size)
+        assertEquals("ninguno inaccesible ni de más", expected, seen.toSet())
     }
 }

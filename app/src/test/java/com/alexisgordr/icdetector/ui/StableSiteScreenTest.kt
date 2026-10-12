@@ -50,14 +50,19 @@ class StableSiteScreenTest {
         assertEquals(2, Regex("""catch \(e: CancellationException\) \{\s*throw e""").findAll(screen).count())
     }
 
-    @Test fun `routes use stored identities and the route time only`() {
+    @Test fun `route detail pages episodes per site in a lazy list, with stored data only`() {
         val screen = ui("StableSiteScreen.kt")
-        val section = screen.substringAfter("fun RouteStableSiteSection").substringBefore("/** Clave guardada abreviada")
-        assertTrue(section.contains("RouteAssociation.associate(route.fromIdentity, route.toIdentity, route.lastSeenMs, it)"))
-        listOf("currentLocation", "getCurrentLocation", "siteKey =", "StableSiteReadStore.sites").forEach { assertFalse(section.contains(it)) }
+        val detail = screen.substringAfter("fun RouteDetailPanel(").substringBefore("/** Clave guardada abreviada")
+        assertTrue(detail.contains("LazyColumn("))
+        assertFalse("nada de pintar todos en una Column", detail.contains("episodes.forEach"))
+        assertTrue(detail.contains("StableSiteReadStore.routeSites(dbHelper.readableDatabase, route.fromIdentity, route.toIdentity, route.lastSeenMs)"))
+        assertTrue(detail.contains("StableSiteReadStore.routeEpisodes(dbHelper.readableDatabase, route.fromIdentity, route.toIdentity, route.lastSeenMs, site, after)"))
+        assertTrue(detail.contains("onMore = { loadGroup(group.siteKey, first = false) }"))
+        assertTrue(detail.contains("BackHandler(onBack = onBack)"))
+        listOf("currentLocation", "getCurrentLocation", "StableSiteReadStore.sites").forEach { assertFalse(detail.contains(it)) }
         val history = ui("HistoryScreen.kt")
-        assertTrue(history.contains("TopologyRouteCard(route, dbHelper)"))
-        assertTrue(history.contains("RouteStableSiteSection(dbHelper, route)"))
+        assertTrue(history.contains("TopologyRouteCard(route) { selectedRoute = route }"))
+        assertTrue(history.contains("RouteDetailPanel(dbHelper, route, routeStatusLabel(route.lastStatus), modifier) { selectedRoute = null }"))
         assertTrue("se mantienen ambas exportaciones", history.contains("R.string.export_topology") && history.contains("R.string.export_stable_site"))
         assertTrue(history.contains("onClick = { showStableSite = true }"))
         assertTrue(history.contains("StableSitePanel(dbHelper, modifier) { showStableSite = false }"))

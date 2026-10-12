@@ -130,18 +130,58 @@ object StableSiteQuery {
             (listOf(siteKey) + (after?.let(::cursorArgs) ?: emptyList())).toTypedArray()
     }
 
-    /**
-     * Episodios cuya celda anterior y nueva son las de la ruta, de cualquier sitio o sin sitio. La
-     * comprobación de tiempo ([RouteAssociation]) se hace después, con los datos de la ruta.
+    /*
+     * Episodios Stable-Site de una ruta de Topología, solo con datos guardados:
+     *  - identidades: la celda anterior y la nueva del episodio son las de la ruta (A→B, mismo formato);
+     *  - tiempo: el episodio no empieza después de la última vez que se vio la ruta, con un margen que
+     *    es solo un criterio de consulta, no una prueba de asociación. Va en el WHERE, antes del LIMIT.
+     * La coincidencia A→B relaciona los episodios con la ruta AGREGADA, pero no permite atribuirlos a
+     * una transición individual: la ruta no guarda la fecha de cada cambio. Cada sitio se pagina por
+     * separado; los episodios sin `site_key` forman el grupo «sin sitio asociado» (sin suponer el
+     * motivo). Nunca se usa la ubicación ni el sitio actual.
      */
-    fun routeEpisodesSql(fromIdentity: String, toIdentity: String, limit: Int = 200): Pair<String, Array<String>> =
-        "SELECT $EPISODE_COLUMNS FROM site_shadow_triggers e WHERE e.previous_identity=? AND e.candidate_identity=? " +
-            "ORDER BY e.first_seen_ms DESC, e.episode_id DESC LIMIT $limit" to arrayOf(fromIdentity, toIdentity)
+
+    /** Instante máximo de inicio de un episodio de la ruta (criterio de consulta, no prueba). */
+    fun routeMaxFirstSeenMs(routeLastSeenMs: Long) = routeLastSeenMs + ROUTE_ASSOCIATION_TOLERANCE_MS
+
+    private const val ROUTE_WHERE = "e.previous_identity=? AND e.candidate_identity=? AND e.first_seen_ms <= CAST(? AS INTEGER)"
+
+    /**
+     * Sitios con episodios de la ruta (identidades A→B guardadas y criterio de tiempo en el WHERE),
+     * con cuántos tiene cada uno. Los episodios sin `site_key` forman su propio grupo, al final.
+     */
+    fun routeSitesSql(fromIdentity: String, toIdentity: String, routeLastSeenMs: Long): Pair<String, Array<String>> =
+        "SELECT e.site_key, COUNT(*) AS episodes, MAX(e.first_seen_ms) AS newest_first_seen FROM site_shadow_triggers e " +
+            "WHERE $ROUTE_WHERE GROUP BY e.site_key ORDER BY (e.site_key IS NULL), newest_first_seen DESC, e.site_key DESC" to
+            arrayOf(fromIdentity, toIdentity, routeMaxFirstSeenMs(routeLastSeenMs).toString())
+
+    /**
+     * Una página de episodios de la ruta en un sitio (o sin sitio si [siteKey] es null). El criterio
+     * de tiempo va en el WHERE, antes del LIMIT: ningún episodio válido queda fuera de las páginas.
+     */
+    fun routeEpisodesSql(
+        fromIdentity: String,
+        toIdentity: String,
+        routeLastSeenMs: Long,
+        siteKey: String?,
+        after: PageCursor?,
+        limit: Int = PAGE_SIZE
+    ): Pair<String, Array<String>> {
+        val site = if (siteKey == null) " AND e.site_key IS NULL" else " AND e.site_key=?"
+        val where = ROUTE_WHERE + site + (after?.let { " AND " + keyset("e.first_seen_ms", "e.episode_id") } ?: "")
+        val args = listOf(fromIdentity, toIdentity, routeMaxFirstSeenMs(routeLastSeenMs).toString()) +
+            listOfNotNull(siteKey) + (after?.let(::cursorArgs) ?: emptyList())
+        return "SELECT $EPISODE_COLUMNS FROM site_shadow_triggers e WHERE $where " +
+            "ORDER BY e.first_seen_ms DESC, e.episode_id DESC LIMIT ${limit + 1}" to args.toTypedArray()
+    }
 
     const val EPISODE_COLUMNS = "e.episode_id, e.site_key, e.previous_identity, e.candidate_identity, e.first_seen_ms, " +
         "e.last_seen_ms, e.evaluated_ms, e.closed_ms, e.shadow_recorded, e.reason, e.motion_state, e.feature_state, " +
         "e.globally_known, e.known_at_site, e.seen_as_neighbour, e.serving_days, e.neighbour_days, e.corroborated"
 }
+
+/** Un sitio (o «sin sitio asociado» si [siteKey] es null) con episodios de una ruta. */
+data class RouteSiteGroup(val siteKey: String?, val episodes: Int)
 
 /** Un sitio con sus contadores. Su estado es el actual, calculado con la política. */
 data class StableSiteSummary(
@@ -222,30 +262,3 @@ data class StableSiteEpisode(
     val neighbourDays: Int?,
     val corroborated: Boolean
 )
-
-/**
- * Episodios Stable-Site de una ruta de Topología, solo con datos guardados:
- *  - identidades: la celda anterior y la nueva del episodio son las de la ruta (A→B, mismo formato);
- *  - tiempo: el episodio no empieza después de la última vez que se vio la ruta, con un margen que
- *    es solo un criterio de consulta, no una prueba de asociación.
- * La coincidencia A→B relaciona los episodios con la ruta AGREGADA, pero no permite atribuirlos a
- * una transición individual: la ruta no guarda la fecha de cada cambio. Varios sitios se devuelven
- * separados; los episodios sin `site_key` van aparte como «sin sitio asociado» (sin suponer el
- * motivo). Nunca se usa la ubicación ni el sitio actual.
- */
-object RouteAssociation {
-    data class SiteGroup(val siteKey: String?, val episodes: List<StableSiteEpisode>)
-
-    fun associate(
-        fromIdentity: String,
-        toIdentity: String,
-        routeLastSeenMs: Long,
-        candidates: List<StableSiteEpisode>,
-        toleranceMs: Long = StableSiteQuery.ROUTE_ASSOCIATION_TOLERANCE_MS
-    ): List<SiteGroup> = candidates
-        .filter { it.previousIdentity == fromIdentity && it.candidateIdentity == toIdentity }
-        .filter { it.firstSeenMs <= routeLastSeenMs + toleranceMs }
-        .groupBy { it.siteKey }
-        .map { (site, episodes) -> SiteGroup(site, episodes.sortedByDescending { it.firstSeenMs }) }
-        .sortedWith(compareBy<SiteGroup> { it.siteKey == null }.thenByDescending { g -> g.episodes.maxOf { it.firstSeenMs } })
-}

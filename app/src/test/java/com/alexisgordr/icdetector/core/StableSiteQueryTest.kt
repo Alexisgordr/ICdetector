@@ -48,25 +48,15 @@ class StableSiteQueryTest {
         assertEquals("sitio sin vecinas", NeighbourEvidenceCapability.NO_NEIGHBOUR_DATA, s.maturity.capability)
     }
 
-    private fun episode(id: String, site: String?, from: String?, to: String, at: Long, recorded: Boolean = false) = StableSiteEpisode(
-        id, site, from, to, at, at + 1000, null, null, recorded, null, null, null, null, null, null, null, null, false
-    )
-
-    @Test fun `routes associate by stored identities and time, sites kept apart`() {
-        val candidates = listOf(
-            episode("1", "siteA", "A", "B", 1_000),
-            episode("2", "siteB", "A", "B", 5_000, recorded = true),
-            episode("3", null, "A", "B", 3_000),
-            episode("4", "siteA", "A", "C", 2_000),                         // otra ruta
-            episode("5", "siteA", "X", "B", 2_000),                         // otra celda anterior
-            episode("6", "siteA", "A", "B", 10_000 + StableSiteQuery.ROUTE_ASSOCIATION_TOLERANCE_MS + 1)  // posterior a la ruta
-        )
-        val groups = RouteAssociation.associate("A", "B", routeLastSeenMs = 10_000, candidates = candidates)
-        assertEquals(listOf("siteB", "siteA", null), groups.map { it.siteKey })
-        assertEquals(listOf("1"), groups.first { it.siteKey == "siteA" }.episodes.map { it.episodeId })
-        assertEquals(listOf("3"), groups.last().episodes.map { it.episodeId })
-        assertTrue("sin asociación", RouteAssociation.associate("A", "Z", 10_000, candidates).isEmpty())
-        assertTrue(RouteAssociation.associate("A", "B", 10_000, emptyList()).isEmpty())
+    @Test fun `route queries apply the time criterion in the WHERE, before the LIMIT`() {
+        val (sql, args) = StableSiteQuery.routeEpisodesSql("A", "B", 10_000, "siteA", StableSiteQuery.PageCursor(9_000, "e9"), limit = 50)
+        val where = sql.substringAfter(" WHERE ").substringBefore(" ORDER BY ")
+        assertTrue(where.contains("e.first_seen_ms <= CAST(? AS INTEGER)"))
+        assertTrue(sql.indexOf("first_seen_ms <=") < sql.indexOf("LIMIT"))
+        assertTrue(sql.endsWith("LIMIT 51"))
+        assertEquals(listOf("A", "B", (10_000 + StableSiteQuery.ROUTE_ASSOCIATION_TOLERANCE_MS).toString(), "siteA", "9000", "9000", "e9"), args.toList())
+        assertTrue(StableSiteQuery.routeEpisodesSql("A", "B", 10_000, null, null).first.contains("e.site_key IS NULL"))
+        assertTrue(StableSiteQuery.routeSitesSql("A", "B", 10_000).first.contains("e.first_seen_ms <= CAST(? AS INTEGER)"))
     }
 
     @Test fun `filtered paging never loses rows and stops`() {
@@ -101,7 +91,7 @@ class StableSiteQueryTest {
     @Test fun `queries only read, never coordinates`() {
         val c = StableSiteQuery.PageCursor(5, "k")
         listOf(StableSiteQuery.sitesSql(c), StableSiteQuery.cellsSql("s", c), StableSiteQuery.rfSql("s", c),
-            StableSiteQuery.episodesSql("s", StableSiteQuery.EpisodeFilter.SHADOW_RECORDED, c), StableSiteQuery.routeEpisodesSql("A", "B")
+            StableSiteQuery.episodesSql("s", StableSiteQuery.EpisodeFilter.SHADOW_RECORDED, c), StableSiteQuery.routeEpisodesSql("A", "B", 1L, "s", c), StableSiteQuery.routeSitesSql("A", "B", 1L)
         ).forEach { (sql, _) ->
             assertTrue(sql.startsWith("SELECT "))
             listOf("INSERT", "UPDATE", "DELETE", "DROP").forEach { assertFalse(sql.uppercase().contains(it)) }

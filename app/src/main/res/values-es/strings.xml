@@ -485,6 +485,8 @@
     <string name="stable_site_capability_full_note">se vieron vecinas con identidad celular completa.</string>
     <string name="stable_site_capability_rf_note">solo se vieron huellas RF sin Cell ID.</string>
     <string name="stable_site_capability_none_note">el teléfono no informó de vecinas útiles en este sitio.</string>
+    <string name="route_detail_last_seen">Última vez %1$s</string>
+    <string name="stable_site_route_group_count">%1$d episodios</string>
     <string name="route_detail_identities">De %1$s a %2$s</string>
     <string name="route_detail_counts">%1$d cambios · %2$d de confianza · último veredicto %3$s · %4$d trayectos</string>
 </resources>
