@@ -552,7 +552,7 @@
     <string name="legacy_alert_off">Off</string>
     <string name="legacy_alert_notify">Notification only</string>
     <string name="legacy_alert_notify_sound">Notification and sound</string>
-    <string name="legacy_alert_description">One alert when the phone starts using 2G/3G; no repeats while it stays there. A new alert needs at least 1 minute in a row back on 4G/5G first. It can be caused by coverage or calls without VoLTE.</string>
+    <string name="legacy_alert_description">One alert when the phone starts using 2G/3G; no repeats while it stays there. A new alert needs at least 1 minute in a row back on 4G/5G first. It can be caused by coverage or calls without VoLTE. If your phone offers an «Allow 2G» setting, turning it off avoids 2G (not 3G). Airplane mode is always your own choice.</string>
     <string name="channel_legacy_network_name">2G/3G network</string>
     <string name="channel_legacy_network_description">2G/3G use or change alerts, one per episode. Whether they sound depends on the app setting and on this channel.</string>
     <string name="notif_legacy_previous_signal">Last earlier signal observed: %1$d dBm (context only).</string>

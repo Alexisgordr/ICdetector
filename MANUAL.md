@@ -214,7 +214,9 @@ the terminal, also with alerts off. The terminal line and the notification also 
 the episode, as context only; it is not scored, and it may not be the reading immediately before (its
 age is not kept). A missing or invalid value reads *earlier signal unknown*. The notification has an
 **Airplane mode settings** button; the
-app never switches Airplane mode on by itself. The setting travels in backups; restoring a backup made before
+app never switches Airplane mode on by itself. Some devices also offer an **Allow 2G** setting (often under
+*Network & internet → SIMs*); turning it off avoids 2G but not 3G. Its presence and location depend
+on the manufacturer, Android version and operator, so the app does not link to it. The setting travels in backups; restoring a backup made before
 it existed sets *Notification only*.
 
 ### External verification

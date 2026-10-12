@@ -32,6 +32,9 @@ GitHub pre-release of an earlier build was withdrawn.
 - **Earlier signal as context.** The 2G/3G terminal line and notification show the last earlier
   signal observed, validated with the same −140…−30 dBm range as H13's baseline and the local
   profile; missing, sentinel or out-of-range values read "earlier signal unknown". Not scored.
+- **Docs.** README's technical limitations state that H1, H2, H7, H12 and H13 abstain on Wi-Fi, and
+  mention Android's *Allow 2G* setting where the device offers it (it does not block 3G; no universal
+  route). The 2G/3G setting text says the same in English and Spanish.
 - **Airplane mode is manual.** The 2G/3G response tried to switch Airplane mode on by writing a secure
   setting, which needs `WRITE_SECURE_SETTINGS`; the app does not declare it, so the write always
   failed, and the manual promised an ADB grant that cannot work. The attempt is removed: the

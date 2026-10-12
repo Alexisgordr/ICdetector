@@ -585,6 +585,17 @@ applications. ICdetection cannot directly access:
 - the identity (MCC, MNC, TAC, Cell ID) of most neighbour cells — many modems only report their
   frequency, PCI and signal level
 
+With Wi-Fi connected, the current implementation abstains on **H1, H2, H7, H12 and H13**
+(`N/A`, never "passed"). H12 must: its probe would measure the Wi-Fi path. The four RF rules abstain
+as an unvalidated precaution, so on Wi-Fi the app relies on the remaining rules; see the
+[manual](MANUAL.md) (*Wi-Fi and rule coverage*).
+
+ICdetection cannot block 2G or 3G. It only reports their use (*Settings → 2G/3G network alerts*) and
+offers to open Android's Airplane mode settings; turning Airplane mode on is always the user's own
+action. Some devices offer an **Allow 2G** setting (often under *Network & internet → SIMs*); turning it
+off avoids 2G but **not 3G**, and its presence and location depend on the manufacturer, Android
+version and operator, so there is no universal route.
+
 Detection is therefore heuristic and must never be read as definitive proof of surveillance or
 interception. Sophisticated LTE/5G interception systems may emulate legitimate carrier infrastructure
 and remain difficult — or impossible — to distinguish from real towers using Android-only telemetry.
