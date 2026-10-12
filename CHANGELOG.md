@@ -23,6 +23,12 @@ No new rules, no change to scores, alarms, learning, schema or export formats.
   before 3.0, never "all evaluated"), the location mode and the app version. Local profile abstentions
   read in words (immature, expired or incompatible reference, no learned reference…) with the stored
   code in the detail.
+- **Shared evidence.** The manual lists which modules share inputs (H13 and the local profile; H11
+  and H16; PCI across H11, H15 and local confidence; H13 and H15; Stable-Site and local confidence)
+  and flags two possible double counts for a later decision: H11 + H16 can shorten confirmation to
+  two phases on one GPS fact, and one PCI change can feed three outputs. "Independent" is no longer
+  used for the two-phase shortcut. Stable-Site's historical limits (cumulative shadow mark, last
+  saved evaluation, aggregated routes) are stated in README and manual.
 
 ### Stable-Site view in History → Topology
 

@@ -295,8 +295,9 @@ are logged but do not raise alarms, which reduces false-positive fatigue.
 | `2/3` | The condition persists, but it is not yet a confirmed threat. |
 | `3/3` | Confirmed: a *Network anomaly confirmed* notification is posted once per episode. |
 
-Two independent high-value failures in the same observation (H11, H13, H15, H16) confirm in two
-phases instead of three. A repeated delivery of the same modem sample never counts as a new phase.
+Two high-value failures in the same observation (any two of H11, H13, H15, H16) confirm in two
+phases instead of three. They are not always independent: H11 and H16 share the GPS fix (see
+*Shared evidence* in the [manual](MANUAL.md)). A repeated delivery of the same modem sample never counts as a new phase.
 Confirmation **starts again** after a signal loss or a gap of more than 2 minutes without readings,
 and the terminal records which one happened.
 
@@ -374,6 +375,8 @@ Local Cell Trust, temporal confidence, alerts or forensic decisions.
   is still missing and its cell changes; keys, codes, counters, cells and RF fingerprints sit under
   *View technical details*. Tapping a route shows the Stable-Site episodes with the same stored A→B
   change. A prepared reference (`ACTIVE`) is not an applied protection.
+- **Historical limits:** *recorded in shadow* is a cumulative mark of the episode; its reason and
+  movement are those of its last saved evaluation; routes are aggregates, not a timeline.
 
 ---
 

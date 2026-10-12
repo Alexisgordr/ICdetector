@@ -589,9 +589,10 @@ ICdetection does not confirm a threat from one suspicious cycle:
    *Security alerts* channel and plays the alert tone at notification volume (respecting silent,
    vibrate and Do Not Disturb).
 
-A single or weak anomaly needs three distinct modem observations. If two or more independent
-high-value checks — geographic consistency (H11), signal baseline (H13), RF identity stability (H15)
-and transition coherence (H16) — fail in the same observation, two are enough. Repeated delivery of
+A single or weak anomaly needs three distinct modem observations. If two or more high-value checks —
+geographic consistency (H11), signal baseline (H13), RF identity stability (H15) and transition
+coherence (H16) — fail in the same observation, two are enough. These checks are not fully
+independent (H11 and H16 share the GPS fix; see *Shared evidence* in section 8). Repeated delivery of
 the same modem sample never counts as another phase, and a continuity break (section 3) starts
 again from zero. An alarm episode closes after 60 s without alarm; a new alarm in the same cell
 afterwards is notified again.
@@ -660,6 +661,24 @@ as a reconfiguration, not instability. Operator reconfiguration and modem report
 explanations.
 
 **Mobility sanity (H16).** See section 5.
+
+### Shared evidence: when two results are not independent
+
+Some modules read the same inputs or learn from the same history rows. When they agree, that is one
+fact seen twice, not two confirmations. This beta only documents the overlaps; it changes no weight,
+score or rule.
+
+| Modules | What they share | Effect today |
+|---|---|---|
+| H13 and the local profile | The serving level (and RSRQ) of the same cell, compared with references learned from the same clean history rows. | None on the engine: the profile is shadow or display only. In *History → Local profile* the H13 line says agreement is not a confirmation. |
+| H13 power and H13 RSRQ/SINR fingerprint | One cell's signal history. | Already guarded: they share one flag, and the fingerprint only counts when the power check did not fail. |
+| H11 and H16 | The current GPS fix and the positions stored for the cell(s) in history. A wrong fix, or a learned zone that is off, can fail both. | **Possible double counting.** Both are in the list of strong failures that shortens temporal confirmation from three phases to two, while the episode tracker already puts both in the same *mobility* family. |
+| H11, H15 and local cell confidence | PCI/ARFCN values of the same cell: H11 adds severity when PCI/ARFCN differ far away, H15 looks for PCI alternation, local confidence lists PCI/ARFCN as contradictions. | **Possible double counting** of one PCI change across three outputs. Local confidence still requires a separate geographic or handover contradiction (H11 or H16) to raise its case. |
+| H13 and H15 | Same history pool of the cell (they learn only once the cell is established). | Different measurements (power versus PCI); a shared blind spot if the pool was learned in a contaminated period. |
+| Stable-Site and local cell confidence | Stable-Site site state. | None while Stable-Site stays in shadow mode (the `SITE_UNVERIFIED` path is disabled). |
+
+The two "possible double counting" rows are reported for a later, data-backed decision; no behaviour
+was changed in this phase.
 
 ---
 
@@ -945,6 +964,13 @@ Android; it cannot guarantee detection.
   behave differently elsewhere.
 - **Coverage matters:** `NotEvaluatedHeuristics` shows when each rule could not run. Read a rule's
   "passed" rate together with how often it was evaluated.
+- **What a row does not keep:** the reason each rule abstained (only which ones did), the age of the
+  GPS fix (stale fixes are discarded before saving, but the age is not stored) and the time zone of
+  rows before 3.0. The app shows these as "not stored" and never fills them in.
+- **Stable-Site history:** an episode's *recorded in shadow* mark is cumulative (it stays set if any
+  evaluation during the episode met the shadow conditions), while its reason, movement and site state
+  belong only to its **last saved evaluation**. Topology routes are aggregates (counts, last state,
+  last time), not a timeline of each handover, so an episode is linked to a route as a whole.
 
 ---
 
