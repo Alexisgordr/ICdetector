@@ -192,13 +192,34 @@ class LocalProfileLearnerTest {
     }
 
     @Test fun `live holdout is deterministic, about one in ten and not tied to a rhythm`() {
-        val held = (1L..10_000L).filter { ProfileBootstrap.isLiveHoldout(it) }
+        val times = (1L..10_000L).map { t0 + it * 5 * 60_000L }                  // una lectura cada 5 min
+        val held = times.filter { ProfileBootstrap.isLiveHoldout(ctx.key, it) }
         assertTrue(held.size in 800..1200)
-        assertEquals(held, (1L..10_000L).filter { ProfileBootstrap.isLiveHoldout(it) })
-        // Una celda que se escribe cada N filas no queda siempre reservada.
-        listOf(10L, 20L, 40L).forEach { n ->
-            val ids = (0L until 1000L).map { it * n + n - 1 }
-            assertTrue(ids.count { ProfileBootstrap.isLiveHoldout(it) } < ids.size / 2)
+        assertEquals(held, times.filter { ProfileBootstrap.isLiveHoldout(ctx.key, it) })
+        listOf("1", "2", "3").forEach { cid ->
+            val key = ctx.copy(cellId = cid).key
+            assertTrue(times.count { ProfileBootstrap.isLiveHoldout(key, it) } in 800..1200)
         }
+    }
+
+    @Test fun `all rows of one observation share the holdout decision (F03)`() {
+        val shadow = LocalProfileShadow()
+        val p = mapOf(ProfileMetric.SIGNAL_DBM to train(days = 4))
+        val at = (0L until 1000L).map { t0 + 5 * DAY_MS + it * 61_000L }.first { ProfileBootstrap.isLiveHoldout(ctx.key, it) }
+        // Fila periódica (id 1) y fila de alarma confirmada (id 2) de la misma lectura.
+        val periodic = shadow.process(p, LocalProfileShadow.Observation(1, ctx, -74, null, at, device), ProfileMode.SHADOW, at)
+        val alarm = shadow.process(p + periodic.changed.associateBy { it.metric }, LocalProfileShadow.Observation(2, ctx, -74, null, at, device), ProfileMode.SHADOW, at)
+        assertTrue(periodic.record.holdout && alarm.record.holdout)
+        assertFalse(periodic.record.learned || alarm.record.learned)
+        assertEquals(periodic.record.profileRevision, alarm.record.profileRevision)
+        assertEquals(periodic.record.score, alarm.record.score)
+    }
+
+    @Test fun `bootstrap never splits rows of the same instant (F03)`() {
+        val rows = (0 until 10).flatMap { i -> listOf(1, 2).map { k -> ProfileBootstrap.Row(i * 2L + k, ctx, -80, -10, t0 + i * 600_000L) } }
+        val plan = ProfileBootstrap.plan(rows, t0 + 10 * 600_000L, restoredFromBackup = false, holdoutFraction = 0.25)
+        val learnTimes = plan.learn.map { it.observedAtMs }.toSet()
+        assertTrue(plan.holdout.none { it.observedAtMs in learnTimes })
+        assertEquals(20, plan.learn.size + plan.holdout.size)
     }
 }

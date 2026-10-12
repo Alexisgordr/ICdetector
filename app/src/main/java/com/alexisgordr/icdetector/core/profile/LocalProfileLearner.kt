@@ -199,15 +199,24 @@ object ProfileBootstrap {
         val usable = rows.filter { it.observedAtMs != null && nowMs - it.observedAtMs <= maxAgeMs && it.context.isComplete }
             .sortedWith(compareBy<Row> { it.observedAtMs }.thenBy { it.historyId })
         val holdoutCount = (usable.size * holdoutFraction).toInt()
-        return Plan(usable.dropLast(holdoutCount), usable.takeLast(holdoutCount))
+        if (holdoutCount == 0) return Plan(usable, emptyList())
+        // Corte por instante: filas del mismo instante (una misma observación) nunca quedan a los
+        // dos lados; todas van a la reserva (F03).
+        val cutoff = usable[usable.size - holdoutCount].observedAtMs!!
+        return Plan(usable.filter { it.observedAtMs!! < cutoff }, usable.filter { it.observedAtMs!! >= cutoff })
     }
 
     /**
-     * Observaciones nuevas reservadas solo para evaluar (≈1 de cada 10): determinista y sin
-     * aleatoriedad por instalación. Se mezcla el id antes del módulo: con `id % 10` y un ritmo de
-     * escritura periódico, una celda podía caer siempre en la reserva y no aprender nunca.
+     * Observaciones nuevas reservadas solo para evaluar (≈1 de cada 10): deterministas y sin
+     * aleatoriedad por instalación. Se mezcla antes del módulo para no seguir el ritmo de escritura.
+     *
+     * F03 — Se decide por la OBSERVACIÓN (contexto e instante de captura), no por la fila: una misma
+     * lectura puede guardarse en varias filas (periódica y alarma confirmada del mismo ciclo). Por
+     * id de fila, una se aprendía y otra quedaba reservada pero se evaluaba contra una referencia
+     * que ya contenía esa lectura. Ahora todas las filas de una observación comparten la decisión.
      */
-    fun isLiveHoldout(historyId: Long): Boolean = java.lang.Long.remainderUnsigned(mix(historyId), 10L) == 0L
+    fun isLiveHoldout(contextKey: String, observedAtMs: Long): Boolean =
+        java.lang.Long.remainderUnsigned(mix(observedAtMs * 31L + contextKey.hashCode()), 10L) == 0L
 
     /** Finalizador de SplitMix64: constante, igual en todos los teléfonos. */
     private fun mix(x: Long): Long {

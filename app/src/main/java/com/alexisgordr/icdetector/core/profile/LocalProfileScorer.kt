@@ -123,7 +123,7 @@ class LocalProfileShadow(private val learner: LocalProfileLearner = LocalProfile
         obs: Observation,
         mode: ProfileMode,
         nowMs: Long,
-        holdout: Boolean = ProfileBootstrap.isLiveHoldout(obs.historyId),
+        holdout: Boolean = ProfileBootstrap.isLiveHoldout(obs.context.key, obs.observedAtMs),
         provenance: Provenance = Provenance.LIVE
     ): Step {
         val r = LocalProfileScorer.evaluate(current, obs.context, obs.values, obs.deviceModel, nowMs, learner)
