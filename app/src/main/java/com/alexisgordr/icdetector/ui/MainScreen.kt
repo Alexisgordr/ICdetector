@@ -480,7 +480,8 @@ fun MainScreenContent(dbHelper: CellDbHelper, service: MiniICService?) {
                                     BandIndicator(
                                         arfcn = active?.arfcn,
                                         networkType = active?.networkType ?: "",
-                                        suspicious = active != null && !active.heuristicReport.bandDowngradePassed
+                                        suspicious = active != null && !active.heuristicReport.bandDowngradePassed,
+                                        radioTech = active?.radioTech ?: com.alexisgordr.icdetector.models.RadioTech.UNKNOWN
                                     )
                                     MiniRsrqGraph(rsrqHistory, active?.rsrq)
                                 }

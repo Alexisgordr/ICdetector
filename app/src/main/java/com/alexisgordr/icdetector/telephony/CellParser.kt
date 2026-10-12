@@ -70,9 +70,11 @@ object CellParser {
             is CellInfoNr -> {
                 val id = info.cellIdentity as CellIdentityNr
                 val strength = info.cellSignalStrength as CellSignalStrengthNr
-                // ssRsrp puede ser Int.MAX_VALUE (no disponible). Si lo es, caemos al dbm
-                // normalizado del framework para no inyectar un valor absurdo (2147483647)
-                // que dispararía en falso todas las heurísticas de potencia.
+                // ssRsrp puede ser Int.MAX_VALUE (no disponible). Si lo es, se intenta getDbm(), pero
+                // NO es una medida alternativa garantizada: según la versión de Android puede ser el
+                // mismo SS-RSRP o también "no disponible", y en ese caso la entrada se filtra aguas
+                // abajo como sin señal utilizable. No se sustituye por CSI-RSRP, que mide otra cosa
+                // (ni aquí, ni en el motor, ni en los perfiles).
                 val dbm = strength.ssRsrp.let { if (it == Int.MAX_VALUE) strength.dbm else it }
                 val cellMcc = identityOrFallback(id.mccString, reg, mcc)
                 val cellMnc = identityOrFallback(id.mncString, reg, mnc)

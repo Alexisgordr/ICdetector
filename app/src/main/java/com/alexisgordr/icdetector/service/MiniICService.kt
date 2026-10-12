@@ -1030,7 +1030,9 @@ class MiniICService : Service() {
                 } else if (info is CellInfoLte) {
                     "4G LTE"
                 } else if (info is CellInfoNr) {
-                    "5G NR (SA)"
+                    // 3.0 — Que exista un CellInfoNr no demuestra 5G SA (en NSA también aparece la
+                    // portadora NR). Sin más evidencia, solo 5G NR (las filas anteriores dicen 5G NR (SA)).
+                    "5G NR"
                 } else if (info is CellInfoWcdma) {
                     "3G WCDMA"
                 } else if (info is CellInfoGsm) {

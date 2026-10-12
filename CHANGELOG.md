@@ -30,6 +30,10 @@ GitHub pre-release of an earlier build was withdrawn.
   longer a mismatch. The geographic part of H11 is unchanged. Side effect: local cell confidence no
   longer lists an ARFCN/PCI contradiction caused by a sentinel in the current reading. Rows from
   earlier builds keep their stored values; the `AppVersion` column separates them.
+- **NR and GSM labels.** An NR cell is labelled `5G NR` instead of `5G NR (SA)`: a `CellInfoNr` alone
+  does not show SA versus NSA (new rows only; the band indicator now uses the cell's technology).
+  Comments no longer claim that `getDbm()` is a guaranteed alternative to SS-RSRP or that GSM has no
+  physical identifier (Android exposes BSIC; the app does not record it). No CSI-RSRP substitution.
 
 - **Latency factor follows H12 (anomaly-confidence cut).** The uncalibrated anomaly confidence applied
   the latency likelihood ratio whenever the raw latency indicator was anomalous, even when H12 did not

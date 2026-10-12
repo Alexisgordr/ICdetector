@@ -14,7 +14,9 @@ import com.alexisgordr.icdetector.models.RadioTech
  *
  * `CellInfo.UNAVAILABLE` (Int.MAX_VALUE) nunca es válido. Los rangos son los de 3GPP:
  * EARFCN 0..262143, NR-ARFCN 0..3279165, UARFCN 0..16383, ARFCN GSM 0..1023; PCI LTE 0..503,
- * PCI NR 0..1007, PSC UMTS 0..511. GSM no tiene identificador físico en la API.
+ * PCI NR 0..1007, PSC UMTS 0..511. GSM sí tiene un identificador físico en la API (BSIC,
+ * `CellIdentityGsm.getBsic()`), pero la app no lo lee ni lo guarda en el campo PCI, así que aquí
+ * no hay identificador físico GSM que validar.
  */
 object RadioChannels {
     const val ANDROID_UNAVAILABLE = Int.MAX_VALUE

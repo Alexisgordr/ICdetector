@@ -655,7 +655,11 @@ compare TA with a tower position: no tower coordinates reach the score (public-d
 are only displayed as a distance), and the phone's own position is never used as the tower's. A missing TA is only taken from a duplicate of the same cell (same
 technology and physical cell), never from another transmitter. Many modems omit TA or always return
 zero; that "always 0" behaviour is detected per technology and never read as a real distance of zero
-metres. TA on 5G NR is not converted to distance, so H6 is `N/A` there.
+metres. TA on 5G NR is not converted to distance, so H6 is `N/A` there. Only values in range are
+used: LTE index 0–1282, GSM index 0–219 (also when converting older rows). LTE TA comes only from
+Android's getter; the app no longer reads it from the manufacturer's text, so some phones show less
+TA than before. NR TA comes from Android's public getter (Android 14+) and is kept as raw context;
+a value read from text, only for NR, is marked `UNKNOWN`.
 
 **Channel sanity (H8).** Impossible or malformed channel values fail, using technology-specific
 limits. When the modem does not report the frequency at all, H8 is `N/A`: a missing value is not an
@@ -672,7 +676,11 @@ whether you are stationary, so it reports `N/A`.
 physically inconsistent places. Geographic evidence passes a GNSS continuity gate: a displacement
 implying high speed stays provisional until a second, genuinely newer fix continues coherently, so a
 single bad fix is not evidence. Operator reuse, database errors and parsing limits must also be
-considered.
+considered. When the cell is far from where it was seen before, H11 adds severity for a different
+PCI/PSC or channel only if both values are valid for the same technology; an unknown, invalid or
+"not available" value is not a difference. Carrier aggregation is not handled specially here: the
+modem can attribute a secondary carrier's channel or PCI to the serving cell, which can still look
+like a valid difference. That limit is documented for a separate review.
 
 **Regional, latency and external correlation (H12 and others).** These depend on reliable location,
 tower-database results, network reachability and enough samples, and may legitimately remain `N/A`.
@@ -837,6 +845,13 @@ ProfileAlgorithm, ProfileRevision, ProfileEvidence, ProfileLearned, ProfileHoldo
 - `TA` is the raw Timing Advance, `TAUnit` how it was interpreted, and `TAMeters` is empty when a
   conversion is not defensible.
 - `Radio` comes from Android's cellular information, not only the status-bar label.
+- `PCI` and `ARFCN` are empty when Android reported "not available". Rows recorded before this
+  change (see `AppVersion`) may contain `2147483647` instead; read it as empty. Other out-of-range
+  values are real readings and are kept.
+- `NetType` for an NR cell is `5G NR`; the presence of NR alone does not prove standalone (SA), so
+  earlier rows labelled `5G NR (SA)` mean the same thing.
+- GSM has a physical identifier (BSIC) in Android, but the app does not record it; `PCI` stays empty
+  for GSM.
 - `FailedHeuristics` entries marked `[sub-umbral]` failed without reaching the alarm threshold; they
   are kept on purpose so false positives can be studied (shown as `[sub-threshold]` in English).
 - `AnomalyConfidence` is uncalibrated analytical output, not a measured probability.
