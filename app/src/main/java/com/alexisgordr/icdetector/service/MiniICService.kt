@@ -1117,8 +1117,8 @@ class MiniICService : Service() {
             // Antes se cogía el PRIMER TA disponible de toda la lista (vecinas incluidas) y se le
             // estampaba a la celda registrada si ella no tenía. Un TA es la distancia de ida y
             // vuelta a UNA antena concreta: atribuírselo a otra es inventar una geometría. Y esa
-            // geometría alimenta H6, que penaliza -40 (lo máximo del sistema) por "Suplantación
-            // TA" — es decir, la señal más cara del motor podía estar midiendo otra antena.
+            // geometría alimenta H6 (en 3.0, la proximidad por TA; la rama "Suplantación TA" de -40
+            // se retiró por no tener datos en producción): la regla podía estar midiendo otra antena.
             //
             // Se mantiene el único caso legítimo que esto cubría: que la MISMA celda aparezca
             // duplicada en la lista (pasa con NSA y con algunos módems) y solo una de las entradas

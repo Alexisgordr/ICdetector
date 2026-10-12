@@ -52,7 +52,7 @@ object BayesianScorer {
         // Expert-derived LR estimate — not directly reported by source paper
         "pingPong"    to 3.0f,  // Baja especificidad standalone
         "h11"         to 6.0f,  // Compromiso móvil vs fijo
-        "taDistance"  to 7.0f,  // Físicamente irrefutable con TA real
+        "taDistance"  to 7.0f,  // H6: proximidad anómala por TA (≤ 100 m con señal ≥ -60 dBm)
         "rfStability" to 6.0f,  // Misma Cell ID con PCI/ARFCN mutados — clon reconfigurándose
         "transitionCoherence" to 1.8f, // H16 nace conservadora; necesita calibración de campo
 

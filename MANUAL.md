@@ -638,8 +638,10 @@ many modems report only frequency, PCI and signal, so these rules can stay `N/A`
 closer or stronger than expected. Movement, handovers, line-of-sight changes and indoor propagation
 also cause abrupt shifts. Weaker-than-usual readings are not treated as suspicious.
 
-**Timing Advance and geometry (H6).** When Timing Advance has a known unit, its implied range is
-compared with geographic context. A missing TA is only taken from a duplicate of the same cell (same
+**Timing Advance proximity (H6).** When Timing Advance has a known unit, H6 checks proximity only:
+it fails when TA implies about 100 m or less while the signal is −60 dBm or stronger. It does not
+compare TA with a tower position: no tower coordinates reach the score (public-database coordinates
+are only displayed as a distance), and the phone's own position is never used as the tower's. A missing TA is only taken from a duplicate of the same cell (same
 technology and physical cell), never from another transmitter. Many modems omit TA or always return
 zero; that "always 0" behaviour is detected per technology and never read as a real distance of zero
 metres. TA on 5G NR is not converted to distance, so H6 is `N/A` there.

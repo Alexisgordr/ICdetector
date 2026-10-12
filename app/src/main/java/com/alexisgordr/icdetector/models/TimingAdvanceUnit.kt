@@ -13,8 +13,9 @@ package com.alexisgordr.icdetector.models
  * donde se lee el dato (`CellParser`) y viaja con él.
  *
  * ── LA REGLA ─────────────────────────────────────────────────────────────────────────────────
- * [toMeters] devuelve null siempre que no exista una conversión defendible. H6 —la heurística con
- * la penalización más alta del motor, -40— se abstiene entonces de juzgar. No es una carencia: es
+ * [toMeters] devuelve null siempre que no exista una conversión defendible. H6 (proximidad por TA;
+ * la rama geométrica de -40 se retiró en 3.0 por no tener datos en producción) se abstiene entonces
+ * de juzgar. No es una carencia: es
  * la política. Una geometría inventada es peor que no tener geometría.
  */
 enum class TimingAdvanceUnit {

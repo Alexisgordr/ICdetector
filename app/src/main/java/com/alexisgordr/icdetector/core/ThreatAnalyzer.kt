@@ -256,53 +256,30 @@ object ThreatAnalyzer {
         // aparecen etiquetadas unas veces como 4G y otras como 5G sin cambiar de identidad, así
         // que las dos cosas se desincronizan de forma rutinaria — y un índice LTE tratado como
         // microsegundos (o al revés) desplaza la distancia por un factor cercano a 2. H6 lleva la
-        // penalización más alta del sistema (-40) y la LR más alta tras el cifrado (7.0): es el
-        // último sitio donde conviene deducir una unidad.
+        // LR más alta tras el cifrado (7.0): es el último sitio donde conviene deducir una unidad.
         //
         // Si la unidad no es determinable (valor raspado del toString() del fabricante), no hay
         // conversión y H6 NO JUZGA. Abstenerse es correcto: una geometría inventada aquí es peor
         // que no tener geometría.
         val taMeters = active.timingAdvance?.let { active.timingAdvanceUnit.toMeters(it) }
         eTa = taMeters != null
-        if (taMeters != null) {
-            if (active.lat != null && active.lon != null && currentLocation != null) {
-                if (taMeters > 0) {
-                    val results = FloatArray(1)
-                    Location.distanceBetween(
-                        currentLocation.latitude, currentLocation.longitude,
-                        active.lat, active.lon, results
-                    )
-                    // La antena dice estar a >2 km pero el TA implica <500 m: incoherencia física.
-                    if (results[0] > 2000 && taMeters < 500) {
-                        hTa = false
-                        reasons.add("Suplantación TA")
-                        score -= 40
-                    }
-                }
-            } else {
-                // Sin posición de la antena: solo el caso "estoy pegado al emisor". El umbral de
-                // 100 m equivale exactamente al `ta <= 1` anterior en LTE (0 m y 78 m), y ahora
-                // se expresa en metros para que signifique lo mismo en cualquier tecnología.
-                //
-                // No hace falta excluir NR aquí: si hemos llegado a este punto es porque la unidad
-                // produjo metros, y NR nunca los produce (ver TimingAdvanceUnit.NR_RAW).
-                //
-                // Aquí había una excepción: la celda se libraba de la penalización si estaba
-                // VERIFIED. Se ha quitado — y no por poco importante, sino por lo contrario. Era la
-                // ÚLTIMA vía por la que el estado de verificación entraba en la puntuación, y la
-                // hacía entrar en silencio: misma celda, mismo TA, misma señal, distinto score
-                // según lo que contestara una base pública. Con ella dentro, la pregunta que la
-                // fase de recolección tiene que responder —¿aporta señal la verificación externa?—
-                // se contestaba en parte a sí misma.
-                //
-                // Desde v2.1 `ThreatAnalyzer` **no lee `active.verified` en ninguna heurística**.
-                // El detector y la etiqueta externa son ortogonales, y por eso podrán cruzarse.
-                if (taMeters <= 100 && active.dbm >= -60) {
-                    hTa = false
-                    reasons.add("Proximidad anómala (TA)")
-                    score -= 15
-                }
-            }
+        //
+        // 3.0 — Solo queda la rama de PROXIMIDAD (TA + señal). Había otra rama "geométrica" que
+        // comparaba el TA con la distancia entre el móvil y `active.lat/lon` como posición de la
+        // antena, pero ningún flujo de producción rellena esas coordenadas en CellData (CellParser
+        // no las tiene; las de OpenCellID van a apiLocationCache y solo se MUESTRAN como distancia,
+        // fuera del score por diseño). Era código muerto y se retira; no se sustituye la antena por
+        // la ubicación del móvil ni se conecta OpenCellID al score.
+        //
+        // Proximidad: solo el caso "estoy pegado al emisor". El umbral de 100 m equivale al
+        // `ta <= 1` anterior en LTE (0 m y 78 m) y se expresa en metros para que signifique lo mismo
+        // en cualquier tecnología; NR nunca llega aquí porque su unidad no produce metros. Desde
+        // v2.1 no hay excepción por VERIFIED: ThreatAnalyzer no lee `active.verified` en ninguna
+        // heurística (misma celda, mismo TA y misma señal dan el mismo resultado).
+        if (taMeters != null && taMeters <= 100 && active.dbm >= -60) {
+            hTa = false
+            reasons.add("Proximidad anómala (TA)")
+            score -= 15
         }
 
         // 7. Ghost Cells Check

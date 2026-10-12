@@ -26,6 +26,10 @@ GitHub pre-release of an earlier build was withdrawn.
   setting, which needs `WRITE_SECURE_SETTINGS`; the app does not declare it, so the write always
   failed, and the manual promised an ADB grant that cannot work. The attempt is removed: the
   notification offers a button to open Airplane mode settings. No permission is added.
+- **H6 geometric branch removed.** H6 had a branch comparing TA with the distance to `active.lat/lon` as
+  the tower position (−40), but no production flow fills those fields (OpenCellID coordinates are only
+  shown as a distance), so it never ran. It is removed; the proximity branch (TA ≤ 100 m with signal
+  ≥ −60 dBm, −15) is unchanged, as are weights and the H6 likelihood ratio.
 
 ### Consolidation: labels, data provenance and shared evidence
 

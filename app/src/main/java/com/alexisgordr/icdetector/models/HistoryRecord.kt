@@ -59,7 +59,7 @@ data class HistoryRecord(
     /**
      * Timing Advance CRUDO tal y como lo entregó el módem, y la unidad en que lo entregó.
      *
-     * v2.1: es la señal más cara del motor (H6 penaliza -40) y era la única que NO se exportaba,
+     * v2.1: alimenta H6 (en 3.0, solo la rama de proximidad, -15) y era la única que NO se exportaba,
      * así que nadie podía comprobar si su teléfono la reporta siquiera. Ahora se guarda el valor
      * sin transformar junto con su procedencia: si algún día hay que decidir empíricamente cómo
      * convertir el TA de NR, la evidencia estará recogida en vez de haber que empezar de cero.

@@ -197,9 +197,10 @@ border regions produce legitimate diversity. Requires neighbours that report the
 Validates Tracking Area Code coherence against surrounding infrastructure. `N/A` when no neighbour
 reports a real TAC; placeholder values some modems report (TAC `65535`) are read as unavailable.
 
-#### Timing Advance Geometric Analysis (H6)
-Correlates Timing Advance distance estimates with tower-position validation when enough data exists.
-A missing TA is only taken from a duplicate of the same cell, never from another transmitter. Modems
+#### Timing Advance Proximity (H6)
+Fails when the Timing Advance implies the phone is within about 100 m of the transmitter while the
+signal is very strong (≥ −60 dBm). The app has no tower position in the scoring path (public-database
+coordinates are only shown as a distance), so H6 does not compare TA with a tower location. A missing TA is only taken from a duplicate of the same cell, never from another transmitter. Modems
 that always report zero are detected per technology (`STUB_ZERO`) and excluded from geometry. TA on
 5G NR is not converted to distance.
 
