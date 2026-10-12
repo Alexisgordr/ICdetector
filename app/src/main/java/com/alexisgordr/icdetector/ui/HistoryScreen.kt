@@ -550,6 +550,12 @@ private fun TopologyPanel(
         }) { Text(stringResource(R.string.export)) } },
         dismissButton = { TextButton(onClick = { confirmExport = false }) { Text(stringResource(R.string.cancel)) } }
     )
+    // 3.0 — Consulta de Stable-Site integrada en Topología (StableSitePanel); la flecha vuelve aquí.
+    var showStableSite by remember { mutableStateOf(false) }
+    if (showStableSite) {
+        StableSitePanel(dbHelper, modifier) { showStableSite = false }
+        return
+    }
     var filter by remember { mutableStateOf("ALL") }
     val visible = remember(transitions, filter) {
         when (filter) {
@@ -604,6 +610,14 @@ private fun TopologyPanel(
                 Text(stringResource(R.string.export_stable_site), fontFamily = FontFamily.Monospace, fontSize = 9.sp)
             }
         }
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+            TextButton(
+                onClick = { showStableSite = true },
+                colors = ButtonDefaults.textButtonColors(contentColor = Color(0xFF80CBC4))
+            ) {
+                Text(stringResource(R.string.view_stable_site), fontFamily = FontFamily.Monospace, fontSize = 9.sp)
+            }
+        }
         exportMessage?.let {
             Text(it, color = Color(0xFF80CBC4), fontFamily = FontFamily.Monospace, fontSize = 8.sp)
         }
@@ -624,7 +638,7 @@ private fun TopologyPanel(
         } else {
             LazyColumn(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 items(visible, key = { "${it.fromIdentity}>${it.toIdentity}" }) { route ->
-                    TopologyRouteCard(route)
+                    TopologyRouteCard(route, dbHelper)
                 }
             }
         }
@@ -642,7 +656,9 @@ private fun TopologyMetric(label: String, value: String, modifier: Modifier = Mo
 }
 
 @Composable
-private fun TopologyRouteCard(route: CellTransitionSummary) {
+private fun TopologyRouteCard(route: CellTransitionSummary, dbHelper: CellDbHelper) {
+    // 3.0 — Al pulsar la tarjeta se abre su detalle: datos de la ruta y episodios Stable-Site.
+    var expanded by remember("${route.fromIdentity}>${route.toIdentity}") { mutableStateOf(false) }
     val statusText = routeStatusLabel(route.lastStatus)
     val statusColor = when (route.lastStatus) {
         HeuristicStatus.PASSED -> Color(0xFF4CAF50)
@@ -654,6 +670,7 @@ private fun TopologyRouteCard(route: CellTransitionSummary) {
             .format(java.util.Date(route.lastSeenMs))
     }
     Card(
+        onClick = { expanded = !expanded },
         colors = CardDefaults.cardColors(containerColor = Color(0xFF111111)),
         border = BorderStroke(1.dp, statusColor.copy(alpha = 0.45f)),
         shape = RoundedCornerShape(4.dp)
@@ -681,6 +698,16 @@ private fun TopologyRouteCard(route: CellTransitionSummary) {
                     color = Color(0xFF999999), fontFamily = FontFamily.Monospace, fontSize = 8.sp
                 )
                 Text(lastSeen, color = Color(0xFF666666), fontFamily = FontFamily.Monospace, fontSize = 8.sp)
+            }
+            if (expanded) {
+                HorizontalDivider(color = Color(0xFF222222))
+                // Datos guardados de la ruta (un agregado: no guarda la fecha de cada cambio).
+                Text(stringResource(R.string.route_detail_identities, route.fromIdentity, route.toIdentity),
+                    color = Color(0xFFCCCCCC), fontFamily = FontFamily.Monospace, fontSize = 8.sp, lineHeight = 11.sp)
+                Text(stringResource(R.string.route_detail_counts, route.observations, route.trustedObservations, statusText, route.tripCount),
+                    color = Color(0xFF999999), fontFamily = FontFamily.Monospace, fontSize = 8.sp, lineHeight = 11.sp)
+                HorizontalDivider(color = Color(0xFF222222))
+                RouteStableSiteSection(dbHelper, route)
             }
         }
     }
