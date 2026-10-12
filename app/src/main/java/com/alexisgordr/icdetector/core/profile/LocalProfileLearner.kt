@@ -88,7 +88,14 @@ class LocalProfileLearner(private val config: Config = Config()) {
         if (!sample.context.isComplete) return LearnResult(stored, LearnOutcome.INCOMPLETE_CONTEXT)
         // Una referencia de otra versión del algoritmo no se mezcla con la actual: se reaprende
         // desde cero, con una generación nueva. Otro teléfono, en cambio, exige reiniciar a mano.
-        val current = stored?.takeIf { it.algorithmVersion == LocalProfile.ALGORITHM_VERSION }
+        val sameAlgorithm = stored?.takeIf { it.algorithmVersion == LocalProfile.ALGORITHM_VERSION }
+        // F05 — Revalidación tras caducar: si entre la última evidencia y esta muestra pasaron más
+        // de [Config.staleAfterMs], la referencia antigua no se reactiva con los contadores de
+        // entonces (una sola muestra la devolvía a MATURE). Empieza una generación nueva, en
+        // aprendizaje, que necesita otra vez [Config.matureSamples] muestras en [Config.matureDays] días.
+        val current = sameAlgorithm?.takeUnless { p ->
+            p.lastEvidenceMs != null && sample.observedAtMs - p.lastEvidenceMs > config.staleAfterMs
+        }
         if (current != null && ProfileCompatibility.check(current, sample.deviceModel, sample.context.radio) != null) {
             return LearnResult(current, LearnOutcome.INCOMPATIBLE)
         }

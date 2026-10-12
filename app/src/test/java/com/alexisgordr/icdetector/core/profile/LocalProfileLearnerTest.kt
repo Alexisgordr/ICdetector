@@ -166,6 +166,22 @@ class LocalProfileLearnerTest {
         assertTrue(LocalProfileScorer.revisionOf(first) != LocalProfileScorer.revisionOf(relearned))
     }
 
+    @Test fun `one sample does not revive a stale reference (F05)`() {
+        val p = train(days = 4)
+        val later = p.lastEvidenceMs!! + 40 * DAY_MS
+        assertEquals(AbstainReason.PROFILE_STALE, eval(p, -80, later).abstainReason)
+        val r = learner.learn(p, sample(-80, later), later)
+        assertEquals(LearnOutcome.LEARNED, r.outcome)
+        val resumed = r.profile!!
+        assertEquals(ProfileMaturity.LEARNING, resumed.maturity)
+        assertEquals(1, resumed.effectiveSamples)
+        assertEquals(1, resumed.distinctDays)
+        assertEquals(MetricProfile.generationAt(later), resumed.generation)
+        assertEquals(AbstainReason.PROFILE_IMMATURE, eval(resumed, -80, later + 60_000L).abstainReason)
+        // Con evidencia reciente suficiente vuelve a ser madura, en su nueva generación.
+        assertEquals(ProfileMaturity.MATURE, train(days = 3, start = resumed, from = later + DAY_MS).maturity)
+    }
+
     @Test fun `a profile without recent evidence becomes stale`() {
         val p = train(days = 4)
         assertEquals(ProfileMaturity.STALE, learner.maturity(p, p.lastEvidenceMs!! + 31 * DAY_MS))
