@@ -5,6 +5,9 @@ import android.database.Cursor
 import android.database.sqlite.SQLiteDatabase
 import com.alexisgordr.icdetector.core.profile.AbstainReason
 import com.alexisgordr.icdetector.core.profile.DeviationLevel
+import com.alexisgordr.icdetector.core.profile.EvaluationEntry
+import com.alexisgordr.icdetector.core.profile.HistoricalObservation
+import com.alexisgordr.icdetector.core.profile.ProfileEvaluationQuery
 import com.alexisgordr.icdetector.core.profile.MetricProfile
 import com.alexisgordr.icdetector.core.profile.ProfileBootstrap
 import com.alexisgordr.icdetector.core.profile.ProfileContext
@@ -113,6 +116,57 @@ object LocalProfileStore {
                 abstainReason = AbstainReason.entries.firstOrNull { it.name == s("abstain_reason") },
                 learned = i("learned") == 1, holdout = i("holdout") == 1
             )
+        }
+
+    /**
+     * Una página de evaluaciones guardadas con su observación (Historial → Perfil local). Devuelve
+     * hasta [ProfileEvaluationQuery.PAGE_SIZE] + 1 filas: la última solo indica que hay más.
+     */
+    fun evaluationsPage(
+        db: SQLiteDatabase,
+        filter: ProfileEvaluationQuery.LevelFilter,
+        after: ProfileEvaluationQuery.PageCursor?
+    ): List<EvaluationEntry> {
+        val (sql, args) = ProfileEvaluationQuery.pageSql(filter, after)
+        return db.rawQuery(sql, args).use { c ->
+            fun s(n: String) = c.getColumnIndexOrThrow(n).let { if (c.isNull(it)) null else c.getString(it) }
+            fun l(n: String) = c.getColumnIndexOrThrow(n).let { if (c.isNull(it)) null else c.getLong(it) }
+            fun i(n: String) = c.getColumnIndexOrThrow(n).let { if (c.isNull(it)) null else c.getInt(it) }
+            buildList {
+                while (c.moveToNext()) {
+                    val observation = if (l("h_id") == null) null else HistoricalObservation(
+                        timestamp = s("timestamp"), observedAtMs = l("observed_at_ms"), mcc = s("mcc"), mnc = s("mnc"),
+                        tac = s("tac"), cid = s("cid"),
+                        radio = RadioTech.entries.firstOrNull { it.name == s("radio") } ?: RadioTech.UNKNOWN,
+                        dbm = i("dbm"), rsrq = i("rsrq"), sinr = i("sinr"), score = i("score"),
+                        failedHeuristics = s("failed_heuristics"), notEvaluatedHeuristics = s("not_evaluated_heuristics"),
+                        locationMode = s("location_mode"), appVersion = s("app_version")
+                    )
+                    add(EvaluationEntry(
+                        evaluationId = l("e_id")!!, historyId = l("history_id")!!, evaluatedAtMs = l("evaluated_at_ms")!!,
+                        algorithmVersion = i("algorithm_version") ?: 0, profileRevision = s("profile_revision"),
+                        contextKey = s("context_key").orEmpty(),
+                        mode = ProfileMode.entries.firstOrNull { it.name == s("mode") },
+                        level = DeviationLevel.entries.firstOrNull { it.name == s("deviation_level") },
+                        score = c.getColumnIndexOrThrow("deviation_score").let { if (c.isNull(it)) null else c.getDouble(it) },
+                        metricsEvaluated = i("metrics_evaluated") ?: 0, metricsTotal = i("metrics_total") ?: 0,
+                        evidence = s("evidence"),
+                        abstainReason = AbstainReason.entries.firstOrNull { it.name == s("abstain_reason") },
+                        learned = i("learned") == 1, holdout = i("holdout") == 1, observation = observation
+                    ))
+                }
+            }
+        }
+    }
+
+    /** Evaluaciones guardadas por nivel. */
+    fun evaluationLevelCounts(db: SQLiteDatabase): Map<DeviationLevel, Int> =
+        db.rawQuery(ProfileEvaluationQuery.LEVEL_COUNTS_SQL, null).use { c ->
+            buildMap {
+                while (c.moveToNext()) {
+                    DeviationLevel.entries.firstOrNull { it.name == c.getString(0) }?.let { put(it, c.getInt(1)) }
+                }
+            }
         }
 
     /** Todas las referencias guardadas (son pocas: una por celda, tecnología y métrica). */
