@@ -56,6 +56,11 @@ class RadioChannelsTest {
         ).first { it.exists() }.readText()
         assertFalse(helper.contains("takeIf { it > 0 }"))
         assertFalse(helper.contains("takeIf { it in 0..1007 }"))
-        assertEquals(2, Regex("RadioChannels\\.channelOrNull\\(").findAll(helper).count())
+        // 3.0 — La parte de H15 vive en RfStabilityAccumulator (misma lógica, mismo validador).
+        val accumulator = listOf(
+            File("src/main/java/com/alexisgordr/icdetector/storage/RfStabilityAccumulator.kt"),
+            File("app/src/main/java/com/alexisgordr/icdetector/storage/RfStabilityAccumulator.kt")
+        ).first { it.exists() }.readText()
+        assertEquals(2, Regex("RadioChannels\\.channelOrNull\\(").findAll(helper + accumulator).count())
     }
 }

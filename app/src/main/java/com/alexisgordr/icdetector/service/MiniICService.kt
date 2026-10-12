@@ -234,6 +234,8 @@ class MiniICService : Service() {
     private var cachedHistory: List<HistoryRecord> = emptyList()
     private var cachedBaseline: SignalBaseline? = null
     private var cachedRfStability: CellRfStability? = null
+    /** 3.0 — La última lectura del historial RF (H15) falló; se avisa una vez por racha. */
+    @Volatile private var rfStabilityReadFailing = false
     private var cachedReputation: CellReputation? = null
     private var cachedFingerprint: CellRfFingerprint? = null
     private var cachedTrustGate: Boolean? = null
@@ -1302,9 +1304,23 @@ class MiniICService : Service() {
                         )
                         if (apiLocation != null) apiLocationCache[rfSig] = apiLocation
                         else apiLocationCache.remove(rfSig)
-                        cachedRfSignature = rfSig
-                        cachedRfStability = st
-                        cachedRfTimestamp = nowRf
+                        // 3.0 — Lectura fallida de H15: null (H15 se abstiene este ciclo) y sin caché, para
+                        // reintentar en el siguiente. Una línea al empezar la racha y otra al recuperarse;
+                        // sin identificadores ni ubicación.
+                        if (st == null) {
+                            if (!rfStabilityReadFailing) {
+                                rfStabilityReadFailing = true
+                                appendLog("[H15]", "Lectura del historial RF fallida: H15 no se evalúa hasta que vuelva a leerse.")
+                            }
+                        } else {
+                            if (rfStabilityReadFailing) {
+                                rfStabilityReadFailing = false
+                                appendLog("[H15]", "Lectura del historial RF restablecida.")
+                            }
+                            cachedRfSignature = rfSig
+                            cachedRfStability = st
+                            cachedRfTimestamp = nowRf
+                        }
                         st
                     }
                 }
@@ -1561,6 +1577,7 @@ class MiniICService : Service() {
                             signalBaseline = signalBaseline,
                             rfFingerprint = rfFingerprint,
                             rfStability = rfStability,
+                            rfStabilityReadFailed = rfStabilityReadFailing && rfStability == null,
                             reputation = reputation,
                             transitionCoherence = transitionCoherence,
                             trustGateMet = cachedTrustGate.takeIf { activeRaw != null && activeRaw.cellId != "N/A" }

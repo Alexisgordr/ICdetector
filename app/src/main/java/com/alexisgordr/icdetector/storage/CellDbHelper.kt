@@ -2838,21 +2838,21 @@ class CellDbHelper(
     // el índice idx_cell_identity_radio (comprobado con EXPLAIN QUERY PLAN en
     // tools/check_sql_affinity.py); el único coste extra es ordenar esas filas. No se le pone un
     // LIMIT a propósito: cambiaría qué historia ve H15 y sería un corte de dataset sin necesidad.
-    fun getCellRfStability(cellId: String, mnc: String, tac: String, mcc: String, radio: RadioTech): CellRfStability {
-        val pciCounts = HashMap<Int, Int>()
-        val arfcnCounts = HashMap<Int, Int>()
-        val recentPciCounts = HashMap<Int, Int>()
-        val recentArfcnCounts = HashMap<Int, Int>()
-        // v2.1: mismo recuento de PCI, pero desglosado por portadora (ARFCN). Ver CellRfStability.
-        val pciByArfcn = HashMap<Int, HashMap<Int, Int>>()
-        val recentPciByArfcn = HashMap<Int, HashMap<Int, Int>>()
-        val recentPciEpisodes = HashMap<Int, Int>()
-        val recentPciEpisodesByArfcn = HashMap<Int, HashMap<Int, Int>>()
-        val lastPciByArfcn = HashMap<Int, Int>()
-        val currentEpisodeReachedRecent = HashMap<Int, Boolean>()
-        var lastGlobalPci: Int? = null
-        var currentGlobalEpisodeReachedRecent = false
-        var total = 0
+    /**
+     * Historial de PCI/ARFCN para H15. 3.0 — Devuelve **null si la lectura falla** en cualquier punto
+     * (antes devolvía lo acumulado hasta la excepción como si fuera una lectura completa). Null es
+     * "error de lectura": H15 se abstiene en ese ciclo. Un historial insuficiente sigue siendo un
+     * resultado completo con pocas observaciones.
+     */
+    fun getCellRfStability(cellId: String, mnc: String, tac: String, mcc: String, radio: RadioTech): CellRfStability? = try {
+        readCellRfStability(cellId, mnc, tac, mcc, radio)
+    } catch (e: kotlinx.coroutines.CancellationException) {
+        throw e
+    } catch (_: Exception) {
+        null
+    }
+
+    private fun readCellRfStability(cellId: String, mnc: String, tac: String, mcc: String, radio: RadioTech): CellRfStability? {
         val db = this.readableDatabase
         val now = System.currentTimeMillis()
         val thirtyDaysAgo = now - (30L * 24 * 60 * 60 * 1000)
@@ -2898,88 +2898,23 @@ class CellDbHelper(
             arrayOf(cellId, mnc, tac, mcc, radio.name,
                 TRUSTED_BASELINE_MIN_SCORE.toString(), *h15Patterns, *since(thirtyDaysAgo))
         )
-        try {
-            if (cursor.moveToFirst()) {
-                val pciIdx = cursor.getColumnIndexOrThrow(COLUMN_PCI)
-                val arfcnIdx = cursor.getColumnIndexOrThrow(COLUMN_ARFCN)
-                val tsIdx = cursor.getColumnIndexOrThrow(COLUMN_TIMESTAMP)
-                val observedIdx = cursor.getColumnIndexOrThrow(COLUMN_OBSERVED_AT_MS)
-                do {
-                    total++
-                    val ts = cursor.getString(tsIdx) ?: ""
-                    val observedAt = if (cursor.isNull(observedIdx)) null else cursor.getLong(observedIdx)
-                    val isRecent = ObservationTime.isAfter(observedAt, ts, recentWindow)
-
-                    // 3.0 (#22) — Validador por tecnología. Antes `> 0` mezclaba el EARFCN 0 (Banda 1)
-                    // con las filas sin frecuencia (UNKNOWN_ARFCN), y cualquier PCI hasta 1007 valía en LTE.
-                    val pci = if (!cursor.isNull(pciIdx)) RadioChannels.physicalIdOrNull(radio, cursor.getInt(pciIdx)) else null
-                    val arfcn = if (!cursor.isNull(arfcnIdx)) RadioChannels.channelOrNull(radio, cursor.getInt(arfcnIdx)) else null
-
-                    if (pci != null) {
-                        pciCounts[pci] = (pciCounts[pci] ?: 0) + 1
-                        if (isRecent) recentPciCounts[pci] = (recentPciCounts[pci] ?: 0) + 1
-
-                        // Desglose por portadora. Las filas sin ARFCN (histórico anterior a la
-                        // migración v6) se agrupan bajo UNKNOWN_ARFCN, así que siguen contando
-                        // entre ellas y no se mezclan con las que sí tienen portadora conocida.
-                        val carrier = arfcn ?: CellRfStability.UNKNOWN_ARFCN
-                        pciByArfcn.getOrPut(carrier) { HashMap() }
-                            .let { it[pci] = (it[pci] ?: 0) + 1 }
-                        if (isRecent) {
-                            recentPciByArfcn.getOrPut(carrier) { HashMap() }
-                                .let { it[pci] = (it[pci] ?: 0) + 1 }
-                        }
-
-                        // Episodios, no muestras: varias lecturas consecutivas de un handover son
-                        // una sola aparición. El mismo PCI solo suma otra vez tras alternar a otro
-                        // PCI en esa misma portadora.
-                        val carrierChanged = lastPciByArfcn[carrier] != pci
-                        if (carrierChanged) {
-                            lastPciByArfcn[carrier] = pci
-                            currentEpisodeReachedRecent[carrier] = isRecent
-                            if (isRecent) recentPciEpisodesByArfcn.getOrPut(carrier) { HashMap() }
-                                .let { it[pci] = (it[pci] ?: 0) + 1 }
-                        } else if (isRecent && currentEpisodeReachedRecent[carrier] != true) {
-                            currentEpisodeReachedRecent[carrier] = true
-                            recentPciEpisodesByArfcn.getOrPut(carrier) { HashMap() }
-                                .let { it[pci] = (it[pci] ?: 0) + 1 }
-                        }
-
-                        val globalChanged = lastGlobalPci != pci
-                        if (globalChanged) {
-                            lastGlobalPci = pci
-                            currentGlobalEpisodeReachedRecent = isRecent
-                            if (isRecent) recentPciEpisodes[pci] = (recentPciEpisodes[pci] ?: 0) + 1
-                        } else if (isRecent && !currentGlobalEpisodeReachedRecent) {
-                            currentGlobalEpisodeReachedRecent = true
-                            recentPciEpisodes[pci] = (recentPciEpisodes[pci] ?: 0) + 1
-                        }
-                    }
-
-                    if (arfcn != null) {
-                        arfcnCounts[arfcn] = (arfcnCounts[arfcn] ?: 0) + 1
-                        if (isRecent) recentArfcnCounts[arfcn] = (recentArfcnCounts[arfcn] ?: 0) + 1
-                    }
-                } while (cursor.moveToNext())
+        return cursor.use {
+            RfStabilityAccumulator.readComplete(radio, recentWindow) { acc ->
+                if (cursor.moveToFirst()) {
+                    val pciIdx = cursor.getColumnIndexOrThrow(COLUMN_PCI)
+                    val arfcnIdx = cursor.getColumnIndexOrThrow(COLUMN_ARFCN)
+                    val tsIdx = cursor.getColumnIndexOrThrow(COLUMN_TIMESTAMP)
+                    val observedIdx = cursor.getColumnIndexOrThrow(COLUMN_OBSERVED_AT_MS)
+                    do {
+                        acc.add(
+                            rawPci = if (cursor.isNull(pciIdx)) null else cursor.getInt(pciIdx),
+                            rawArfcn = if (cursor.isNull(arfcnIdx)) null else cursor.getInt(arfcnIdx),
+                            timestamp = cursor.getString(tsIdx),
+                            observedAtMs = if (cursor.isNull(observedIdx)) null else cursor.getLong(observedIdx)
+                        )
+                    } while (cursor.moveToNext())
+                }
             }
-        } catch (_: Exception) {
-            // Lectura best-effort: ante cualquier problema, devolver lo acumulado.
-        } finally {
-            cursor.close()
         }
-
-        return CellRfStability(
-            totalObservations = total,
-            distinctPci = pciCounts.map { it.key to it.value },
-            distinctArfcn = arfcnCounts.map { it.key to it.value },
-            recentDistinctPci = recentPciCounts.map { it.key to it.value },
-            recentDistinctArfcn = recentArfcnCounts.map { it.key to it.value },
-            pciByArfcn = pciByArfcn.mapValues { (_, counts) -> counts.map { it.key to it.value } },
-            recentPciByArfcn = recentPciByArfcn.mapValues { (_, counts) -> counts.map { it.key to it.value } },
-            recentPciEpisodes = recentPciEpisodes.map { it.key to it.value },
-            recentPciEpisodesByArfcn = recentPciEpisodesByArfcn.mapValues { (_, counts) ->
-                counts.map { it.key to it.value }
-            }
-        )
     }
 }

@@ -22,6 +22,8 @@ object DiagnosticEngine {
         val signalBaseline: SignalBaseline?,
         val rfFingerprint: CellRfFingerprint?,
         val rfStability: CellRfStability?,
+        /** 3.0 — La lectura del historial RF falló en este ciclo (no es historial insuficiente). */
+        val rfStabilityReadFailed: Boolean = false,
         val reputation: CellReputation?,
         val transitionCoherence: TransitionCoherenceResult = TransitionCoherenceResult(),
         val trustGateMet: Boolean? = null
@@ -87,7 +89,8 @@ object DiagnosticEngine {
             HeuristicDiagnostic(14, "Downgrade de banda", r.bandDowngrade,
                 explanation(r.bandDowngrade, if (!i.previousBandAvailable) "N/A: falta una banda anterior válida (LTE o 5G) de la misma tecnología para comparar." else "N/A: la tecnología o banda actual no permite la comparación.")),
             HeuristicDiagnostic(15, "Estabilidad de identidad RF", r.rfStability,
-                explanation(r.rfStability, "N/A: historial RF insuficiente (${i.rfStability?.totalObservations ?: 0}/4 observaciones).")),
+                explanation(r.rfStability, if (i.rfStabilityReadFailed) "N/A: no se pudo leer el historial RF en este ciclo."
+                    else "N/A: historial RF insuficiente (${i.rfStability?.totalObservations ?: 0}/4 observaciones).")),
             HeuristicDiagnostic(16, "Coherencia de transición celular", r.transitionCoherence,
                 i.transitionCoherence.explanation)
         )

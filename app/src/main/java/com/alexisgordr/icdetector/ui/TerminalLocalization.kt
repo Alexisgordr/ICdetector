@@ -136,6 +136,10 @@ private val replacements = linkedMapOf(
     "Red 2G/3G en uso: cambio desde 4G/5G" to "2G/3G network in use: change from 4G/5G",
     "Red 2G/3G en uso" to "2G/3G network in use",
     " · aviso " to " · alert ",
+    "Lectura del historial RF fallida: H15 no se evalúa hasta que vuelva a leerse." to
+        "RF history read failed: H15 is not evaluated until it can be read again.",
+    "Lectura del historial RF restablecida." to "RF history read restored.",
+    "N/A: no se pudo leer el historial RF en este ciclo." to "N/A: the RF history could not be read in this cycle.",
     "última señal anterior observada" to "last earlier signal observed",
     "señal previa desconocida" to "earlier signal unknown",
     "Puede deberse a cobertura o a llamadas sin VoLTE; no es un ataque confirmado." to
