@@ -288,7 +288,7 @@
     <string name="notif_monitoring_title_intelligent">ICdetection: monitorización · GPS inteligente</string>
     <string name="notif_legacy_network_title">ICdetection: red 2G/3G en uso</string>
     <string name="channel_monitoring_name">Monitorización</string>
-    <string name="channel_alerts_description">Avisos accionables de degradación celular</string>
+    <string name="channel_alerts_description">Alarmas de anomalía de red confirmadas, una por episodio</string>
     <string name="notif_latency_title">⚠ Anomalía de red</string>
     <string name="collection_interrupted_format">⚠ Recolección interrumpida %1$dh %2$dmin</string>
     <string name="write_failure_notification">⚠ ESCRITURA FALLIDA — no se están guardando datos</string>
@@ -553,4 +553,6 @@
     <string name="legacy_alert_notify">Solo notificación</string>
     <string name="legacy_alert_notify_sound">Notificación y sonido</string>
     <string name="legacy_alert_description">Un aviso cuando el móvil empieza a usar 2G/3G; no se repite mientras siga en ella. Para un aviso nuevo tiene que volver antes al menos 1 minuto seguido a 4G/5G. Puede deberse a cobertura o a llamadas sin VoLTE.</string>
+    <string name="channel_legacy_network_name">Red 2G/3G</string>
+    <string name="channel_legacy_network_description">Avisos de uso o cambio a 2G/3G, uno por episodio. Que suenen depende del ajuste de la app y de este canal.</string>
 </resources>

@@ -427,8 +427,7 @@ class MiniICService : Service() {
         )
         legacyNetworkProtection = LegacyNetworkProtection(
             notifications = notificationController,
-            log = { appendLog("[SEC]", it) },
-            playWarningTone = { toneGenerator?.startTone(ToneGenerator.TONE_PROP_BEEP2, 500) }
+            log = { appendLog("[SEC]", it) }
         )
         transitionTracker = ServingTransitionTracker(dbHelper) { appendLog("[H16]", it) }
         collectionPower = CollectionPowerController(this)

@@ -70,7 +70,8 @@ internal class SecurityAlertController(
         }
 
         if (cell.isSuspicious) {
-            tone()?.startTone(ToneGenerator.TONE_CDMA_SOFT_ERROR_LITE, 200)
+            // 3.0 — Sin tono aquí: sonaba en cada evaluación mientras durase la alarma. El único
+            // sonido de una alarma confirmada es su notificación (canal de alertas), una por episodio.
             Log.e(TAG, "THREAT DETECTED: ${cell.suspiciousReason}")
             requestPreciseLocation()
             // v2.10.7 — Se escribe al confirmarse, no en cada evaluación posterior de la misma

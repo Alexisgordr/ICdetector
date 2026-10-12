@@ -20,13 +20,43 @@ class LegacyNetworkWiringTest {
         assertFalse(alerts.contains("legacyProtectionEnabled"))
     }
 
-    @Test fun `the tone only plays with notification and sound, and off shows nothing`() {
+    @Test fun `off shows nothing, notify is silent, and notify-sound adds no manual tone`() {
         val protection = src("LegacyNetworkProtection.kt")
         val body = protection.substringAfter("fun onEpisodeStart(").substringBefore("\n    }\n")
-        assertTrue(body.indexOf("if (mode == LegacyNetworkAlertMode.OFF) return") < body.indexOf("playWarningTone()"))
-        assertTrue(body.contains("if (mode == LegacyNetworkAlertMode.NOTIFY_SOUND) playWarningTone()"))
+        assertTrue(body.contains("if (mode == LegacyNetworkAlertMode.OFF) return"))
+        assertTrue(body.indexOf("if (mode == LegacyNetworkAlertMode.OFF) return") < body.indexOf("showLegacyNetworkNotice"))
         assertTrue(body.contains("silent = mode != LegacyNetworkAlertMode.NOTIFY_SOUND"))
+        listOf("playWarningTone", "startTone", "ToneGenerator").forEach { assertFalse("tono manual: $it", protection.contains(it)) }
         assertTrue(protection.contains("no es un ataque confirmado"))
+    }
+
+    @Test fun `2G-3G and confirmed alarms use independent channels`() {
+        val n = src("ServiceNotificationController.kt")
+        assertTrue(n.contains("const val LEGACY_CHANNEL_ID = \"miniic_legacy_network\""))
+        assertTrue(n.contains("const val ALERT_CHANNEL_ID = \"miniic_security_alerts\""))
+        assertTrue(Regex("""LEGACY_CHANNEL_ID,\s*context.getString\(R.string.channel_legacy_network_name\),\s*NotificationManager.IMPORTANCE_DEFAULT""").containsMatchIn(n))
+        val notice = n.substringAfter("fun showLegacyNetworkNotice(").substringBefore("\n    }\n")
+        assertTrue(notice.contains("NotificationCompat.Builder(context, LEGACY_CHANNEL_ID)"))
+        assertFalse(notice.contains("ALERT_CHANNEL_ID"))
+        assertFalse("un aviso nuevo debe poder sonar aunque el anterior siga visible", notice.contains("setOnlyAlertOnce"))
+        val alarm = n.substringAfter("fun showConfirmedAlarm(").substringBefore("\n    }\n")
+        assertTrue(alarm.contains("NotificationCompat.Builder(context, ALERT_CHANNEL_ID)"))
+        // #35 sigue mirando el canal de alarmas confirmadas, no el de 2G/3G.
+        val audibility = n.substringAfter("fun alarmAudibility(").substringBefore("\n        }\n")
+        assertTrue(audibility.contains("getNotificationChannel(ALERT_CHANNEL_ID)"))
+        assertFalse(audibility.contains("LEGACY_CHANNEL_ID"))
+        assertFalse("no se borra ningún canal", n.contains("deleteNotificationChannel"))
+    }
+
+    @Test fun `a confirmed alarm sounds through its notification only, not a tone per evaluation`() {
+        val alerts = src("SecurityAlertController.kt")
+        val suspicious = alerts.substringAfter("if (cell.isSuspicious) {").substringBefore("} else {")
+        assertFalse(suspicious.contains("startTone"))
+        assertTrue(suspicious.contains("if (confirmed && alarmEpisodes.onConfirmedAlarm(cell.identityKey))"))
+        assertTrue(suspicious.contains("notifyConfirmedAlarm(cell)"))
+        // Los avisos independientes se conservan: potencia fuerte (aquí) y latencia (servicio).
+        assertTrue(alerts.contains("TONE_CDMA_ALERT_CALL_GUARD"))
+        assertTrue(src("MiniICService.kt").substringAfter("private fun showLatencyAlert()").contains("startTone"))
     }
 
     @Test fun `the service reads a real preference instead of a hard-coded flag`() {

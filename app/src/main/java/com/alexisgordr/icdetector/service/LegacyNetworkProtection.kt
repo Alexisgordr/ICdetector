@@ -7,7 +7,8 @@ import com.alexisgordr.icdetector.core.LegacyNetworkEpisodeGate
 /**
  * Aviso de uso de red 2G/3G, una vez por episodio ([LegacyNetworkEpisodeGate]) y según la preferencia
  * [LegacyNetworkAlertMode]. No es un ataque confirmado: también ocurre por cobertura o en llamadas
- * sin VoLTE. Todo tono de este aviso pasa por aquí y solo suena con [LegacyNetworkAlertMode.NOTIFY_SOUND].
+ * sin VoLTE. El único sonido posible es el de la propia notificación, en su canal, y solo con
+ * [LegacyNetworkAlertMode.NOTIFY_SOUND]; no hay tono manual.
  *
  * El modo avión no se activa nunca de forma automática: la notificación ofrece abrir sus ajustes y
  * decide el usuario. Escribir AIRPLANE_MODE_ON exige WRITE_SECURE_SETTINGS, un permiso privilegiado
@@ -15,15 +16,13 @@ import com.alexisgordr.icdetector.core.LegacyNetworkEpisodeGate
  */
 internal class LegacyNetworkProtection(
     private val notifications: ServiceNotificationController,
-    private val log: (String) -> Unit,
-    private val playWarningTone: () -> Unit
+    private val log: (String) -> Unit
 ) {
     fun onEpisodeStart(kind: LegacyNetworkEpisodeGate.Trigger, mode: LegacyNetworkAlertMode) {
         Log.w("MiniIC", "2G/3G network in use ($kind, alert ${mode.storedValue})")
         val what = if (kind == LegacyNetworkEpisodeGate.Trigger.CHANGE_FROM_MODERN) "Red 2G/3G en uso: cambio desde 4G/5G" else "Red 2G/3G en uso"
         log("$what · aviso ${mode.storedValue}. $CAUSE_NOTE")
         if (mode == LegacyNetworkAlertMode.OFF) return
-        if (mode == LegacyNetworkAlertMode.NOTIFY_SOUND) playWarningTone()
         notifications.showLegacyNetworkNotice(kind, silent = mode != LegacyNetworkAlertMode.NOTIFY_SOUND)
     }
 

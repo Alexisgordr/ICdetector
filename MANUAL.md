@@ -177,19 +177,24 @@ app does not request the privileged battery-optimization exemption itself.
 
 ### Notifications and sound
 
-ICdetection uses two notification channels, which you can configure separately in
+ICdetection uses three notification channels, which you can configure separately in
 **Settings → Apps → ICdetection → Notifications**:
 
 | Channel | What it shows | Sound |
 |---|---|---|
 | **Monitoring** | The persistent notification (cell, signal, verification), updated every few seconds | Always silent, whatever the channel setting |
 | **Security alerts** | A confirmed network anomaly, once per episode | Keep it alerting so you hear an alarm |
+| **2G/3G network** | Use of or change to 2G/3G, once per episode (see below) | Silent unless you choose *Notification and sound*; then as this channel and Android allow |
 
-Only a confirmed network anomaly makes a sound, so there is no need to silence the app. If
-notifications are off, or *Security alerts* is silenced or has its sound set to *None*, the main
-screen shows **ALARMS ARE MUTED** with a button that opens the alert settings. That warning is about
-the notification: the short alert tone is separate, plays at notification volume and respects only
-silent, vibrate and Do Not Disturb.
+A confirmed alarm sounds only through its *Security alerts* notification, once per episode; there is
+no extra tone repeating while the alarm lasts. If notifications are off, or *Security alerts* is
+silenced or has its sound set to *None*, the main screen shows **ALARMS ARE MUTED** with a button that
+opens that channel's settings. The *2G/3G network* channel is independent: silencing one does not
+silence the other, and the warning only looks at *Security alerts*.
+
+Two other cues are short tones at notification volume (they respect silent, vibrate and Do Not
+Disturb): the very-strong-signal warning (at most once a minute) and, if latency detection is
+enabled, a persistent latency anomaly.
 
 ### 2G/3G network alerts
 

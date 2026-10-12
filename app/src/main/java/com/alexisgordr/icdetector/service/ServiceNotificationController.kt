@@ -42,6 +42,16 @@ internal class ServiceNotificationController(
                 NotificationManager.IMPORTANCE_HIGH
             ).apply { description = context.getString(R.string.channel_alerts_description) }
         )
+        // 3.0 — Canal propio para los avisos 2G/3G, separado de las alarmas confirmadas: silenciar
+        // uno no silencia el otro. Volver a crear un canal existente solo actualiza nombre y
+        // descripción; Android conserva la importancia y el sonido que haya elegido el usuario.
+        manager.createNotificationChannel(
+            NotificationChannel(
+                LEGACY_CHANNEL_ID,
+                context.getString(R.string.channel_legacy_network_name),
+                NotificationManager.IMPORTANCE_DEFAULT
+            ).apply { description = context.getString(R.string.channel_legacy_network_description) }
+        )
     }
 
     fun foregroundNotification(text: String): Notification {
@@ -88,7 +98,8 @@ internal class ServiceNotificationController(
     /**
      * 3.0 — Aviso de un episodio de red 2G/3G (uno por episodio, ver LegacyNetworkEpisodeGate).
      * Describe el uso o el cambio a 2G/3G, no un ataque, y ofrece abrir los ajustes de modo avión.
-     * [silent]: «Solo notificación» (predeterminado); el tono, si se eligió, lo pone quien llama.
+     * [silent]: «Solo notificación» (predeterminado). Si no es silenciosa, suena lo que diga el canal
+     * [LEGACY_CHANNEL_ID] y Android (volumen, No molestar): no hay ningún tono aparte.
      */
     fun showLegacyNetworkNotice(kind: com.alexisgordr.icdetector.core.LegacyNetworkEpisodeGate.Trigger, silent: Boolean) {
         val settings = PendingIntent.getActivity(
@@ -102,7 +113,7 @@ internal class ServiceNotificationController(
             else R.string.notif_legacy_network_title
         )
         val body = context.getString(R.string.notif_legacy_network_body)
-        val notification = NotificationCompat.Builder(context, ALERT_CHANNEL_ID)
+        val notification = NotificationCompat.Builder(context, LEGACY_CHANNEL_ID)
             .setContentTitle(title)
             .setContentText(body)
             .setStyle(NotificationCompat.BigTextStyle().bigText(body))
@@ -110,7 +121,6 @@ internal class ServiceNotificationController(
             .setPriority(NotificationCompat.PRIORITY_DEFAULT)
             .setCategory(NotificationCompat.CATEGORY_STATUS)
             .setSilent(silent)
-            .setOnlyAlertOnce(true)
             .setContentIntent(settings)
             .addAction(android.R.drawable.ic_menu_manage, context.getString(R.string.notif_open_airplane_settings), settings)
             .setAutoCancel(true)
@@ -156,6 +166,8 @@ internal class ServiceNotificationController(
     companion object {
         const val CHANNEL_ID = "miniic_channel"
         const val ALERT_CHANNEL_ID = "miniic_security_alerts"
+        /** 3.0 — Avisos de red 2G/3G (uno por episodio). */
+        const val LEGACY_CHANNEL_ID = "miniic_legacy_network"
         const val NOTIFICATION_ID = 202
         const val LEGACY_NETWORK_NOTIFICATION_ID = 204
         const val CONFIRMED_ALARM_NOTIFICATION_ID = 205

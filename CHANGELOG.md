@@ -23,6 +23,12 @@ GitHub pre-release of an earlier build was withdrawn.
   service; a loss of service restarts that minute instead of counting through it. Texts
   describe use of or a change to 2G/3G, with coverage and calls without VoLTE as possible causes. The
   setting travels in backups (same format); older backups restore the default.
+- **One sound path per alert.** 2G/3G alerts have their own channel, *2G/3G network*
+  (`miniic_legacy_network`, default importance); *Security alerts* (`miniic_security_alerts`) is kept
+  for confirmed alarms with the user's settings. 2G/3G alerts make no manual tone: *Notification only*
+  is silent and *Notification and sound* sounds as the channel and Android allow. A confirmed alarm
+  no longer plays a tone on every evaluation while it lasts; its notification, once per episode, is
+  its only sound. The strong-signal and latency tones are unchanged.
 - **Airplane mode is manual.** The 2G/3G response tried to switch Airplane mode on by writing a secure
   setting, which needs `WRITE_SECURE_SETTINGS`; the app does not declare it, so the write always
   failed, and the manual promised an ADB grant that cannot work. The attempt is removed: the

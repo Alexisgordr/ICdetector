@@ -288,7 +288,7 @@
     <string name="notif_monitoring_title_intelligent">ICdetection: monitoring · smart GPS</string>
     <string name="notif_legacy_network_title">ICdetection: 2G/3G network in use</string>
     <string name="channel_monitoring_name">Monitoring</string>
-    <string name="channel_alerts_description">Actionable cellular degradation alerts</string>
+    <string name="channel_alerts_description">Confirmed network anomaly alarms, one per episode</string>
     <string name="notif_latency_title">⚠ Network anomaly</string>
     <string name="collection_interrupted_format">⚠ Collection interrupted %1$dh %2$dmin</string>
     <string name="write_failure_notification">⚠ WRITE FAILED — data is not being saved</string>
@@ -553,4 +553,6 @@
     <string name="legacy_alert_notify">Notification only</string>
     <string name="legacy_alert_notify_sound">Notification and sound</string>
     <string name="legacy_alert_description">One alert when the phone starts using 2G/3G; no repeats while it stays there. A new alert needs at least 1 minute in a row back on 4G/5G first. It can be caused by coverage or calls without VoLTE.</string>
+    <string name="channel_legacy_network_name">2G/3G network</string>
+    <string name="channel_legacy_network_description">2G/3G use or change alerts, one per episode. Whether they sound depends on the app setting and on this channel.</string>
 </resources>
