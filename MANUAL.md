@@ -1019,6 +1019,18 @@ so the strongest remaining signals there are H6, H8, H11, H14, H15 and H16 (when
 available). H3–H5 also depend on neighbour reports but do not abstain on Wi-Fi; that inconsistency is
 documented, not changed.
 
+**Learning from rows recorded on Wi-Fi.** A row recorded while Wi-Fi was connected is stored like
+any other. If it has no failed rule (stored as `OK`) and passes the usual filters (score, age,
+location), the local references — H13's signal baseline and RSRQ/SINR fingerprint, H15's RF history,
+local cell confidence and the local profile — can learn from it, even though some rules did not run
+in that cycle. "No failure recorded" therefore does not mean "every rule was evaluated": check
+`NotEvaluatedHeuristics`. The Wi-Fi state is not stored per row and cannot be reconstructed
+afterwards (a row listing H1, H2, H7, H12 and H13 as not evaluated suggests it, but those rules can
+also abstain for other reasons). Whether mixing Wi-Fi (idle) and mobile-data (connected) readings
+shifts those references is a **limitation still to be measured**, not a quantified bias, and not a
+demonstrated change in detection. No Wi-Fi column is added and these rows are not excluded in this
+phase.
+
 Conclusion for this phase: H12 must keep abstaining. H1, H2, H7 and H13 should only be enabled on
 Wi-Fi after a specific validation — for example, logging what each would have decided on Wi-Fi in
 shadow mode and comparing it with the same places on mobile data — so no rule is changed now.

@@ -2034,17 +2034,6 @@ class MiniICService : Service() {
         return telephonyController.displayNetworkType()
     }
 
-    /**
-     * Escribe en el terminal el resultado de una celda **después** de que las bases públicas
-     * contesten, y solo si esa celda es la que tiene la auditoría escrita y su estado ha cambiado
-     * desde entonces.
-     *
-     * Existe porque el terminal miente por omisión: la auditoría se genera en el handover, con la
-     * celda todavía PENDING, y ahí puede leerse "100% — entorno SEGURO". La verificación llega
-     * después y cambia la etiqueta de la celda, pero nadie reescribía nada:
-     * quedaban a la vista dos cifras distintas —la del terminal y la de la cabecera— sin ninguna
-     * pista de que una era historia y la otra el presente.
-     */
     companion object {
         const val CHANNEL_ID = ServiceNotificationController.CHANNEL_ID
         const val ALERT_CHANNEL_ID = ServiceNotificationController.ALERT_CHANNEL_ID

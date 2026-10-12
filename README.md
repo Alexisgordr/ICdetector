@@ -588,7 +588,10 @@ applications. ICdetection cannot directly access:
 With Wi-Fi connected, the current implementation abstains on **H1, H2, H7, H12 and H13**
 (`N/A`, never "passed"). H12 must: its probe would measure the Wi-Fi path. The four RF rules abstain
 as an unvalidated precaution, so on Wi-Fi the app relies on the remaining rules; see the
-[manual](MANUAL.md) (*Wi-Fi and rule coverage*).
+[manual](MANUAL.md) (*Wi-Fi and rule coverage*). Rows recorded on Wi-Fi can still feed the local
+references if they pass the usual filters, "no failure recorded" does not mean every rule ran, and
+the Wi-Fi state is not stored per row; whether this mixes contexts in a way that matters is not yet
+measured.
 
 ICdetection cannot block 2G or 3G. It only reports their use (*Settings → 2G/3G network alerts*) and
 offers to open Android's Airplane mode settings; turning Airplane mode on is always the user's own

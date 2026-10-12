@@ -2421,7 +2421,8 @@ class CellDbHelper(
                     val ts = cursor.getString(1) ?: ""
                     total++
                     val reason = cursor.getString(2).orEmpty()
-                    if (score >= 85 && StoredReasons.isClean(reason)) clean++
+                    // Mismo criterio de fila limpia que el baseline de confianza (score mínimo y sin motivo).
+                    if (score >= TRUSTED_BASELINE_MIN_SCORE && StoredReasons.isClean(reason)) clean++
                     if (ts.length >= 10) days.add(ts.substring(0, 10))  // día calendario distinto
                 } while (cursor.moveToNext())
             }

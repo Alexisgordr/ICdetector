@@ -11,6 +11,15 @@ GitHub pre-release of an earlier build was withdrawn.
 
 ### Audit fixes
 
+- **Robustness.** A forensic case is created in one transaction (no half-created "PENDING" case).
+  A failed read of H15's RF history makes H15 abstain for that cycle instead of judging partial data.
+  A failed history prune is reported by the daily maintenance instead of looking like "0 rows". The
+  texts and patterns stored in `failed_heuristics` that queries depend on are shared constants
+  (`StoredReasons`), with the same strings. No change to scores, rules, schema or backups.
+- **Wi-Fi learning documented.** Rows recorded on Wi-Fi can feed the local references; "no failure"
+  is not "all rules evaluated"; the Wi-Fi state is not stored per row. A limitation to measure, not a
+  quantified bias.
+
 - **Timing Advance input (dataset cut for TA and H6).** The getters are range-checked (LTE 0…1282,
   GSM 0…219); sentinels, negatives and out-of-range values store no TA. `toMeters()` applies the same
   limits, so older rows or other inputs cannot produce a distance from an impossible index or
