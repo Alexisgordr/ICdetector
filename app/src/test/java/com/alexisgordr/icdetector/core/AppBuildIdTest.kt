@@ -36,8 +36,17 @@ class AppBuildIdTest {
         assertTrue(gradle.contains("buildConfigField(\"String\", \"BUILD_COMMIT\", \"\\\"\$buildCommit\\\"\")"))
         assertTrue(gradle.contains("\"git\", \"describe\", \"--always\", \"--dirty\", \"--abbrev=7\", \"--exclude=*\""))
         assertTrue(gradle.contains("file(\"BUILD_COMMIT\")"))
-        assertTrue(read(".gitattributes").contains("BUILD_COMMIT export-subst"))
-        assertEquals("\$Format:%h\$", read("BUILD_COMMIT").trim())
+        // En un checkout, BUILD_COMMIT es la plantilla; en un ZIP de `git archive` ya lleva el commit.
+        // Antes la prueba solo aceptaba la plantilla y fallaba al compilar desde el ZIP.
+        val commit = read("BUILD_COMMIT").trim()
+        val fromArchive = Regex("[0-9a-f]{7,40}").matches(commit)
+        assertTrue(commit, commit == "\$Format:%h\$" || fromArchive)
+        // .gitattributes es lo que hace que `git archive` rellene BUILD_COMMIT. En un checkout tiene
+        // que estar; en una copia descomprimida puede faltar si el descompresor omite ficheros ocultos.
+        val attributes = listOf(File(".gitattributes"), File("../.gitattributes")).firstOrNull { it.exists() }
+        if (attributes != null || !fromArchive) {
+            assertTrue(read(".gitattributes").contains("BUILD_COMMIT export-subst"))
+        }
         val main = "app/src/main/java/com/alexisgordr/icdetector"
         assertTrue(read("$main/service/MiniICService.kt").contains("com.alexisgordr.icdetector.core.AppBuildId.current("))
         listOf("ForensicExporter", "TopologyExporter", "GeometryExporter").forEach {
