@@ -57,6 +57,32 @@ class PruneFailureTest {
         assertEquals("el historial borrado en el primer paso se revierte", 3, count())
     }
 
+    @Test fun aServiceStateFailureRollsBackEarlierDeletes() {
+        // Antes este paso tenía un catch vacío: el fallo se ignoraba y la poda se daba por buena.
+        val db = helper.writableDatabase
+        db.execSQL(
+            "INSERT INTO incidents (started_at, updated_at, identity, cid, radio, state, highest_phase, required_phases, " +
+                "score, anomaly_confidence, reason, heuristic_snapshot) VALUES ('2020-01-01 10:00:00', '2020-01-01 10:00:00', " +
+                "'214-07-1-1-LTE', '1', 'LTE', 'RECOVERED', 1, 3, 70, 0.0, 'x', '')"
+        )
+        db.insertOrThrow(CellDbHelper.TABLE_SERVICE_STATE_EVENTS, null, ContentValues().apply {
+            put("ts_ms", 1_577_872_800_000L); put("state", "IN_SERVICE"); put("source", "test")
+        })
+        db.execSQL(
+            "CREATE TRIGGER fail_service_prune BEFORE DELETE ON service_state_events BEGIN SELECT RAISE(ABORT, 'forced'); END"
+        )
+        try {
+            helper.pruneOldRecords()
+            fail("el fallo en los eventos de servicio debe llegar al llamador")
+        } catch (_: Exception) { }
+        assertEquals("historial borrado antes del fallo, revertido", 3, count())
+        assertEquals("incidente borrado antes del fallo, revertido", 1, count("incidents"))
+        assertEquals(1, count(CellDbHelper.TABLE_SERVICE_STATE_EVENTS))
+    }
+
+    private fun count(table: String) =
+        helper.readableDatabase.rawQuery("SELECT COUNT(*) FROM $table", null).use { it.moveToFirst(); it.getInt(0) }
+
     private fun count() = helper.readableDatabase.rawQuery("SELECT COUNT(*) FROM history", null).use { it.moveToFirst(); it.getInt(0) }
 
     private companion object { const val DATABASE_NAME = "icdetector_history.db" }

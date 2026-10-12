@@ -26,6 +26,8 @@ class MaintenanceReportTest {
         assertTrue(prune.contains("} finally {\n            db.endTransaction()"))
         assertFalse("un error ya no es «0 filas»", Regex("""catch \(_: Exception\) \{\s*0\s*\}""").containsMatchIn(prune))
         assertTrue(prune.contains("return try {"))
+        assertFalse("ningún paso de la poda se traga su error (eventos de servicio incluidos)", Regex("""catch\s*\(""").containsMatchIn(prune))
+        assertTrue(prune.contains("db.delete(TABLE_SERVICE_STATE_EVENTS"))
         val maintenance = main.resolve("com/alexisgordr/icdetector/service/DatabaseMaintenance.kt").readText()
         assertTrue(maintenance.contains("MaintenanceReport.Prune.Failed(e.javaClass.simpleName)"))
         assertTrue("el tope forense se aplica igual", maintenance.indexOf("pruneLine(") < maintenance.indexOf("enforceForensicSampleCap()"))

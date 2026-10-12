@@ -1946,13 +1946,12 @@ class CellDbHelper(
      * margen ([DEFAULT_RETENTION_DAYS] por defecto) garantiza que NO se borra nada que las
      * heurísticas puedan usar:
      * esto solo evita que la tabla crezca sin límite registrando 24/7. No toca el esquema ni
-     * los datos recientes. Devuelve el número de filas borradas.
-     */
-    /**
-     * Borra lo que supera la retención, todo en una transacción. Devuelve las filas de historial
-     * borradas. 3.0 — Un error ya no se devuelve como "0 filas borradas": la transacción se revierte
-     * y la excepción llega a [com.alexisgordr.icdetector.service.DatabaseMaintenance], que lo
-     * registra como fallo. Retención y condiciones de borrado sin cambios.
+     * los datos recientes.
+     *
+     * Todo va en una transacción y devuelve las filas de historial borradas. 3.0 — Un error en
+     * cualquier tabla ya no se devuelve como "0 filas borradas" ni se ignora: la transacción se
+     * revierte y la excepción llega a [com.alexisgordr.icdetector.service.DatabaseMaintenance],
+     * que lo registra como fallo. Retención y condiciones de borrado sin cambios.
      */
     fun pruneOldRecords(daysToKeep: Int = DEFAULT_RETENTION_DAYS): Int {
         val cutoff = System.currentTimeMillis() - (daysToKeep.toLong() * 24 * 60 * 60 * 1000)
@@ -1973,14 +1972,13 @@ class CellDbHelper(
             db.delete(TABLE_FORENSIC_CASES, updatedBefore, cutoffArgs)
             db.delete(TABLE_CELL_TRANSITIONS, "last_seen_ms < ?", arrayOf(cutoff.toString()))
             // v2.10.4 — Eventos de servicio: misma antigüedad que el historial y un tope de filas,
-            // por si un módem inestable genera cambios continuos.
-            try {
-                db.delete(TABLE_SERVICE_STATE_EVENTS, "ts_ms < ?", arrayOf(cutoff.toString()))
-                db.execSQL(
-                    "DELETE FROM $TABLE_SERVICE_STATE_EVENTS WHERE id NOT IN " +
-                        "(SELECT id FROM $TABLE_SERVICE_STATE_EVENTS ORDER BY ts_ms DESC, id DESC LIMIT $MAX_SERVICE_STATE_EVENTS)"
-                )
-            } catch (_: Exception) {}
+            // por si un módem inestable genera cambios continuos. 3.0 — Sin catch propio: un fallo
+            // aquí revierte la poda entera y llega al mantenimiento como cualquier otro paso.
+            db.delete(TABLE_SERVICE_STATE_EVENTS, "ts_ms < ?", arrayOf(cutoff.toString()))
+            db.execSQL(
+                "DELETE FROM $TABLE_SERVICE_STATE_EVENTS WHERE id NOT IN " +
+                    "(SELECT id FROM $TABLE_SERVICE_STATE_EVENTS ORDER BY ts_ms DESC, id DESC LIMIT $MAX_SERVICE_STATE_EVENTS)"
+            )
             val siteCutoff = System.currentTimeMillis() - 120L * 24 * 60 * 60 * 1000
             val eventCutoff = System.currentTimeMillis() - 14L * 24 * 60 * 60 * 1000
             val hardSiteCutoff = System.currentTimeMillis() - 365L * 24 * 60 * 60 * 1000
