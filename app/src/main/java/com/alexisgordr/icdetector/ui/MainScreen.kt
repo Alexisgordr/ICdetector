@@ -230,6 +230,12 @@ fun MainScreenContent(dbHelper: CellDbHelper, service: MiniICService?) {
     var showSettings by remember { mutableStateOf(false) }
     // 3.0 — Pestaña con que se abre Historial ("profile" desde Ajustes → Ver evaluaciones).
     var historyTab by remember { mutableStateOf<String?>(null) }
+    // 3.0 — El botón/gesto «atrás» del sistema cierra Ajustes o Historial y vuelve a la pantalla
+    // principal, en vez de salir de la app.
+    androidx.activity.compose.BackHandler(enabled = showSettings || showHistory) {
+        showSettings = false
+        showHistory = false
+    }
 
     LaunchedEffect(service) {
         if (service != null) {
@@ -277,7 +283,8 @@ fun MainScreenContent(dbHelper: CellDbHelper, service: MiniICService?) {
         if (showSettings) {
             SettingsPanel(
                 service,
-                onOpenProfileEvaluations = { showSettings = false; historyTab = "profile"; showHistory = true }
+                onOpenProfileEvaluations = { showSettings = false; historyTab = "profile"; showHistory = true },
+                onBack = { showSettings = false }
             ) { showSettings = false }
         } else if (showHistory) {
             HistoryPanel(dbHelper = dbHelper, service = service, initialTab = historyTab) { showHistory = false }

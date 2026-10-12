@@ -195,6 +195,8 @@ fun StableSitePanel(dbHelper: CellDbHelper, modifier: Modifier = Modifier, onBac
     DisposableEffect(Unit) { onDispose { sites.job?.cancel() } }
     LaunchedEffect(filter) { sites.reset("sites|${filter.name}"); loadSites(first = true) }
 
+    // «Atrás» del sistema: del detalle a la lista y de la lista a Topología (no cierra Historial).
+    androidx.activity.compose.BackHandler { if (selected != null) selected = null else onBack() }
     val site = selected
     if (site != null) {
         StableSiteDetail(dbHelper, site, modifier) { selected = null }

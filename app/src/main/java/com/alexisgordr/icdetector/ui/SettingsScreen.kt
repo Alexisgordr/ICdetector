@@ -24,6 +24,7 @@ import android.app.Activity
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.border
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Favorite
 import com.alexisgordr.icdetector.service.MiniICService
 import com.alexisgordr.icdetector.R
@@ -36,6 +37,8 @@ fun SettingsPanel(
     service: MiniICService?,
     /** 3.0 — «Ver evaluaciones»: abre Historial con la pestaña Perfil local. */
     onOpenProfileEvaluations: () -> Unit = {},
+    /** 3.0 — Flecha de volver: cierra Ajustes sin guardar, como el botón «atrás» del sistema. */
+    onBack: () -> Unit = {},
     onSave: () -> Unit
 ) {
     val context = LocalContext.current
@@ -63,7 +66,12 @@ fun SettingsPanel(
                 .verticalScroll(scrollState),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            Text(stringResource(R.string.settings_title), color = Color(0xFF666666), fontFamily = FontFamily.Monospace, fontSize = 12.sp)
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                IconButton(onClick = onBack) {
+                    Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.back), tint = Color.White)
+                }
+                Text(stringResource(R.string.settings_title), color = Color(0xFF666666), fontFamily = FontFamily.Monospace, fontSize = 12.sp)
+            }
             Text(stringResource(R.string.settings_language), color = Color.White, fontSize = 14.sp, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Bold)
             Row(
                 modifier = Modifier.fillMaxWidth(),
