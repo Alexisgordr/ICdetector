@@ -282,6 +282,23 @@ cell and episode files contain complete cellular identities; treat the ZIP as se
 context data. A transmitter present throughout the first days can influence the first baseline;
 local history cannot establish external truth.
 
+**Viewing it in the app.** **History → Topology → VIEW STABLE-SITE** shows what Stable-Site has
+learned, read only. Sites appear by their stored key (no names, no coordinates) with their
+**current** state, computed with the same maturity policy as the export. `ACTIVE` means a mature
+site, not that any protection is applied; Stable-Site stays in shadow mode. A site's detail shows
+progress towards `ACTIVE`, the neighbour capability, the full-identity cells, the RF fingerprints
+(local context, not cell identities) and its episodes. Episodes are serving-cell changes; only those
+marked *recorded in shadow* met the shadow conditions, and none is an alarm. Each episode shows its
+**last saved evaluation** and the site state recorded then, which is not the initial evidence nor
+the site's current state; missing values are shown as not available.
+
+**Routes.** Tapping a route in Topology opens its detail with **Stable-Site episodes of this route**:
+episodes with the same stored previous and new cell (A→B) that start no later than the last time the
+route was seen (a 2-minute query margin, not proof of association). They relate to the route as a
+whole: a route is an aggregate without the time of each handover, so an episode cannot be attributed
+to one specific transition. Different sites are listed apart; episodes without a stored site appear as
+*No associated site*; with no match the detail says *No associated Stable-Site context*.
+
 ### Local profile (shadow mode, experimental)
 
 The local profile learns how the serving signal of each cell usually looks **on this phone** and

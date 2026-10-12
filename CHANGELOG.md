@@ -9,6 +9,23 @@ Version numbers follow the app's `versionName`; the Android `versionCode` is giv
 Available as source on the `ICdetection-v3.0.0-beta` branch; no APK is published. A short-lived
 GitHub pre-release of an earlier build was withdrawn.
 
+### Stable-Site view in History → Topology
+
+Read only; no schema change. Learning, H1–H16, scores, alarms, retention and both exports are
+unchanged.
+
+- **VIEW STABLE-SITE** lists sites by stored key with their current state from
+  `StableSiteMaturityPolicy` (its thresholds are now named constants, same values and logic), progress
+  towards `ACTIVE`, neighbour capability, full-identity cells, RF fingerprints and paged episodes
+  (all observed, or only those recorded in shadow). Episodes show their last saved evaluation and the
+  site state recorded then, apart from the current state.
+- **Route detail.** Tapping a Topology route shows its data and the Stable-Site episodes with the same
+  stored A→B identities (2-minute query margin); they relate to the aggregated route, not to one
+  transition. Several sites stay apart; no match reads "No associated Stable-Site context".
+- Paged lists with loading, empty and error states with retry; pending loads are cancelled on site
+  or filter change. `tools/check_when_exhaustive.py` no longer reads enum constructor arguments as
+  enum values.
+
 ### Local profile (shadow mode, experimental) — schemas 22 and 23
 
 An optional statistical layer, complementary to H1–H16. **Not a dataset cut for any rule:** scores,
