@@ -11,45 +11,27 @@ GitHub pre-release of an earlier build was withdrawn.
 
 ### Local profile (shadow mode, experimental) — schemas 22 and 23
 
-A local statistical profile, complementary to H1–H16. **Not a dataset cut for any rule:** scores,
-confirmation, alerts, current learning and forensic decisions are unchanged; the profile only adds
-its own tables and CSV columns.
+An optional statistical layer, complementary to H1–H16. **Not a dataset cut for any rule:** scores,
+confirmation, alerts, trust learning and forensic decisions are unchanged.
 
-- **Schema 22 (additive).** New tables `local_profile`, `profile_evaluations` (one per history row,
-  deleted with it) and `profile_mode_events`. Existing data is kept; no clean install. "Delete
-  history" also clears the profile; retention prunes references without recent evidence.
-- **Protected learning.** Per cell and radio technology, an exponentially weighted mean and spread of
-  `DBM` and `RSRQ`. Invalid, old (> 30 days), repeated or out-of-order readings are ignored; at most
-  48 samples a day; outliers beyond 4 spreads are quarantined; the mean moves at most one noise floor
-  a day. Mature with 30 samples over 3 days; stale after 30 days without evidence. References carry
-  the phone model and algorithm version; any mismatch abstains.
-- **Shadow evaluation.** After each history row is saved: evaluate with the previous reference, then
-  learn, except about 1 row in 10 (deterministic, from the row id) kept for evaluation only. One-time
-  start from the last 30 days of history with an exact instant, the latest 20% held out; never from a
-  restored backup. Levels `NONE`/`LOW`/`MODERATE`/`HIGH` from fixed, uncalibrated cut-offs (2, 3, 4),
-  or `ABSTAIN` with a reason. Failures never affect the saved row.
-- **Export.** Ten `Profile*` columns appended after `LocationMode`; earlier columns unchanged, empty
-  for rows not evaluated. `tools/check_export.py` validates them.
-- **Experimental option.** Settings → Local profile (experimental), off by default: shows the latest
-  evaluation, labelled as not an engine decision; cannot add, silence or lower alerts. Mode changes,
-  resets and first activation are logged; **RESET LOCAL PROFILE** relearns from scratch (needed after
-  restoring on another phone model).
-- **Known limitations.** Not an IMSI-catcher detector; no resistance to evasion; a transmitter present
-  while learning becomes normal; slow multi-day drift is only slowed; not validated.
-- **Technical review of 637761d — algorithm 2, schema 23 (additive).** Fixed: a unit test that did
-  not compile (F01); the spread could grow from 3 to 22 dB in one day and turn a HIGH reading into
-  NONE — residuals are now clipped and the spread grows at most one noise floor a day (F02); one
-  reading saved as several rows could be learned through one row and evaluated as holdout through
-  another — the holdout is now decided per observation (F03); revisions repeated after a reset — each
-  reference has a generation, exported as `SIGNAL_DBM@<generation>:<revision>`, with evidence to three
-  decimals (F04); one sample revived a stale reference as mature — it now relearns as a new generation
-  (F05); readings dated in the future were learned and blocked later ones — refused beyond 5 minutes,
-  and future-dated references are rebuilt (F06); `check_export.py` now rejects impossible `Profile*`
-  values (F07); the Settings card refreshes every 30 s and counts only references usable now (F08);
-  a repeated quarantined reading is counted once (F09); profile failures are counted and shown as
-  diagnosis instead of being dropped (F10). Restoring a backup always turns the experimental option off
-  (logged as `OFF`); `ProfileLearned` follows the learning outcome, so a relearned stale reference is
-  exported as learned. References of algorithm 1 are relearned automatically.
+- **Storage.** Schema 22 adds `local_profile`, `profile_evaluations` (one per history row, deleted
+  with it) and `profile_mode_events`; schema 23 adds three columns. Both are additive: no clean
+  install, no data lost.
+- **Learning (algorithm 2).** Per cell and technology, mean and spread of `DBM` and `RSRQ`. Invalid,
+  old, future-dated and repeated readings are ignored; at most 48 samples a day; outliers are
+  quarantined; mean and spread shift at most one noise floor a day. Mature after 30 samples over
+  3 days; stale after 30 days without evidence, then relearned as a new generation.
+- **Shadow evaluation.** Each saved row is evaluated before it is learned; about 1 observation in 10
+  is held out for evaluation only. First use also learns from the last 30 days of history, never from
+  a restored backup. Uncalibrated levels `NONE`/`LOW`/`MODERATE`/`HIGH`, or `ABSTAIN` with a reason.
+- **Export.** Ten `Profile*` columns appended at the end of the history CSV; `tools/check_export.py`
+  validates them.
+- **Settings.** *Local profile (experimental)*, off by default, display only; **RESET LOCAL
+  PROFILE**; error diagnostics. Mode changes and resets are logged. Restoring a backup turns the option
+  off.
+- **Limitations.** Not an IMSI-catcher detector; no resistance to evasion; a transmitter present while
+  learning becomes normal; slow multi-day drift is only slowed; not validated.
+- **Also fixed.** `AppBuildIdTest` now passes when building from a source ZIP.
 
 ### Phase 4 — Maintenance backlog and documentation
 

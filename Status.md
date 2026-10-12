@@ -42,8 +42,8 @@ mode stored per row (schema 21); the main-screen GPS
 indicator uses the same validated position as the analysis; backup and restore from Settings
 (validated, journaled and safe against interruptions; v2.10.x backups refused), a first-start
 question that blocks collection until answered, and no app data in Android's backup or
-phone-to-phone transfer; a local statistical profile in shadow mode (schemas 22–23, additive; algorithm 2
-after a technical review) with an experimental, display-only option in Settings, off by default.
+phone-to-phone transfer; a local statistical profile in shadow mode (schemas 22–23, additive) with an
+experimental, display-only option in Settings, off by default.
 
 ## Dataset cuts in 3.0
 
