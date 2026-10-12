@@ -645,6 +645,17 @@ can be suspicious, but rural coverage, indoor deployments, modem limitations and
 conditions look similar. H3 (MCC), H4 (MNC) and H5 (TAC) need neighbours that report their identity;
 many modems report only frequency, PCI and signal, so these rules can stay `N/A` permanently.
 
+**Which entries count as neighbours.** A neighbour is an entry the modem reports as not registered
+and does **not** declare `SECONDARY_SERVING`. A secondary carrier (the NR leg of 5G NSA, or an LTE
+carrier-aggregation secondary published without "registered") serves this connection, so it is
+listed as a secondary carrier and shown in the Radio context, but it is not counted or compared as a
+neighbour. The app does not assume that secondaries come from the same site as the primary; it only
+uses the role the modem declares. NR entries are not excluded for being NR, and entries in `NONE` or
+`UNKNOWN` state keep their previous treatment. The same list feeds H1–H5, H7, the H11 distance
+threshold, H16, the Bayesian density factor and Stable-Site learning. Before this change (3.0 beta,
+commit `6e99267`) such secondaries counted as neighbours; how many past rows that affected has not
+been measured, and stored rows are not recomputed (see *What your own data can and cannot show*).
+
 **Sudden signal changes (H2, H13).** An unusually large power increase can indicate a transmitter much
 closer or stronger than expected. Movement, handovers, line-of-sight changes and indoor propagation
 also cause abrupt shifts. Weaker-than-usual readings are not treated as suspicious.
@@ -1049,6 +1060,11 @@ shadow mode and comparing it with the same places on mobile data — so no rule 
 - **What a row does not keep:** the reason each rule abstained (only which ones did), the age of the
   GPS fix (stale fixes are discarded before saving, but the age is not stored) and the time zone of
   rows before 3.0. The app shows these as "not stored" and never fills them in.
+- **Neighbour selection before 3.0 beta (commit `6e99267`):** a secondary carrier published as
+  unregistered (typically the NR leg of 5G NSA) counted as a neighbour for H1–H5, H7, H11's density
+  threshold, H16, the Bayesian density factor and Stable-Site learning. Rows do not store the
+  neighbour list, so the effect on past rows cannot be reconstructed and **has not been measured**;
+  nothing is rewritten. Compare such rows by `AppVersion`.
 - **Stable-Site history:** an episode's *recorded in shadow* mark is cumulative (it stays set if any
   evaluation during the episode met the shadow conditions), while its reason, movement and site state
   belong only to its **last saved evaluation**. Topology routes are aggregates (counts, last state,

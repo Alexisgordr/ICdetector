@@ -11,6 +11,23 @@ GitHub pre-release of an earlier build was withdrawn.
 
 ### Audit fixes
 
+- **Neighbour selection (dataset cut for H1–H5, H7, H11, H16, the Bayesian density factor and
+  Stable-Site learning; commit `6e99267`).** A carrier the modem declares `SECONDARY_SERVING` but
+  publishes without `isRegistered` — typically the NR leg of 5G NSA, sometimes an LTE secondary — used
+  to count as a neighbour, because neighbours were "every unregistered entry". It now stays a
+  secondary carrier (shown in the Radio context and in `secondaryCarriers`) and is no longer counted
+  or compared as a neighbour. Affected consumers: H1 (isolation and its 3-delivery streak), H2 (power
+  gap), H3–H5 (MCC, MNC, TAC), H7 (ghost neighbours), the H11 distance threshold that depends on
+  neighbour density, H16 ("destination was a neighbour"), the Bayesian density factor, Stable-Site
+  learning and its neighbour diagnostic, and the neighbour count in the rule explanations. Expected
+  direction on NSA phones: fewer "neighbours", so H1 can see an isolated cell where it used to see one
+  neighbour, and H2/H7 can become `N/A` where the secondary was the only neighbour. The selection is a
+  single function (`ServingCellSelection.neighbours`). Unchanged: the serving-cell choice, the signal
+  filter, entries in `NONE`/`UNKNOWN` state, weights, thresholds, schema, backups, exports and the
+  forensic black box (which still records every non-serving entry with its connection state). How many
+  historical rows were affected has **not been measured**; rows are not rewritten or recomputed, the
+  per-row neighbour list is not stored, and Stable-Site aggregates learnt before this change may
+  include such carriers until they age out. New rows are identified by the `AppVersion` column.
 - **Robustness.** A forensic case is created in one transaction (no half-created "PENDING" case).
   A failed read of H15's RF history makes H15 abstain for that cycle instead of judging partial data.
   A failed history prune is reported by the daily maintenance instead of looking like "0 rows". The

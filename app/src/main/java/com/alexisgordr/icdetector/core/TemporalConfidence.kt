@@ -156,9 +156,15 @@ class TemporalConfidence(
     }
 
     /**
-     * Dos evidencias fuertes e independientes reducen la confirmación a dos observaciones reales.
-     * Una señal aislada —aunque tenga mucho peso— conserva los tres ciclos para no convertir una
-     * lectura defectuosa del módem o del GPS en alarma instantánea.
+     * Dos fallos fuertes en la misma observación (dos cualesquiera de H11, H13, H15 y H16) reducen
+     * la confirmación a dos observaciones reales. Un fallo fuerte aislado conserva los tres ciclos
+     * para no convertir una lectura defectuosa del módem o del GPS en alarma instantánea.
+     *
+     * Dos fallos fuertes NO son necesariamente evidencias independientes: H11 y H16 leen el mismo
+     * fijo GPS y las posiciones guardadas de las mismas celdas, así que una posición errónea puede
+     * hacer fallar las dos y acortar la confirmación por una sola causa (y H11 y H15 pueden
+     * reaccionar al mismo cambio de PCI/ARFCN). Es una limitación documentada (MANUAL, «Shared
+     * evidence»), no una garantía de independencia; la regla no se ha cambiado.
      */
     private fun requiredCycles(cell: CellData): Int {
         val report = cell.heuristicReport

@@ -353,7 +353,11 @@ without data for another reason shows **WAITING**.
 The **RADIO** tab (History → RADIO) shows the live serving cell, its carriers, every visible cell and
 the recent service-state changes, exportable to CSV. The serving cell is chosen by the modem's
 `PRIMARY_SERVING` status, never by signal strength; if a declared primary has unusable telemetry, the
-cycle abstains instead of promoting a secondary.
+cycle abstains instead of promoting a secondary. A secondary carrier is never counted as a
+neighbour, even when the modem publishes it as unregistered (the NR leg of 5G NSA): neighbour-based
+rules, the Bayesian density factor and Stable-Site use only real neighbours. Before 3.0 beta (commit
+`6e99267`) such carriers counted; the effect on earlier rows has not been measured and is not
+recomputed (see the [manual](MANUAL.md)).
 
 ---
 
