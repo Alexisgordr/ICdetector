@@ -486,12 +486,21 @@ class MiniICService : Service() {
             runCatching { packageManager.getPackageInfo(packageName, 0).versionName }.getOrNull()
         )
         // 3.0 — Perfil local en sombra: después de cada fila, en la misma cola; no toca el motor.
+        val profilePrefs = getSharedPreferences("miniic_prefs", MODE_PRIVATE)
         localProfile = LocalProfileController(
             dbHelper = dbHelper,
-            prefs = getSharedPreferences("miniic_prefs", MODE_PRIVATE),
+            prefs = profilePrefs,
             deviceModel = com.alexisgordr.icdetector.core.profile.ProfileCompatibility.deviceModel(
                 android.os.Build.MANUFACTURER, android.os.Build.MODEL
-            )
+            ),
+            // Opción experimental (Ajustes): solo cambia el modo guardado en cada evaluación.
+            mode = {
+                com.alexisgordr.icdetector.core.profile.LocalProfileOption.mode(profilePrefs.getBoolean(
+                    com.alexisgordr.icdetector.core.profile.LocalProfileOption.PREF_KEY,
+                    com.alexisgordr.icdetector.core.profile.LocalProfileOption.DEFAULT_ENABLED
+                ))
+            },
+            appVersion = appVersion
         )
         writeGate.launch(scope, historyWriteDispatcher) { runCatching { localProfile.bootstrapIfNeeded() } }
         observationPersistence = ObservationPersistenceController(

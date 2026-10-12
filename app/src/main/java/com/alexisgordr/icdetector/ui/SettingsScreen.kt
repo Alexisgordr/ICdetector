@@ -277,6 +277,11 @@ fun SettingsPanel(service: MiniICService?, onSave: () -> Unit) {
 
             HorizontalDivider(color = Color(0xFF1A1A1A), modifier = Modifier.padding(vertical = 4.dp))
 
+            // 3.0 — Perfil local: opción experimental, solo visualización.
+            LocalProfileSection()
+
+            HorizontalDivider(color = Color(0xFF1A1A1A), modifier = Modifier.padding(vertical = 4.dp))
+
             // 3.0 — Copia de seguridad: exportar y restaurar todos los datos.
             BackupSection()
 

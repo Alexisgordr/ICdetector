@@ -4,6 +4,7 @@ import android.content.ContentValues
 import android.database.Cursor
 import android.database.sqlite.SQLiteDatabase
 import com.alexisgordr.icdetector.core.profile.AbstainReason
+import com.alexisgordr.icdetector.core.profile.DeviationLevel
 import com.alexisgordr.icdetector.core.profile.MetricProfile
 import com.alexisgordr.icdetector.core.profile.ProfileBootstrap
 import com.alexisgordr.icdetector.core.profile.ProfileContext
@@ -78,11 +79,41 @@ object LocalProfileStore {
             }
         }
 
-    fun recordModeEvent(db: SQLiteDatabase, mode: ProfileMode?, appVersion: String?, atMs: Long) {
+    fun recordModeEvent(db: SQLiteDatabase, mode: ProfileMode?, appVersion: String?, atMs: Long) =
+        recordEvent(db, mode?.name ?: "OFF", appVersion, atMs)
+
+    /** Un evento del registro de modos: un modo, `OFF` o `RESET` (reinicio del perfil). */
+    fun recordEvent(db: SQLiteDatabase, label: String, appVersion: String?, atMs: Long) {
         db.insert(M, null, ContentValues().apply {
-            put("at_ms", atMs); put("mode", mode?.name ?: "OFF"); put("app_version", appVersion)
+            put("at_ms", atMs); put("mode", label); put("app_version", appVersion)
         })
     }
+
+    /** Última evaluación guardada, para mostrarla con la opción experimental. */
+    fun latestEvaluation(db: SQLiteDatabase): ProfileEvaluationRecord? =
+        db.rawQuery("SELECT * FROM $E ORDER BY evaluated_at_ms DESC, id DESC LIMIT 1", null).use { c ->
+            if (!c.moveToFirst()) return null
+            fun s(n: String) = c.getColumnIndexOrThrow(n).let { if (c.isNull(it)) null else c.getString(it) }
+            fun i(n: String) = c.getInt(c.getColumnIndexOrThrow(n))
+            ProfileEvaluationRecord(
+                historyId = c.getLong(c.getColumnIndexOrThrow("history_id")),
+                evaluatedAtMs = c.getLong(c.getColumnIndexOrThrow("evaluated_at_ms")),
+                algorithmVersion = i("algorithm_version"), profileRevision = s("profile_revision"),
+                contextKey = s("context_key").orEmpty(),
+                mode = ProfileMode.entries.firstOrNull { it.name == s("mode") } ?: ProfileMode.SHADOW,
+                level = DeviationLevel.entries.firstOrNull { it.name == s("deviation_level") } ?: DeviationLevel.ABSTAIN,
+                score = c.getColumnIndexOrThrow("deviation_score").let { if (c.isNull(it)) null else c.getDouble(it) },
+                metricsEvaluated = i("metrics_evaluated"), metricsTotal = i("metrics_total"), evidence = s("evidence"),
+                abstainReason = AbstainReason.entries.firstOrNull { it.name == s("abstain_reason") },
+                learned = i("learned") == 1, holdout = i("holdout") == 1
+            )
+        }
+
+    /** Referencias guardadas: (maduras según su última actualización, total). */
+    fun maturityCounts(db: SQLiteDatabase): Pair<Int, Int> =
+        db.rawQuery("SELECT SUM(maturity='MATURE'), COUNT(*) FROM $P", null).use { c ->
+            if (c.moveToFirst()) c.getInt(0) to c.getInt(1) else 0 to 0
+        }
 
     /** Reiniciar el perfil (todo, o un contexto). Las evaluaciones ya hechas se conservan. */
     fun reset(db: SQLiteDatabase, contextKey: String? = null) {

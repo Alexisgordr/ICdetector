@@ -24,6 +24,7 @@ internal class LocalProfileController(
     private val prefs: SharedPreferences,
     private val deviceModel: String,
     private val mode: () -> ProfileMode = { ProfileMode.SHADOW },
+    private val appVersion: String? = null,
     private val clock: () -> Long = System::currentTimeMillis
 ) {
     private val shadow = LocalProfileShadow(LocalProfileLearner())
@@ -78,6 +79,8 @@ internal class LocalProfileController(
                     LocalProfileStore.insertEvaluation(db, step.record)
                 }
             }
+            // Primera activación de esta versión del algoritmo, con el modo en que empieza.
+            LocalProfileStore.recordModeEvent(db, mode(), appVersion, now)
             db.setTransactionSuccessful()
         } finally {
             db.endTransaction()

@@ -357,4 +357,23 @@
     <string name="first_run_fresh_failed">No se pudo borrar todo, así que no se ha decidido nada. Vuelve a intentarlo.</string>
     <string name="first_run_fresh_confirm_title">¿Borrar los datos que hay?</string>
     <string name="first_run_fresh_confirm_body">Empezar de cero borra todos los datos de ICdetection que ya hay en este móvil. No se puede deshacer.</string>
+    <!-- 3.0 — Perfil local (experimental) -->
+    <string name="local_profile_title">Perfil local (experimental)</string>
+    <string name="local_profile_body">Aprende cómo suele verse la señal de cada celda en ESTE teléfono y anota, en cada fila guardada, cuánto se aparta la observación. Siempre funciona en segundo plano (sombra) y va en el CSV exportado. Activarlo solo muestra aquí la última evaluación: no añade, silencia ni rebaja alertas, y no es prueba de un IMSI catcher.</string>
+    <string name="local_profile_summary">Referencias: %1$d maduras de %2$d</string>
+    <string name="local_profile_none">Todavía no hay evaluaciones.</string>
+    <string name="local_profile_last_level">Última evaluación: %1$s (desviación %2$s, métricas %3$s)</string>
+    <string name="local_profile_last_abstain">Última evaluación: sin nivel (%1$s)</string>
+    <string name="local_profile_not_engine">EXPERIMENTAL — no es una decisión del motor. Sin calibrar: la desviación no es una probabilidad. Un perfil maduro no significa que el método esté validado.</string>
+    <string name="local_profile_level_none">sin desviación</string>
+    <string name="local_profile_level_low">baja</string>
+    <string name="local_profile_level_moderate">moderada</string>
+    <string name="local_profile_level_high">alta</string>
+    <string name="local_profile_level_abstain">sin nivel</string>
+    <string name="local_profile_reset">REINICIAR PERFIL LOCAL</string>
+    <string name="local_profile_reset_title">¿Reiniciar el perfil local?</string>
+    <string name="local_profile_reset_body">Borra lo que ha aprendido el perfil local para que empiece de nuevo en este teléfono. Se conservan el historial, las alertas, las evaluaciones pasadas y todo lo demás.</string>
+    <string name="local_profile_reset_confirm">REINICIAR</string>
+    <string name="local_profile_reset_done">Perfil local reiniciado. Vuelve a aprender con las nuevas observaciones.</string>
+    <string name="local_profile_reset_failed">No se pudo reiniciar el perfil local. No se ha cambiado nada.</string>
 </resources>
