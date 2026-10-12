@@ -45,8 +45,8 @@ class LocalProfileHookTest {
 
     @Test fun `rows and write results are identical with, without or with a failing profile`() {
         val without = run(null)
-        val with = run { _, _ -> }
-        val failing = run { _, _ -> throw IllegalStateException("perfil roto") }
+        val with = run(afterWrite = { _, _ -> })
+        val failing = run(afterWrite = { _, _ -> throw IllegalStateException("perfil roto") })
         listOf(with, failing).forEach {
             assertEquals(without.rows.map { r -> r.cell to r.reason }, it.rows.map { r -> r.cell to r.reason })
             assertEquals(without.writes, it.writes)
@@ -55,7 +55,7 @@ class LocalProfileHookTest {
     }
 
     @Test fun `the profile runs after the row is saved and only for saved rows`() {
-        assertEquals(listOf("write:1", "profile:1", "write:2", "profile:2", "write:3", "profile:3"), run { _, _ -> }.events)
-        assertEquals(listOf("write:-1", "write:-1", "write:-1"), run({ _, _ -> }, insertResult = { -1L }).events)
+        assertEquals(listOf("write:1", "profile:1", "write:2", "profile:2", "write:3", "profile:3"), run(afterWrite = { _, _ -> }).events)
+        assertEquals(listOf("write:-1", "write:-1", "write:-1"), run(afterWrite = { _, _ -> }, insertResult = { -1L }).events)
     }
 }
