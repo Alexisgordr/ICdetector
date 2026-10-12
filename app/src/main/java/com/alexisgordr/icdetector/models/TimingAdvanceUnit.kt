@@ -35,7 +35,8 @@ enum class TimingAdvanceUnit {
     GSM_INDEX,
 
     /**
-     * Valor leído de `CellSignalStrengthNr.getTimingAdvanceMicros()` (API 34+, por reflexión).
+     * Valor leído de `CellSignalStrengthNr.getTimingAdvanceMicros()` (API pública 34+; antes de 3.0,
+     * por reflexión).
      *
      * **NO se convierte a distancia. A propósito.** El nombre `NR_RAW` es deliberado: registra de
      * dónde salió el número sin afirmar en qué unidad está, porque eso es exactamente lo que no se
@@ -98,8 +99,8 @@ enum class TimingAdvanceUnit {
     STUB_ZERO,
 
     /**
-     * Unidad indeterminable: valor raspado del `toString()` de un fabricante. Ni siquiera se sabe
-     * si es un índice o un tiempo.
+     * Unidad indeterminable: valor raspado del `toString()` de un fabricante (desde 3.0 solo en NR y
+     * como contexto). Ni siquiera se sabe si es un índice o un tiempo.
      */
     UNKNOWN;
 
@@ -112,13 +113,23 @@ enum class TimingAdvanceUnit {
      */
     fun toMeters(timingAdvance: Int): Int? {
         if (timingAdvance < 0) return null
+        // 3.0 — Los mismos límites que el parser, también aquí: protegen filas antiguas y entradas
+        // ajenas al parser. Fuera de rango no hay distancia (y no puede desbordarse: 1282·78 y
+        // 219·554 caben de sobra en un Int).
         return when (this) {
-            LTE_INDEX -> timingAdvance * 78
-            GSM_INDEX -> timingAdvance * 554
+            LTE_INDEX -> if (timingAdvance in LTE_INDEX_RANGE) timingAdvance * 78 else null
+            GSM_INDEX -> if (timingAdvance in GSM_INDEX_RANGE) timingAdvance * 554 else null
             NR_RAW -> null      // ver la documentación de NR_RAW: deliberado
             STUB_ZERO -> null   // un cero que no mide nada no es media distancia, es ninguna
             UNKNOWN -> null
         }
+    }
+
+    companion object {
+        /** Índice TA de LTE válido (3GPP TS 36.213). */
+        val LTE_INDEX_RANGE = 0..1282
+        /** Índice TA de GSM válido. */
+        val GSM_INDEX_RANGE = 0..219
     }
 
     /** ¿Puede esta unidad sostener una afirmación geométrica? Azúcar legible para las heurísticas. */

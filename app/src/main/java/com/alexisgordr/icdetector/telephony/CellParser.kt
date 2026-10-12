@@ -10,6 +10,7 @@ import com.alexisgordr.icdetector.models.RadioTech
 import com.alexisgordr.icdetector.models.TimingAdvanceUnit
 import com.alexisgordr.icdetector.core.BandPlan
 import com.alexisgordr.icdetector.core.NeighbourPlaceholders
+import com.alexisgordr.icdetector.core.TimingAdvanceInput
 
 object CellParser {
 
@@ -52,19 +53,10 @@ object CellParser {
                     .let { if (it == Int.MAX_VALUE) null else it }
                 val sinr = info.cellSignalStrength.rssnr
                     .let { if (it == Int.MAX_VALUE) null else it }
-                // TA de LTE: SIEMPRE un índice (1 unidad ≈ 78 m), tanto por el getter como por el
-                // raspado de reserva, que lee el mismo campo impreso de CellSignalStrengthLte.
-                var ta = info.cellSignalStrength.timingAdvance.let { if (it == Int.MAX_VALUE) null else it }
-                if (ta == null) {
-                    try {
-                        val rawString = info.cellSignalStrength.toString()
-                        val taMatch = TA_REGEX.find(rawString)
-                        if (taMatch != null) {
-                            val extracted = taMatch.groupValues[1].toIntOrNull()
-                            if (extracted != null && extracted != Int.MAX_VALUE) ta = extracted
-                        }
-                    } catch (_: Exception) {}
-                }
+                // TA de LTE: índice 0..1282, SOLO del getter. 3.0 — Ya no se raspa toString(): el
+                // texto del fabricante no se convierte en LTE_INDEX (la regex aceptaba `data=0` o
+                // `delta=0` como TA 0). Sin valor válido del getter, no hay TA.
+                val ta = TimingAdvanceInput.lte(info.cellSignalStrength.timingAdvance)
                 val extras = extrasLte(id)
                 // 3.0 (#11) — En vecinas LTE, TAC 65535 y Cell ID 268435455 son relleno: N/A.
                 // 3.0 (#32) — Banda: el EARFCN si está en la tabla; si no, la que declare el módem.
@@ -80,38 +72,19 @@ object CellParser {
                 val dbm = strength.ssRsrp.let { if (it == Int.MAX_VALUE) strength.dbm else it }
                 val cellMcc = identityOrFallback(id.mccString, reg, mcc)
                 val cellMnc = identityOrFallback(id.mncString, reg, mnc)
-                // TA de NR. Dos rutas con unidades DISTINTAS, y por eso la unidad viaja con el
-                // valor (ver TimingAdvanceUnit):
-                //  - getTimingAdvanceMicros() devuelve microsegundos de ida y vuelta -> NR_RAW.
-                //  - el raspado de toString() devuelve lo que imprima el fabricante, que puede ser
-                //    un índice o microsegundos. No es determinable -> UNKNOWN, y H6 se abstiene de
-                //    deducir distancia. Se conserva el valor porque sigue sirviendo para mostrarlo,
-                //    pero no se usa para geometría: es preferible no juzgar a juzgar con la unidad
-                //    equivocada, que en el peor caso erraba por un factor cercano a 2.
+                // TA de NR. Dos rutas, y la unidad viaja con el valor (ver TimingAdvanceUnit):
+                //  - API pública getTimingAdvanceMicros() (API 34+) -> NR_RAW. No se deduce distancia
+                //    ni se cambia su semántica por el nombre del método.
+                //  - Si no da un valor válido, el toString() del fabricante, solo como contexto ->
+                //    UNKNOWN, con el nombre del campo delimitado y el número completo.
                 var ta: Int? = null
                 var taUnit = TimingAdvanceUnit.UNKNOWN
-                if (Build.VERSION.SDK_INT >= 34) {
-                    try {
-                        val method = strength.javaClass.getMethod("getTimingAdvanceMicros")
-                        val res = method.invoke(strength) as Int
-                        if ((res != Int.MAX_VALUE) && (res != -1)) {
-                            ta = res
-                            taUnit = TimingAdvanceUnit.NR_RAW
-                        }
-                    } catch (_: Exception) { }
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+                    ta = try { TimingAdvanceInput.nr(strength.timingAdvanceMicros) } catch (_: Exception) { null }
+                    if (ta != null) taUnit = TimingAdvanceUnit.NR_RAW
                 }
                 if (ta == null) {
-                    try {
-                        val rawString = info.toString()
-                        val taMatch = TA_REGEX.find(rawString) ?: TA_LONG_REGEX.find(rawString)
-                        if (taMatch != null) {
-                            val extracted = taMatch.groupValues[1].toIntOrNull()
-                            if (extracted != null && extracted != Int.MAX_VALUE) {
-                                ta = extracted
-                                taUnit = TimingAdvanceUnit.UNKNOWN
-                            }
-                        }
-                    } catch (_: Exception) {}
+                    ta = try { TimingAdvanceInput.scrapedNr(info.toString()) } catch (_: Exception) { null }
                 }
                 val rsrq = strength.ssRsrq
                     .let { if (it == Int.MAX_VALUE) null else it }
@@ -134,18 +107,14 @@ object CellParser {
                 val dbm = info.cellSignalStrength.dbm
                 val cellMcc = identityOrFallback(id.mccString, reg, mcc)
                 val cellMnc = identityOrFallback(id.mncString, reg, mnc)
-                val ta = info.cellSignalStrength.timingAdvance.let { if (it == Int.MAX_VALUE) null else it }
+                // Índice 0..219; centinelas y fuera de rango, sin TA.
+                val ta = TimingAdvanceInput.gsm(info.cellSignalStrength.timingAdvance)
                 CellData(reg, networkTypeString, id.cid.valOrNa(), cellMnc, id.lac.valOrNa(), dbm, cellMcc, timingAdvance = ta, timingAdvanceUnit = TimingAdvanceUnit.GSM_INDEX, radioTech = radioTechOf(info), arfcn = id.arfcn)
                     .withRadioContext(connectionOf(info), null, extrasGsm(id))
             }
             else -> null
         }
     }
-
-    // Regex compiladas una sola vez (antes se construían en cada lectura de cada celda, varias
-    // veces por segundo en zonas de transición).
-    private val TA_REGEX = Regex("ta=([0-9]+)")
-    private val TA_LONG_REGEX = Regex("timingAdvance=([0-9]+)")
 
     // ── v2.10.4 — Contexto de radio (solo recolección) ─────────────────────────────────────
     //
