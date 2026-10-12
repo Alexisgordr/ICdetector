@@ -20,10 +20,13 @@ object FirstRunPolicy {
     /** Nombre de la copia de los datos anteriores a una restauración (ver RestoreStartup). */
     const val PREF_PRE_BACKUP_NAME = "restore_pre_backup_name"
 
+    /** 3.0 — La base actual viene de una copia restaurada (ver LocalProfileController). */
+    const val PREF_HISTORY_RESTORED = "local_profile_history_restored"
+
     enum class Decision { PENDING, RESTORED, FRESH, EXISTING }
 
     /** Preferencias que escribe esta misma función o la restauración: no prueban un uso previo. */
-    val OWN_KEYS = setOf(PREF_DECISION, PREF_RESTORE_RESULT, PREF_PRE_BACKUP_NAME)
+    val OWN_KEYS = setOf(PREF_DECISION, PREF_RESTORE_RESULT, PREF_PRE_BACKUP_NAME, PREF_HISTORY_RESTORED)
 
     fun parse(value: String?): Decision? = Decision.entries.firstOrNull { it.name == value }
 

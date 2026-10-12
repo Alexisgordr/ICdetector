@@ -27,7 +27,12 @@ object ExportUtils {
         "AppVersion,ExportDevice,ExportAndroid," +
         // 3.0 (esquema 21) — Modo: CONTINUOUS, INTELLIGENT o ADAPTIVE. Al final, para no
         // mover ninguna columna anterior. Vacío en filas anteriores al esquema 21: desconocido.
-        "LocationMode"
+        "LocationMode," +
+        // 3.0 (esquema 22) — Perfil local en sombra, al final para no mover ninguna columna. Vacías
+        // si la fila no se evaluó (filas anteriores o sin perfil). El nivel no está calibrado y no
+        // es una probabilidad; ProfileMode dice si era sombra o la opción experimental visible.
+        "ProfileMode,ProfileLevel,ProfileScore,ProfileCoverage,ProfileAbstainReason,ProfileAlgorithm," +
+        "ProfileRevision,ProfileEvidence,ProfileLearned,ProfileHoldout"
 
     /** Cabecera del CSV de eventos de servicio (pestaña Radio). */
     const val SERVICE_STATE_CSV_HEADER = "TimestampUtc,State,DataRegistered,VoiceRegistered,Searching," +
@@ -142,7 +147,17 @@ object ExportUtils {
         item.appVersion ?: "",
         export.device,
         export.android,
-        item.locationMode ?: ""
+        item.locationMode ?: "",
+        item.profile?.mode ?: "",
+        item.profile?.level ?: "",
+        item.profile?.score?.let { String.format(java.util.Locale.ROOT, "%.2f", it) } ?: "",
+        item.profile?.let { "${it.metricsEvaluated}/${it.metricsTotal}" } ?: "",
+        item.profile?.abstainReason ?: "",
+        item.profile?.algorithmVersion ?: "",
+        item.profile?.revision ?: "",
+        item.profile?.evidence ?: "",
+        item.profile?.let { if (it.learned) 1 else 0 } ?: "",
+        item.profile?.let { if (it.holdout) 1 else 0 } ?: ""
     ).joinToString(",") { csvEscape(it) }
 
     /** Una fila del CSV de eventos de servicio. Pura: se puede probar sin Android. */

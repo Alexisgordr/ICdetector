@@ -2061,10 +2061,10 @@ class CellDbHelper(
             val expected = db.rawQuery("SELECT COUNT(*) FROM $TABLE_HISTORY", null).use { c ->
                 if (c.moveToFirst()) c.getInt(0) else 0
             }
-            db.rawQuery("SELECT * FROM $TABLE_HISTORY ORDER BY $NEWEST_FIRST", null).use { cursor ->
+            db.rawQuery(EXPORT_QUERY, null).use { cursor ->
                 if (cursor.moveToFirst()) {
                     do {
-                        action(readRecord(cursor))
+                        action(readRecord(cursor).copy(profile = readProfileExport(cursor)))
                     } while (cursor.moveToNext())
                 }
             }
@@ -2073,6 +2073,29 @@ class CellDbHelper(
         } finally {
             db.endTransaction()
         }
+    }
+
+    /**
+     * 3.0 — Export: cada fila con su evaluación del perfil local (si la tiene). LEFT JOIN: el número
+     * y el orden de las filas no cambian, porque hay como mucho una evaluación por fila (UNIQUE).
+     */
+    private val EXPORT_QUERY = "SELECT h.*, e.mode AS p_mode, e.deviation_level AS p_level, " +
+        "e.deviation_score AS p_score, e.metrics_evaluated AS p_evaluated, e.metrics_total AS p_total, " +
+        "e.abstain_reason AS p_abstain, e.algorithm_version AS p_algorithm, e.profile_revision AS p_revision, " +
+        "e.evidence AS p_evidence, e.learned AS p_learned, e.holdout AS p_holdout " +
+        "FROM $TABLE_HISTORY h LEFT JOIN ${SchemaV22.TABLE_EVALUATIONS} e ON e.history_id = h.$COLUMN_ID " +
+        "ORDER BY h.$COLUMN_OBSERVED_AT_MS DESC, h.$COLUMN_ID DESC"
+
+    private fun readProfileExport(c: Cursor): com.alexisgordr.icdetector.models.ProfileExport? {
+        val level = optString(c, "p_level") ?: return null
+        return com.alexisgordr.icdetector.models.ProfileExport(
+            mode = optString(c, "p_mode").orEmpty(), level = level,
+            score = c.getColumnIndex("p_score").let { if (it < 0 || c.isNull(it)) null else c.getDouble(it) },
+            metricsEvaluated = optInt(c, "p_evaluated") ?: 0, metricsTotal = optInt(c, "p_total") ?: 0,
+            abstainReason = optString(c, "p_abstain"), algorithmVersion = optInt(c, "p_algorithm") ?: 0,
+            revision = optString(c, "p_revision"), evidence = optString(c, "p_evidence"),
+            learned = optInt(c, "p_learned") == 1, holdout = optInt(c, "p_holdout") == 1
+        )
     }
 
     fun updateNullCoordinates(

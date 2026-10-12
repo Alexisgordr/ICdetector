@@ -49,6 +49,15 @@ EXPECTED_COLUMNS_V30 = EXPECTED_COLUMNS_V2104 + [
 # 3.0 (esquema 21) — Modo de ubicación: CONTINUOUS, INTELLIGENT o ADAPTIVE. Vacío = desconocido.
 EXPECTED_COLUMNS_V30_LOCATION = EXPECTED_COLUMNS_V30 + ["LocationMode"]
 LOCATION_MODES = ("CONTINUOUS", "INTELLIGENT", "ADAPTIVE")
+# 3.0 (esquema 22) — Perfil local en sombra, al final. Vacías si la fila no se evaluó. El nivel no
+# está calibrado: no es una probabilidad ni una alerta, y no cambia ninguna columna anterior.
+PROFILE_COLUMNS = [
+    "ProfileMode", "ProfileLevel", "ProfileScore", "ProfileCoverage", "ProfileAbstainReason",
+    "ProfileAlgorithm", "ProfileRevision", "ProfileEvidence", "ProfileLearned", "ProfileHoldout",
+]
+EXPECTED_COLUMNS_V30_PROFILE = EXPECTED_COLUMNS_V30_LOCATION + PROFILE_COLUMNS
+PROFILE_MODES = ("SHADOW", "EXPERIMENTAL_DISPLAY")
+PROFILE_LEVELS = ("NONE", "LOW", "MODERATE", "HIGH", "ABSTAIN")
 # Cortes de dataset: a partir de esta versión cambió cómo se evalúa la regla indicada.
 DATASET_CUTS = [
     ("2.10.9", "H10 (Ping-Pong)"),
@@ -315,6 +324,29 @@ def location_mode_summary(rows):
         else:
             invalid += 1
     return modes, unknown, invalid
+
+
+def profile_summary(rows):
+    """Evaluaciones del perfil local: por nivel, por modo, sin evaluar y filas incoherentes (un nivel
+    desconocido, ABSTAIN sin motivo o con puntuación, o un nivel con motivo de abstención)."""
+    levels, modes = Counter(), Counter()
+    missing = invalid = 0
+    for r in rows:
+        level = (r.get("ProfileLevel") or "").strip()
+        if not level:
+            missing += 1
+            continue
+        mode = (r.get("ProfileMode") or "").strip()
+        reason = (r.get("ProfileAbstainReason") or "").strip()
+        score = (r.get("ProfileScore") or "").strip()
+        bad = level not in PROFILE_LEVELS or mode not in PROFILE_MODES
+        bad = bad or (level == "ABSTAIN" and (not reason or score)) or (level != "ABSTAIN" and (reason or not score))
+        if bad:
+            invalid += 1
+            continue
+        levels[level] += 1
+        modes[mode] += 1
+    return levels, modes, missing, invalid
 
 
 def dataset_cut_summary(rows):
@@ -666,6 +698,15 @@ def main(path):
                 "y H16 pueden estar en N/A más a menudo. "
                 "Compara la cobertura de esas reglas por modo antes de juntar los datos."
             )
+
+    if "ProfileLevel" in columns:
+        levels, modes, missing, invalid = profile_summary(rows)
+        print("\nPERFIL LOCAL (3.0, sombra; no calibrado, no es una probabilidad)")
+        for level in PROFILE_LEVELS:
+            print(f"  {level}: {levels.get(level, 0)} filas")
+        print(f"  sin evaluar: {missing} filas; por modo: " + ", ".join(f"{m} {modes.get(m, 0)}" for m in PROFILE_MODES))
+        check("ProfileLevel/Mode/Score/AbstainReason coherentes", invalid == 0,
+              f"{invalid} filas incoherentes" if invalid else "")
 
     if "Bands" in columns:
         with_bands, outside, declared = bands_outside_table(rows)

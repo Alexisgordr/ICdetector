@@ -20,7 +20,10 @@ class ExportMetadataTest {
 
     @Test fun `the csv ends with the app version, the exporting device and the location mode`() {
         val header = ExportUtils.CSV_HEADER.split(",")
-        assertEquals(listOf("AppVersion", "ExportDevice", "ExportAndroid", "LocationMode"), header.takeLast(4))
+        val app = header.indexOf("AppVersion")
+        assertEquals(listOf("AppVersion", "ExportDevice", "ExportAndroid", "LocationMode"), header.subList(app, app + 4))
+        // 3.0 (esquema 22) — Las columnas del perfil local van después: no mueven ninguna anterior.
+        assertTrue(header.drop(app + 4).all { it.startsWith("Profile") })
         val device = ExportUtils.ExportDevice("Google Pixel 8", "16 (API 36)")
         val row = ExportUtils.csvRow(base.copy(appVersion = "3.0.0-beta1"), device).split(",")
         assertEquals(header.size, row.size)

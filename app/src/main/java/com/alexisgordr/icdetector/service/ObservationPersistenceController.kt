@@ -44,7 +44,12 @@ internal class ObservationPersistenceController(
     private val historyGeneration: () -> Long = { 0L },
     private val clock: () -> Long = System::currentTimeMillis,
     /** 3.0 — Modo de ubicación activo ([com.alexisgordr.icdetector.core.LocationMode.storedValue]). */
-    private val locationMode: () -> String? = { null }
+    private val locationMode: () -> String? = { null },
+    /**
+     * 3.0 — Perfil local en sombra, después de guardar la fila y en la misma cola. Su resultado no
+     * vuelve aquí y sus fallos se absorben: la fila guardada y [onWrite] no cambian.
+     */
+    private val afterWrite: (ObservationRow, Long) -> Unit = { _, _ -> }
 ) {
     private var lastPeriodicWrite = 0L
 
@@ -88,6 +93,7 @@ internal class ObservationPersistenceController(
         writeGate.launch(scope, writeDispatcher) {
             val rowId = write(pending) ?: return@launch
             onWrite(rowId)
+            shadow(pending.row, rowId)
             if (rowId != -1L && context.fix == null && !screenOn) onPeriodicMissingLocation(context.observedAtMs)
         }
     }
@@ -96,8 +102,15 @@ internal class ObservationPersistenceController(
         if (!isRecordable(cell)) return
         val pending = pending(cell, reason, context)
         writeGate.launch(scope, writeDispatcher) {
-            write(pending)?.let(onWrite)
+            write(pending)?.let { rowId ->
+                onWrite(rowId)
+                shadow(pending.row, rowId)
+            }
         }
+    }
+
+    private fun shadow(row: ObservationRow, rowId: Long) {
+        if (rowId > 0) runCatching { afterWrite(row, rowId) }
     }
 
     private fun isRecordable(cell: CellData): Boolean =

@@ -1,3 +1,4 @@
+import re
 import unittest
 from datetime import datetime
 from pathlib import Path
@@ -6,7 +7,7 @@ import sys
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from check_export import (
     LTE_EARFCN_RANGES, bands_outside_table, calendar_period_stats, dataset_cut_summary, evaluation_coverage, gps_accuracy_issues,
-    instant_issues, location_mode_summary, radio_context_summary, row_instant, version_key,
+    instant_issues, location_mode_summary, profile_summary, EXPECTED_COLUMNS_V30_PROFILE, radio_context_summary, row_instant, version_key,
     ta_consistency_issues, ta_unit_diagnostic
 )
 
@@ -216,6 +217,27 @@ class LteBandTableTest(unittest.TestCase):
         self.assertEqual(2, modes["ADAPTIVE"])
         self.assertEqual(1, modes["INTELLIGENT"])
         self.assertEqual((2, 1), (unknown, invalid))
+
+    def test_profile_evaluations_are_counted_and_incoherent_rows_flagged(self):
+        rows = [
+            {"ProfileMode": "SHADOW", "ProfileLevel": "NONE", "ProfileScore": "0.50"},
+            {"ProfileMode": "SHADOW", "ProfileLevel": "HIGH", "ProfileScore": "4.20"},
+            {"ProfileMode": "SHADOW", "ProfileLevel": "ABSTAIN", "ProfileAbstainReason": "PROFILE_IMMATURE"},
+            {"ProfileLevel": ""}, {},
+            {"ProfileMode": "SHADOW", "ProfileLevel": "ABSTAIN", "ProfileScore": "1.00"},
+            {"ProfileMode": "SHADOW", "ProfileLevel": "LOW"},
+            {"ProfileMode": "SHADOW", "ProfileLevel": "PROBABLE", "ProfileScore": "0.9"},
+        ]
+        levels, modes, missing, invalid = profile_summary(rows)
+        self.assertEqual((1, 1, 1), (levels["NONE"], levels["HIGH"], levels["ABSTAIN"]))
+        self.assertEqual(3, modes["SHADOW"])
+        self.assertEqual((2, 3), (missing, invalid))
+
+    def test_profile_columns_match_the_app_and_come_last(self):
+        kotlin = (Path(__file__).resolve().parent.parent /
+                  "app/src/main/java/com/alexisgordr/icdetector/utils/ExportUtils.kt").read_text(encoding="utf-8")
+        header = "".join(re.findall(r'"([^"]*)"', kotlin.split("const val CSV_HEADER =")[1].split("const val")[0]))
+        self.assertEqual(EXPECTED_COLUMNS_V30_PROFILE, header.split(","))
 
 if __name__ == "__main__":
     unittest.main()

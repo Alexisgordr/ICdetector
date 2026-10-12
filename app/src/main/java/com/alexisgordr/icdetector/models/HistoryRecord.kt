@@ -113,7 +113,27 @@ data class HistoryRecord(
      */
     val appVersion: String? = null,
     /** 3.0 — Modo de ubicación (`CONTINUOUS` / `INTELLIGENT` / `ADAPTIVE`); null = desconocido. */
-    val locationMode: String? = null
+    val locationMode: String? = null,
+    /** 3.0 — Evaluación del perfil local de esta fila (esquema 22); null si no se evaluó. */
+    val profile: ProfileExport? = null
+)
+
+/**
+ * 3.0 — Evaluación del perfil local de una fila, tal como se exporta. Independiente del score y de
+ * las heurísticas de la fila. El nivel no está calibrado y no es una probabilidad.
+ */
+data class ProfileExport(
+    val mode: String,
+    val level: String,
+    val score: Double?,
+    val metricsEvaluated: Int,
+    val metricsTotal: Int,
+    val abstainReason: String?,
+    val algorithmVersion: Int,
+    val revision: String?,
+    val evidence: String?,
+    val learned: Boolean,
+    val holdout: Boolean
 )
 
 /** Misma identidad completa que [CellData.identityKey], aplicada a una fila histórica. */

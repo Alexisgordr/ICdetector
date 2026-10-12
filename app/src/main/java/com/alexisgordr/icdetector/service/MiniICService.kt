@@ -147,6 +147,7 @@ class MiniICService : Service() {
     }
 
     private lateinit var dbHelper: CellDbHelper
+    private lateinit var localProfile: LocalProfileController
     private lateinit var mobilityFamiliarity: com.alexisgordr.icdetector.core.MobilityFamiliarityEngine
     private var lastMobilityLog: String? = null
     private lateinit var forensicRecorder: ForensicRecorder
@@ -484,6 +485,15 @@ class MiniICService : Service() {
         val appVersion = com.alexisgordr.icdetector.core.AppBuildId.current(
             runCatching { packageManager.getPackageInfo(packageName, 0).versionName }.getOrNull()
         )
+        // 3.0 — Perfil local en sombra: después de cada fila, en la misma cola; no toca el motor.
+        localProfile = LocalProfileController(
+            dbHelper = dbHelper,
+            prefs = getSharedPreferences("miniic_prefs", MODE_PRIVATE),
+            deviceModel = com.alexisgordr.icdetector.core.profile.ProfileCompatibility.deviceModel(
+                android.os.Build.MANUFACTURER, android.os.Build.MODEL
+            )
+        )
+        writeGate.launch(scope, historyWriteDispatcher) { runCatching { localProfile.bootstrapIfNeeded() } }
         observationPersistence = ObservationPersistenceController(
             scope = scope,
             insert = { row -> dbHelper.logObservation(row, appVersion) },
@@ -497,7 +507,8 @@ class MiniICService : Service() {
             writeDispatcher = historyWriteDispatcher,
             writeGate = writeGate,
             historyGeneration = { historyEpoch.current() },
-            locationMode = { locationMode.storedValue }
+            locationMode = { locationMode.storedValue },
+            afterWrite = localProfile::onRowWritten
         )
         securityAlerts = SecurityAlertController(
             tone = { toneGenerator },

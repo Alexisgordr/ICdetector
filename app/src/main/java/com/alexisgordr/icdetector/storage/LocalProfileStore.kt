@@ -5,6 +5,8 @@ import android.database.Cursor
 import android.database.sqlite.SQLiteDatabase
 import com.alexisgordr.icdetector.core.profile.AbstainReason
 import com.alexisgordr.icdetector.core.profile.MetricProfile
+import com.alexisgordr.icdetector.core.profile.ProfileBootstrap
+import com.alexisgordr.icdetector.core.profile.ProfileContext
 import com.alexisgordr.icdetector.core.profile.ProfileEvaluationRecord
 import com.alexisgordr.icdetector.core.profile.ProfileMaturity
 import com.alexisgordr.icdetector.core.profile.ProfileMetric
@@ -55,6 +57,26 @@ object LocalProfileStore {
         }
         return db.insertWithOnConflict(E, null, v, SQLiteDatabase.CONFLICT_IGNORE)
     }
+
+    /**
+     * Filas del historial con instante exacto desde [sinceMs], para el arranque del perfil. Solo
+     * lectura: el historial nunca se modifica.
+     */
+    fun bootstrapRows(db: SQLiteDatabase, sinceMs: Long): List<ProfileBootstrap.Row> =
+        db.rawQuery(
+            "SELECT id, mcc, mnc, tac, cid, radio, dbm, rsrq, observed_at_ms FROM history " +
+                "WHERE observed_at_ms >= ? ORDER BY observed_at_ms, id",
+            arrayOf(sinceMs.toString())
+        ).use { c ->
+            buildList {
+                while (c.moveToNext()) {
+                    fun s(i: Int) = if (c.isNull(i)) "" else c.getString(i)
+                    fun n(i: Int) = if (c.isNull(i)) null else c.getInt(i)
+                    val radio = RadioTech.entries.firstOrNull { it.name == s(5) } ?: RadioTech.UNKNOWN
+                    add(ProfileBootstrap.Row(c.getLong(0), ProfileContext(s(1), s(2), s(3), s(4), radio), n(6), n(7), c.getLong(8)))
+                }
+            }
+        }
 
     fun recordModeEvent(db: SQLiteDatabase, mode: ProfileMode?, appVersion: String?, atMs: Long) {
         db.insert(M, null, ContentValues().apply {

@@ -32,6 +32,10 @@ object RestoreStartup {
             RestoreEngine.RestoreOutcome.DISCARDED -> null
         }
         if (text != null) prefs(context).edit().putString(PREF_LAST_RESULT, text).commit()
+        // 3.0 — Un historial restaurado (quizá de otro teléfono) no arranca el perfil local.
+        if (restoreOutcome == RestoreEngine.RestoreOutcome.RESTORED) {
+            prefs(context).edit().putBoolean(FirstRunPolicy.PREF_HISTORY_RESTORED, true).commit()
+        }
         return result
     }
 
