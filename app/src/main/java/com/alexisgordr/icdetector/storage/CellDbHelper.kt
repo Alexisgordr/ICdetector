@@ -70,7 +70,7 @@ class CellDbHelper(
             }
 
         const val DATABASE_NAME = "icdetector_history.db"
-        const val DATABASE_VERSION = SchemaV22.VERSION
+        const val DATABASE_VERSION = SchemaV23.VERSION
         const val TABLE_HISTORY = "history"
         const val COLUMN_ID = "id"
         const val COLUMN_TIMESTAMP = "timestamp"
@@ -349,6 +349,7 @@ class CellDbHelper(
         applySchemaV20(db)
         applySchemaV21(db)
         applySchemaV22(db)
+        applySchemaV23(db)
     }
 
     override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {
@@ -438,6 +439,7 @@ class CellDbHelper(
         if (oldVersion < 20) applySchemaV20(db)
         if (oldVersion < 21) applySchemaV21(db)
         if (oldVersion < 22) applySchemaV22(db)
+        if (oldVersion < 23) applySchemaV23(db)
     }
 
     /**
@@ -456,6 +458,22 @@ class CellDbHelper(
     private fun applySchemaV22(db: SQLiteDatabase) {
         createHistoryTable(db)
         SchemaV22.STATEMENTS.forEach(db::execSQL)
+    }
+
+    /**
+     * 3.0 — Esquema 23 (ver [SchemaV23]): columnas nuevas de `local_profile`. Se asegura antes de que
+     * la tabla exista; una columna que ya existe (instalación parcial) se acepta y cualquier otro
+     * fallo se propaga, como en [applySchemaV20].
+     */
+    private fun applySchemaV23(db: SQLiteDatabase) {
+        applySchemaV22(db)
+        SchemaV23.STATEMENTS.forEach { sql ->
+            try {
+                db.execSQL(sql)
+            } catch (e: android.database.sqlite.SQLiteException) {
+                if (e.message?.contains("duplicate column", ignoreCase = true) != true) throw e
+            }
+        }
     }
 
     /** 3.0 — Esquema 21 (ver [SchemaV21]); mismas reglas que [applySchemaV20]. */

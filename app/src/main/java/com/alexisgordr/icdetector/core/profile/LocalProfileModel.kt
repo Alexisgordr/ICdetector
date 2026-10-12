@@ -105,8 +105,24 @@ data class MetricProfile(
     val lastSampleMs: Long?,
     val maturity: ProfileMaturity,
     val abstainReason: AbstainReason?,
-    val updatedAtMs: Long
-)
+    val updatedAtMs: Long,
+    /**
+     * Identidad de esta vida de la referencia (esquema 23). Se fija al crearla y cambia cuando se
+     * reinicia, caduca o se reaprende: dos referencias distintas nunca comparten generación y
+     * revisión, aunque la revisión vuelva a empezar. `legacy` en filas del esquema 22.
+     */
+    val generation: String = LEGACY_GENERATION,
+    /** Varianza al empezar el día de [lastDay]: acota cuánto puede crecer la dispersión en un día. */
+    val dayStartVariance: Double? = null,
+    /** Última muestra PROCESADA (aprendida o en cuarentena), para no contar dos veces la misma. */
+    val lastSeenMs: Long? = null
+) {
+    companion object {
+        const val LEGACY_GENERATION = "legacy"
+        /** Generación de una referencia creada en [createdAtMs]: determinista, sin aleatoriedad. */
+        fun generationAt(createdAtMs: Long) = "g$createdAtMs"
+    }
+}
 
 /**
  * Compatibilidad de un perfil con el teléfono, la tecnología y el algoritmo actuales.
@@ -157,7 +173,7 @@ data class ProfileEvaluationRecord(
     val historyId: Long,
     val evaluatedAtMs: Long,
     val algorithmVersion: Int,
-    /** Revisión de cada referencia usada, p. ej. `SIGNAL_DBM:42;SIGNAL_RSRQ:17`. */
+    /** Generación y revisión de cada referencia usada, p. ej. `SIGNAL_DBM@g1790000000000:42`. */
     val profileRevision: String?,
     val contextKey: String,
     val mode: ProfileMode,

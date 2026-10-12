@@ -26,7 +26,10 @@ object LocalProfileScorer {
         val metricsTotal: Int,
         val evidence: String?,
         val abstainReason: AbstainReason?,
-        /** Revisión de cada referencia evaluada, p. ej. `SIGNAL_DBM:42;SIGNAL_RSRQ:17`. */
+        /**
+         * Generación y revisión de cada referencia evaluada, p. ej.
+         * `SIGNAL_DBM@g1790000000000:42;SIGNAL_RSRQ@g1790000000000:17`.
+         */
         val revision: String?
     )
 
@@ -76,11 +79,14 @@ object LocalProfileScorer {
             else -> DeviationLevel.HIGH
         }
         val evidence = evaluated.joinToString("; ") { (p, v, z) ->
-            String.format(Locale.ROOT, "%s %d vs %.1f±%.1f z=%.2f", p.metric.name, v, p.mean, learner.spread(p), z)
+            // Parámetros con 3 decimales: suficientes para repetir el cálculo de la desviación.
+            String.format(Locale.ROOT, "%s %d vs %.3f±%.3f z=%.3f", p.metric.name, v, p.mean, learner.spread(p), z)
         }
-        val revision = evaluated.joinToString(";") { "${it.first.metric.name}:${it.first.revision}" }
+        val revision = evaluated.joinToString(";") { revisionOf(it.first) }
         return Result(level, round2(score), evaluated.size, total, evidence, null, revision)
     }
+
+    fun revisionOf(p: MetricProfile) = "${p.metric.name}@${p.generation}:${p.revision}"
 
     private fun abstain(reason: AbstainReason, total: Int) =
         Result(DeviationLevel.ABSTAIN, null, 0, total, null, reason, null)

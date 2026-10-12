@@ -118,6 +118,16 @@ class LocalProfileLearnerTest {
         assertEquals(LearnOutcome.INCOMPATIBLE, learner.learn(p, sample(-80, at, context = ctx.copy(radio = RadioTech.NR)), at).outcome)
     }
 
+    @Test fun `a reset profile starts a new generation (F04)`() {
+        val first = train(days = 4)
+        val later = t0 + 10 * DAY_MS
+        val relearned = train(days = 4, center = -105, from = later)
+        assertEquals(MetricProfile.generationAt(t0), first.generation)
+        assertEquals(MetricProfile.generationAt(later), relearned.generation)
+        assertEquals(first.revision, relearned.revision)
+        assertTrue(LocalProfileScorer.revisionOf(first) != LocalProfileScorer.revisionOf(relearned))
+    }
+
     @Test fun `a profile without recent evidence becomes stale`() {
         val p = train(days = 4)
         assertEquals(ProfileMaturity.STALE, learner.maturity(p, p.lastEvidenceMs!! + 31 * DAY_MS))

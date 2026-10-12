@@ -21,7 +21,8 @@ class LocalProfileScorerTest {
         revision = revision, mean = mean, variance = sd * sd, effectiveSamples = samples, bootstrapSamples = 0,
         liveSamples = samples, quarantinedSamples = 0, distinctDays = days, lastDay = "2026-09-21", daySamples = 10,
         dayStartMean = mean, firstEvidenceMs = now - days * DAY_MS, lastEvidenceMs = lastEvidence,
-        lastSampleMs = lastEvidence, maturity = ProfileMaturity.MATURE, abstainReason = null, updatedAtMs = lastEvidence
+        lastSampleMs = lastEvidence, maturity = ProfileMaturity.MATURE, abstainReason = null, updatedAtMs = lastEvidence,
+        generation = "g1"
     )
 
     private val mature = mapOf(
@@ -42,8 +43,8 @@ class LocalProfileScorerTest {
         assertEquals(2, high.metricsEvaluated)
         assertEquals(2, high.metricsTotal)
         assertNull(high.abstainReason)
-        assertEquals("SIGNAL_DBM:60;SIGNAL_RSRQ:55", high.revision)
-        assertTrue(high.evidence!!.contains("SIGNAL_DBM -60 vs -80.0±4.0 z=5.00"))
+        assertEquals("SIGNAL_DBM@g1:60;SIGNAL_RSRQ@g1:55", high.revision)
+        assertTrue(high.evidence!!.contains("SIGNAL_DBM -60 vs -80.000±4.000 z=5.000"))
         assertFalse("sin comas: no rompe el CSV ni depende del idioma", high.evidence!!.contains(","))
     }
 
@@ -55,7 +56,7 @@ class LocalProfileScorerTest {
         val r = eval(mature, -80, null)                                       // 3G o módem sin RSRQ
         assertEquals(DeviationLevel.NONE, r.level)
         assertEquals(1, r.metricsEvaluated)
-        assertEquals("SIGNAL_DBM:60", r.revision)
+        assertEquals("SIGNAL_DBM@g1:60", r.revision)
     }
 
     @Test fun `abstains with an explicit reason`() {
@@ -76,7 +77,7 @@ class LocalProfileScorerTest {
         val shadow = LocalProfileShadow()
         val obs = LocalProfileShadow.Observation(11, ctx, -82, -10, now, device)
         val step = shadow.process(mature, obs, ProfileMode.SHADOW, now, holdout = false)
-        assertEquals("evaluada con la referencia anterior", "SIGNAL_DBM:60;SIGNAL_RSRQ:55", step.record.profileRevision)
+        assertEquals("evaluada con la referencia anterior", "SIGNAL_DBM@g1:60;SIGNAL_RSRQ@g1:55", step.record.profileRevision)
         assertTrue(step.record.learned)
         assertEquals(setOf(61L, 56L), step.changed.map { it.revision }.toSet())
 
@@ -94,6 +95,13 @@ class LocalProfileScorerTest {
         val dbm = step.changed.single { it.metric == ProfileMetric.SIGNAL_DBM }
         assertEquals(1, dbm.quarantinedSamples)
         assertEquals(60L, dbm.revision)
+    }
+
+    @Test fun `references from different lives never share an identity (F04)`() {
+        val before = mature.getValue(ProfileMetric.SIGNAL_DBM)
+        val after = before.copy(mean = -105.0, generation = MetricProfile.generationAt(now + 1))
+        assertEquals(before.revision, after.revision)
+        assertTrue(LocalProfileScorer.revisionOf(before) != LocalProfileScorer.revisionOf(after))
     }
 
     @Test fun `the same input always gives the same record`() {

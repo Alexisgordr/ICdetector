@@ -55,12 +55,11 @@ class SchemaV22MigrationTest {
         assertEquals("0", single("SELECT COUNT(*) FROM profile_evaluations"))
     }
 
-    @Test fun `CellDbHelper creates and upgrades to 22, and clear and retention reach the new tables`() {
+    @Test fun `CellDbHelper creates and upgrades through 22, and clear and retention reach the new tables`() {
         val helper = listOf(
             File("src/main/java/com/alexisgordr/icdetector/storage/CellDbHelper.kt"),
             File("app/src/main/java/com/alexisgordr/icdetector/storage/CellDbHelper.kt")
         ).first { it.exists() }.readText()
-        assertTrue(helper.contains("const val DATABASE_VERSION = SchemaV22.VERSION"))
         assertTrue(helper.contains("if (oldVersion < 22) applySchemaV22(db)"))
         val onCreate = helper.substringAfter("override fun onCreate(db: SQLiteDatabase) {").substringBefore("override fun onUpgrade")
         assertTrue(onCreate.contains("applySchemaV22(db)"))

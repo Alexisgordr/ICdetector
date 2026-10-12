@@ -41,6 +41,8 @@ object LocalProfileStore {
             put("last_evidence_ms", p.lastEvidenceMs); put("last_sample_ms", p.lastSampleMs)
             put("maturity", p.maturity.name); put("abstain_reason", p.abstainReason?.name)
             put("updated_at_ms", p.updatedAtMs)
+            put("generation", p.generation); put("day_start_variance", p.dayStartVariance)
+            put("last_seen_ms", p.lastSeenMs)
         }
         db.insertWithOnConflict(P, null, v, SQLiteDatabase.CONFLICT_REPLACE)
     }
@@ -142,7 +144,9 @@ object LocalProfileStore {
             lastEvidenceMs = l("last_evidence_ms"), lastSampleMs = l("last_sample_ms"),
             maturity = ProfileMaturity.entries.firstOrNull { it.name == s("maturity") } ?: ProfileMaturity.LEARNING,
             abstainReason = AbstainReason.entries.firstOrNull { it.name == s("abstain_reason") },
-            updatedAtMs = l("updated_at_ms") ?: 0L
+            updatedAtMs = l("updated_at_ms") ?: 0L,
+            generation = s("generation") ?: MetricProfile.LEGACY_GENERATION,
+            dayStartVariance = d("day_start_variance"), lastSeenMs = l("last_seen_ms")
         )
     }
 }

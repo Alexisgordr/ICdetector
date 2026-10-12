@@ -109,7 +109,8 @@ class LocalProfileLearner(private val config: Config = Config()) {
             mean = null, variance = null, effectiveSamples = 0, bootstrapSamples = 0, liveSamples = 0,
             quarantinedSamples = 0, distinctDays = 0, lastDay = null, daySamples = 0, dayStartMean = null,
             firstEvidenceMs = null, lastEvidenceMs = null, lastSampleMs = null,
-            maturity = ProfileMaturity.LEARNING, abstainReason = null, updatedAtMs = nowMs
+            maturity = ProfileMaturity.LEARNING, abstainReason = null, updatedAtMs = nowMs,
+            generation = MetricProfile.generationAt(nowMs)
         )
         val newDay = base.lastDay != day
         val dayStart = if (newDay) base.mean else base.dayStartMean
