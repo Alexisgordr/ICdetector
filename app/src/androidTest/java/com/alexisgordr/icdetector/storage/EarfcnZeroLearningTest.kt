@@ -34,7 +34,7 @@ class EarfcnZeroLearningTest {
                 pci = 10, arfcn = 0, failedHeuristics = "OK"
             )
         }
-        val stability = db.getCellRfStability("100", "07", "1", "214", RadioTech.LTE)
+        val stability = checkNotNull(db.getCellRfStability("100", "07", "1", "214", RadioTech.LTE)) { "lectura RF fallida" }
         assertEquals(6, stability.totalObservations)
         assertEquals(listOf(10 to 6), stability.pciByArfcn[0])
         assertFalse(stability.pciByArfcn.containsKey(CellRfStability.UNKNOWN_ARFCN))
