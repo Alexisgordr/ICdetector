@@ -54,8 +54,25 @@ class BackupArchiveTest {
         ))
         assertFalse(json.contains("secret"))
         assertFalse(json.contains("last_accepted_loc"))
-        assertEquals(mapOf("location_mode" to "ADAPTIVE", "proxy_enabled" to true), BackupSettings.fromJson(json))
-        assertEquals(emptyMap<String, Any>(), BackupSettings.fromJson("{\"opencellid_key\":\"x\"}"))
+        // Sin la clave de avisos 2G/3G (copia anterior): se restaura su valor predeterminado.
+        assertEquals(mapOf("location_mode" to "ADAPTIVE", "proxy_enabled" to true, "legacy_network_alert_mode" to "NOTIFY"),
+            BackupSettings.fromJson(json))
+        assertEquals(mapOf("legacy_network_alert_mode" to "NOTIFY"), BackupSettings.fromJson("{\"opencellid_key\":\"x\"}"))
         assertEquals(emptyMap<String, Any>(), BackupSettings.fromJson("broken"))
+    }
+
+    @Test fun `2G-3G alert mode travels in new backups and old backups restore the default`() {
+        val json = BackupSettings.toJson(mapOf("legacy_network_alert_mode" to "NOTIFY_SOUND"))
+        assertEquals("NOTIFY_SOUND", BackupSettings.fromJson(json)["legacy_network_alert_mode"])
+        assertEquals("OFF", BackupSettings.fromJson("{\"legacy_network_alert_mode\":\"OFF\"}")["legacy_network_alert_mode"])
+        // Copia 3.0 anterior a la clave, con sus otros ajustes intactos.
+        val old = BackupSettings.fromJson("{\"app_language\":\"es\",\"location_mode\":\"CONTINUOUS\"}")
+        assertEquals("es", old["app_language"])
+        assertEquals(com.alexisgordr.icdetector.core.LegacyNetworkAlertMode.DEFAULT.storedValue, old["legacy_network_alert_mode"])
+        // Un valor desconocido se restaura tal cual y el servicio lo lee como el predeterminado.
+        val odd = BackupSettings.fromJson("{\"legacy_network_alert_mode\":\"LOUD\"}")["legacy_network_alert_mode"] as String
+        assertEquals(com.alexisgordr.icdetector.core.LegacyNetworkAlertMode.NOTIFY,
+            com.alexisgordr.icdetector.core.LegacyNetworkAlertMode.fromStored(odd))
+        assertEquals(com.alexisgordr.icdetector.core.LegacyNetworkAlertMode.PREF_KEY, "legacy_network_alert_mode")
     }
 }

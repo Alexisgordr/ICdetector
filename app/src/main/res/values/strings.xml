@@ -108,7 +108,7 @@
     <string name="csv_exported_format">✅ CSV exported: %1$d rows</string>
     <string name="incident_observing">OBSERVING</string><string name="incident_confirmed">CONFIRMED</string><string name="incident_recovered">RECOVERED</string><string name="incident_interrupted">INTERRUPTED</string>
     <string name="critical_battery_gps_paused">Critical battery: continuous GPS paused</string><string name="no_signal_airplane">No signal / Airplane mode</string><string name="searching_network">Searching for network…</string>
-    <string name="latency_warning">Persistent anomalous latency — possible MITM interference</string><string name="airplane_settings_hint">Tap to open Airplane mode settings.</string>
+    <string name="latency_warning">Persistent anomalous latency — possible MITM interference</string>
     <string name="heuristic_rule_format">H%1$d · detection rule</string><string name="status_passed">PASSED</string><string name="status_failed">FAILED</string><string name="status_coherent">COHERENT</string><string name="status_incoherent">INCOHERENT</string>
     <string-array name="heuristic_names"><item>Isolated cell</item><item>Signal-power stability</item><item>MCC consistency</item><item>MNC limit</item><item>Regional TAC validation</item><item>Geometric coherence (TA)</item><item>Neighbor spectrum</item><item>ARFCN sanity</item><item>Hardware ciphering</item><item>Anti ping-pong</item><item>Geographic consistency</item><item>Latency + RF correlation</item><item>Baseline and RF fingerprint</item><item>Band downgrade</item><item>RF identity stability</item><item>Cellular-transition coherence</item></string-array><string name="transition_explanation_passed">The observed handover is coherent with learned local routes.</string><string name="transition_explanation_failed">The observed handover is inconsistent with learned local routes.</string><string name="transition_explanation_na">There is not enough trusted route history to evaluate this transition.</string>
     <string name="mobility_sanity">MOBILITY SANITY · H16</string>
@@ -286,8 +286,7 @@
     <string name="notif_monitoring_title">ICdetection: monitoring · continuous GPS</string>
     <string name="notif_monitoring_title_adaptive">ICdetection: monitoring · adaptive GPS</string>
     <string name="notif_monitoring_title_intelligent">ICdetection: monitoring · smart GPS</string>
-    <string name="notif_legacy_network_title">ICdetection: 2G/3G network detected</string>
-    <string name="notif_open_settings">OPEN SETTINGS</string>
+    <string name="notif_legacy_network_title">ICdetection: 2G/3G network in use</string>
     <string name="channel_monitoring_name">Monitoring</string>
     <string name="channel_alerts_description">Actionable cellular degradation alerts</string>
     <string name="notif_latency_title">⚠ Network anomaly</string>
@@ -545,4 +544,13 @@
     <string name="profile_abstain_incompatible_algorithm">reference from another algorithm version</string>
     <string name="profile_abstain_no_compatible_metric">no valid metric in this observation</string>
     <string name="profile_history_reason_code">Stored reason code: %1$s</string>
+    <!-- Avisos de red 2G/3G -->
+    <string name="notif_legacy_change_title">ICdetection: change from 4G/5G to 2G/3G</string>
+    <string name="notif_legacy_network_body">Your phone is using a 2G/3G network. This can happen with weak 4G/5G coverage or during calls without VoLTE; it is not a confirmed attack. Use Airplane mode settings if you want to leave the network.</string>
+    <string name="notif_open_airplane_settings">AIRPLANE MODE SETTINGS</string>
+    <string name="legacy_alert_title">2G/3G network alerts</string>
+    <string name="legacy_alert_off">Off</string>
+    <string name="legacy_alert_notify">Notification only</string>
+    <string name="legacy_alert_notify_sound">Notification and sound</string>
+    <string name="legacy_alert_description">One alert when the phone starts using 2G/3G; no repeats while it stays there. A new alert needs at least 1 minute in a row back on 4G/5G first. It can be caused by coverage or calls without VoLTE.</string>
 </resources>

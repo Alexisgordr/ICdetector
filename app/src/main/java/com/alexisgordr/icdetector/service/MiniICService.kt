@@ -290,7 +290,9 @@ class MiniICService : Service() {
 
     var alarmThreshold = -50f
     var isStrongSignalAlarmEnabled = true
-    var is3gAirplaneModeEnabled = true
+    /** 3.0 — Avisos de red 2G/3G (Ajustes). Predeterminado: solo notificación. */
+    @Volatile var legacyNetworkAlertMode: com.alexisgordr.icdetector.core.LegacyNetworkAlertMode =
+        com.alexisgordr.icdetector.core.LegacyNetworkAlertMode.DEFAULT
     var isProxyEnabled = false
     var isLatencyDetectionEnabled: Boolean = false
     /** 3.0 — Modo de ubicación (Ajustes). Continuo por defecto; adaptativo ahorra batería. */
@@ -536,7 +538,7 @@ class MiniICService : Service() {
             },
             strongSignalEnabled = { isStrongSignalAlarmEnabled },
             strongSignalThreshold = { alarmThreshold },
-            legacyProtectionEnabled = { is3gAirplaneModeEnabled }
+            legacyAlertMode = { legacyNetworkAlertMode }
         )
         telemetryHistory = TelemetryHistoryController(_dbmHistory, _rsrqHistory, _geoHistory)
 
@@ -585,6 +587,9 @@ class MiniICService : Service() {
         isLatencyDetectionEnabled = prefs.getBoolean("latency_detection_enabled", false)
         locationMode = com.alexisgordr.icdetector.core.LocationMode.fromStored(
             prefs.getString(com.alexisgordr.icdetector.core.LocationMode.PREF_KEY, null)
+        )
+        legacyNetworkAlertMode = com.alexisgordr.icdetector.core.LegacyNetworkAlertMode.fromStored(
+            prefs.getString(com.alexisgordr.icdetector.core.LegacyNetworkAlertMode.PREF_KEY, null)
         )
         restoreTaSanityEvidence()            // evidencia de TA superviviente a reinicios (v2.5)
 

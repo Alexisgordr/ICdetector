@@ -133,8 +133,11 @@ private val replacements = linkedMapOf(
     "Captura forense restablecida." to "Forensic capture restored.",
     "Mantenimiento de base de datos fallido" to "Database maintenance failed",
     "No se pudo registrar" to "Could not register",
-    "Red 2G/3G detectada" to "2G/3G network detected",
-    "Abriendo ajustes para Modo Avión manual" to "Opening settings for manual Airplane mode",
+    "Red 2G/3G en uso: cambio desde 4G/5G" to "2G/3G network in use: change from 4G/5G",
+    "Red 2G/3G en uso" to "2G/3G network in use",
+    " · aviso " to " · alert ",
+    "Puede deberse a cobertura o a llamadas sin VoLTE; no es un ataque confirmado." to
+        "It can be caused by coverage or calls without VoLTE; it is not a confirmed attack.",
     "Latencia" to "Latency",
     "sin suficientes endpoints disponibles" to "not enough endpoints available",
     "anómala" to "anomalous",

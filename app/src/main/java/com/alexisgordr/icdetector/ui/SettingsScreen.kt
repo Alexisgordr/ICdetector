@@ -29,6 +29,7 @@ import androidx.compose.material.icons.filled.Favorite
 import com.alexisgordr.icdetector.service.MiniICService
 import com.alexisgordr.icdetector.R
 import com.alexisgordr.icdetector.util.LocaleController
+import com.alexisgordr.icdetector.core.LegacyNetworkAlertMode
 import com.alexisgordr.icdetector.core.LocationMode
 import kotlin.time.Duration.Companion.milliseconds
 
@@ -51,6 +52,9 @@ fun SettingsPanel(
     var selectedLanguage by remember { mutableStateOf(LocaleController.selectedLanguage(context)) }
     var selectedLocationMode by remember {
         mutableStateOf(LocationMode.fromStored(prefs.getString(LocationMode.PREF_KEY, null)))
+    }
+    var selectedLegacyAlertMode by remember {
+        mutableStateOf(LegacyNetworkAlertMode.fromStored(prefs.getString(LegacyNetworkAlertMode.PREF_KEY, null)))
     }
 
     val scrollState = rememberScrollState()
@@ -262,10 +266,33 @@ fun SettingsPanel(
             Text(stringResource(modeDescription), color = Color(0xFF888888), fontSize = 11.sp,
                 fontFamily = FontFamily.Monospace, lineHeight = 15.sp)
 
+            HorizontalDivider(color = Color(0xFF222222), modifier = Modifier.padding(vertical = 4.dp))
+
+            // 3.0 — Avisos de red 2G/3G: uno por episodio; el sonido solo si se elige.
+            Text(stringResource(R.string.legacy_alert_title), color = Color.White,
+                fontSize = 14.sp, fontFamily = FontFamily.Monospace)
+            LegacyNetworkAlertMode.entries.forEach { mode ->
+                val label = when (mode) {
+                    LegacyNetworkAlertMode.OFF -> R.string.legacy_alert_off
+                    LegacyNetworkAlertMode.NOTIFY -> R.string.legacy_alert_notify
+                    LegacyNetworkAlertMode.NOTIFY_SOUND -> R.string.legacy_alert_notify_sound
+                }
+                Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                    RadioButton(selected = selectedLegacyAlertMode == mode,
+                        onClick = { selectedLegacyAlertMode = mode })
+                    TextButton(onClick = { selectedLegacyAlertMode = mode }) {
+                        Text(stringResource(label), color = Color.White, fontFamily = FontFamily.Monospace)
+                    }
+                }
+            }
+            Text(stringResource(R.string.legacy_alert_description), color = Color(0xFF888888), fontSize = 11.sp,
+                fontFamily = FontFamily.Monospace, lineHeight = 15.sp)
+
             Button(
                 onClick = {
                     val cleanToken = token.trim()
                     val selectedMode = selectedLocationMode
+                    val legacyMode = selectedLegacyAlertMode
                     prefs.edit {
                         putString("opencellid_key", cleanToken)
                         remove("wigle_api_name")
@@ -274,11 +301,13 @@ fun SettingsPanel(
                         putBoolean("proxy_enabled", proxyEnabled)
                         putBoolean("latency_detection_enabled", latencyDetectionEnabled)
                         putString(LocationMode.PREF_KEY, selectedMode.storedValue)
+                        putString(LegacyNetworkAlertMode.PREF_KEY, legacyMode.storedValue)
                     }
                     service?.openCellIdKey = cleanToken
                     service?.isProxyEnabled = proxyEnabled
                     service?.isLatencyDetectionEnabled = latencyDetectionEnabled
                     service?.locationMode = selectedMode
+                    service?.legacyNetworkAlertMode = legacyMode
                     onSave()
                 },
                 modifier = Modifier.fillMaxWidth(),

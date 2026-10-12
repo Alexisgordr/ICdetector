@@ -257,7 +257,8 @@ coverage zones and trusted previous transitions. It has no fixed maximum tower d
 > **Which layers carry the weight depends on the device.** On phones that do not report neighbour
 > identities (common on Pixel devices), H3, H4 and H5 usually stay `N/A`. Detection then rests mainly
 > on signal behaviour (H2, H7, H13), RF identity stability (H15), geographic and mobility coherence
-> (H11, H16), Local Cell Trust and 2G/3G downgrade protection.
+> (H11, H16) and Local Cell Trust. 2G/3G use is reported once per episode as context, not as a
+> confirmed attack.
 
 ---
 

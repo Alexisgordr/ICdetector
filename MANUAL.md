@@ -191,6 +191,21 @@ screen shows **ALARMS ARE MUTED** with a button that opens the alert settings. T
 the notification: the short alert tone is separate, plays at notification volume and respects only
 silent, vibrate and Do Not Disturb.
 
+### 2G/3G network alerts
+
+**Settings → 2G/3G network alerts** chooses what happens when the phone starts using a 2G or 3G
+network: **Off**, **Notification only** (default, silent) or **Notification and sound** (only if you
+choose it). Using 2G/3G is not a confirmed attack: it also happens with weak 4G/5G coverage or during
+calls without VoLTE, and it does not change the score, rules or alarms. There is no automatic
+exception during calls.
+
+The alert is given **once per episode**. An episode starts with the first 2G/3G reading (marked as a
+*change from 4G/5G* when the previous reading was 4G/5G) and stays open while the phone keeps using
+2G/3G, including short returns to 4G/5G and readings without service. It closes after **1 minute in
+a row** on 4G/5G; the next 2G/3G reading then starts a new episode. Each episode leaves one line in
+the terminal, also with alerts off. The setting travels in backups; restoring a backup made before
+it existed sets *Notification only*.
+
 ### External verification
 
 OpenCellID is optional. Enter your own API token in Settings to enable cross-referencing. Without

@@ -3,6 +3,8 @@ package com.alexisgordr.icdetector.service
 import android.media.ToneGenerator
 import android.util.Log
 import com.alexisgordr.icdetector.core.AlarmEpisodeGate
+import com.alexisgordr.icdetector.core.LegacyNetworkAlertMode
+import com.alexisgordr.icdetector.core.LegacyNetworkEpisodeGate
 import com.alexisgordr.icdetector.core.ObservationContext
 import com.alexisgordr.icdetector.models.CellData
 import com.alexisgordr.icdetector.models.identityKey
@@ -17,12 +19,14 @@ internal class SecurityAlertController(
     private val notifyConfirmedAlarm: (CellData) -> Unit,
     private val strongSignalEnabled: () -> Boolean,
     private val strongSignalThreshold: () -> Float,
-    private val legacyProtectionEnabled: () -> Boolean
+    private val legacyAlertMode: () -> LegacyNetworkAlertMode,
+    private val nowMs: () -> Long = System::currentTimeMillis
 ) {
     private var previousNetworkType: String? = null
     private var previousDbm: Int? = null
     private var lastStrongSignalAlarm = 0L
     private val alarmEpisodes = AlarmEpisodeGate()
+    private val legacyEpisodes = LegacyNetworkEpisodeGate()
     private var pingPongLogged = false
 
     fun resetAlarmEpisode() {
@@ -44,16 +48,13 @@ internal class SecurityAlertController(
             }
         }
 
-        val previousType = previousNetworkType
-        val previousPower = previousDbm
-        if (previousType != null && previousPower != null) {
-            val wasSecure = previousType.contains("4G") || previousType.contains("5G")
-            val isLegacy = network.contains("2G") || network.contains("3G")
-            if (wasSecure && isLegacy && previousPower >= -85) {
-                tone()?.startTone(ToneGenerator.TONE_SUP_ERROR, 500)
-                Log.e(TAG, "CRITICAL: Downgrade detected; pre-transition signal: $previousPower dBm")
-                legacyProtection.trigger()
+        // 3.0 — Red 2G/3G: una sola ruta, un aviso por episodio continuo y según la preferencia.
+        // El cambio 4G/5G → 2G/3G es solo el tipo de episodio, no una ruta con su propio tono.
+        legacyEpisodes.observe(network, previousNetworkType, nowMs())?.let { kind ->
+            if (kind == LegacyNetworkEpisodeGate.Trigger.CHANGE_FROM_MODERN) {
+                Log.w(TAG, "Change to 2G/3G; previous signal: ${previousDbm ?: "?"} dBm")
             }
+            legacyProtection.onEpisodeStart(kind, legacyAlertMode())
         }
 
         if (cell.isSuspicious) {
@@ -77,10 +78,6 @@ internal class SecurityAlertController(
         } else {
             pingPongLogged = false
             if (confirmed) alarmEpisodes.onClear()
-        }
-
-        if (legacyProtectionEnabled() && (network.contains("3G") || network.contains("2G"))) {
-            legacyProtection.trigger()
         }
 
         previousNetworkType = network

@@ -54,6 +54,8 @@ class TerminalLocalizationCoverageTest {
         "[RADIO] Ping-Pong detectado a 42.0 km/h. Ignorando alerta.",
         "[RADIO] Cambios rápidos de celda observados a 0,0 km/h.",
         "🚨 Efecto Ping-Pong confirmado por TemporalConfidence.",
+        "Red 2G/3G en uso: cambio desde 4G/5G · aviso NOTIFY. Puede deberse a cobertura o a llamadas sin VoLTE; no es un ataque confirmado.",
+        "Red 2G/3G en uso · aviso OFF. Puede deberse a cobertura o a llamadas sin VoLTE; no es un ataque confirmado.",
         "N/A: sin handover reciente; esperando el siguiente para comprobar la movilidad.",
         "N/A: hay cambios rápidos de celda, pero sin velocidad GPS no se puede saber si estás parado.",
         "[RADIO] Cambios rápidos de celda observados sin velocidad GPS (H10 en N/A).",

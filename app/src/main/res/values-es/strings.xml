@@ -108,7 +108,7 @@
     <string name="csv_exported_format">✅ CSV exportado: %1$d filas</string>
     <string name="incident_observing">OBSERVANDO</string><string name="incident_confirmed">CONFIRMADO</string><string name="incident_recovered">RECUPERADO</string><string name="incident_interrupted">INTERRUMPIDO</string>
     <string name="critical_battery_gps_paused">Batería crítica: GPS continuo en pausa</string><string name="no_signal_airplane">Sin señal / Modo Avión</string><string name="searching_network">Buscando red…</string>
-    <string name="latency_warning">Latencia anómala persistente — posible interferencia MITM</string><string name="airplane_settings_hint">Toca para abrir los ajustes de Modo Avión.</string>
+    <string name="latency_warning">Latencia anómala persistente — posible interferencia MITM</string>
     <string name="heuristic_rule_format">H%1$d · regla de detección</string><string name="status_passed">SUPERADA</string><string name="status_failed">FALLIDA</string><string name="status_coherent">COHERENTE</string><string name="status_incoherent">INCOHERENTE</string>
     <string-array name="heuristic_names"><item>Celda aislada</item><item>Estabilidad de potencia</item><item>Consistencia MCC</item><item>Límite MNC</item><item>Validación regional TAC</item><item>Coherencia geométrica (TA)</item><item>Espectro de vecinos</item><item>Sanidad ARFCN</item><item>Cifrado hardware</item><item>Anti ping-pong</item><item>Consistencia geográfica</item><item>Correlación latencia + RF</item><item>Baseline y huella RF</item><item>Downgrade de banda</item><item>Estabilidad de identidad RF</item><item>Coherencia de transición celular</item></string-array><string name="transition_explanation_passed">El handover observado es coherente con las rutas locales aprendidas.</string><string name="transition_explanation_failed">El handover observado no concuerda con las rutas locales aprendidas.</string><string name="transition_explanation_na">No hay suficiente historial fiable de rutas para evaluar esta transición.</string>
     <string name="mobility_sanity">CORDURA DE MOVILIDAD · H16</string>
@@ -286,8 +286,7 @@
     <string name="notif_monitoring_title">ICdetection: monitorización · GPS continuo</string>
     <string name="notif_monitoring_title_adaptive">ICdetection: monitorización · GPS adaptativo</string>
     <string name="notif_monitoring_title_intelligent">ICdetection: monitorización · GPS inteligente</string>
-    <string name="notif_legacy_network_title">ICdetection: red 2G/3G detectada</string>
-    <string name="notif_open_settings">ABRIR AJUSTES</string>
+    <string name="notif_legacy_network_title">ICdetection: red 2G/3G en uso</string>
     <string name="channel_monitoring_name">Monitorización</string>
     <string name="channel_alerts_description">Avisos accionables de degradación celular</string>
     <string name="notif_latency_title">⚠ Anomalía de red</string>
@@ -545,4 +544,13 @@
     <string name="profile_abstain_incompatible_algorithm">referencia de otra versión del algoritmo</string>
     <string name="profile_abstain_no_compatible_metric">ninguna métrica válida en esta observación</string>
     <string name="profile_history_reason_code">Código de motivo guardado: %1$s</string>
+    <!-- Avisos de red 2G/3G -->
+    <string name="notif_legacy_change_title">ICdetection: cambio de 4G/5G a 2G/3G</string>
+    <string name="notif_legacy_network_body">El móvil está usando una red 2G/3G. Puede ocurrir con poca cobertura 4G/5G o en llamadas sin VoLTE; no es un ataque confirmado. Usa los ajustes de modo avión si quieres salir de la red.</string>
+    <string name="notif_open_airplane_settings">AJUSTES DE MODO AVIÓN</string>
+    <string name="legacy_alert_title">Avisos de red 2G/3G</string>
+    <string name="legacy_alert_off">Desactivados</string>
+    <string name="legacy_alert_notify">Solo notificación</string>
+    <string name="legacy_alert_notify_sound">Notificación y sonido</string>
+    <string name="legacy_alert_description">Un aviso cuando el móvil empieza a usar 2G/3G; no se repite mientras siga en ella. Para un aviso nuevo tiene que volver antes al menos 1 minuto seguido a 4G/5G. Puede deberse a cobertura o a llamadas sin VoLTE.</string>
 </resources>

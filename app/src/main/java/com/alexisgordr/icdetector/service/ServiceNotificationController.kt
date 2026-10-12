@@ -85,25 +85,38 @@ internal class ServiceNotificationController(
             .notify(NOTIFICATION_ID, foregroundNotification(text))
     }
 
-    fun showAirplaneModeAction() {
+    /**
+     * 3.0 — Aviso de un episodio de red 2G/3G (uno por episodio, ver LegacyNetworkEpisodeGate).
+     * Describe el uso o el cambio a 2G/3G, no un ataque, y ofrece abrir los ajustes de modo avión.
+     * [silent]: «Solo notificación» (predeterminado); el tono, si se eligió, lo pone quien llama.
+     */
+    fun showLegacyNetworkNotice(kind: com.alexisgordr.icdetector.core.LegacyNetworkEpisodeGate.Trigger, silent: Boolean) {
         val settings = PendingIntent.getActivity(
             context,
             2,
             Intent(Settings.ACTION_AIRPLANE_MODE_SETTINGS),
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
         )
+        val title = context.getString(
+            if (kind == com.alexisgordr.icdetector.core.LegacyNetworkEpisodeGate.Trigger.CHANGE_FROM_MODERN) R.string.notif_legacy_change_title
+            else R.string.notif_legacy_network_title
+        )
+        val body = context.getString(R.string.notif_legacy_network_body)
         val notification = NotificationCompat.Builder(context, ALERT_CHANNEL_ID)
-            .setContentTitle(context.getString(R.string.notif_legacy_network_title))
-            .setContentText(context.getString(R.string.airplane_settings_hint))
+            .setContentTitle(title)
+            .setContentText(body)
+            .setStyle(NotificationCompat.BigTextStyle().bigText(body))
             .setSmallIcon(android.R.drawable.stat_sys_warning)
-            .setPriority(NotificationCompat.PRIORITY_HIGH)
-            .setCategory(NotificationCompat.CATEGORY_ALARM)
+            .setPriority(NotificationCompat.PRIORITY_DEFAULT)
+            .setCategory(NotificationCompat.CATEGORY_STATUS)
+            .setSilent(silent)
+            .setOnlyAlertOnce(true)
             .setContentIntent(settings)
-            .addAction(android.R.drawable.ic_menu_manage, context.getString(R.string.notif_open_settings), settings)
+            .addAction(android.R.drawable.ic_menu_manage, context.getString(R.string.notif_open_airplane_settings), settings)
             .setAutoCancel(true)
             .build()
         context.getSystemService(NotificationManager::class.java)
-            .notify(AIRPLANE_ACTION_NOTIFICATION_ID, notification)
+            .notify(LEGACY_NETWORK_NOTIFICATION_ID, notification)
     }
 
     /**
@@ -144,7 +157,7 @@ internal class ServiceNotificationController(
         const val CHANNEL_ID = "miniic_channel"
         const val ALERT_CHANNEL_ID = "miniic_security_alerts"
         const val NOTIFICATION_ID = 202
-        const val AIRPLANE_ACTION_NOTIFICATION_ID = 204
+        const val LEGACY_NETWORK_NOTIFICATION_ID = 204
         const val CONFIRMED_ALARM_NOTIFICATION_ID = 205
 
         /** 3.0 (#35) — ¿Sonaría ahora la notificación de una alarma confirmada? */

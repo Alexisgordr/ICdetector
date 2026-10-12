@@ -16,6 +16,12 @@ GitHub pre-release of an earlier build was withdrawn.
   fail (Wi-Fi, no measurement, weak signal or normal RF quality). It now applies it only when H12 is
   `FAILED`, once, with the same weight. Rules, score and alarms are unchanged; stored
   `AnomalyConfidence` values from earlier builds may be higher in those cases.
+- **2G/3G network alerts.** A hidden flag fixed to "on" fired the 2G/3G response every 60 seconds, and
+  the 4G/5G → 2G/3G path played its own tone outside any control. There is now a setting (*Off*,
+  *Notification only* — default — and *Notification and sound*), every path goes through it, and the
+  alert is given once per continuous 2G/3G episode, closed after 1 minute in a row on 4G/5G. Texts
+  describe use of or a change to 2G/3G, with coverage and calls without VoLTE as possible causes. The
+  setting travels in backups (same format); older backups restore the default.
 
 ### Consolidation: labels, data provenance and shared evidence
 
