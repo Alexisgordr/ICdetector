@@ -84,6 +84,33 @@ object ServingCellSelection {
     }
 
     /**
+     * 3.0 — Las VECINAS que cuentan para el análisis: entradas no registradas que el módem no
+     * declara `SECONDARY_SERVING`.
+     *
+     * Antes el servicio usaba `filter { !it.isRegistered }`, y la pata NR de NSA (o cualquier
+     * portadora secundaria publicada sin `isRegistered`) entraba como vecina: rellenaba el recuento
+     * de H1, H7 y la densidad del bayesiano, competía en H2 y Stable-Site la aprendía como entorno.
+     * Una portadora que sirve a esta conexión no es una celda vecina, aunque sea de otra tecnología
+     * o de otro emplazamiento: no se supone que comparta estación con la primaria, solo que su
+     * papel es otro.
+     *
+     * Lo demás no cambia: una entrada no se excluye por ser NR, `NONE` y `UNKNOWN` no registradas
+     * siguen siendo vecinas como antes (no se inventa su papel), y el filtro de potencia lo
+     * aplica quien llama, igual que antes. Las secundarias siguen en [secondaryCarriers] y en
+     * [nonServingEntries] para mostrarlas y registrarlas.
+     */
+    fun neighbours(cells: List<CellData>): List<CellData> = cells.filter {
+        !it.isRegistered && it.connectionState != CellConnectionState.SECONDARY_SERVING
+    }
+
+    /**
+     * Todas las entradas no registradas, secundarias incluidas: el contexto completo de radio que
+     * se MUESTRA o se guarda como evidencia (pantalla, caja negra forense). No es la lista de
+     * vecinas: para contar o comparar vecinas, [neighbours].
+     */
+    fun nonServingEntries(cells: List<CellData>): List<CellData> = cells.filter { !it.isRegistered }
+
+    /**
      * Devuelve una copia de [cells] con la servidora en la posición 0 y sus portadoras
      * secundarias adjuntas. El resto conserva su orden. Así todo el código que busca "la
      * primera registrada" encuentra la servidora correcta sin cambiar cada llamada.

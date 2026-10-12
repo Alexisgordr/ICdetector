@@ -1162,7 +1162,11 @@ class MiniICService : Service() {
                 }
             }
 
-            val neighbors = list.filter { !it.isRegistered }
+            // 3.0 — Vecinas para el análisis (H1-H5, H7, H11, H16, densidad bayesiana, Stable-Site
+            // y diagnóstico): sin las portadoras SECONDARY_SERVING que el módem publica sin
+            // isRegistered. La caja negra conserva el contexto completo, secundarias incluidas.
+            val neighbors = com.alexisgordr.icdetector.core.ServingCellSelection.neighbours(list)
+            val nonServingContext = com.alexisgordr.icdetector.core.ServingCellSelection.nonServingEntries(list)
             val activeRaw = list.firstOrNull { it.isRegistered }
             // Milisegundos desde el arranque de la celda registrada aceptada por el parser.
             val observationToken = activeObservationToken ?: 0L
@@ -1614,7 +1618,7 @@ class MiniICService : Service() {
                         writeGate.launch(scope, forensicDispatcher) {
                             forensicRecorder.observe(
                                 active = confirmedActive.copy(verified = knownStatus),
-                                neighbors = neighbors,
+                                neighbors = nonServingContext,
                                 location = currentLocation,
                                 latencyState = networkLatencyState.value,
                                 logs = liveLogs.value,

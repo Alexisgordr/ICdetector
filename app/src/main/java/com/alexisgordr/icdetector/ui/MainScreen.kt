@@ -629,7 +629,7 @@ fun MainScreenContent(dbHelper: CellDbHelper, service: MiniICService?) {
                         }
 
                         if (active != null) {
-                            SignalVisualizer(active, cellList.filter { !it.isRegistered })
+                            SignalVisualizer(active, com.alexisgordr.icdetector.core.ServingCellSelection.nonServingEntries(cellList))
                         }
 
                         // v2.10.4 — Contexto de radio: servidora según el módem, portadoras
