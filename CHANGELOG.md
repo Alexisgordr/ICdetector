@@ -26,6 +26,9 @@ confirmation, alerts, trust learning and forensic decisions are unchanged.
   a restored backup. Uncalibrated levels `NONE`/`LOW`/`MODERATE`/`HIGH`, or `ABSTAIN` with a reason.
 - **Export.** Ten `Profile*` columns appended at the end of the history CSV; `tools/check_export.py`
   validates them.
+- **History → Local profile.** With the option on, a tab (also opened from Settings → VIEW
+  EVALUATIONS) lists stored evaluations by page and level, with a detail of the stored reference,
+  the linked observation and H13 at the time. Read only; nothing is recomputed.
 - **Settings.** *Local profile (experimental)*, off by default, display only; **RESET LOCAL
   PROFILE**; error diagnostics. Mode changes and resets are logged. Restoring a backup turns the option
   off.

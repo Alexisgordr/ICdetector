@@ -384,8 +384,8 @@ each saved observation deviates from that reference.
   quarantined; the reference can only shift gradually from day to day.
 - **Abstains when unsure.** Immature (fewer than 30 samples over 3 days), stale, or learned on another
   phone model. Maturity is not validation.
-- **Experimental option.** *Settings → Local profile*, off by default, only displays the latest
-  evaluation. It cannot add, silence or lower alerts.
+- **Experimental option.** *Settings → Local profile*, off by default, only displays: the latest
+  evaluation and a History tab with the stored evaluations. It cannot add, silence or lower alerts.
 
 It is not an IMSI-catcher detector, does not resist evasion, and its levels are uncalibrated — not
 probabilities. Details: [MANUAL → Local profile](MANUAL.md#local-profile-shadow-mode-experimental).

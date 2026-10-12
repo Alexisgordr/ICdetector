@@ -328,6 +328,15 @@ references are usable now, marked *not an engine decision*. It cannot add, silen
 or skip `1/3 → 3/3` confirmation. Every evaluation stores its mode, and every change of the option is
 logged with time and app version.
 
+**Viewing evaluations.** With the option on, *Settings → Local profile → VIEW EVALUATIONS* (or the
+**Local profile** tab in History) lists the stored evaluations, newest first, 50 at a time: normal
+observations, signal deviations and abstentions, filterable by level. The detail shows only what was
+stored at the time — the reference used comes from the saved evidence, and when it was not stored the
+view says so; the current profile is never used for past evaluations. It also shows the linked
+history observation and what the saved row tells about H13 (failed, not evaluated, no failure
+recorded, or unknown before 3.0); H13 and the profile look at the same signal, so agreement is not
+independent confirmation. Nothing in this view raises alerts or changes any result.
+
 **Reset.** **RESET LOCAL PROFILE** deletes only what was learned; history, alerts and past evaluations
 are kept, and learning starts again. Use it after restoring a backup from another phone model, or
 after a major change of surroundings.
