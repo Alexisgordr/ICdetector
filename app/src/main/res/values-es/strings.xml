@@ -98,13 +98,13 @@
     <string name="site_warning">Los sectores agrupados bajo este eNodeB aparecen muy separados. Puede indicar una identidad reutilizada o anómala, pero también una red distribuida; revísalo con el resto de evidencias.</string>
     <string name="route_distance_format">centros %1$d m · sin explicar %2$d m</string>
     <string name="monitoring_active">Sondeo activo</string>
-    <string name="verified_label">✅ VERIFICADA</string><string name="not_found_label">➖ SIN REGISTRO</string><string name="rejected_label">⚠️ RESPUESTA DESCARTADA</string><string name="api_error_label">⚠️ ERROR API</string><string name="pending_label">⏳ PENDIENTE</string>
+    <string name="verified_label">✅ REGISTRADA</string><string name="not_found_label">➖ SIN REGISTRO</string><string name="rejected_label">⚠️ RESPUESTA DESCARTADA</string><string name="api_error_label">⚠️ ERROR API</string><string name="pending_label">⏳ PENDIENTE</string>
     <string name="security_alerts_channel">Alertas de seguridad</string><string name="stop">Detener</string>
     <string name="permissions_required">Android te pedirá estos permisos a continuación. Esto es para lo que se usa cada uno.</string>
     <string name="monitor">MONITOR</string><string name="history">HISTORIAL</string>
     <string name="searching_signal">BUSCANDO SEÑAL…</string><string name="network_anomaly_confirmed">ANOMALÍA DE RED CONFIRMADA</string><string name="no_anomalies">SIN ANOMALÍAS DETECTADAS</string>
     <string name="observing_score">OBSERVANDO — %1$d%%</string><string name="unconfirmed_anomaly_score">ANOMALÍA SIN CONFIRMAR — %1$d%%</string>
-    <string name="public_db_registered">Registrada en base pública</string><string name="public_db_not_found">Sin registro en base pública (no implica amenaza)</string><string name="public_db_rejected">Respuesta de la base descartada; se reintentará</string><string name="public_db_pending">Consultando base pública…</string><string name="public_db_error">Base pública sin respuesta</string>
+    <string name="public_db_registered">Registrada en base pública (no prueba legitimidad)</string><string name="public_db_not_found">Sin registro en base pública (no implica amenaza)</string><string name="public_db_rejected">Respuesta de la base descartada; se reintentará</string><string name="public_db_pending">Consultando base pública…</string><string name="public_db_error">Base pública sin respuesta</string>
     <string name="csv_exported_format">✅ CSV exportado: %1$d filas</string>
     <string name="incident_observing">OBSERVANDO</string><string name="incident_confirmed">CONFIRMADO</string><string name="incident_recovered">RECUPERADO</string><string name="incident_interrupted">INTERRUMPIDO</string>
     <string name="critical_battery_gps_paused">Batería crítica: GPS continuo en pausa</string><string name="no_signal_airplane">Sin señal / Modo Avión</string><string name="searching_network">Buscando red…</string>
@@ -126,7 +126,7 @@
     <string name="local_trust_ceiling">Evidencia local revocable · techo epistémico 98%</string>
     <string name="trust_state_new">NUEVA</string><string name="trust_state_learning">APRENDIENDO</string><string name="trust_state_established">CONSOLIDADA</string><string name="trust_state_changed">CAMBIADA</string><string name="trust_state_quarantined">EN CUARENTENA</string><string name="trust_state_site_unverified">SITIO SIN VERIFICAR</string>
     <string name="trust_desc_new">Aún no hay historial limpio suficiente; no se afirma legitimidad.</string>
-    <string name="trust_desc_learning">Construyendo un perfil local durante días independientes con identidad RF, GPS y handovers fiables.</string>
+    <string name="trust_desc_learning">Construyendo un perfil local durante días independientes con identidad RF, GPS y handovers aprendidos.</string>
     <string name="trust_desc_established">Coincide con un patrón local observado repetidamente. Es confianza, no prueba de autenticidad.</string>
     <string name="trust_desc_changed">El patrón actual de RF, geometría o handover contradice el perfil local consolidado: %1$s.</string>
     <string name="trust_desc_quarantined">Esta observación no puede entrenar el perfil porque una o más reglas de anomalía han fallado.</string>
@@ -213,7 +213,7 @@
     <string name="export_failed_format">❌ Error al exportar: %1$s</string>
     <string name="unknown_error">desconocido</string>
     <string name="export_error_format">Error: %1$s</string>
-    <string name="route_trust_label">confianza</string>
+    <string name="route_trust_label">aprendidos</string>
     <string name="antenna_anomaly_label">anomalía</string>
     <string name="antenna_samples_label">muestras</string>
     <string name="topology_exporting">Exportando topología…</string>
@@ -221,13 +221,14 @@
     <string name="stable_site_exporting">Exportando Stable-Site…</string>
     <string name="stable_site_exported">Stable-Site exportado correctamente</string>
     <string name="topology_export_privacy_warning">El paquete contiene identidades celulares y rutas de handover que pueden revelar patrones habituales de movimiento. No incluye IMSI, IMEI, teléfono ni credenciales. Revísalo antes de compartirlo.</string>
+    <string name="topology_learned_note">Aprendido: el cambio superó la comprobación de movilidad (H16) con dos posiciones GPS precisas y se sumó a la referencia local de rutas. No prueba que las celdas sean legítimas.</string>
     <string name="topology_header">MAPA LÓGICO LOCAL · NO MODIFICA EL SCORE</string>
     <string name="topology_metric_cells">CELDAS</string>
     <string name="topology_metric_handovers">HANDOVERS</string>
-    <string name="topology_metric_trusted">FIABLES</string>
+    <string name="topology_metric_trusted">APRENDIDAS</string>
     <string name="topology_empty">SIN RUTAS TODAVÍA\nLa topología aparecerá tras los primeros handovers</string>
     <string name="topology_status_learning">APRENDIENDO</string>
-    <string name="topology_route_counts_format">%1$d observaciones · %2$d fiables</string>
+    <string name="topology_route_counts_format">%1$d observaciones · %2$d aprendidos</string>
     <string name="forensic_exporting_format">Exportando %1$s…</string>
     <string name="forensic_exported">Caso exportado correctamente</string>
     <string name="forensic_window_note">Ventana automática: 60 s antes · episodio completo · 60 s después</string>
@@ -258,9 +259,9 @@
     <string name="geometry_not_available">NO DISPONIBLE</string>
     <string name="geometry_relevant_trips">Viajes relevantes</string>
     <string name="geometry_transitions_in_out">Transiciones entrada/salida</string>
-    <string name="geometry_trusted_in_out">Fiables entrada/salida</string>
+    <string name="geometry_trusted_in_out">Aprendidos entrada/salida</string>
     <string name="geometry_route_counts_format">Transiciones %1$d · Viajes %2$d</string>
-    <string name="intel_verified">VERIFICADAS</string>
+    <string name="intel_verified">REGISTRADAS</string>
     <string name="intel_not_found">NO ENCONTRADAS</string>
     <string name="geometry_local_cell_trust">Confianza local</string>
     <string name="geometry_mobility">Movilidad</string>
@@ -477,7 +478,7 @@
     <string name="route_detail_last_seen">Última vez %1$s</string>
     <string name="stable_site_route_group_count">%1$d episodios</string>
     <string name="route_detail_identities">De %1$s a %2$s</string>
-    <string name="route_detail_counts">%1$d cambios · %2$d de confianza · último veredicto %3$s · %4$d trayectos</string>
+    <string name="route_detail_counts">%1$d cambios · %2$d aprendidos · último veredicto %3$s · %4$d trayectos</string>
     <!-- Stable-Site en lenguaje sencillo -->
     <string name="stable_site_simple_title">STABLE-SITE: LUGARES</string>
     <string name="stable_site_simple_intro">Cada lugar indica si ICdetection ya tiene una referencia de sus celdas habituales y qué le falta. Nada de esto es un veredicto de seguridad.</string>

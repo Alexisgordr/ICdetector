@@ -478,8 +478,8 @@ or Android did not provide the field.
 
 ### Verification states
 
-- **VERIFIED:** a configured external source returned a compatible record. Context, not proof of
-  legitimacy. The label is re-checked after 30 days.
+- **VERIFIED** (shown as *REGISTERED*): a configured external source returned a compatible record.
+  Context, not proof of legitimacy: a cloned identity can also be registered. The label is re-checked after 30 days.
 - **PENDING:** verification has not finished or is waiting for required data.
 - **NOT FOUND:** no matching public record. Common for new, indoor, rural or unmapped cells.
 - **ERROR / REJECTED:** credentials, connectivity, proxy configuration or the external service
@@ -537,8 +537,10 @@ signal only, since distributed radio deployments can produce the same pattern.
 ### Topology explorer
 
 **History → TOPOLOGY** shows the directional handover graph learned by the device: unique cells,
-routes, total handovers and routes with trusted H16 observations. Each route keeps its full origin
-and destination identities, observation count, trusted count, last H16 state, trust ratio and most
+routes, total handovers and **learned** routes. A handover is *learned* when it passed H16 with two
+contemporaneous, precise GPS fixes and was added to the local route reference; this is a mobility
+criterion, not proof that either cell is legitimate. Each route keeps its full origin and
+destination identities, observation count, learned count, last H16 state, learned ratio and most
 recent timestamp. Filters separate all routes, learned routes and routes worth reviewing. The screen
 is read-only: it cannot change the score, H16 or the transition baseline.
 

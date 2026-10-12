@@ -588,6 +588,12 @@ private fun TopologyPanel(
             TopologyMetric(stringResource(R.string.topology_metric_handovers), totalHandovers.toString(), Modifier.weight(1f))
             TopologyMetric(stringResource(R.string.topology_metric_trusted), trustedRoutes.toString(), Modifier.weight(1f))
         }
+        Spacer(Modifier.height(4.dp))
+        // «Aprendida» es un criterio de movilidad (H16 con GPS preciso), no una prueba de legitimidad.
+        Text(
+            stringResource(R.string.topology_learned_note),
+            color = Color(0xFF666666), fontFamily = FontFamily.Monospace, fontSize = 8.sp
+        )
         Spacer(Modifier.height(8.dp))
         Row(
             Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),

@@ -98,13 +98,13 @@
     <string name="site_warning">Sectors grouped under this eNodeB appear far apart. This may indicate reused or anomalous identity, but also a distributed network; review it with the remaining evidence.</string>
     <string name="route_distance_format">centres %1$d m · unexplained %2$d m</string>
     <string name="monitoring_active">Monitoring active</string>
-    <string name="verified_label">✅ VERIFIED</string><string name="not_found_label">➖ NOT REGISTERED</string><string name="rejected_label">⚠️ RESPONSE REJECTED</string><string name="api_error_label">⚠️ API ERROR</string><string name="pending_label">⏳ PENDING</string>
+    <string name="verified_label">✅ REGISTERED</string><string name="not_found_label">➖ NOT REGISTERED</string><string name="rejected_label">⚠️ RESPONSE REJECTED</string><string name="api_error_label">⚠️ API ERROR</string><string name="pending_label">⏳ PENDING</string>
     <string name="security_alerts_channel">Security alerts</string><string name="stop">Stop</string>
     <string name="permissions_required">Android will ask you for these permissions next. This is what each one is used for.</string>
     <string name="monitor">MONITOR</string><string name="history">HISTORY</string>
     <string name="searching_signal">SEARCHING FOR SIGNAL…</string><string name="network_anomaly_confirmed">NETWORK ANOMALY CONFIRMED</string><string name="no_anomalies">NO ANOMALIES DETECTED</string>
     <string name="observing_score">OBSERVING — %1$d%%</string><string name="unconfirmed_anomaly_score">UNCONFIRMED ANOMALY — %1$d%%</string>
-    <string name="public_db_registered">Registered in public database</string><string name="public_db_not_found">Not registered in public database (does not imply a threat)</string><string name="public_db_rejected">Public-database response rejected; retry pending</string><string name="public_db_pending">Querying public database…</string><string name="public_db_error">Public database did not respond</string>
+    <string name="public_db_registered">Registered in public database (does not prove legitimacy)</string><string name="public_db_not_found">Not registered in public database (does not imply a threat)</string><string name="public_db_rejected">Public-database response rejected; retry pending</string><string name="public_db_pending">Querying public database…</string><string name="public_db_error">Public database did not respond</string>
     <string name="csv_exported_format">✅ CSV exported: %1$d rows</string>
     <string name="incident_observing">OBSERVING</string><string name="incident_confirmed">CONFIRMED</string><string name="incident_recovered">RECOVERED</string><string name="incident_interrupted">INTERRUPTED</string>
     <string name="critical_battery_gps_paused">Critical battery: continuous GPS paused</string><string name="no_signal_airplane">No signal / Airplane mode</string><string name="searching_network">Searching for network…</string>
@@ -126,7 +126,7 @@
     <string name="local_trust_ceiling">Revocable local evidence · epistemic ceiling 98%</string>
     <string name="trust_state_new">NEW</string><string name="trust_state_learning">LEARNING</string><string name="trust_state_established">ESTABLISHED</string><string name="trust_state_changed">CHANGED</string><string name="trust_state_quarantined">QUARANTINED</string><string name="trust_state_site_unverified">SITE UNVERIFIED</string>
     <string name="trust_desc_new">Not enough clean history yet; no legitimacy claim is made.</string>
-    <string name="trust_desc_learning">Building a local profile across independent days, RF identity, GPS and trusted handovers.</string>
+    <string name="trust_desc_learning">Building a local profile across independent days, RF identity, GPS and learned handovers.</string>
     <string name="trust_desc_established">Matches a repeatedly observed local pattern. This is confidence, not proof of authenticity.</string>
     <string name="trust_desc_changed">The current RF, geometry or handover pattern contradicts the established local profile: %1$s.</string>
     <string name="trust_desc_quarantined">This observation cannot train the profile because one or more anomaly rules failed.</string>
@@ -213,7 +213,7 @@
     <string name="export_failed_format">❌ Export failed: %1$s</string>
     <string name="unknown_error">unknown</string>
     <string name="export_error_format">Error: %1$s</string>
-    <string name="route_trust_label">trust</string>
+    <string name="route_trust_label">learned</string>
     <string name="antenna_anomaly_label">anomaly</string>
     <string name="antenna_samples_label">samples</string>
     <string name="topology_exporting">Exporting topology…</string>
@@ -221,13 +221,14 @@
     <string name="stable_site_exporting">Exporting Stable-Site…</string>
     <string name="stable_site_exported">Stable-Site exported successfully</string>
     <string name="topology_export_privacy_warning">The package contains cell identities and handover routes that can reveal habitual movement patterns. It does not include IMSI, IMEI, phone number or credentials. Review it before sharing it.</string>
+    <string name="topology_learned_note">Learned: the handover passed the mobility check (H16) with two precise GPS fixes and was added to the local route reference. It does not prove that the cells are legitimate.</string>
     <string name="topology_header">LOCAL LOGICAL MAP · DOES NOT CHANGE THE SCORE</string>
     <string name="topology_metric_cells">CELLS</string>
     <string name="topology_metric_handovers">HANDOVERS</string>
-    <string name="topology_metric_trusted">TRUSTED</string>
+    <string name="topology_metric_trusted">LEARNED</string>
     <string name="topology_empty">NO ROUTES YET\nThe topology will appear after the first handovers</string>
     <string name="topology_status_learning">LEARNING</string>
-    <string name="topology_route_counts_format">%1$d observations · %2$d trusted</string>
+    <string name="topology_route_counts_format">%1$d observations · %2$d learned</string>
     <string name="forensic_exporting_format">Exporting %1$s…</string>
     <string name="forensic_exported">Case exported successfully</string>
     <string name="forensic_window_note">Automatic window: 60 s before · full episode · 60 s after</string>
@@ -258,9 +259,9 @@
     <string name="geometry_not_available">NOT AVAILABLE</string>
     <string name="geometry_relevant_trips">Relevant trips</string>
     <string name="geometry_transitions_in_out">Transitions in/out</string>
-    <string name="geometry_trusted_in_out">Trusted in/out</string>
+    <string name="geometry_trusted_in_out">Learned in/out</string>
     <string name="geometry_route_counts_format">Transitions %1$d · Trips %2$d</string>
-    <string name="intel_verified">VERIFIED</string>
+    <string name="intel_verified">REGISTERED</string>
     <string name="intel_not_found">NOT FOUND</string>
     <string name="geometry_local_cell_trust">Local cell trust</string>
     <string name="geometry_mobility">Mobility</string>
@@ -477,7 +478,7 @@
     <string name="route_detail_last_seen">Last seen %1$s</string>
     <string name="stable_site_route_group_count">%1$d episodes</string>
     <string name="route_detail_identities">From %1$s to %2$s</string>
-    <string name="route_detail_counts">%1$d handovers · %2$d trusted · last verdict %3$s · %4$d trips</string>
+    <string name="route_detail_counts">%1$d handovers · %2$d learned · last verdict %3$s · %4$d trips</string>
     <!-- Stable-Site en lenguaje sencillo -->
     <string name="stable_site_simple_title">STABLE-SITE: PLACES</string>
     <string name="stable_site_simple_intro">Each place shows whether ICdetection already has a reference of its usual cells and what is still missing. Nothing here is a security verdict.</string>

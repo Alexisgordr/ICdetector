@@ -9,6 +9,16 @@ Version numbers follow the app's `versionName`; the Android `versionCode` is giv
 Available as source on the `ICdetection-v3.0.0-beta` branch; no APK is published. A short-lived
 GitHub pre-release of an earlier build was withdrawn.
 
+### Consolidation: labels, data provenance and shared evidence
+
+No new rules, no change to scores, alarms, learning, schema or export formats.
+
+- **Labels.** Topology called the same H16 criterion *TRUSTED* (metric) and *LEARNED* (filter); it is
+  now *LEARNED* everywhere (topology, route detail, geometry, local-trust text), with one line
+  explaining it: H16 passed with two precise GPS fixes, not proof that the cells are legitimate. A
+  public-database match reads *REGISTERED* in the notification and History counters, as it already did
+  on the badges, and the main screen adds "does not prove legitimacy".
+
 ### Stable-Site view in History → Topology
 
 Read only; no schema change. Learning, H1–H16, scores, alarms, retention and both exports are
