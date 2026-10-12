@@ -100,7 +100,7 @@ class BayesianScorerTest {
     }
 
     @Test
-    fun `la latencia anomala suma evidencia debil pero suma`() {
+    fun `H12 fallida suma evidencia debil pero suma`() {
         val sinLatencia = BayesianScorer.calculate(listOf("powerJump"), "PENDING", false)
         val conLatencia = BayesianScorer.calculate(listOf("powerJump"), "PENDING", true)
         assertTrue("latencia (LR 1.8) debe subir algo el posterior", conLatencia > sinLatencia)

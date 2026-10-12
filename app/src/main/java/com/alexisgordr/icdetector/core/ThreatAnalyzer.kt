@@ -628,7 +628,9 @@ object ThreatAnalyzer {
         val anomalyConfidence = BayesianScorer.calculate(
             failedList,
             active.verified.name,
-            isNetworkLatencyAnomalous,
+            // 3.0 — Solo H12 FAILED aporta la LR de latencia; el indicador bruto no (antes pesaba
+            // aunque H12 no fallara: con Wi-Fi, señal débil o RF normal).
+            latencyCorrelationFailed = !hLatencyCorrelation,
             neighborCount = neighbors.size,
             trustScore = reputation?.trustScore ?: -1
         )

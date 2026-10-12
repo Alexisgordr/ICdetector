@@ -146,10 +146,16 @@ object BayesianScorer {
     /** 3.0 (#7, O2) — Claves usadas en los grupos de correlación. */
     internal val groupedKeys: Set<String> get() = ALL_GROUPED.toSet()
 
+    /**
+     * @param latencyCorrelationFailed H12 en estado FAILED en esta observación. La LR de latencia
+     *   se aplica SOLO entonces: el indicador bruto de latencia anómala no es evidencia por sí solo
+     *   (con Wi-Fi, sin medición, con señal débil o con RF normal, H12 no falla y no debe pesar).
+     *   No va en [failedHeuristics] para no contarla dos veces.
+     */
     fun calculate(
         failedHeuristics: List<String>,
         verificationStatus: String,
-        isLatencyAnomalous: Boolean,
+        latencyCorrelationFailed: Boolean,
         neighborCount: Int = -1,
         trustScore: Int = -1
     ): Float {
@@ -187,8 +193,8 @@ object BayesianScorer {
         val dbLr = DB_RATIOS[verificationStatus] ?: 1.0f
         posterior = bayesUpdate(posterior, dbLr)
 
-        // Factor latencia experimental
-        if (isLatencyAnomalous) {
+        // Factor latencia experimental: solo con H12 FAILED (ver el parámetro).
+        if (latencyCorrelationFailed) {
             posterior = bayesUpdate(posterior, LIKELIHOOD_RATIOS["latency"]!!)
         }
 

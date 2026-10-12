@@ -9,6 +9,14 @@ Version numbers follow the app's `versionName`; the Android `versionCode` is giv
 Available as source on the `ICdetection-v3.0.0-beta` branch; no APK is published. A short-lived
 GitHub pre-release of an earlier build was withdrawn.
 
+### Audit fixes
+
+- **Latency factor follows H12 (anomaly-confidence cut).** The uncalibrated anomaly confidence applied
+  the latency likelihood ratio whenever the raw latency indicator was anomalous, even when H12 did not
+  fail (Wi-Fi, no measurement, weak signal or normal RF quality). It now applies it only when H12 is
+  `FAILED`, once, with the same weight. Rules, score and alarms are unchanged; stored
+  `AnomalyConfidence` values from earlier builds may be higher in those cases.
+
 ### Consolidation: labels, data provenance and shared evidence
 
 No new rules, no change to scores, alarms, learning, schema or export formats.
