@@ -51,4 +51,17 @@ class LocalProfileOptionTest {
         assertTrue(res("values-es").contains("EXPERIMENTAL — no es una decisión del motor. Sin calibrar: la desviación no es una probabilidad."))
         listOf("values", "values-es").forEach { assertFalse(res(it).contains("probabilidad de ataque\"")) }
     }
+
+    @Test fun `restoring a backup leaves the option off and logs it when it was on`() {
+        assertFalse("la opción no viaja en las copias", LocalProfileOption.PREF_KEY in com.alexisgordr.icdetector.backup.BackupSettings.KEYS)
+        val restore = source("backup/RestoreStartup.kt")
+        val restored = restore.substringAfter("if (restoreOutcome == RestoreEngine.RestoreOutcome.RESTORED) {").substringBefore("return result")
+        assertTrue(restored.contains(".putBoolean(com.alexisgordr.icdetector.core.profile.LocalProfileOption.PREF_KEY, false)"))
+        assertTrue(restored.contains("if (wasOn) editor.putBoolean(FirstRunPolicy.PREF_PROFILE_OFF_BY_RESTORE, true)"))
+        assertTrue(restored.contains("editor.commit()"))
+        assertTrue(com.alexisgordr.icdetector.backup.FirstRunPolicy.PREF_PROFILE_OFF_BY_RESTORE in com.alexisgordr.icdetector.backup.FirstRunPolicy.OWN_KEYS)
+        val controller = source("service/LocalProfileController.kt")
+        assertTrue(controller.contains("LocalProfileStore.recordModeEvent(dbHelper.writableDatabase, null, appVersion, clock())"))
+        assertTrue(source("service/MiniICService.kt").contains("runCatching { localProfile.logSwitchOffByRestore() }"))
+    }
 }

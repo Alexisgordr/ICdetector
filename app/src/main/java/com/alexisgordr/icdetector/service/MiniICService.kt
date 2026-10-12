@@ -503,6 +503,8 @@ class MiniICService : Service() {
             appVersion = appVersion
         )
         writeGate.launch(scope, historyWriteDispatcher) {
+            runCatching { localProfile.logSwitchOffByRestore() }
+                .onFailure { e -> runCatching { localProfile.recordFailure("restore", e) } }
             runCatching { localProfile.bootstrapIfNeeded() }
                 .onFailure { e -> runCatching { localProfile.recordFailure("bootstrap", e) } }
         }

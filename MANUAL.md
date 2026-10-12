@@ -343,7 +343,8 @@ in (`SHADOW` or `EXPERIMENTAL_DISPLAY`). **RESET LOCAL PROFILE** deletes only wh
 history, alerts and past evaluations are kept. Each reference has a **generation**, new after a
 reset, after going stale or after an algorithm change, so evaluations of two different references
 are never confused even when their revision numbers repeat. The option itself is not saved in
-backups: a restored installation starts with it off. **Delete history** clears the profile and its
+backups, and restoring a backup always turns it off, also on a phone where it was on; that change is
+logged as `OFF` in the mode log when monitoring next starts. **Delete history** clears the profile and its
 evaluations but keeps the log of mode changes, so it remains known when the option was active.
 
 **Before giving it a larger role.** Showing extra alerts, or anything stronger, would need evidence
@@ -876,7 +877,7 @@ It is not a long-term archive. Restoring a backup kept for weeks or months can c
 - The longer the file is kept, the longer your location history sits outside the phone.
 
 The local profile is learned per phone model: after restoring on a different model it stays
-inactive until you reset it (see [Local profile](#local-profile-shadow-mode-experimental)).
+inactive until you reset it, and restoring always turns its experimental option off (see [Local profile](#local-profile-shadow-mode-experimental)).
 
 To keep data for a long time, use the **exports** (history CSV, forensic cases, topology,
 geometry, Stable-Site): they are read-only and meant for analysis and archiving.

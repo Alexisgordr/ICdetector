@@ -33,8 +33,16 @@ object RestoreStartup {
         }
         if (text != null) prefs(context).edit().putString(PREF_LAST_RESULT, text).commit()
         // 3.0 — Un historial restaurado (quizá de otro teléfono) no arranca el perfil local.
+        // La opción experimental del perfil local no viaja en las copias y vuelve a estar desactivada:
+        // las referencias restauradas pueden ser de otro teléfono. Si estaba activa, se anota.
         if (restoreOutcome == RestoreEngine.RestoreOutcome.RESTORED) {
-            prefs(context).edit().putBoolean(FirstRunPolicy.PREF_HISTORY_RESTORED, true).commit()
+            val p = prefs(context)
+            val wasOn = p.getBoolean(com.alexisgordr.icdetector.core.profile.LocalProfileOption.PREF_KEY, false)
+            val editor = p.edit()
+                .putBoolean(FirstRunPolicy.PREF_HISTORY_RESTORED, true)
+                .putBoolean(com.alexisgordr.icdetector.core.profile.LocalProfileOption.PREF_KEY, false)
+            if (wasOn) editor.putBoolean(FirstRunPolicy.PREF_PROFILE_OFF_BY_RESTORE, true)
+            editor.commit()
         }
         return result
     }

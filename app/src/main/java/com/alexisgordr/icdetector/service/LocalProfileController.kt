@@ -110,6 +110,16 @@ internal class LocalProfileController(
 
     @Volatile private var lastLoggedMs: Long? = null
 
+    /**
+     * Si una restauración desactivó la opción experimental, lo anota como `OFF` en el registro de
+     * modos (la restauración ocurre antes de que se pueda abrir la base).
+     */
+    fun logSwitchOffByRestore() {
+        if (!prefs.getBoolean(com.alexisgordr.icdetector.backup.FirstRunPolicy.PREF_PROFILE_OFF_BY_RESTORE, false)) return
+        LocalProfileStore.recordModeEvent(dbHelper.writableDatabase, null, appVersion, clock())
+        prefs.edit().remove(com.alexisgordr.icdetector.backup.FirstRunPolicy.PREF_PROFILE_OFF_BY_RESTORE).apply()
+    }
+
     private fun observation(r: ProfileBootstrap.Row) =
         LocalProfileShadow.Observation(r.historyId, r.context, r.dbm, r.rsrq, r.observedAtMs!!, deviceModel)
 

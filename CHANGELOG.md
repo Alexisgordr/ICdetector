@@ -47,7 +47,9 @@ its own tables and CSV columns.
   and future-dated references are rebuilt (F06); `check_export.py` now rejects impossible `Profile*`
   values (F07); the Settings card refreshes every 30 s and counts only references usable now (F08);
   a repeated quarantined reading is counted once (F09); profile failures are counted and shown as
-  diagnosis instead of being dropped (F10). References of algorithm 1 are relearned automatically.
+  diagnosis instead of being dropped (F10). Restoring a backup always turns the experimental option off
+  (logged as `OFF`); `ProfileLearned` follows the learning outcome, so a relearned stale reference is
+  exported as learned. References of algorithm 1 are relearned automatically.
 
 ### Phase 4 — Maintenance backlog and documentation
 

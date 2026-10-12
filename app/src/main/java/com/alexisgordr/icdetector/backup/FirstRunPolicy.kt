@@ -23,10 +23,16 @@ object FirstRunPolicy {
     /** 3.0 — La base actual viene de una copia restaurada (ver LocalProfileController). */
     const val PREF_HISTORY_RESTORED = "local_profile_history_restored"
 
+    /**
+     * 3.0 — La restauración desactivó la opción experimental del perfil local; el servicio lo anota
+     * en el registro de modos en cuanto puede abrir la base (ver LocalProfileController).
+     */
+    const val PREF_PROFILE_OFF_BY_RESTORE = "local_profile_off_by_restore"
+
     enum class Decision { PENDING, RESTORED, FRESH, EXISTING }
 
     /** Preferencias que escribe esta misma función o la restauración: no prueban un uso previo. */
-    val OWN_KEYS = setOf(PREF_DECISION, PREF_RESTORE_RESULT, PREF_PRE_BACKUP_NAME, PREF_HISTORY_RESTORED)
+    val OWN_KEYS = setOf(PREF_DECISION, PREF_RESTORE_RESULT, PREF_PRE_BACKUP_NAME, PREF_HISTORY_RESTORED, PREF_PROFILE_OFF_BY_RESTORE)
 
     fun parse(value: String?): Decision? = Decision.entries.firstOrNull { it.name == value }
 
