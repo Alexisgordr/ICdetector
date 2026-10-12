@@ -1,6 +1,7 @@
 package com.alexisgordr.icdetector.service
 
 import android.util.Log
+import com.alexisgordr.icdetector.core.LegacyNetwork
 import com.alexisgordr.icdetector.core.LegacyNetworkAlertMode
 import com.alexisgordr.icdetector.core.LegacyNetworkEpisodeGate
 
@@ -18,12 +19,14 @@ internal class LegacyNetworkProtection(
     private val notifications: ServiceNotificationController,
     private val log: (String) -> Unit
 ) {
-    fun onEpisodeStart(kind: LegacyNetworkEpisodeGate.Trigger, mode: LegacyNetworkAlertMode) {
+    /** @param previousDbm última potencia anterior observada (sin validar); solo contexto. */
+    fun onEpisodeStart(kind: LegacyNetworkEpisodeGate.Trigger, mode: LegacyNetworkAlertMode, previousDbm: Int?) {
         Log.w("MiniIC", "2G/3G network in use ($kind, alert ${mode.storedValue})")
         val what = if (kind == LegacyNetworkEpisodeGate.Trigger.CHANGE_FROM_MODERN) "Red 2G/3G en uso: cambio desde 4G/5G" else "Red 2G/3G en uso"
-        log("$what · aviso ${mode.storedValue}. $CAUSE_NOTE")
+        log("$what · ${LegacyNetwork.previousSignalLog(previousDbm)} · aviso ${mode.storedValue}. $CAUSE_NOTE")
         if (mode == LegacyNetworkAlertMode.OFF) return
-        notifications.showLegacyNetworkNotice(kind, silent = mode != LegacyNetworkAlertMode.NOTIFY_SOUND)
+        notifications.showLegacyNetworkNotice(kind, silent = mode != LegacyNetworkAlertMode.NOTIFY_SOUND,
+            previousDbm = LegacyNetwork.previousSignalDbm(previousDbm))
     }
 
     companion object {

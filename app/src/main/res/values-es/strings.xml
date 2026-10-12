@@ -555,4 +555,6 @@
     <string name="legacy_alert_description">Un aviso cuando el móvil empieza a usar 2G/3G; no se repite mientras siga en ella. Para un aviso nuevo tiene que volver antes al menos 1 minuto seguido a 4G/5G. Puede deberse a cobertura o a llamadas sin VoLTE.</string>
     <string name="channel_legacy_network_name">Red 2G/3G</string>
     <string name="channel_legacy_network_description">Avisos de uso o cambio a 2G/3G, uno por episodio. Que suenen depende del ajuste de la app y de este canal.</string>
+    <string name="notif_legacy_previous_signal">Última señal anterior observada: %1$d dBm (solo contexto).</string>
+    <string name="notif_legacy_previous_unknown">Señal previa desconocida.</string>
 </resources>

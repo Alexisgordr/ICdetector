@@ -97,4 +97,20 @@ class LegacyNetworkAlertsTest {
         g.interrupt()
         assertFalse(g.open)
     }
+
+    @Test fun `previous signal is shown only when it is a valid reading`() {
+        assertEquals(-72, LegacyNetwork.previousSignalDbm(-72))
+        assertEquals(-140, LegacyNetwork.previousSignalDbm(-140))
+        assertEquals(-30, LegacyNetwork.previousSignalDbm(-30))
+        listOf(null, -999, Int.MAX_VALUE, Int.MIN_VALUE, -141, -29, 0, 85).forEach {
+            assertNull("$it", LegacyNetwork.previousSignalDbm(it))
+            assertEquals("señal previa desconocida", LegacyNetwork.previousSignalLog(it))
+        }
+        assertEquals("última señal anterior observada: -72 dBm", LegacyNetwork.previousSignalLog(-72))
+        // El mismo criterio que el perfil local y la línea base de H13.
+        assertEquals(com.alexisgordr.icdetector.core.profile.ProfileMetric.SIGNAL_DBM.validRange, LegacyNetwork.VALID_DBM)
+        val db = listOf(java.io.File("src/main/java"), java.io.File("app/src/main/java")).first { it.exists() }
+            .walkTopDown().first { it.name == "CellDbHelper.kt" }.readText()
+        assertTrue(db.contains("dbm in -140..-30"))
+    }
 }

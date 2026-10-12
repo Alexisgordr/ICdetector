@@ -101,7 +101,12 @@ internal class ServiceNotificationController(
      * [silent]: «Solo notificación» (predeterminado). Si no es silenciosa, suena lo que diga el canal
      * [LEGACY_CHANNEL_ID] y Android (volumen, No molestar): no hay ningún tono aparte.
      */
-    fun showLegacyNetworkNotice(kind: com.alexisgordr.icdetector.core.LegacyNetworkEpisodeGate.Trigger, silent: Boolean) {
+    fun showLegacyNetworkNotice(
+        kind: com.alexisgordr.icdetector.core.LegacyNetworkEpisodeGate.Trigger,
+        silent: Boolean,
+        /** Ya validada (LegacyNetwork.previousSignalDbm); null = «señal previa desconocida». */
+        previousDbm: Int?
+    ) {
         val settings = PendingIntent.getActivity(
             context,
             2,
@@ -112,7 +117,9 @@ internal class ServiceNotificationController(
             if (kind == com.alexisgordr.icdetector.core.LegacyNetworkEpisodeGate.Trigger.CHANGE_FROM_MODERN) R.string.notif_legacy_change_title
             else R.string.notif_legacy_network_title
         )
-        val body = context.getString(R.string.notif_legacy_network_body)
+        val previous = previousDbm?.let { context.getString(R.string.notif_legacy_previous_signal, it) }
+            ?: context.getString(R.string.notif_legacy_previous_unknown)
+        val body = context.getString(R.string.notif_legacy_network_body) + "\n" + previous
         val notification = NotificationCompat.Builder(context, LEGACY_CHANNEL_ID)
             .setContentTitle(title)
             .setContentText(body)

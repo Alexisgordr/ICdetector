@@ -136,6 +136,8 @@ private val replacements = linkedMapOf(
     "Red 2G/3G en uso: cambio desde 4G/5G" to "2G/3G network in use: change from 4G/5G",
     "Red 2G/3G en uso" to "2G/3G network in use",
     " · aviso " to " · alert ",
+    "última señal anterior observada" to "last earlier signal observed",
+    "señal previa desconocida" to "earlier signal unknown",
     "Puede deberse a cobertura o a llamadas sin VoLTE; no es un ataque confirmado." to
         "It can be caused by coverage or calls without VoLTE; it is not a confirmed attack.",
     "Latencia" to "Latency",

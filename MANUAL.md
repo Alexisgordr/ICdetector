@@ -210,7 +210,10 @@ The alert is given **once per episode**. An episode starts with the first 2G/3G 
 a row** on 4G/5G with service: a 2G/3G reading or a loss of service (no active cell, Airplane mode)
 restarts that minute without closing the episode. After it closes, the next 2G/3G reading starts a
 new episode. Each episode leaves one line in
-the terminal, also with alerts off. The notification has an **Airplane mode settings** button; the
+the terminal, also with alerts off. The terminal line and the notification also show the **last earlier signal observed** before
+the episode, as context only; it is not scored, and it may not be the reading immediately before (its
+age is not kept). A missing or invalid value reads *earlier signal unknown*. The notification has an
+**Airplane mode settings** button; the
 app never switches Airplane mode on by itself. The setting travels in backups; restoring a backup made before
 it existed sets *Notification only*.
 

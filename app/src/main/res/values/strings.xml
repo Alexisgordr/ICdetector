@@ -555,4 +555,6 @@
     <string name="legacy_alert_description">One alert when the phone starts using 2G/3G; no repeats while it stays there. A new alert needs at least 1 minute in a row back on 4G/5G first. It can be caused by coverage or calls without VoLTE.</string>
     <string name="channel_legacy_network_name">2G/3G network</string>
     <string name="channel_legacy_network_description">2G/3G use or change alerts, one per episode. Whether they sound depends on the app setting and on this channel.</string>
+    <string name="notif_legacy_previous_signal">Last earlier signal observed: %1$d dBm (context only).</string>
+    <string name="notif_legacy_previous_unknown">Earlier signal unknown.</string>
 </resources>

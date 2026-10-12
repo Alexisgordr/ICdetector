@@ -63,10 +63,9 @@ internal class SecurityAlertController(
         // 3.0 — Red 2G/3G: una sola ruta, un aviso por episodio continuo y según la preferencia.
         // El cambio 4G/5G → 2G/3G es solo el tipo de episodio, no una ruta con su propio tono.
         legacyEpisodes.observe(network, previousNetworkType, nowMs())?.let { kind ->
-            if (kind == LegacyNetworkEpisodeGate.Trigger.CHANGE_FROM_MODERN) {
-                Log.w(TAG, "Change to 2G/3G; previous signal: ${previousDbm ?: "?"} dBm")
-            }
-            legacyProtection.onEpisodeStart(kind, legacyAlertMode())
+            // previousDbm es la última potencia observada antes de esta lectura (null tras una
+            // interrupción); LegacyNetworkProtection la valida y la muestra solo como contexto.
+            legacyProtection.onEpisodeStart(kind, legacyAlertMode(), previousDbm)
         }
 
         if (cell.isSuspicious) {

@@ -29,6 +29,9 @@ GitHub pre-release of an earlier build was withdrawn.
   is silent and *Notification and sound* sounds as the channel and Android allow. A confirmed alarm
   no longer plays a tone on every evaluation while it lasts; its notification, once per episode, is
   its only sound. The strong-signal and latency tones are unchanged.
+- **Earlier signal as context.** The 2G/3G terminal line and notification show the last earlier
+  signal observed, validated with the same −140…−30 dBm range as H13's baseline and the local
+  profile; missing, sentinel or out-of-range values read "earlier signal unknown". Not scored.
 - **Airplane mode is manual.** The 2G/3G response tried to switch Airplane mode on by writing a secure
   setting, which needs `WRITE_SECURE_SETTINGS`; the app does not declare it, so the write always
   failed, and the manual promised an ADB grant that cannot work. The attempt is removed: the

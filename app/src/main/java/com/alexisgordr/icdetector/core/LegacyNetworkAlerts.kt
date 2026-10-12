@@ -26,6 +26,23 @@ enum class LegacyNetworkAlertMode(val storedValue: String) {
 object LegacyNetwork {
     fun isLegacy(networkType: String?): Boolean = networkType != null && (networkType.contains("2G") || networkType.contains("3G"))
     fun isModern(networkType: String?): Boolean = networkType != null && (networkType.contains("4G") || networkType.contains("5G"))
+
+    /**
+     * Última potencia anterior observada, solo como contexto del aviso (nunca puntúa ni atribuye).
+     * Mismo criterio de validez que el resto de la app (-140..-30 dBm, el de la línea base de H13 y
+     * el del perfil local; aquí se repite el rango porque el motor no puede depender del perfil):
+     * ausente, centinelas (-999, `Int.MAX_VALUE`) o fuera de rango → null, «señal previa desconocida».
+     * Un CHANGE_FROM_MODERN no garantiza una medida válida, y no se conserva su antigüedad: es la
+     * última observada, no necesariamente la inmediatamente anterior.
+     */
+    fun previousSignalDbm(dbm: Int?): Int? = dbm?.takeIf { it in VALID_DBM }
+
+    /** Rango de dBm válido; ver LegacyNetworkAlertsTest, que lo compara con los demás usos. */
+    val VALID_DBM = -140..-30
+
+    /** Fragmento del terminal (en castellano, como el resto; se traduce al mostrarlo). */
+    fun previousSignalLog(dbm: Int?): String =
+        previousSignalDbm(dbm)?.let { "última señal anterior observada: $it dBm" } ?: "señal previa desconocida"
 }
 
 /**

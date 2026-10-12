@@ -14,7 +14,7 @@ class LegacyNetworkWiringTest {
     @Test fun `every 2G-3G path goes through the episode gate and the preference`() {
         val alerts = src("SecurityAlertController.kt")
         assertEquals(1, Regex("""legacyEpisodes\.observe\(""").findAll(alerts).count())
-        assertTrue(alerts.contains("legacyProtection.onEpisodeStart(kind, legacyAlertMode())"))
+        assertTrue(alerts.contains("legacyProtection.onEpisodeStart(kind, legacyAlertMode(), previousDbm)"))
         assertFalse("sin tono propio en el cambio 4G/5G → 2G/3G", alerts.contains("TONE_SUP_ERROR"))
         assertFalse(alerts.contains("legacyProtection.trigger"))
         assertFalse(alerts.contains("legacyProtectionEnabled"))
@@ -93,5 +93,18 @@ class LegacyNetworkWiringTest {
         val alerts = src("SecurityAlertController.kt").substringAfter("fun onServiceInterrupted() {").substringBefore("\n    }")
         assertTrue(alerts.contains("legacyEpisodes.interrupt()"))
         assertTrue("sin continuidad no hay «cambio desde 4G/5G»", alerts.contains("previousNetworkType = null"))
+    }
+
+    @Test fun `previous signal is passed as context only, validated, and never scored`() {
+        val alerts = src("SecurityAlertController.kt")
+        assertTrue(alerts.contains("legacyProtection.onEpisodeStart(kind, legacyAlertMode(), previousDbm)"))
+        val protection = src("LegacyNetworkProtection.kt")
+        assertTrue(protection.contains("LegacyNetwork.previousSignalLog(previousDbm)"))
+        assertTrue(protection.contains("previousDbm = LegacyNetwork.previousSignalDbm(previousDbm)"))
+        val notice = src("ServiceNotificationController.kt").substringAfter("fun showLegacyNetworkNotice(").substringBefore("\n    }\n")
+        assertTrue(notice.contains("R.string.notif_legacy_previous_unknown"))
+        listOf("ThreatAnalyzer.kt", "BayesianScorer.kt", "TemporalConfidence.kt").forEach {
+            assertFalse(it, src(it).contains("previousSignalDbm"))
+        }
     }
 }
