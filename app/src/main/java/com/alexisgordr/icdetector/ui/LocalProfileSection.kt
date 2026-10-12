@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
@@ -56,7 +57,10 @@ import java.util.Locale
  * silencia ni rebaja alertas (ver [LocalProfileOption]). Se aplica al momento y queda registrado.
  */
 @Composable
-fun LocalProfileSection() {
+fun LocalProfileSection(
+    /** 3.0 — Abre Historial → Perfil local con las evaluaciones guardadas. */
+    onViewEvaluations: () -> Unit = {}
+) {
     val context = LocalContext.current
     val resources = LocalResources.current
     val scope = rememberCoroutineScope()
@@ -154,6 +158,13 @@ fun LocalProfileSection() {
                     .format(java.util.Date(prefs.getLong(LocalProfileHealth.PREF_LAST_ERROR_MS, 0L)))
                 Text(stringResource(R.string.local_profile_errors, errors, lastErrorAt, prefs.getString(LocalProfileHealth.PREF_LAST_ERROR, null) ?: "-"),
                     color = Color(0xFFFFA000), fontSize = 10.sp, fontFamily = FontFamily.Monospace, lineHeight = 13.sp)
+            }
+            OutlinedButton(
+                onClick = onViewEvaluations,
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(4.dp)
+            ) {
+                Text(stringResource(R.string.local_profile_view_evaluations), color = Color(0xFFB39DDB), fontFamily = FontFamily.Monospace, fontSize = 11.sp)
             }
             Text(stringResource(R.string.local_profile_not_engine), color = Color(0xFF666666), fontSize = 9.sp,
                 fontFamily = FontFamily.Monospace, lineHeight = 12.sp)

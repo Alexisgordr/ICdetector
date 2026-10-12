@@ -40,7 +40,7 @@ class LocalProfileOptionTest {
         val switch = section.substringAfter("Switch(").substringBefore("colors =")
         assertFalse("el interruptor nunca se bloquea", Regex("""^\s*enabled\s*=(?!\s*requested)""", RegexOption.MULTILINE).containsMatchIn(switch))
         assertFalse(section.contains("context.getString"))
-        assertTrue(source("ui/SettingsScreen.kt").contains("LocalProfileSection()"))
+        assertTrue(source("ui/SettingsScreen.kt").contains("LocalProfileSection(onViewEvaluations = onOpenProfileEvaluations)"))
         assertTrue(source("service/LocalProfileController.kt").contains("LocalProfileStore.recordModeEvent(db, mode(), appVersion, now)"))
     }
 

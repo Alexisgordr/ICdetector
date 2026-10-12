@@ -228,6 +228,8 @@ fun MainScreenContent(dbHelper: CellDbHelper, service: MiniICService?) {
     val active = cellList.firstOrNull { it.isRegistered }
     var showHistory by remember { mutableStateOf(false) }
     var showSettings by remember { mutableStateOf(false) }
+    // 3.0 — Pestaña con que se abre Historial ("profile" desde Ajustes → Ver evaluaciones).
+    var historyTab by remember { mutableStateOf<String?>(null) }
 
     LaunchedEffect(service) {
         if (service != null) {
@@ -264,7 +266,7 @@ fun MainScreenContent(dbHelper: CellDbHelper, service: MiniICService?) {
                     Icon(Icons.Default.Settings, contentDescription = stringResource(R.string.settings_accessibility), tint = if (showSettings) Color.White else Color(0xFF888888))
                 }
                 TextButton(
-                    onClick = { showHistory = !showHistory; showSettings = false },
+                    onClick = { showHistory = !showHistory; showSettings = false; historyTab = null },
                     colors = ButtonDefaults.textButtonColors(contentColor = Color(0xFF888888))
                 ) {
                     Text(if (showHistory) stringResource(R.string.monitor) else stringResource(R.string.history), fontFamily = FontFamily.Monospace, fontSize = 12.sp)
@@ -273,9 +275,12 @@ fun MainScreenContent(dbHelper: CellDbHelper, service: MiniICService?) {
         }
 
         if (showSettings) {
-            SettingsPanel(service) { showSettings = false }
+            SettingsPanel(
+                service,
+                onOpenProfileEvaluations = { showSettings = false; historyTab = "profile"; showHistory = true }
+            ) { showSettings = false }
         } else if (showHistory) {
-            HistoryPanel(dbHelper = dbHelper, service = service) { showHistory = false }
+            HistoryPanel(dbHelper = dbHelper, service = service, initialTab = historyTab) { showHistory = false }
         } else {
             Box(modifier = Modifier.fillMaxSize().pullRefresh(pullRefreshState)) {
                 Column(modifier = Modifier.fillMaxSize()) {

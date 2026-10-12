@@ -32,7 +32,12 @@ import com.alexisgordr.icdetector.core.LocationMode
 import kotlin.time.Duration.Companion.milliseconds
 
 @Composable
-fun SettingsPanel(service: MiniICService?, onSave: () -> Unit) {
+fun SettingsPanel(
+    service: MiniICService?,
+    /** 3.0 — «Ver evaluaciones»: abre Historial con la pestaña Perfil local. */
+    onOpenProfileEvaluations: () -> Unit = {},
+    onSave: () -> Unit
+) {
     val context = LocalContext.current
     val prefs = remember { context.getSharedPreferences("miniic_prefs", Context.MODE_PRIVATE) }
     var token by remember { mutableStateOf(prefs.getString("opencellid_key", "") ?: "") }
@@ -278,7 +283,7 @@ fun SettingsPanel(service: MiniICService?, onSave: () -> Unit) {
             HorizontalDivider(color = Color(0xFF1A1A1A), modifier = Modifier.padding(vertical = 4.dp))
 
             // 3.0 — Perfil local: opción experimental, solo visualización.
-            LocalProfileSection()
+            LocalProfileSection(onViewEvaluations = onOpenProfileEvaluations)
 
             HorizontalDivider(color = Color(0xFF1A1A1A), modifier = Modifier.padding(vertical = 4.dp))
 

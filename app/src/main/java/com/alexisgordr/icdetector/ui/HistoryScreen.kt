@@ -65,6 +65,8 @@ fun HistoryPanel(
     dbHelper: CellDbHelper,
     // v2.10.4 — Opcional: la pestaña RADIO muestra datos en vivo del servicio si está conectado.
     service: com.alexisgordr.icdetector.service.MiniICService? = null,
+    /** 3.0 — Pestaña inicial: `profile` abre Perfil local (acceso «Ver evaluaciones» de Ajustes). */
+    initialTab: String? = null,
     onBack: () -> Unit
 ) {
     var items by remember { mutableStateOf<List<HistoryRecord>>(emptyList()) }
@@ -78,6 +80,15 @@ fun HistoryPanel(
     var showGeometry by remember { mutableStateOf(false) }
     // v2.10.4 — Pestaña de contexto de radio. Ver RadioScreen.
     var showRadio by remember { mutableStateOf(false) }
+    // 3.0 — Pestaña Perfil local: evaluaciones guardadas del perfil local (LocalProfileHistoryPanel).
+    // Visible con la opción experimental activada, que controla lo que se muestra del perfil.
+    var showProfile by remember { mutableStateOf(initialTab == "profile") }
+    val historyContext = LocalContext.current
+    val profileTabVisible = remember {
+        showProfile || historyContext.getSharedPreferences("miniic_prefs", android.content.Context.MODE_PRIVATE)
+            .getBoolean(com.alexisgordr.icdetector.core.profile.LocalProfileOption.PREF_KEY,
+                com.alexisgordr.icdetector.core.profile.LocalProfileOption.DEFAULT_ENABLED)
+    }
     var forensicCases by remember { mutableStateOf<List<ForensicCase>>(emptyList()) }
     var transitions by remember { mutableStateOf<List<CellTransitionSummary>>(emptyList()) }
     val showDeleteConfirm = remember { mutableStateOf(false) }
@@ -211,6 +222,7 @@ fun HistoryPanel(
                 showTopology -> stringResource(R.string.history_title_topology)
                 showGeometry -> stringResource(R.string.history_title_geometry)
                 showRadio -> stringResource(R.string.radio_title)
+                showProfile -> stringResource(R.string.history_title_local_profile)
                 showIncidents -> stringResource(R.string.history_title_incidents)
                 else -> stringResource(R.string.history_title_antennas)
             }, color = Color(0xFF666666), fontFamily = FontFamily.Monospace, fontSize = 12.sp)
@@ -228,13 +240,17 @@ fun HistoryPanel(
                 showTopology = tab == "topology"
                 showGeometry = tab == "geometry"
                 showRadio = tab == "radio"
+                showProfile = tab == "profile"
             }
-            FilterChip(selected = !showIncidents && !showForensics && !showTopology && !showGeometry && !showRadio, onClick = { select("antennas") }, label = { Text(stringResource(R.string.tab_antennas)) })
+            FilterChip(selected = !showIncidents && !showForensics && !showTopology && !showGeometry && !showRadio && !showProfile, onClick = { select("antennas") }, label = { Text(stringResource(R.string.tab_antennas)) })
             FilterChip(selected = showIncidents, onClick = { select("incidents") }, label = { Text(stringResource(R.string.tab_incidents)) })
             FilterChip(selected = showForensics, onClick = { select("forensics") }, label = { Text(stringResource(R.string.tab_forensics)) })
             FilterChip(selected = showTopology, onClick = { select("topology") }, label = { Text(stringResource(R.string.tab_topology)) })
             FilterChip(selected = showGeometry, onClick = { select("geometry") }, label = { Text(stringResource(R.string.tab_geometry)) })
             FilterChip(selected = showRadio, onClick = { select("radio") }, label = { Text(stringResource(R.string.tab_radio)) })
+            if (profileTabVisible) {
+                FilterChip(selected = showProfile, onClick = { select("profile") }, label = { Text(stringResource(R.string.tab_local_profile)) })
+            }
         }
 
         if (showForensics) {
@@ -259,6 +275,14 @@ fun HistoryPanel(
         }
         if (showRadio) {
             RadioPanel(dbHelper, service, Modifier.fillMaxWidth().weight(1f))
+            return@Column
+        }
+        if (showProfile) {
+            LocalProfileHistoryPanel(dbHelper, Modifier.fillMaxWidth().weight(1f)) { cellQuery ->
+                // «Ver celda en Antenas»: la pestaña Antenas filtrada por esa identidad.
+                antennaQuery = cellQuery
+                showProfile = false
+            }
             return@Column
         }
 
