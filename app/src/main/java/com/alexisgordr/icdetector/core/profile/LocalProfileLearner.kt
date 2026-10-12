@@ -57,10 +57,13 @@ data class LearnResult(val profile: MetricProfile?, val outcome: LearnOutcome)
  *  - **Cuarentena**: con referencia formada, una muestra a más de [Config.quarantineSigma]
  *    desviaciones no se aprende; se cuenta en `quarantinedSamples`.
  *  - **Actualizaciones acotadas**: el peso de una muestra nunca pasa de 1/[Config.maxWeightSamples]
- *    con referencia formada, y la media no se aleja en un día más de [Config.dailyDriftFloors] veces
- *    el ruido mínimo de la métrica desde el inicio de ese día. Una ráfaga extraña no redefine la
- *    normalidad; una contaminación lenta y sostenida durante muchos días solo se frena (limitación
- *    documentada), no se impide.
+ *    con referencia formada; el residuo que entra en la media y la varianza se recorta a
+ *    [Config.residualClipSigma] dispersiones; la media no se aleja en un día más de
+ *    [Config.dailyDriftFloors] veces el ruido mínimo de la métrica desde el inicio de ese día, y la
+ *    dispersión no crece en un día más de [Config.dailySpreadGrowthFloors] ruidos mínimos. Una ráfaga
+ *    extraña no redefine la normalidad ni la vuelve permisiva; una contaminación lenta y sostenida
+ *    durante muchos días solo se frena (limitación documentada), no se impide. Coste: una celda
+ *    realmente más ruidosa tarda varios días en reflejar toda su dispersión.
  */
 class LocalProfileLearner(private val config: Config = Config()) {
 
@@ -72,18 +75,25 @@ class LocalProfileLearner(private val config: Config = Config()) {
         val quarantineSigma: Double = 4.0,
         val maxWeightSamples: Int = 200,
         val dailyDriftFloors: Double = 1.0,
+        /** Residuo máximo, en dispersiones, que entra en la media y la varianza (Huber). */
+        val residualClipSigma: Double = 2.5,
+        /** Cuánto puede crecer la dispersión en un día, en veces el ruido mínimo de la métrica. */
+        val dailySpreadGrowthFloors: Double = 1.0,
         val matureSamples: Int = 30,
         val matureDays: Int = 3,
         val staleAfterMs: Long = 30L * DAY_MS
     )
 
-    fun learn(current: MetricProfile?, sample: ProfileSample, nowMs: Long): LearnResult {
-        if (!sample.context.isComplete) return LearnResult(current, LearnOutcome.INCOMPLETE_CONTEXT)
+    fun learn(stored: MetricProfile?, sample: ProfileSample, nowMs: Long): LearnResult {
+        if (!sample.context.isComplete) return LearnResult(stored, LearnOutcome.INCOMPLETE_CONTEXT)
+        // Una referencia de otra versión del algoritmo no se mezcla con la actual: se reaprende
+        // desde cero, con una generación nueva. Otro teléfono, en cambio, exige reiniciar a mano.
+        val current = stored?.takeIf { it.algorithmVersion == LocalProfile.ALGORITHM_VERSION }
         if (current != null && ProfileCompatibility.check(current, sample.deviceModel, sample.context.radio) != null) {
             return LearnResult(current, LearnOutcome.INCOMPATIBLE)
         }
-        if (!sample.metric.isValid(sample.value)) return LearnResult(current, LearnOutcome.INVALID)
-        if (nowMs - sample.observedAtMs > config.maxSampleAgeMs) return LearnResult(current, LearnOutcome.TOO_OLD)
+        if (!sample.metric.isValid(sample.value)) return LearnResult(stored, LearnOutcome.INVALID)
+        if (nowMs - sample.observedAtMs > config.maxSampleAgeMs) return LearnResult(stored, LearnOutcome.TOO_OLD)
         val x = sample.value!!.toDouble()
         val day = dayOf(sample.observedAtMs)
 
@@ -114,17 +124,28 @@ class LocalProfileLearner(private val config: Config = Config()) {
         )
         val newDay = base.lastDay != day
         val dayStart = if (newDay) base.mean else base.dayStartMean
+        val dayStartVariance = if (newDay) base.variance else base.dayStartVariance
         val n = base.effectiveSamples
+        val floor = sample.metric.floor
         val (mean, variance) = if (base.mean == null || n == 0) {
-            x to sample.metric.floor * sample.metric.floor
+            x to floor * floor
         } else {
             val w = 1.0 / min(n + 1, config.maxWeightSamples)
-            val delta = x - base.mean
+            // F02 — Residuo recortado: una muestra lejana (pero bajo la cuarentena) no puede inflar
+            // la varianza de golpe. Sin esto, 48 muestras de un día llevaban la dispersión de 3 a
+            // 22 dB y una lectura antes HIGH pasaba a NONE.
+            val clip = config.residualClipSigma * spread(base)
+            val delta = (x - base.mean).coerceIn(-clip, clip)
             var m = base.mean + w * delta
-            val v = (1 - w) * ((base.variance ?: 0.0) + w * delta * delta)
+            var v = (1 - w) * ((base.variance ?: 0.0) + w * delta * delta)
             if (dayStart != null) {
-                val cap = config.dailyDriftFloors * sample.metric.floor
+                val cap = config.dailyDriftFloors * floor
                 m = m.coerceIn(dayStart - cap, dayStart + cap)
+            }
+            // Y la dispersión crece como mucho un ruido mínimo al día (bajar, siempre puede).
+            if (dayStartVariance != null) {
+                val maxSd = sqrt(max(dayStartVariance, floor * floor)) + config.dailySpreadGrowthFloors * floor
+                v = min(v, maxSd * maxSd)
             }
             m to v
         }
@@ -139,6 +160,7 @@ class LocalProfileLearner(private val config: Config = Config()) {
             lastDay = day,
             daySamples = if (newDay) 1 else base.daySamples + 1,
             dayStartMean = dayStart ?: mean,
+            dayStartVariance = dayStartVariance ?: variance,
             firstEvidenceMs = base.firstEvidenceMs?.let { min(it, sample.observedAtMs) } ?: sample.observedAtMs,
             lastEvidenceMs = max(base.lastEvidenceMs ?: sample.observedAtMs, sample.observedAtMs),
             lastSampleMs = sample.observedAtMs,

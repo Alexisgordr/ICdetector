@@ -15,8 +15,11 @@ object LocalProfile {
     /**
      * Versión del algoritmo. Un perfil aprendido con otra versión se abstiene hasta reaprenderse:
      * cambiar reglas de aprendizaje o de puntuación es un corte metodológico.
+     *
+     * 2 — Revisión técnica 637761d: dispersión acotada (F02), revalidación tras caducar (F05),
+     * muestras futuras rechazadas (F06) y cuarentena sin repeticiones (F09).
      */
-    const val ALGORITHM_VERSION = 1
+    const val ALGORITHM_VERSION = 2
 
     /**
      * La madurez del perfil (muchas muestras) NO valida el algoritmo. Mientras esto sea false, el

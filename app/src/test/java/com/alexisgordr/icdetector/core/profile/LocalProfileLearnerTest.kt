@@ -79,19 +79,57 @@ class LocalProfileLearnerTest {
         assertEquals(1, r.profile!!.quarantinedSamples)
     }
 
+    private fun eval(p: MetricProfile, value: Int, at: Long) = LocalProfileScorer.evaluate(
+        mapOf(ProfileMetric.SIGNAL_DBM to p), ctx, mapOf(ProfileMetric.SIGNAL_DBM to value, ProfileMetric.SIGNAL_RSRQ to null), device, at
+    )
+
+    /** Ráfaga de [n] muestras en un día, cada una justo por debajo del umbral de cuarentena. */
+    private fun burst(p: MetricProfile, day: Long, n: Int = 48): MetricProfile {
+        var q = p
+        repeat(n) { i ->
+            val at = day + i * 61_000L
+            q = learner.learn(q, sample(floor(q.mean!! + 3.9 * learner.spread(q)).toInt().coerceIn(-140, -30), at), at).profile!!
+        }
+        return q
+    }
+
     @Test fun `a strange burst cannot redefine normal in a day`() {
         val p = train(days = 4)
         val floor = ProfileMetric.SIGNAL_DBM.floor
-        // Ráfaga justo por debajo del umbral de cuarentena durante todo un día.
-        var q: MetricProfile = p
-        val day = t0 + 5 * DAY_MS
-        repeat(200) { i ->
-            val at = day + i * 61_000L
-            val target = floor(q.mean!! + 3.9 * learner.spread(q)).toInt()
-            q = learner.learn(q, sample(target, at), at).profile!!
-        }
+        val q = burst(p, t0 + 5 * DAY_MS, n = 200)
         assertTrue("la ráfaga se aprende, no se pone toda en cuarentena", q.revision > p.revision)
         assertTrue("la media se mueve como mucho un ruido mínimo al día", q.mean!! - p.mean!! <= floor + 1e-9)
+    }
+
+    @Test fun `a burst cannot make the reference permissive in a day (F02)`() {
+        val p = train(days = 4)
+        val day = t0 + 5 * DAY_MS
+        assertEquals(DeviationLevel.HIGH, eval(p, -45, day).level)
+        val q = burst(p, day)
+        val floor = ProfileMetric.SIGNAL_DBM.floor
+        assertTrue("dispersión ${learner.spread(q)}", learner.spread(q) <= learner.spread(p) + floor + 1e-9)
+        assertEquals("antes de F02 pasaba a NONE", DeviationLevel.HIGH, eval(q, -45, day + 4_000_000L).level)
+    }
+
+    @Test fun `a genuinely noisier cell is still learned over days`() {
+        var p: MetricProfile? = null
+        val values = listOf(-92, -86, -80, -74, -68, -80)                           // dispersión real ≈ 8 dB
+        for (d in 0 until 10) for (i in 0 until 30) {
+            val at = t0 + d * DAY_MS + i * 5 * 60_000L
+            p = learner.learn(p, sample(values[(i + d) % values.size], at), at).profile
+        }
+        assertTrue("dispersión ${learner.spread(p!!)}", learner.spread(p!!) > 6.0)
+        assertEquals(ProfileMaturity.MATURE, p!!.maturity)
+    }
+
+    @Test fun `a reference from another algorithm version is relearned with a new generation`() {
+        val old = train(days = 4).copy(algorithmVersion = LocalProfile.ALGORITHM_VERSION - 1, generation = "g1")
+        val at = t0 + 5 * DAY_MS
+        val r = learner.learn(old, sample(-80, at), at)
+        assertEquals(LearnOutcome.LEARNED, r.outcome)
+        assertEquals(1L, r.profile!!.revision)
+        assertEquals(LocalProfile.ALGORITHM_VERSION, r.profile!!.algorithmVersion)
+        assertEquals(MetricProfile.generationAt(at), r.profile!!.generation)
     }
 
     @Test fun `gradual contamination is slowed, bounded by days, not prevented`() {
