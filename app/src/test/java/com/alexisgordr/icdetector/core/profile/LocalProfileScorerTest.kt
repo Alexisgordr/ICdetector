@@ -104,6 +104,19 @@ class LocalProfileScorerTest {
         assertTrue(LocalProfileScorer.revisionOf(before) != LocalProfileScorer.revisionOf(after))
     }
 
+    @Test fun `a stale or old-algorithm reference relearned with the same revision is exported as learned`() {
+        val obs = LocalProfileShadow.Observation(11, ctx, -82, -10, now, device)
+        // Revisión 1 en ambas: la nueva generación también empieza en 1.
+        val stale = mature.mapValues { it.value.copy(revision = 1, lastEvidenceMs = now - 40 * DAY_MS, lastSampleMs = now - 40 * DAY_MS) }
+        val oldAlgorithm = mature.mapValues { it.value.copy(revision = 1, algorithmVersion = LocalProfile.ALGORITHM_VERSION - 1) }
+        listOf(stale, oldAlgorithm).forEach { before ->
+            val step = LocalProfileShadow().process(before, obs, ProfileMode.SHADOW, now, holdout = false)
+            assertEquals(setOf(1L), step.changed.map { it.revision }.toSet())
+            assertTrue(step.changed.all { it.generation == MetricProfile.generationAt(now) })
+            assertTrue("ProfileLearned debe ser 1", step.record.learned)
+        }
+    }
+
     @Test fun `the same input always gives the same record`() {
         val obs = LocalProfileShadow.Observation(11, ctx, -70, -12, now, device)
         assertEquals(LocalProfileShadow().process(mature, obs, ProfileMode.SHADOW, now), LocalProfileShadow().process(mature, obs, ProfileMode.SHADOW, now))

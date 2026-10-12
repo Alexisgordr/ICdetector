@@ -127,8 +127,11 @@ class LocalProfileShadow(private val learner: LocalProfileLearner = LocalProfile
         provenance: Provenance = Provenance.LIVE
     ): Step {
         val r = LocalProfileScorer.evaluate(current, obs.context, obs.values, obs.deviceModel, nowMs, learner)
-        val changed = if (holdout) emptyList() else learn(current, obs, provenance, nowMs)
-        val learned = changed.any { p -> current[p.metric]?.revision != p.revision }
+        val results = if (holdout) emptyList() else learnResults(current, obs, provenance, nowMs)
+        val changed = results.map { it.profile }
+        // Lo dice el resultado del aprendizaje, no una comparación de revisiones: una referencia
+        // caducada o de otro algoritmo se reaprende con generación nueva y puede repetir revisión.
+        val learned = results.any { it.outcome == LearnOutcome.LEARNED }
         val record = ProfileEvaluationRecord(
             historyId = obs.historyId, evaluatedAtMs = nowMs, algorithmVersion = LocalProfile.ALGORITHM_VERSION,
             profileRevision = r.revision, contextKey = obs.context.key, mode = mode, level = r.level, score = r.score,
@@ -140,9 +143,15 @@ class LocalProfileShadow(private val learner: LocalProfileLearner = LocalProfile
 
     /** Solo aprende; para el arranque con historial, donde las filas de aprendizaje no se evalúan. */
     fun learn(current: Map<ProfileMetric, MetricProfile>, obs: Observation, provenance: Provenance, nowMs: Long): List<MetricProfile> =
+        learnResults(current, obs, provenance, nowMs).map { it.profile }
+
+    /** Referencias que cambian (aprendidas o con la cuarentena contada) y con qué resultado. */
+    private data class Changed(val profile: MetricProfile, val outcome: LearnOutcome)
+
+    private fun learnResults(current: Map<ProfileMetric, MetricProfile>, obs: Observation, provenance: Provenance, nowMs: Long): List<Changed> =
         ProfileMetric.entries.mapNotNull { metric ->
             val before = current[metric]
-            val after = learner.learn(before, ProfileSample(obs.context, metric, obs.values[metric], obs.observedAtMs, obs.deviceModel, provenance), nowMs).profile
-            after?.takeIf { it != before }
+            val r = learner.learn(before, ProfileSample(obs.context, metric, obs.values[metric], obs.observedAtMs, obs.deviceModel, provenance), nowMs)
+            r.profile?.takeIf { it != before }?.let { Changed(it, r.outcome) }
         }
 }
