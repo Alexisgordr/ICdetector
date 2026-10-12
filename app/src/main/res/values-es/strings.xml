@@ -521,8 +521,8 @@
     <string name="stable_site_motion_then">Movimiento: %1$s</string>
     <string name="stable_site_motion_still">móvil quieto</string>
     <string name="stable_site_motion_moving">móvil en movimiento</string>
-    <string name="stable_site_reason_new_cell">Motivo: celda nueva con el móvil quieto en un lugar con referencia preparada.</string>
-    <string name="stable_site_reason_not_enough_context">Motivo: no había contexto suficiente para comparar con la referencia.</string>
+    <string name="stable_site_reason_few_prior_sightings">Motivo: la celda tenía pocos antecedentes en este lugar mientras el móvil estaba quieto.</string>
+    <string name="stable_site_reason_conditions_not_met">Motivo: no se cumplieron las condiciones para registrar una novedad en esta evaluación.</string>
     <string name="stable_site_reason_hold">Motivo: se aplicó una retención por novedad.</string>
     <string name="stable_site_reason_no_location">Motivo: no había una ubicación fiable.</string>
     <string name="stable_site_reason_no_site_data">Motivo: no había datos guardados de este lugar.</string>

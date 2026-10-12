@@ -64,8 +64,8 @@ class StableSitePresentationTest {
     }
 
     @Test fun `stored episode reasons and movement are translated, missing ones stay unknown`() {
-        assertEquals(EpisodeReason.NEW_CELL_WHILE_STILL_AT_REFERENCE, StableSitePresentation.episodeReason("NEW_SERVING_WHILE_STATIC_AT_MATURE_SITE"))
-        assertEquals(EpisodeReason.NOT_ENOUGH_CONTEXT, StableSitePresentation.episodeReason("INSUFFICIENT_CONTEXT"))
+        assertEquals(EpisodeReason.FEW_PRIOR_SIGHTINGS_WHILE_STILL, StableSitePresentation.episodeReason("NEW_SERVING_WHILE_STATIC_AT_MATURE_SITE"))
+        assertEquals(EpisodeReason.NOVELTY_CONDITIONS_NOT_MET, StableSitePresentation.episodeReason("INSUFFICIENT_CONTEXT"))
         assertEquals(EpisodeReason.HOLD_APPLIED, StableSitePresentation.episodeReason("STABLE_SITE_NOVELTY_HOLD"))
         assertEquals(EpisodeReason.NO_RELIABLE_LOCATION, StableSitePresentation.episodeReason("NO_RELIABLE_LOCATION"))
         assertEquals(EpisodeReason.NO_SITE_DATA, StableSitePresentation.episodeReason("NO_SITE_DATA"))
@@ -81,7 +81,7 @@ class StableSitePresentationTest {
         // Marcado en sombra durante el episodio, pero la última evaluación ya no tenía contexto.
         val marked = episode(shadowRecorded = true, reason = "INSUFFICIENT_CONTEXT", evaluatedMs = 30, motion = "MOVING", state = "LEARNING")
         assertEquals(EpisodeKind.NOVELTY_RECORDED_IN_SHADOW, StableSitePresentation.episodeKind(marked))
-        assertEquals(EpisodeReason.NOT_ENOUGH_CONTEXT, StableSitePresentation.episodeReason(marked.reason))
+        assertEquals(EpisodeReason.NOVELTY_CONDITIONS_NOT_MET, StableSitePresentation.episodeReason(marked.reason))
         assertEquals(SimpleState.LEARNING_PLACE, StableSitePresentation.simpleStateOf(marked.featureStateAtEpisode))
         // Sin marca: un cambio observado, aunque la última evaluación tenga un motivo de novedad.
         val observed = episode(shadowRecorded = false, reason = "NEW_SERVING_WHILE_STATIC_AT_MATURE_SITE", evaluatedMs = 30, motion = null, state = "ACTIVE")

@@ -66,12 +66,16 @@ object StableSitePresentation {
 
     fun episodeKind(e: StableSiteEpisode) = if (e.shadowRecorded) EpisodeKind.NOVELTY_RECORDED_IN_SHADOW else EpisodeKind.OBSERVED_CHANGE
 
-    /** Motivo de la ÚLTIMA evaluación guardada, traducido. [UNKNOWN]: ausente o no reconocido. */
-    enum class EpisodeReason { NEW_CELL_WHILE_STILL_AT_REFERENCE, NOT_ENOUGH_CONTEXT, HOLD_APPLIED, NO_RELIABLE_LOCATION, NO_SITE_DATA, UNKNOWN }
+    /**
+     * Motivo de la ÚLTIMA evaluación guardada, traducido. [UNKNOWN]: ausente o no reconocido.
+     * [FEW_PRIOR_SIGHTINGS_WHILE_STILL] también se da en SHADOW_READY (no implica referencia preparada);
+     * [NOVELTY_CONDITIONS_NOT_MET] también cuando hay datos pero la celda es conocida u otra condición falla.
+     */
+    enum class EpisodeReason { FEW_PRIOR_SIGHTINGS_WHILE_STILL, NOVELTY_CONDITIONS_NOT_MET, HOLD_APPLIED, NO_RELIABLE_LOCATION, NO_SITE_DATA, UNKNOWN }
 
     fun episodeReason(stored: String?): EpisodeReason = when (stored) {
-        "NEW_SERVING_WHILE_STATIC_AT_MATURE_SITE" -> EpisodeReason.NEW_CELL_WHILE_STILL_AT_REFERENCE
-        "INSUFFICIENT_CONTEXT" -> EpisodeReason.NOT_ENOUGH_CONTEXT
+        "NEW_SERVING_WHILE_STATIC_AT_MATURE_SITE" -> EpisodeReason.FEW_PRIOR_SIGHTINGS_WHILE_STILL
+        "INSUFFICIENT_CONTEXT" -> EpisodeReason.NOVELTY_CONDITIONS_NOT_MET
         "STABLE_SITE_NOVELTY_HOLD" -> EpisodeReason.HOLD_APPLIED
         "NO_RELIABLE_LOCATION" -> EpisodeReason.NO_RELIABLE_LOCATION
         "NO_SITE_DATA" -> EpisodeReason.NO_SITE_DATA

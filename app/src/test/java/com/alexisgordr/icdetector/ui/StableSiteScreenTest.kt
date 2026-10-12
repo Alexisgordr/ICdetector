@@ -112,10 +112,27 @@ class StableSiteScreenTest {
         assertTrue("la marca es del episodio, no de la última evaluación",
             es.getValue("stable_site_kind_novelty_note").contains("aunque la última evaluación ya no lo cumpliera"))
         assertTrue(es.getValue("stable_site_requirements_note").contains("no es una cuenta atrás"))
-        listOf("stable_site_reason_new_cell", "stable_site_reason_not_enough_context", "stable_site_reason_hold",
+        listOf("stable_site_reason_few_prior_sightings", "stable_site_reason_conditions_not_met", "stable_site_reason_hold",
             "stable_site_reason_no_location", "stable_site_reason_no_site_data").forEach {
             assertTrue(it, es.getValue(it).startsWith("Motivo: ") && en.getValue(it).startsWith("Reason: "))
             listOf("NEW_SERVING", "INSUFFICIENT", "HOLD", "NO_SITE").forEach { code -> assertFalse("$it deja el código $code", es.getValue(it).contains(code)) }
+        }
+        // Motivos sin afirmar más de lo guardado: una novedad también puede darse en SHADOW_READY, e
+        // INSUFFICIENT_CONTEXT también cuando hay datos pero la celda es conocida u otra condición falla.
+        assertEquals("Motivo: la celda tenía pocos antecedentes en este lugar mientras el móvil estaba quieto.",
+            es.getValue("stable_site_reason_few_prior_sightings"))
+        assertEquals("Reason: the cell had little prior history at this place while the phone was still.",
+            en.getValue("stable_site_reason_few_prior_sightings"))
+        assertEquals("Motivo: no se cumplieron las condiciones para registrar una novedad en esta evaluación.",
+            es.getValue("stable_site_reason_conditions_not_met"))
+        assertEquals("Reason: the conditions to record a novelty were not met in this evaluation.",
+            en.getValue("stable_site_reason_conditions_not_met"))
+        listOf(en, es).forEach { m ->
+            listOf("stable_site_reason_few_prior_sightings", "stable_site_reason_conditions_not_met").forEach { k ->
+                listOf("preparada", "prepared", "contexto", "context", "referencia", "reference").forEach {
+                    assertFalse("$k dice $it", m.getValue(k).contains(it, ignoreCase = true))
+                }
+            }
         }
         // Formatos iguales en ambos idiomas: «X de Y» con los mismos argumentos.
         listOf("stable_site_requirement_met", "stable_site_requirement_pending", "stable_site_state_then", "stable_site_motion_then",

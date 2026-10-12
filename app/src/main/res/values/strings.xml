@@ -521,8 +521,8 @@
     <string name="stable_site_motion_then">Movement: %1$s</string>
     <string name="stable_site_motion_still">phone still</string>
     <string name="stable_site_motion_moving">phone moving</string>
-    <string name="stable_site_reason_new_cell">Reason: new cell while the phone stayed still at a place with a prepared reference.</string>
-    <string name="stable_site_reason_not_enough_context">Reason: not enough context to compare with the reference.</string>
+    <string name="stable_site_reason_few_prior_sightings">Reason: the cell had little prior history at this place while the phone was still.</string>
+    <string name="stable_site_reason_conditions_not_met">Reason: the conditions to record a novelty were not met in this evaluation.</string>
     <string name="stable_site_reason_hold">Reason: a hold for novelty was applied.</string>
     <string name="stable_site_reason_no_location">Reason: there was no reliable location.</string>
     <string name="stable_site_reason_no_site_data">Reason: there was no stored data for this place.</string>

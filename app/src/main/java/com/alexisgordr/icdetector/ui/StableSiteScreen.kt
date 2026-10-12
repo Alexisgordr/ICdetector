@@ -576,8 +576,8 @@ private fun requirementLabel(k: StableSitePresentation.Requirement.Kind): Int = 
 }
 
 private fun episodeReasonLabel(r: StableSitePresentation.EpisodeReason): Int = when (r) {
-    StableSitePresentation.EpisodeReason.NEW_CELL_WHILE_STILL_AT_REFERENCE -> R.string.stable_site_reason_new_cell
-    StableSitePresentation.EpisodeReason.NOT_ENOUGH_CONTEXT -> R.string.stable_site_reason_not_enough_context
+    StableSitePresentation.EpisodeReason.FEW_PRIOR_SIGHTINGS_WHILE_STILL -> R.string.stable_site_reason_few_prior_sightings
+    StableSitePresentation.EpisodeReason.NOVELTY_CONDITIONS_NOT_MET -> R.string.stable_site_reason_conditions_not_met
     StableSitePresentation.EpisodeReason.HOLD_APPLIED -> R.string.stable_site_reason_hold
     StableSitePresentation.EpisodeReason.NO_RELIABLE_LOCATION -> R.string.stable_site_reason_no_location
     StableSitePresentation.EpisodeReason.NO_SITE_DATA -> R.string.stable_site_reason_no_site_data
