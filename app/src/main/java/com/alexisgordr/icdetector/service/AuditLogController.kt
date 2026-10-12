@@ -43,7 +43,7 @@ internal class AuditLogController(
             "3. Consistencia MCC" to report.mccConsistency,
             "4. Límite MNC" to report.mncCount,
             "5. Validación Regional TAC" to report.tacDeviation,
-            "6. Geometría (TA)" to report.taDistance,
+            "6. Proximidad por Timing Advance" to report.taDistance,
             "7. Espectro Fantasma" to report.ghostNeighbors,
             "8. Sanidad ARFCN" to report.arfcnSanity,
             "9. Cifrado Hardware" to report.hardwareCiphering,

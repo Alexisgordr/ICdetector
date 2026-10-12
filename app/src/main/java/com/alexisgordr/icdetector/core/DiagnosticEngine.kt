@@ -58,7 +58,7 @@ object DiagnosticEngine {
                 explanation(r.mncCount, "N/A: faltan MNC válidos de celdas vecinas.")),
             HeuristicDiagnostic(5, "Validación regional TAC", r.tacDeviation,
                 explanation(r.tacDeviation, "N/A: no hay TAC válidos de vecinas para contrastar.")),
-            HeuristicDiagnostic(6, "Coherencia geométrica (TA)", r.taDistance,
+            HeuristicDiagnostic(6, "Proximidad por Timing Advance", r.taDistance,
                 explanation(r.taDistance, "N/A: el módem no entrega un Timing Advance convertible a metros.")),
             HeuristicDiagnostic(7, "Espectro de vecinos", r.ghostNeighbors,
                 explanation(r.ghostNeighbors, if (i.wifiActive) WIFI_NA else "N/A: no hay celdas vecinas disponibles para contrastar el espectro.")),
