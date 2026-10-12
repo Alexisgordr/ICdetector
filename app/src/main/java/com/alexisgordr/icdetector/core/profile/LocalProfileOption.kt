@@ -28,3 +28,27 @@ object LocalProfileOption {
 
     fun mode(enabled: Boolean): ProfileMode = if (enabled) ProfileMode.EXPERIMENTAL_DISPLAY else ProfileMode.SHADOW
 }
+
+/**
+ * 3.0 — Lo que muestra la opción experimental, calculado con el estado ACTUAL (F08): una referencia
+ * guardada como madura puede haber caducado desde entonces o ser de otro teléfono.
+ */
+object LocalProfileSummary {
+    /** La tarjeta de Ajustes se refresca con esta frecuencia mientras está visible. */
+    const val REFRESH_MS = 30_000L
+
+    /** Referencias utilizables ahora (maduras y compatibles con este teléfono) y total guardado. */
+    data class Counts(val usable: Int, val total: Int)
+
+    fun counts(profiles: List<MetricProfile>, deviceModel: String, nowMs: Long, learner: LocalProfileLearner = LocalProfileLearner()) =
+        Counts(
+            usable = profiles.count {
+                ProfileCompatibility.check(it, deviceModel, it.radio) == null && learner.maturity(it, nowMs) == ProfileMaturity.MATURE
+            },
+            total = profiles.size
+        )
+
+    /** La evaluación se hizo con el perfil que había antes del último reinicio. */
+    fun fromPreviousProfile(evaluatedAtMs: Long, lastResetMs: Long?): Boolean =
+        lastResetMs != null && evaluatedAtMs <= lastResetMs
+}

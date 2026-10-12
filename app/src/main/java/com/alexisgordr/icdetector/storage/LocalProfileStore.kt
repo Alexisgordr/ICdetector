@@ -111,16 +111,15 @@ object LocalProfileStore {
             )
         }
 
-    /** Referencias guardadas: (maduras según su última actualización, total). */
-    fun maturityCounts(db: SQLiteDatabase): Pair<Int, Int> =
-        db.rawQuery("SELECT SUM(maturity='MATURE'), COUNT(*) FROM $P", null).use { c ->
-            if (c.moveToFirst()) c.getInt(0) to c.getInt(1) else 0 to 0
-        }
+    /** Todas las referencias guardadas (son pocas: una por celda, tecnología y métrica). */
+    fun allProfiles(db: SQLiteDatabase): List<MetricProfile> =
+        db.rawQuery("SELECT * FROM $P", null).use { c -> buildList { while (c.moveToNext()) readProfile(c)?.let(::add) } }
 
-    /** Reiniciar el perfil (todo, o un contexto). Las evaluaciones ya hechas se conservan. */
-    fun reset(db: SQLiteDatabase, contextKey: String? = null) {
-        if (contextKey == null) db.delete(P, null, null) else db.delete(P, "context_key=?", arrayOf(contextKey))
-    }
+    /** Instante del último evento [label] del registro de modos (p. ej. el último reinicio), o null. */
+    fun lastEventMs(db: SQLiteDatabase, label: String): Long? =
+        db.rawQuery("SELECT MAX(at_ms) FROM $M WHERE mode=?", arrayOf(label)).use { c ->
+            if (c.moveToFirst() && !c.isNull(0)) c.getLong(0) else null
+        }
 
     /** Retención: referencias sin evidencia nueva en [cutoffMs] o antes. */
     fun pruneProfiles(db: SQLiteDatabase, cutoffMs: Long): Int =

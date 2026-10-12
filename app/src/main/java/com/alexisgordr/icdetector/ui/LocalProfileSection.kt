@@ -37,10 +37,14 @@ import com.alexisgordr.icdetector.R
 import com.alexisgordr.icdetector.core.AppBuildId
 import com.alexisgordr.icdetector.core.profile.DeviationLevel
 import com.alexisgordr.icdetector.core.profile.LocalProfileOption
+import com.alexisgordr.icdetector.core.profile.LocalProfileSummary
+import com.alexisgordr.icdetector.core.profile.ProfileCompatibility
 import com.alexisgordr.icdetector.core.profile.ProfileEvaluationRecord
 import com.alexisgordr.icdetector.storage.CellDbHelper
 import com.alexisgordr.icdetector.storage.LocalProfileStore
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.util.Locale
@@ -58,7 +62,8 @@ fun LocalProfileSection() {
     val prefs = remember { context.getSharedPreferences("miniic_prefs", Context.MODE_PRIVATE) }
     var enabled by remember { mutableStateOf(prefs.getBoolean(LocalProfileOption.PREF_KEY, LocalProfileOption.DEFAULT_ENABLED)) }
     var latest by remember { mutableStateOf<ProfileEvaluationRecord?>(null) }
-    var counts by remember { mutableStateOf(0 to 0) }
+    var counts by remember { mutableStateOf(LocalProfileSummary.Counts(0, 0)) }
+    var lastResetMs by remember { mutableStateOf<Long?>(null) }
     var refresh by remember { mutableIntStateOf(0) }
     var confirmReset by remember { mutableStateOf(false) }
     var message by remember { mutableStateOf<String?>(null) }
@@ -68,11 +73,24 @@ fun LocalProfileSection() {
         context.packageManager.getPackageInfo(context.packageName, 0).versionName
     }.getOrNull())
 
+    val deviceModel = remember { ProfileCompatibility.deviceModel(android.os.Build.MANUFACTURER, android.os.Build.MODEL) }
+
+    // F08 — Mientras la tarjeta está visible y la opción activa, se refresca cada
+    // [LocalProfileSummary.REFRESH_MS]; el recuento usa la madurez y compatibilidad actuales.
     LaunchedEffect(enabled, refresh) {
-        if (!enabled) return@LaunchedEffect
-        withContext(Dispatchers.IO) {
-            runCatching { LocalProfileStore.latestEvaluation(db()) to LocalProfileStore.maturityCounts(db()) }.getOrNull()
-        }?.let { (l, c) -> latest = l; counts = c }
+        while (enabled && isActive) {
+            withContext(Dispatchers.IO) {
+                runCatching {
+                    val db = db()
+                    Triple(
+                        LocalProfileStore.latestEvaluation(db),
+                        LocalProfileSummary.counts(LocalProfileStore.allProfiles(db), deviceModel, System.currentTimeMillis()),
+                        LocalProfileStore.lastEventMs(db, LocalProfileOption.RESET_EVENT)
+                    )
+                }.getOrNull()
+            }?.let { (l, c, r) -> latest = l; counts = c; lastResetMs = r }
+            delay(LocalProfileSummary.REFRESH_MS)
+        }
     }
 
     Text(stringResource(R.string.local_profile_title), color = Color.White, fontSize = 14.sp, fontFamily = FontFamily.Monospace)
@@ -97,7 +115,7 @@ fun LocalProfileSection() {
 
     if (enabled) {
         Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            Text(stringResource(R.string.local_profile_summary, counts.first, counts.second),
+            Text(stringResource(R.string.local_profile_summary, counts.usable, counts.total),
                 color = Color(0xFFB39DDB), fontSize = 11.sp, fontFamily = FontFamily.Monospace)
             val r = latest
             val line = when {
@@ -111,6 +129,17 @@ fun LocalProfileSection() {
                 )
             }
             Text(line, color = Color(0xFFB39DDB), fontSize = 11.sp, fontFamily = FontFamily.Monospace, lineHeight = 15.sp)
+            if (r != null) {
+                val stamp = remember(r.evaluatedAtMs) {
+                    java.text.DateFormat.getDateTimeInstance(java.text.DateFormat.SHORT, java.text.DateFormat.MEDIUM).format(java.util.Date(r.evaluatedAtMs))
+                }
+                Text(stringResource(R.string.local_profile_last_when, stamp, r.contextKey), color = Color(0xFF888888),
+                    fontSize = 10.sp, fontFamily = FontFamily.Monospace)
+                if (LocalProfileSummary.fromPreviousProfile(r.evaluatedAtMs, lastResetMs)) {
+                    Text(stringResource(R.string.local_profile_previous), color = Color(0xFF888888), fontSize = 10.sp,
+                        fontFamily = FontFamily.Monospace)
+                }
+            }
             Text(stringResource(R.string.local_profile_not_engine), color = Color(0xFF666666), fontSize = 9.sp,
                 fontFamily = FontFamily.Monospace, lineHeight = 12.sp)
         }

@@ -360,10 +360,12 @@
     <!-- 3.0 — Perfil local (experimental) -->
     <string name="local_profile_title">Local profile (experimental)</string>
     <string name="local_profile_body">Learns how the signal of each cell usually looks on THIS phone and records, for every saved row, how far the observation is from it. It always runs in the background (shadow) and goes into the CSV export. Turning this on only shows the latest evaluation here: it does not add, silence or lower alerts, and it is not proof of an IMSI catcher.</string>
-    <string name="local_profile_summary">References: %1$d mature of %2$d</string>
+    <string name="local_profile_summary">Usable references (mature and from this phone): %1$d of %2$d</string>
     <string name="local_profile_none">No evaluation yet.</string>
     <string name="local_profile_last_level">Latest evaluation: %1$s (deviation %2$s, metrics %3$s)</string>
     <string name="local_profile_last_abstain">Latest evaluation: no level (%1$s)</string>
+    <string name="local_profile_last_when">%1$s · cell %2$s</string>
+    <string name="local_profile_previous">From the profile before the last reset.</string>
     <string name="local_profile_not_engine">EXPERIMENTAL — not an engine decision. Uncalibrated: the deviation is not a probability. A mature profile does not mean the method is validated.</string>
     <string name="local_profile_level_none">no deviation</string>
     <string name="local_profile_level_low">low</string>

@@ -360,10 +360,12 @@
     <!-- 3.0 — Perfil local (experimental) -->
     <string name="local_profile_title">Perfil local (experimental)</string>
     <string name="local_profile_body">Aprende cómo suele verse la señal de cada celda en ESTE teléfono y anota, en cada fila guardada, cuánto se aparta la observación. Siempre funciona en segundo plano (sombra) y va en el CSV exportado. Activarlo solo muestra aquí la última evaluación: no añade, silencia ni rebaja alertas, y no es prueba de un IMSI catcher.</string>
-    <string name="local_profile_summary">Referencias: %1$d maduras de %2$d</string>
+    <string name="local_profile_summary">Referencias utilizables (maduras y de este teléfono): %1$d de %2$d</string>
     <string name="local_profile_none">Todavía no hay evaluaciones.</string>
     <string name="local_profile_last_level">Última evaluación: %1$s (desviación %2$s, métricas %3$s)</string>
     <string name="local_profile_last_abstain">Última evaluación: sin nivel (%1$s)</string>
+    <string name="local_profile_last_when">%1$s · celda %2$s</string>
+    <string name="local_profile_previous">Del perfil anterior al último reinicio.</string>
     <string name="local_profile_not_engine">EXPERIMENTAL — no es una decisión del motor. Sin calibrar: la desviación no es una probabilidad. Un perfil maduro no significa que el método esté validado.</string>
     <string name="local_profile_level_none">sin desviación</string>
     <string name="local_profile_level_low">baja</string>
