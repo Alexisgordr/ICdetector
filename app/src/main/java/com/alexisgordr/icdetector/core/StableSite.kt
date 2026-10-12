@@ -60,27 +60,39 @@ data class StableSiteMaturity(
 )
 
 object StableSiteMaturityPolicy {
+    // 3.0 — Umbrales con nombre (mismos valores y misma lógica que antes) para que la consulta de
+    // Historial → Topología → Stable-Site muestre el progreso sin copiar las reglas en la interfaz.
+    /** Días de servicio y estáticos por debajo de los cuales el sitio sigue en LEARNING. */
+    const val LEARNING_SERVING_DAYS = 5
+    const val LEARNING_STATIC_DAYS = 2
+    /** Requisitos de ACTIVE (sitio maduro; no significa que se aplique ninguna protección). */
+    const val ACTIVE_SERVING_DAYS = 7
+    const val ACTIVE_STATIC_DAYS = 3
+    const val ACTIVE_NEIGHBOUR_DAYS = 3
+    const val ACTIVE_SERVING_OBSERVATIONS = 30
+
     fun evaluate(servingDays: Int, staticDays: Int, fullNeighbourDays: Int, rfNeighbourDays: Int, servingObservations: Int): StableSiteMaturity {
         val capability = when {
-            fullNeighbourDays >= 3 -> NeighbourEvidenceCapability.FULL_NEIGHBOUR_IDENTITY
+            fullNeighbourDays >= ACTIVE_NEIGHBOUR_DAYS -> NeighbourEvidenceCapability.FULL_NEIGHBOUR_IDENTITY
             rfNeighbourDays > 0 -> NeighbourEvidenceCapability.RF_NEIGHBOUR_ONLY
             fullNeighbourDays > 0 -> NeighbourEvidenceCapability.FULL_NEIGHBOUR_IDENTITY
             else -> NeighbourEvidenceCapability.NO_NEIGHBOUR_DATA
         }
-        val neighbourReady = fullNeighbourDays >= 3 || rfNeighbourDays >= 3
+        val neighbourReady = fullNeighbourDays >= ACTIVE_NEIGHBOUR_DAYS || rfNeighbourDays >= ACTIVE_NEIGHBOUR_DAYS
         val state = when {
             servingDays == 0 -> StableSiteFeatureState.BOOTSTRAP
-            servingDays < 5 || staticDays < 2 -> StableSiteFeatureState.LEARNING
-            servingDays < 7 || staticDays < 3 || !neighbourReady || servingObservations < 30 -> StableSiteFeatureState.SHADOW_READY
+            servingDays < LEARNING_SERVING_DAYS || staticDays < LEARNING_STATIC_DAYS -> StableSiteFeatureState.LEARNING
+            servingDays < ACTIVE_SERVING_DAYS || staticDays < ACTIVE_STATIC_DAYS || !neighbourReady ||
+                servingObservations < ACTIVE_SERVING_OBSERVATIONS -> StableSiteFeatureState.SHADOW_READY
             else -> StableSiteFeatureState.ACTIVE
         }
         val reason = when {
             state == StableSiteFeatureState.ACTIVE -> "MATURE_${capability.name}"
-            servingDays < 7 -> "NEEDS_SERVING_DAYS"
-            staticDays < 3 -> "NEEDS_STATIC_DAYS"
-            servingObservations < 30 -> "NEEDS_SERVING_OBSERVATIONS"
-            fullNeighbourDays in 1..2 -> "NEEDS_FULL_NEIGHBOUR_DAYS"
-            rfNeighbourDays in 1..2 -> "NEEDS_RF_NEIGHBOUR_DAYS"
+            servingDays < ACTIVE_SERVING_DAYS -> "NEEDS_SERVING_DAYS"
+            staticDays < ACTIVE_STATIC_DAYS -> "NEEDS_STATIC_DAYS"
+            servingObservations < ACTIVE_SERVING_OBSERVATIONS -> "NEEDS_SERVING_OBSERVATIONS"
+            fullNeighbourDays in 1 until ACTIVE_NEIGHBOUR_DAYS -> "NEEDS_FULL_NEIGHBOUR_DAYS"
+            rfNeighbourDays in 1 until ACTIVE_NEIGHBOUR_DAYS -> "NEEDS_RF_NEIGHBOUR_DAYS"
             !neighbourReady && capability == NeighbourEvidenceCapability.NO_NEIGHBOUR_DATA -> "NO_USABLE_NEIGHBOUR_DATA"
             else -> "MATURE"
         }
