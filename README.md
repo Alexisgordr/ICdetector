@@ -74,6 +74,7 @@
 - [Capability diagnostics & baseline maturity](#-capability-diagnostics--baseline-maturity)
 - [Radio context](#-radio-context)
 - [Stable-Site learning (shadow mode)](#-stable-site-learning-shadow-mode)
+- [Local profile (shadow mode, experimental)](#-local-profile-shadow-mode-experimental)
 - [Telemetry & visualization](#-telemetry--visualization)
 - [Infrastructure verification](#-infrastructure-verification)
 - [Privacy & networking](#-privacy--networking)
@@ -371,6 +372,32 @@ Local Cell Trust, temporal confidence, alerts or forensic decisions.
 
 ---
 
+## 🧪 Local profile (shadow mode, experimental)
+
+A local statistical profile, complementary to H1–H16 (3.0, schema 22). For each cell and radio
+technology it learns how the serving level (`DBM`) and quality (`RSRQ`) usually look **on this
+phone**, and records for every saved row how far the observation deviates. It is **not** an
+IMSI-catcher detector, does not resist evasion and its levels are **not calibrated probabilities**.
+
+- **Learned vs fixed:** only the per-cell mean and spread are learned; metrics, noise floors,
+  protections, maturity and level cut-offs are fixed and identical on every phone. The detector's
+  own score and alerts are never used as labels.
+- **Protected learning:** invalid, old, repeated and out-of-order readings are ignored; at most 48
+  samples a day; outliers are quarantined; the mean moves at most one noise floor per day. A slow,
+  sustained change over many days is slowed, not prevented.
+- **Shadow mode, always:** evaluated before it learns, about 1 row in 10 held out for evaluation
+  only, results in their own table and appended `Profile*` CSV columns. It cannot change scores,
+  confirmation, alerts, current learning or forensic decisions.
+- **Maturity is not validation:** a reference needs 30 samples over 3 days to be used; until then,
+  or when stale or learned on another phone model, it abstains.
+- **Experimental option** (Settings, off by default): only shows the latest evaluation, labelled as
+  not an engine decision. It cannot add, silence or lower alerts. Changes are logged.
+
+Details, interpretation and the evidence needed before widening its role:
+[MANUAL → Local profile](MANUAL.md#local-profile-shadow-mode-experimental).
+
+---
+
 ## 📈 Telemetry & visualization
 
 - **Forensic Terminal** — event-driven logging of meaningful security and radio events.
@@ -470,7 +497,8 @@ Stable-Site (hashed sites, neighbours, motion bands, shadow episodes) and RADIO 
 **History CSV.** One row per observation, with the cell identity, signal, Timing Advance, radio
 context, score and failed rules — and, for each row, the exact UTC instant (`ObservedAtUtc`), the
 rules that could not be evaluated (`NotEvaluatedHeuristics`), the GPS accuracy (`GpsAccuracyM`) and
-the app version that observed it (`AppVersion`) and the location mode (`LocationMode`). Columns that did not exist when a row was recorded
+the app version that observed it (`AppVersion`), the location mode (`LocationMode`) and the local
+profile's evaluation (`Profile*`, shadow mode, uncalibrated). Columns that did not exist when a row was recorded
 are empty: unknown, never assumed. The full column list is in the
 [manual](MANUAL.md#12-exporting-antenna-history).
 

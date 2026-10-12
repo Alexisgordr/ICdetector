@@ -9,6 +9,34 @@ Version numbers follow the app's `versionName`; the Android `versionCode` is giv
 Available as source on the `ICdetection-v3.0.0-beta` branch; no APK is published. A short-lived
 GitHub pre-release of an earlier build was withdrawn.
 
+### Local profile (shadow mode, experimental) — schema 22
+
+A local statistical profile, complementary to H1–H16. **Not a dataset cut for any rule:** scores,
+confirmation, alerts, current learning and forensic decisions are unchanged; the profile only adds
+its own tables and CSV columns.
+
+- **Schema 22 (additive).** New tables `local_profile`, `profile_evaluations` (one per history row,
+  deleted with it) and `profile_mode_events`. Existing data is kept; no clean install. "Delete
+  history" also clears the profile; retention prunes references without recent evidence.
+- **Protected learning.** Per cell and radio technology, an exponentially weighted mean and spread of
+  `DBM` and `RSRQ`. Invalid, old (> 30 days), repeated or out-of-order readings are ignored; at most
+  48 samples a day; outliers beyond 4 spreads are quarantined; the mean moves at most one noise floor
+  a day. Mature with 30 samples over 3 days; stale after 30 days without evidence. References carry
+  the phone model and algorithm version; any mismatch abstains.
+- **Shadow evaluation.** After each history row is saved: evaluate with the previous reference, then
+  learn, except about 1 row in 10 (deterministic, from the row id) kept for evaluation only. One-time
+  start from the last 30 days of history with an exact instant, the latest 20% held out; never from a
+  restored backup. Levels `NONE`/`LOW`/`MODERATE`/`HIGH` from fixed, uncalibrated cut-offs (2, 3, 4),
+  or `ABSTAIN` with a reason. Failures never affect the saved row.
+- **Export.** Ten `Profile*` columns appended after `LocationMode`; earlier columns unchanged, empty
+  for rows not evaluated. `tools/check_export.py` validates them.
+- **Experimental option.** Settings → Local profile (experimental), off by default: shows the latest
+  evaluation, labelled as not an engine decision; cannot add, silence or lower alerts. Mode changes,
+  resets and first activation are logged; **RESET LOCAL PROFILE** relearns from scratch (needed after
+  restoring on another phone model).
+- **Known limitations.** Not an IMSI-catcher detector; no resistance to evasion; a transmitter present
+  while learning becomes normal; slow multi-day drift is only slowed; not validated.
+
 ### Phase 4 — Maintenance backlog and documentation
 
 Fourth and last beta of the 3.0 roadmap (GitHub issue #27): the maintenance items from the
