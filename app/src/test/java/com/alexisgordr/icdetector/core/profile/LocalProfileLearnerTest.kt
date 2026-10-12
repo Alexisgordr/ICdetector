@@ -116,6 +116,16 @@ class LocalProfileLearnerTest {
         return q
     }
 
+    @Test fun `a repeated quarantined reading is counted once (F09)`() {
+        var q = train(days = 4)
+        val at = t0 + 5 * DAY_MS
+        val outcomes = (1..3).map { learner.learn(q, sample(-40, at), at).also { r -> q = r.profile!! }.outcome }
+        assertEquals(listOf(LearnOutcome.QUARANTINED, LearnOutcome.DUPLICATE, LearnOutcome.DUPLICATE), outcomes)
+        assertEquals(1, q.quarantinedSamples)
+        assertEquals("la caducidad sigue usando la evidencia aprendida", t0 + 3 * DAY_MS + 19 * 5 * 60_000L, q.lastEvidenceMs)
+        assertEquals(LearnOutcome.QUARANTINED, learner.learn(q, sample(-40, at + 60_000L), at + 60_000L).outcome)
+    }
+
     @Test fun `a strange burst cannot redefine normal in a day`() {
         val p = train(days = 4)
         val floor = ProfileMetric.SIGNAL_DBM.floor

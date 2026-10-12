@@ -113,7 +113,10 @@ class LocalProfileLearner(private val config: Config = Config()) {
         val day = dayOf(sample.observedAtMs)
 
         if (current != null) {
-            current.lastSampleMs?.let { last ->
+            // F09 — Se compara con la última muestra PROCESADA (aprendida o en cuarentena): repetir
+            // una lectura en cuarentena ya no vuelve a sumar. La caducidad sigue usando solo la
+            // evidencia aprendida (lastEvidenceMs).
+            listOfNotNull(current.lastSeenMs, current.lastSampleMs).maxOrNull()?.let { last ->
                 if (sample.observedAtMs - last < config.dedupWindowMs) return LearnResult(current, LearnOutcome.DUPLICATE)
             }
             if (current.lastDay == day && current.daySamples >= config.maxPerDay) {
@@ -123,7 +126,7 @@ class LocalProfileLearner(private val config: Config = Config()) {
             if (mean != null && current.effectiveSamples >= config.quarantineAfter &&
                 abs(x - mean) > config.quarantineSigma * spread(current)
             ) {
-                val q = current.copy(quarantinedSamples = current.quarantinedSamples + 1, updatedAtMs = nowMs)
+                val q = current.copy(quarantinedSamples = current.quarantinedSamples + 1, lastSeenMs = sample.observedAtMs, updatedAtMs = nowMs)
                 return LearnResult(q.copy(maturity = maturity(q, nowMs)), LearnOutcome.QUARANTINED)
             }
         }
@@ -179,6 +182,7 @@ class LocalProfileLearner(private val config: Config = Config()) {
             firstEvidenceMs = base.firstEvidenceMs?.let { min(it, sample.observedAtMs) } ?: sample.observedAtMs,
             lastEvidenceMs = max(base.lastEvidenceMs ?: sample.observedAtMs, sample.observedAtMs),
             lastSampleMs = sample.observedAtMs,
+            lastSeenMs = sample.observedAtMs,
             updatedAtMs = nowMs
         )
         return LearnResult(learned.copy(maturity = maturity(learned, nowMs), abstainReason = null), LearnOutcome.LEARNED)
