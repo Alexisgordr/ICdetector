@@ -30,6 +30,14 @@ GitHub pre-release of an earlier build was withdrawn.
   the tower position (−40), but no production flow fills those fields (OpenCellID coordinates are only
   shown as a distance), so it never ran. It is removed; the proximity branch (TA ≤ 100 m with signal
   ≥ −60 dBm, −15) is unchanged, as are weights and the H6 likelihood ratio.
+- **Wi-Fi coverage documented.** The manual lists the rules that abstain on Wi-Fi (H1, H2, H7, H12,
+  H13), why, and what that leaves uncovered; no rule changes. H2, H7 and H13 now give "Wi-Fi active"
+  as their `N/A` reason instead of an unrelated one.
+- **Cleanup.** A comment still described a VERIFIED bonus, a NOT_FOUND penalty and an H6 exception
+  removed in v2.1. H9's reason no longer names "A5/0": the app can only receive "ciphering active or
+  not" from the system, not the algorithm. `org.json` is a test-only dependency: on the phone the
+  framework's `org.json` was always the one loaded, and every call used exists there. CI runs on
+  `ubuntu-24.04`.
 
 ### Consolidation: labels, data provenance and shared evidence
 

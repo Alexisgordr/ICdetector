@@ -138,9 +138,12 @@ dependencies {
     implementation("androidx.compose.material:material")
     implementation("androidx.compose.material:material-icons-extended")
     implementation("com.squareup.okhttp3:okhttp:5.3.2")
-    implementation("org.json:json:20260522")
 
     testImplementation("junit:junit:4.13.2")
+    // 3.0 — org.json solo para las pruebas JVM: en el teléfono la app usa el org.json de Android
+    // (las clases del framework se cargan antes que las de cualquier JAR), y en android.jar son
+    // stubs que no sirven en la JVM. Todas las llamadas usadas existen en Android desde la API 1.
+    testImplementation("org.json:json:20260522")
     // 3.0 — Solo para pruebas: SQLite en la JVM para probar las migraciones de esquema contra
     // un esquema anterior real. No entra en el APK.
     testImplementation("org.xerial:sqlite-jdbc:3.46.1.3")

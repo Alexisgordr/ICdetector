@@ -323,8 +323,11 @@ object ThreatAnalyzer {
         }
 
         // 9. Hardware Ciphering Check (Android 14+)
+        // La app solo puede recibir del sistema un "cifrado activo sí/no"; no observa qué algoritmo
+        // se negocia (A5/x en GSM, EEA en LTE). El motivo no nombra ninguno. Hoy el servicio nunca
+        // marca el dato como disponible, así que H9 queda N/A.
         if (isHardwareCipheringAvailable && !isHardwareCipheringActive) {
-            reasons.add("Cifrado de red anulado (A5/0)")
+            reasons.add("Cifrado de red no activo según el sistema")
             score -= 50
         }
 

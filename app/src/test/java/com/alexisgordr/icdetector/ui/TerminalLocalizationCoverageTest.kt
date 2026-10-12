@@ -95,7 +95,7 @@ class TerminalLocalizationCoverageTest {
         "Multitud de MNCs",
         "Frecuencia (ARFCN) 5G sospechosa",
         "Frecuencia (EARFCN) 4G sospechosa",
-        "Cifrado de red anulado (A5/0)",
+        "Cifrado de red no activo según el sistema",
         "Efecto Ping-Pong (Cambios rápidos en parado)",
         "Huella RF incoherente con el historial (RSRQ/SINR muy desviados)",
         "Downgrade de banda forzado (1800MHz→800MHz, B3→B20)",

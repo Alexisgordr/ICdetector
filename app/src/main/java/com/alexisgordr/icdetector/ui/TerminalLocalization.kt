@@ -389,7 +389,7 @@ private val replacements = linkedMapOf(
     "Vecinos fantasma" to "Ghost neighbours",
     "Frecuencia (ARFCN) 5G sospechosa" to "Suspicious 5G frequency (ARFCN)",
     "Frecuencia (EARFCN) 4G sospechosa" to "Suspicious 4G frequency (EARFCN)",
-    "Cifrado de red anulado (A5/0)" to "Network ciphering disabled (A5/0)",
+    "Cifrado de red no activo según el sistema" to "Network ciphering reported inactive by the system",
     "Efecto Ping-Pong (Cambios rápidos en parado)" to "Ping-Pong effect (rapid changes while stationary)",
     "Huella RF incoherente con el historial (RSRQ/SINR muy desviados)" to "RF fingerprint inconsistent with history (RSRQ/SINR far off)",
     "Downgrade de banda forzado" to "Forced band downgrade",

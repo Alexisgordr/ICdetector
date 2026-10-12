@@ -25,7 +25,7 @@ class BayesianScorerTest {
 
     @Test
     fun `una heuristica fuerte sola sube el posterior`() {
-        // ciphering (A5/0) es independiente, LR = 12 -> ~19.7%
+        // ciphering (H9) es independiente, LR = 12 -> ~19.7%
         val result = BayesianScorer.calculate(listOf("ciphering"), "PENDING", false)
         assertTrue("esperado ~19.7%, fue $result", result in 18f..22f)
     }

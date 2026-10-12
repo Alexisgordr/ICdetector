@@ -374,7 +374,7 @@ class HeuristicsTest {
         assertTrue(analyze(active(networkType = "4G LTE", arfcn = 1500)).arfcnSanityPassed)
     }
 
-    // ---------- H9: Cifrado de hardware (A5/0) ----------
+    // ---------- H9: Cifrado de hardware (estado indicado por el sistema) ----------
     @Test fun `H9 dispara cuando el cifrado esta disponible pero inactivo`() {
         val r = analyze(active(), isHardwareCipheringActive = false, isHardwareCipheringAvailable = true)
         assertFalse(r.hardwareCipheringPassed)

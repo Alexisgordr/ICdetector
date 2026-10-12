@@ -971,6 +971,31 @@ Because ICdetection runs in Android user space without root:
 ICdetection provides leads, historical context and structured evidence about behaviour visible to
 Android; it cannot guarantee detection.
 
+### Wi-Fi and rule coverage
+
+While Wi-Fi is connected, five rules abstain (`N/A`, never "passed"): **H1** (isolated cell),
+**H2** (power jump), **H7** (ghost neighbours), **H12** (latency + RF) and **H13** (signal baseline and
+RSRQ/SINR fingerprint). The isolated-cell confirmation count also restarts. All other rules keep
+running, and nothing about Wi-Fi itself is scored. Each row records the abstentions in
+`NotEvaluatedHeuristics`; the Wi-Fi state itself is not stored per row.
+
+Why each exclusion exists, and how strong the reason is:
+
+| Rule | Kind | Reason | Assessment |
+|---|---|---|---|
+| H12 | Latency | The latency probe would measure the Wi-Fi path, not the cellular link (the same applies to a VPN or the proxy). | **Required.** Without cellular data traffic there is nothing to correlate. |
+| H1, H2, H7 | RF, neighbours | With data on Wi-Fi the modem usually stays idle on the cellular network; idle-mode neighbour reports are sparser and less frequent, which can look like an isolated cell, a power gap or weak "ghost" neighbours. | **Precaution, not validated.** The radio measurements still exist; the concern is reporting quality. |
+| H13 | RF, own history | Most of the baseline is learned with the phone in connected mode; idle readings may follow a different distribution. | **Precaution, not validated.** |
+
+Consequences: at home or at work on Wi-Fi, often for many hours, these five rules give no evidence,
+so the strongest remaining signals there are H6, H8, H11, H14, H15 and H16 (when their own data is
+available). H3–H5 also depend on neighbour reports but do not abstain on Wi-Fi; that inconsistency is
+documented, not changed.
+
+Conclusion for this phase: H12 must keep abstaining. H1, H2, H7 and H13 should only be enabled on
+Wi-Fi after a specific validation — for example, logging what each would have decided on Wi-Fi in
+shadow mode and comparing it with the same places on mobile data — so no rule is changed now.
+
 ### What your own data can and cannot show
 
 - **No ground truth:** your history lets you measure how often warnings appear and study possible

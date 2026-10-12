@@ -1385,13 +1385,12 @@ class MiniICService : Service() {
                 // historial de otra celda.
                 val analyzedList = list.mapIndexed { index, cell ->
                     if (index == 0 && cell.isRegistered) {
-                        // FIX (coherencia de score): resolver el estado de verificación conocido
-                        // (caché) ANTES de analizar, para que el bonus de VERIFIED / la penalización
-                        // de NOT_FOUND y las heurísticas que dependen de `verified` (p.ej. la supresión
-                        // de "Proximidad anómala TA") se apliquen en el MISMO ciclo. Antes se aplicaba
-                        // después, así que el securityScore registrado no reflejaba la verificación y
-                        // una celda VERIFIED podía perder hasta +15 y quedar marcada sospechosa sin
-                        // serlo. Una celda nueva sigue siendo PENDING aquí (aún no verificada): correcto.
+                        // El estado de verificación conocido (caché) se resuelve ANTES de analizar
+                        // solo para que la fila y el CSV lleven la etiqueta correcta del mismo ciclo.
+                        // Desde v2.1 no puntúa: no hay bonus por VERIFIED, ni penalización por
+                        // NOT_FOUND, ni ninguna heurística que lea `verified` (la antigua excepción de
+                        // H6 se quitó), y sus razones en el bayesiano son neutras (1.0). Una celda
+                        // nueva sigue siendo PENDING aquí (aún no verificada).
                         val knownCk = cell.identityKey
                         val knownVerified = verificationCache[knownCk] ?: VerificationStatus.PENDING
                         val analyzed = ThreatAnalyzer.analyzeThreats(

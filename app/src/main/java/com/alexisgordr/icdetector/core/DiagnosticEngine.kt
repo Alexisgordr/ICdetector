@@ -45,13 +45,13 @@ object DiagnosticEngine {
         return listOf(
             HeuristicDiagnostic(1, "Celda aislada", r.isolatedCell,
                 explanation(r.isolatedCell, when {
-                    i.wifiActive -> "N/A: Wi-Fi activo; se evita atribuir el contexto de red al enlace celular."
+                    i.wifiActive -> WIFI_NA
                     i.neighborCount == 0 && i.isolationProgress != null ->
                         "N/A: sin vecinas, pendiente de confirmar (${i.isolationProgress.first}/${i.isolationProgress.second} entregas)."
                     else -> "N/A: sin lectura celular válida."
                 })),
             HeuristicDiagnostic(2, "Estabilidad de potencia", r.powerJump,
-                explanation(r.powerJump, "N/A: hacen falta celdas vecinas con potencia para comparar.")),
+                explanation(r.powerJump, if (i.wifiActive) WIFI_NA else "N/A: hacen falta celdas vecinas con potencia para comparar.")),
             HeuristicDiagnostic(3, "Consistencia MCC", r.mccConsistency,
                 explanation(r.mccConsistency, "N/A: falta MCC válido en la celda activa o en sus vecinas.")),
             HeuristicDiagnostic(4, "Límite MNC", r.mncCount,
@@ -61,7 +61,7 @@ object DiagnosticEngine {
             HeuristicDiagnostic(6, "Coherencia geométrica (TA)", r.taDistance,
                 explanation(r.taDistance, "N/A: el módem no entrega un Timing Advance convertible a metros.")),
             HeuristicDiagnostic(7, "Espectro de vecinos", r.ghostNeighbors,
-                explanation(r.ghostNeighbors, "N/A: no hay celdas vecinas disponibles para contrastar el espectro.")),
+                explanation(r.ghostNeighbors, if (i.wifiActive) WIFI_NA else "N/A: no hay celdas vecinas disponibles para contrastar el espectro.")),
             HeuristicDiagnostic(8, "Sanidad ARFCN", r.arfcnSanity,
                 explanation(r.arfcnSanity, "N/A: el módem no entrega ARFCN/EARFCN para esta tecnología.")),
             HeuristicDiagnostic(9, "Cifrado hardware", r.hardwareCiphering,
@@ -83,7 +83,7 @@ object DiagnosticEngine {
                     else -> "N/A: faltan datos cruzados del ciclo."
                 })),
             HeuristicDiagnostic(13, "Baseline y huella RF", r.signalBaseline,
-                explanation(r.signalBaseline, "N/A: baseline en aprendizaje; se necesitan muestras históricas compatibles.")),
+                explanation(r.signalBaseline, if (i.wifiActive) WIFI_NA else "N/A: baseline en aprendizaje; se necesitan muestras históricas compatibles.")),
             HeuristicDiagnostic(14, "Downgrade de banda", r.bandDowngrade,
                 explanation(r.bandDowngrade, if (!i.previousBandAvailable) "N/A: falta una banda anterior válida (LTE o 5G) de la misma tecnología para comparar." else "N/A: la tecnología o banda actual no permite la comparación.")),
             HeuristicDiagnostic(15, "Estabilidad de identidad RF", r.rfStability,
@@ -92,4 +92,10 @@ object DiagnosticEngine {
                 i.transitionCoherence.explanation)
         )
     }
+
+    /**
+     * 3.0 — Motivo de N/A con Wi-Fi activo en H1, H2, H7 y H13 (se abstienen en ThreatAnalyzer). Antes
+     * H2, H7 y H13 daban otro motivo aunque la causa fuera el Wi-Fi.
+     */
+    private const val WIFI_NA = "N/A: Wi-Fi activo; se evita atribuir el contexto de red al enlace celular."
 }

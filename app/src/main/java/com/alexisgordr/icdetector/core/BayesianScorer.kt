@@ -59,7 +59,7 @@ object BayesianScorer {
         // Independientes
         // Expert-derived LR estimate — not directly reported by source paper
         "arfcn"       to 8.0f,  // ARFCN fuera 3GPP spec — imposible legítimo
-        "ciphering"   to 12.0f, // A5/0 en LTE — indicador crítico (ETSI papers)
+        "ciphering"   to 12.0f, // H9: el sistema indica cifrado no activo (la app no ve el algoritmo)
         "latency"     to 1.8f,  // Experimental — demasiadas variables confundentes
         "bandDowngrade" to 2.5f  // Downgrade forzado a banda baja
     )
