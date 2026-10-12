@@ -41,7 +41,7 @@ class SchemaV20UpgradeTest {
 
     @Test fun upgradeKeepsOldRowsAsUnknownAndWritesNewRowsCompletely() {
         val db = CellDbHelper(context).also { helper = it }
-        assertEquals(SchemaV21.VERSION, db.readableDatabase.version)
+        assertEquals(CellDbHelper.DATABASE_VERSION, db.readableDatabase.version)
 
         val old = db.getRecords().single()
         assertEquals("2026-09-01 10:00:00", old.timestamp)
@@ -76,7 +76,7 @@ class SchemaV20UpgradeTest {
             db.version = 18
         }
         val db = CellDbHelper(context).also { helper = it }.writableDatabase
-        assertEquals(SchemaV21.VERSION, db.version)
+        assertEquals(CellDbHelper.DATABASE_VERSION, db.version)
         db.rawQuery("SELECT cid, observed_at_ms FROM history", null).use { c ->
             c.moveToFirst()
             assertEquals("kept", c.getString(0))

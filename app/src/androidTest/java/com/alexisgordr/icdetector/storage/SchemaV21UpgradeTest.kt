@@ -40,7 +40,7 @@ class SchemaV21UpgradeTest {
 
     @Test fun upgradeKeepsRowsWithUnknownModeAndNewRowsStoreIt() {
         val db = CellDbHelper(context).also { helper = it }
-        assertEquals(SchemaV21.VERSION, db.readableDatabase.version)
+        assertEquals(CellDbHelper.DATABASE_VERSION, db.readableDatabase.version)
 
         val old = db.getRecords().single()
         assertEquals("3.0.0-beta4", old.appVersion)

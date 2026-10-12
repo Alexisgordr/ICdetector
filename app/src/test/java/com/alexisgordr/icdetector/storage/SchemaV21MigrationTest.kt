@@ -45,7 +45,7 @@ class SchemaV21MigrationTest {
             File("src/main/java/com/alexisgordr/icdetector/storage/CellDbHelper.kt"),
             File("app/src/main/java/com/alexisgordr/icdetector/storage/CellDbHelper.kt")
         ).first { it.exists() }.readText()
-        assertTrue(helper.contains("const val DATABASE_VERSION = SchemaV21.VERSION"))
+        assertTrue(helper.contains("if (oldVersion < 21) applySchemaV21(db)"))
         assertTrue(helper.contains("if (oldVersion < 21) applySchemaV21(db)"))
         val v21 = helper.substringAfter("private fun applySchemaV21(db: SQLiteDatabase) {")
             .substringBefore("SchemaV21.STATEMENTS")

@@ -70,7 +70,7 @@ class CellDbHelper(
             }
 
         const val DATABASE_NAME = "icdetector_history.db"
-        const val DATABASE_VERSION = SchemaV21.VERSION
+        const val DATABASE_VERSION = SchemaV22.VERSION
         const val TABLE_HISTORY = "history"
         const val COLUMN_ID = "id"
         const val COLUMN_TIMESTAMP = "timestamp"
@@ -348,6 +348,7 @@ class CellDbHelper(
         createServiceStateTable(db)
         applySchemaV20(db)
         applySchemaV21(db)
+        applySchemaV22(db)
     }
 
     override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {
@@ -436,6 +437,7 @@ class CellDbHelper(
         }
         if (oldVersion < 20) applySchemaV20(db)
         if (oldVersion < 21) applySchemaV21(db)
+        if (oldVersion < 22) applySchemaV22(db)
     }
 
     /**
@@ -447,6 +449,15 @@ class CellDbHelper(
      * datos a la que le falte alguna (instalación parcial o rota) la recibe vacía, sin datos
      * inventados; antes el ALTER fallaba con "no such table" y la app no llegaba a abrir.
      */
+    /**
+     * 3.0 — Esquema 22 (ver [SchemaV22]): tablas nuevas del perfil local. Solo CREATE ... IF NOT
+     * EXISTS; `history` debe existir antes por la referencia de `profile_evaluations`.
+     */
+    private fun applySchemaV22(db: SQLiteDatabase) {
+        createHistoryTable(db)
+        SchemaV22.STATEMENTS.forEach(db::execSQL)
+    }
+
     /** 3.0 — Esquema 21 (ver [SchemaV21]); mismas reglas que [applySchemaV20]. */
     private fun applySchemaV21(db: SQLiteDatabase) {
         createHistoryTable(db)
@@ -1885,6 +1896,12 @@ class CellDbHelper(
             db.execSQL("DELETE FROM $TABLE_MOBILITY_TRIP_EDGES")
             db.execSQL("DELETE FROM $TABLE_MOBILITY_TRIP_CELLS")
             db.execSQL("DELETE FROM $TABLE_MOBILITY_TRIPS")
+            // 3.0 — Perfil local: sus referencias también se aprendieron del historial borrado.
+            // Las evaluaciones caen con sus filas (ON DELETE CASCADE); se borran explícitamente por
+            // si las claves foráneas estuvieran desactivadas. El registro de modos se conserva: no
+            // contiene ubicaciones y documenta los cortes metodológicos.
+            db.execSQL("DELETE FROM ${SchemaV22.TABLE_EVALUATIONS}")
+            LocalProfileStore.reset(db)
             resetStableSiteLearning()
             db.setTransactionSuccessful()
         } finally {
@@ -1945,6 +1962,11 @@ class CellDbHelper(
                 db.execSQL("DELETE FROM $TABLE_SITE_RF_NEIGHBOUR_DAYS WHERE NOT EXISTS (SELECT 1 FROM $TABLE_SITE_RF_NEIGHBOURS r WHERE r.site_key=$TABLE_SITE_RF_NEIGHBOUR_DAYS.site_key AND r.fingerprint=$TABLE_SITE_RF_NEIGHBOUR_DAYS.fingerprint)")
                 db.delete(TABLE_SITE_HOLDS, "last_seen_ms < ? AND active=0", arrayOf(siteCutoff.toString()))
                 db.delete(TABLE_SITE_SHADOW_TRIGGERS, "last_seen_ms < ? AND closed_ms IS NOT NULL", arrayOf(siteCutoff.toString()))
+                // 3.0 — Perfil local: las evaluaciones siguen a su fila del historial (y se borran
+                // aquí también por si las claves foráneas estuvieran desactivadas); las referencias
+                // sin evidencia nueva en un año, como los sitios de Stable-Site.
+                db.execSQL("DELETE FROM ${SchemaV22.TABLE_EVALUATIONS} WHERE history_id NOT IN (SELECT $COLUMN_ID FROM $TABLE_HISTORY)")
+                LocalProfileStore.pruneProfiles(db, hardSiteCutoff)
                 db.setTransactionSuccessful()
                 historyDeleted
             } finally {
