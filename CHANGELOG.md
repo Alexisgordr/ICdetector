@@ -22,6 +22,10 @@ GitHub pre-release of an earlier build was withdrawn.
   alert is given once per continuous 2G/3G episode, closed after 1 minute in a row on 4G/5G. Texts
   describe use of or a change to 2G/3G, with coverage and calls without VoLTE as possible causes. The
   setting travels in backups (same format); older backups restore the default.
+- **Airplane mode is manual.** The 2G/3G response tried to switch Airplane mode on by writing a secure
+  setting, which needs `WRITE_SECURE_SETTINGS`; the app does not declare it, so the write always
+  failed, and the manual promised an ADB grant that cannot work. The attempt is removed: the
+  notification offers a button to open Airplane mode settings. No permission is added.
 
 ### Consolidation: labels, data provenance and shared evidence
 

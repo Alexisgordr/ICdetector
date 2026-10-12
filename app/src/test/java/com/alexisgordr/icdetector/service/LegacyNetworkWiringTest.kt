@@ -41,4 +41,17 @@ class LegacyNetworkWiringTest {
         assertTrue(notice.contains(".setSilent(silent)"))
         assertTrue(notice.contains("Settings.ACTION_AIRPLANE_MODE_SETTINGS"))
     }
+
+    @Test fun `airplane mode is only offered, never written, and no privileged permission is promised`() {
+        listOf("LegacyNetworkProtection.kt", "MiniICService.kt", "SecurityAlertController.kt", "ServiceNotificationController.kt").forEach {
+            val code = src(it)
+            assertFalse("$it escribe ajustes protegidos", code.contains("Settings.Global.putInt"))
+            assertFalse(it, code.contains("ACTION_AIRPLANE_MODE_CHANGED"))
+        }
+        val app = root.parentFile
+        assertFalse(Regex("""<uses-permission[^>]*WRITE_SECURE_SETTINGS""").containsMatchIn(File(app, "AndroidManifest.xml").readText()))
+        val manual = listOf(File("MANUAL.md"), File("../MANUAL.md"), File("../../MANUAL.md")).first { it.exists() }.readText()
+        assertFalse(manual.contains("WRITE_SECURE_SETTINGS"))
+        assertTrue(manual.contains("never turns it on by itself"))
+    }
 }

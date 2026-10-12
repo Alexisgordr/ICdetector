@@ -424,7 +424,6 @@ class MiniICService : Service() {
             onPersistentAnomaly = { showLatencyAlert() }
         )
         legacyNetworkProtection = LegacyNetworkProtection(
-            context = this,
             notifications = notificationController,
             log = { appendLog("[SEC]", it) },
             playWarningTone = { toneGenerator?.startTone(ToneGenerator.TONE_PROP_BEEP2, 500) }

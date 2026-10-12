@@ -203,7 +203,8 @@ The alert is given **once per episode**. An episode starts with the first 2G/3G 
 *change from 4G/5G* when the previous reading was 4G/5G) and stays open while the phone keeps using
 2G/3G, including short returns to 4G/5G and readings without service. It closes after **1 minute in
 a row** on 4G/5G; the next 2G/3G reading then starts a new episode. Each episode leaves one line in
-the terminal, also with alerts off. The setting travels in backups; restoring a backup made before
+the terminal, also with alerts off. The notification has an **Airplane mode settings** button; the
+app never switches Airplane mode on by itself. The setting travels in backups; restoring a backup made before
 it existed sets *Notification only*.
 
 ### External verification
@@ -870,9 +871,9 @@ If an event persists to `3/3` and remains concerning after reviewing its explana
 
 1. **Do not panic.** It is an anomaly classification, not attribution.
 2. **Preserve context.** Do not clear history, storage or the forensic case.
-3. **Use Airplane Mode** if immediate disconnection is appropriate. Automatic activation needs the
-   privileged `WRITE_SECURE_SETTINGS` permission granted through ADB; without it, the app posts a
-   security notification that opens Android's Airplane Mode settings.
+3. **Use Airplane Mode** if immediate disconnection is appropriate, from Quick Settings or Android's
+   settings. ICdetection never turns it on by itself and requests no privileged permission; the 2G/3G
+   notification has a button that opens Android's Airplane mode settings.
 4. **Move to another safe location** if useful, and observe whether the anomaly follows the phone or
    stays local.
 5. **Export the forensic case** once it is `READY`; keep an `INTERRUPTED` case as partial evidence.
