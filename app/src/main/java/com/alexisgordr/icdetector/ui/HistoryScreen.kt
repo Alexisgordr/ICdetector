@@ -2,6 +2,7 @@ package com.alexisgordr.icdetector.ui
 
 import android.annotation.SuppressLint
 import com.alexisgordr.icdetector.R
+import com.alexisgordr.icdetector.core.RowProvenance
 import androidx.compose.ui.res.stringResource
 
 import androidx.compose.foundation.BorderStroke
@@ -472,7 +473,10 @@ private fun AntennaDetailAccordions(
             Row(Modifier.fillMaxWidth().padding(vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f)) {
                     Text(record.timestamp, color = Color(0xFFAAAAAA), fontSize = 10.sp, fontFamily = FontFamily.Monospace)
-                    Text("${verificationStatusLabel(record.verified)} · ${"%.5f".format(java.util.Locale.ROOT, record.lat)}, ${"%.5f".format(java.util.Locale.ROOT, record.lon)}", color = Color(0xFF777777), fontSize = 9.sp, fontFamily = FontFamily.Monospace)
+                    // La precisión guardada acompaña a la posición; si no se guardó, se dice (no se supone).
+                    val accuracy = RowProvenance.accuracyMeters(record.gpsAccuracyM)
+                        ?.let { stringResource(R.string.antenna_gps_accuracy, it) } ?: stringResource(R.string.antenna_gps_accuracy_unknown)
+                    Text("${verificationStatusLabel(record.verified)} · ${"%.5f".format(java.util.Locale.ROOT, record.lat)}, ${"%.5f".format(java.util.Locale.ROOT, record.lon)} · $accuracy", color = Color(0xFF777777), fontSize = 9.sp, fontFamily = FontFamily.Monospace)
                 }
                 LocationButton(record.lat!!, record.lon!!, record.cid)
             }
@@ -492,6 +496,13 @@ private fun AntennaDetailAccordions(
         val latest = records.first()
         val oldest = records.last()
         DetailText("CID ${latest.cid} · MCC/MNC ${latest.mcc}/${latest.mnc} · TAC ${latest.tac}\n${latest.radio.name} · PCI ${latest.pci ?: "N/A"} · ARFCN ${latest.arfcn ?: "N/A"}\n${latest.dbm} dBm · RSRQ ${latest.rsrq ?: "N/A"} · SINR ${latest.sinr ?: "N/A"} · TA ${latest.timingAdvance ?: "N/A"} ${latest.timingAdvanceUnit.name}\n${verificationStatusLabel(latest.verified)} · score ${latest.score}% · ${stringResource(R.string.antenna_anomaly_label)} ${"%.1f".format(java.util.Locale.ROOT, latest.anomalyConfidence)}%\n${records.size} ${stringResource(R.string.antenna_samples_label)} · ${oldest.timestamp} — ${latest.timestamp}")
+        val notEvaluated = when (val n = RowProvenance.notEvaluated(latest.notEvaluatedHeuristics)) {
+            RowProvenance.NotEvaluated.Unknown -> stringResource(R.string.antenna_not_evaluated_unknown)
+            RowProvenance.NotEvaluated.None -> stringResource(R.string.antenna_not_evaluated_none)
+            is RowProvenance.NotEvaluated.Rules -> stringResource(R.string.antenna_not_evaluated_rules, n.ids.joinToString(", "))
+        }
+        val notStored = stringResource(R.string.antenna_not_stored)
+        DetailText(notEvaluated + "\n" + stringResource(R.string.antenna_row_origin, latest.locationMode ?: notStored, latest.appVersion ?: notStored))
     }
 }
 

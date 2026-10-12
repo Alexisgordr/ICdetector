@@ -236,7 +236,7 @@ private fun EvaluationCard(entry: EvaluationEntry, beforeReset: Boolean, onOpenC
                 listOfNotNull(
                     stringResource(modeLabel(entry.mode)),
                     stringResource(R.string.profile_history_metrics, entry.metricsEvaluated, entry.metricsTotal),
-                    entry.abstainReason?.let { stringResource(R.string.profile_history_reason, abstainLabel(it)) }
+                    entry.abstainReason?.let { stringResource(R.string.profile_history_reason, stringResource(abstainReasonLabel(it))) }
                 ).joinToString(" · "),
                 color = Color(0xFFAAAAAA), fontFamily = FontFamily.Monospace, fontSize = 9.sp
             )
@@ -257,6 +257,7 @@ private fun EvaluationDetail(entry: EvaluationEntry, beforeReset: Boolean, onOpe
     title(R.string.profile_history_section_evaluation)
     line(stringResource(R.string.profile_history_evaluated_at, formatMs(entry.evaluatedAtMs)))
     line(stringResource(R.string.profile_history_algorithm, entry.algorithmVersion, entry.profileRevision ?: "-"))
+    entry.abstainReason?.let { line(stringResource(R.string.profile_history_reason_code, it.name), dim) }
     line(stringResource(when {
         entry.holdout -> R.string.profile_history_holdout
         entry.learned -> R.string.profile_history_learned
@@ -362,4 +363,14 @@ private fun h13Label(h: H13History): Int = when (h) {
 }
 
 /** Motivo de abstención: código estable (el mismo que el CSV), sin traducir. */
-private fun abstainLabel(reason: AbstainReason): String = reason.name
+/** Motivo de abstención en palabras; el código guardado se muestra en el detalle. */
+internal fun abstainReasonLabel(reason: AbstainReason): Int = when (reason) {
+    AbstainReason.INCOMPLETE_CONTEXT -> R.string.profile_abstain_incomplete_context
+    AbstainReason.NO_PROFILE -> R.string.profile_abstain_no_profile
+    AbstainReason.PROFILE_IMMATURE -> R.string.profile_abstain_immature
+    AbstainReason.PROFILE_STALE -> R.string.profile_abstain_stale
+    AbstainReason.INCOMPATIBLE_DEVICE -> R.string.profile_abstain_incompatible_device
+    AbstainReason.INCOMPATIBLE_RADIO -> R.string.profile_abstain_incompatible_radio
+    AbstainReason.INCOMPATIBLE_ALGORITHM -> R.string.profile_abstain_incompatible_algorithm
+    AbstainReason.NO_COMPATIBLE_METRIC -> R.string.profile_abstain_no_compatible_metric
+}

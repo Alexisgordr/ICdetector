@@ -528,4 +528,21 @@
     <string name="stable_site_reason_no_location">Reason: there was no reliable location.</string>
     <string name="stable_site_reason_no_site_data">Reason: there was no stored data for this place.</string>
     <string name="stable_site_route_simple">Route seen %1$d times</string>
+    <!-- Procedencia de los datos -->
+    <string name="antenna_gps_accuracy">±%1$d m</string>
+    <string name="antenna_gps_accuracy_unknown">accuracy not stored</string>
+    <string name="antenna_not_evaluated_rules">Rules not evaluated: %1$s</string>
+    <string name="antenna_not_evaluated_none">Rules not evaluated: none</string>
+    <string name="antenna_not_evaluated_unknown">Rules not evaluated: not stored (row before 3.0)</string>
+    <string name="antenna_row_origin">Location mode %1$s · app %2$s</string>
+    <string name="antenna_not_stored">not stored</string>
+    <string name="profile_abstain_incomplete_context">incomplete observation context</string>
+    <string name="profile_abstain_no_profile">no learned reference for this cell</string>
+    <string name="profile_abstain_immature">reference still immature</string>
+    <string name="profile_abstain_stale">reference expired (no recent data)</string>
+    <string name="profile_abstain_incompatible_device">reference from another phone model</string>
+    <string name="profile_abstain_incompatible_radio">reference from another radio technology</string>
+    <string name="profile_abstain_incompatible_algorithm">reference from another algorithm version</string>
+    <string name="profile_abstain_no_compatible_metric">no valid metric in this observation</string>
+    <string name="profile_history_reason_code">Stored reason code: %1$s</string>
 </resources>

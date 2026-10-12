@@ -18,6 +18,11 @@ No new rules, no change to scores, alarms, learning, schema or export formats.
   explaining it: H16 passed with two precise GPS fixes, not proof that the cells are legitimate. A
   public-database match reads *REGISTERED* in the notification and History counters, as it already did
   on the badges, and the main screen adds "does not prove legitimacy".
+- **Data provenance.** Antennas → GPS shows the stored fix accuracy (or "accuracy not stored");
+  Antennas → Technical shows the rules not evaluated in the latest row (or "not stored" for rows
+  before 3.0, never "all evaluated"), the location mode and the app version. Local profile abstentions
+  read in words (immature, expired or incompatible reference, no learned reference…) with the stored
+  code in the detail.
 
 ### Stable-Site view in History → Topology
 

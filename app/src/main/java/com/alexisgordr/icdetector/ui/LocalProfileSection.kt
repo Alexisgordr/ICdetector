@@ -131,7 +131,7 @@ fun LocalProfileSection(
             val r = latest
             val line = when {
                 r == null -> stringResource(R.string.local_profile_none)
-                r.level == DeviationLevel.ABSTAIN -> stringResource(R.string.local_profile_last_abstain, r.abstainReason?.name ?: "-")
+                r.level == DeviationLevel.ABSTAIN -> stringResource(R.string.local_profile_last_abstain, r.abstainReason?.let { stringResource(abstainReasonLabel(it)) } ?: "-")
                 else -> stringResource(
                     R.string.local_profile_last_level,
                     stringResource(levelLabel(r.level)),

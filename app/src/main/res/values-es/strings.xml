@@ -528,4 +528,21 @@
     <string name="stable_site_reason_no_location">Motivo: no había una ubicación fiable.</string>
     <string name="stable_site_reason_no_site_data">Motivo: no había datos guardados de este lugar.</string>
     <string name="stable_site_route_simple">Ruta vista %1$d veces</string>
+    <!-- Procedencia de los datos -->
+    <string name="antenna_gps_accuracy">±%1$d m</string>
+    <string name="antenna_gps_accuracy_unknown">precisión no guardada</string>
+    <string name="antenna_not_evaluated_rules">Reglas no evaluadas: %1$s</string>
+    <string name="antenna_not_evaluated_none">Reglas no evaluadas: ninguna</string>
+    <string name="antenna_not_evaluated_unknown">Reglas no evaluadas: sin dato (fila anterior a 3.0)</string>
+    <string name="antenna_row_origin">Modo de ubicación %1$s · app %2$s</string>
+    <string name="antenna_not_stored">sin dato</string>
+    <string name="profile_abstain_incomplete_context">contexto de la observación incompleto</string>
+    <string name="profile_abstain_no_profile">sin referencia aprendida para esta celda</string>
+    <string name="profile_abstain_immature">referencia aún inmadura</string>
+    <string name="profile_abstain_stale">referencia caducada (sin datos recientes)</string>
+    <string name="profile_abstain_incompatible_device">referencia de otro modelo de teléfono</string>
+    <string name="profile_abstain_incompatible_radio">referencia de otra tecnología de radio</string>
+    <string name="profile_abstain_incompatible_algorithm">referencia de otra versión del algoritmo</string>
+    <string name="profile_abstain_no_compatible_metric">ninguna métrica válida en esta observación</string>
+    <string name="profile_history_reason_code">Código de motivo guardado: %1$s</string>
 </resources>
