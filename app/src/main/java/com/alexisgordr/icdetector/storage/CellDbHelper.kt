@@ -2268,7 +2268,10 @@ class CellDbHelper(
                             lat = lat,
                             lon = lon,
                             pci = pci,
-                            arfcn = arfcn
+                            arfcn = arfcn,
+                            // 3.0 — La consulta filtra exactamente por esta tecnología. Sin ella cada
+                            // registro quedaba como UNKNOWN y H11 no podía comparar su PCI/canal.
+                            radio = radio
                         )
                     )
                 }

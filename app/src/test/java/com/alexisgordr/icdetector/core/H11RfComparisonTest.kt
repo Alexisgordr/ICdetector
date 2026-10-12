@@ -91,4 +91,15 @@ class H11RfComparisonTest {
         assertEquals(HeuristicStatus.NOT_EVALUATED, h8(RadioTech.LTE, null))      // centinela ya convertido
         assertEquals(HeuristicStatus.NOT_EVALUATED, h8(RadioTech.LTE, MAX))       // filas o entradas antiguas
     }
+
+    @Test fun `previous cell history keeps the technology it filters by`() {
+        val db = listOf(File("src/main/java"), File("app/src/main/java")).first { it.exists() }
+            .walkTopDown().first { it.name == "CellDbHelper.kt" }.readText()
+        val fn = db.substringAfter("fun getPreviousCellHistory(").substringBefore("\n    fun ")
+        assertTrue(fn.contains("AND \$COLUMN_RADIO = ?"))
+        assertTrue("sin radio, cada registro sería UNKNOWN y H11 no compararía nada", fn.contains("radio = radio"))
+        // Sin la tecnología, una discrepancia válida desaparecería.
+        assertEquals(40, far(active(pci = 100), record(radio = RadioTech.UNKNOWN, pci = 200)).severity)
+        assertEquals(65, far(active(pci = 100), record(radio = RadioTech.LTE, pci = 200)).severity)
+    }
 }
