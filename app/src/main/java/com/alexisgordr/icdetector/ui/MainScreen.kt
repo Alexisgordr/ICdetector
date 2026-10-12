@@ -287,7 +287,7 @@ fun MainScreenContent(dbHelper: CellDbHelper, service: MiniICService?) {
                 onBack = { showSettings = false }
             ) { showSettings = false }
         } else if (showHistory) {
-            HistoryPanel(dbHelper = dbHelper, service = service, initialTab = historyTab) { showHistory = false }
+            HistoryPanel(dbHelper = dbHelper, service = service, initialTab = historyTab)
         } else {
             Box(modifier = Modifier.fillMaxSize().pullRefresh(pullRefreshState)) {
                 Column(modifier = Modifier.fillMaxSize()) {

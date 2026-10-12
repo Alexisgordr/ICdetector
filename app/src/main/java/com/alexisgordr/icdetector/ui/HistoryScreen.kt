@@ -12,7 +12,6 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.Share
@@ -66,8 +65,7 @@ fun HistoryPanel(
     // v2.10.4 — Opcional: la pestaña RADIO muestra datos en vivo del servicio si está conectado.
     service: com.alexisgordr.icdetector.service.MiniICService? = null,
     /** 3.0 — Pestaña inicial: `profile` abre Perfil local (acceso «Ver evaluaciones» de Ajustes). */
-    initialTab: String? = null,
-    onBack: () -> Unit
+    initialTab: String? = null
 ) {
     var items by remember { mutableStateOf<List<HistoryRecord>>(emptyList()) }
     var totalRecordCount by remember { mutableIntStateOf(0) }
@@ -214,9 +212,7 @@ fun HistoryPanel(
             horizontalArrangement = Arrangement.Start,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            IconButton(onClick = onBack) {
-                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.back), tint = Color.White)
-            }
+            // 3.0 — Sin flecha propia: se vuelve con «MONITOR» (arriba) o con el «atrás» del móvil.
             Text(when {
                 showForensics -> stringResource(R.string.history_title_forensics)
                 showTopology -> stringResource(R.string.history_title_topology)
