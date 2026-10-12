@@ -141,7 +141,7 @@ class TemporalConfidence(
                 // "null". Hoy no ocurre (todo fallo añade su motivo), pero el texto ya no depende
                 // de ello. Con motivo, la cadena es idéntica a la de antes.
                 cell.isSuspicious -> listOfNotNull(
-                    "[$currentStreak/$requiredCycles ciclos confirmando]",
+                    com.alexisgordr.icdetector.models.StoredReasons.confirmingPrefix(currentStreak, requiredCycles),
                     cell.suspiciousReason
                 ).joinToString(" ")
                 // La celda no llega al umbral de sospecha, pero SÍ falló heurísticas. Antes esto

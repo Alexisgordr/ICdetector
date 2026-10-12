@@ -97,7 +97,7 @@ object LocalCellTrustEngine {
             localCellTrust = trust,
             isSuspicious = true,
             securityScore = minOf(cell.securityScore, 69),
-            suspiciousReason = listOfNotNull(cell.suspiciousReason, reason).joinToString(" | "),
+            suspiciousReason = listOfNotNull(cell.suspiciousReason, reason).joinToString(com.alexisgordr.icdetector.models.StoredReasons.SEPARATOR),
             stableSiteDecision = stableSite
         )
     }

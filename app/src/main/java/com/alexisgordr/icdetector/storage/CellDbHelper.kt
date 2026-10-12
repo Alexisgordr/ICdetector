@@ -33,6 +33,7 @@ import com.alexisgordr.icdetector.models.CellTransitionSummary
 import com.alexisgordr.icdetector.models.LocalCellTrustEvidence
 import com.alexisgordr.icdetector.models.LocalRfReconfiguration
 import com.alexisgordr.icdetector.models.LOCAL_TRUST_RECONFIGURATION_HISTORY_LIKE
+import com.alexisgordr.icdetector.models.StoredReasons
 import com.alexisgordr.icdetector.models.SUBTHRESHOLD_PREFIX
 import com.alexisgordr.icdetector.models.MobilityGeometrySnapshot
 import com.alexisgordr.icdetector.models.MobilityTripSummary
@@ -676,7 +677,7 @@ class CellDbHelper(
             "SELECT $COLUMN_LAT,$COLUMN_LON FROM $TABLE_HISTORY " +
                 "WHERE $COLUMN_CID=? AND $COLUMN_MNC=? AND $COLUMN_TAC=? AND $COLUMN_MCC=? " +
                 "AND $COLUMN_RADIO=? AND $COLUMN_LAT IS NOT NULL AND $COLUMN_LON IS NOT NULL " +
-                "AND $COLUMN_SCORE>=? AND ($COLUMN_FAILED_H IS NULL OR TRIM($COLUMN_FAILED_H)='' OR $COLUMN_FAILED_H='OK') " +
+                "AND $COLUMN_SCORE>=? AND ${StoredReasons.cleanSql(COLUMN_FAILED_H)} " +
                 "AND ${observedSince()} ORDER BY $NEWEST_FIRST LIMIT ?",
             arrayOf(
                 cell.cellId, cell.mnc, cell.tac, cell.mcc, cell.radioTech.name,
@@ -719,7 +720,7 @@ class CellDbHelper(
         "SELECT COUNT(*),COUNT(DISTINCT substr($COLUMN_TIMESTAMP,1,10)) FROM $TABLE_HISTORY " +
             "WHERE $COLUMN_CID=? AND $COLUMN_MNC=? AND $COLUMN_TAC=? AND $COLUMN_MCC=? " +
             "AND $COLUMN_RADIO=? AND ${observedSince()} AND $COLUMN_SCORE>=? " +
-            "AND ($COLUMN_FAILED_H IS NULL OR TRIM($COLUMN_FAILED_H)='' OR $COLUMN_FAILED_H='OK')",
+            "AND ${StoredReasons.cleanSql(COLUMN_FAILED_H)}",
         arrayOf(
             cellId, mnc, tac, mcc, radio.name, *since(sinceMs),
             TRUSTED_BASELINE_MIN_SCORE.toString()
@@ -753,7 +754,7 @@ class CellDbHelper(
                 "$COLUMN_LAT,$COLUMN_LON FROM $TABLE_HISTORY " +
                 "WHERE $COLUMN_LAT IS NOT NULL AND $COLUMN_LON IS NOT NULL " +
                 "AND $COLUMN_SCORE>=? " +
-                "AND ($COLUMN_FAILED_H IS NULL OR TRIM($COLUMN_FAILED_H)='' OR $COLUMN_FAILED_H='OK') " +
+                "AND ${StoredReasons.cleanSql(COLUMN_FAILED_H)} " +
                 "AND ${observedSince()} ORDER BY $NEWEST_FIRST",
             arrayOf(TRUSTED_BASELINE_MIN_SCORE.toString(), *since(cutoff))
         ).use { cursor ->
@@ -2226,7 +2227,7 @@ class CellDbHelper(
               AND $COLUMN_MCC = ?
               AND $COLUMN_RADIO = ?
               AND $COLUMN_SCORE >= ?
-              AND ($COLUMN_FAILED_H IS NULL OR TRIM($COLUMN_FAILED_H) = '' OR $COLUMN_FAILED_H = 'OK')
+              AND ${StoredReasons.cleanSql(COLUMN_FAILED_H)}
               AND ${observedBefore()}
               AND ${observedSince(strict = true)}
             ORDER BY $NEWEST_FIRST
@@ -2329,7 +2330,7 @@ class CellDbHelper(
               AND $COLUMN_MCC = ?
               AND $COLUMN_RADIO = ?
               AND $COLUMN_SCORE >= ?
-              AND ($COLUMN_FAILED_H IS NULL OR TRIM($COLUMN_FAILED_H) = '' OR $COLUMN_FAILED_H = 'OK')
+              AND ${StoredReasons.cleanSql(COLUMN_FAILED_H)}
               AND ${observedSince(strict = true)}
             ORDER BY $NEWEST_FIRST
             LIMIT 200
@@ -2420,7 +2421,7 @@ class CellDbHelper(
                     val ts = cursor.getString(1) ?: ""
                     total++
                     val reason = cursor.getString(2).orEmpty()
-                    if (score >= 85 && (reason.isBlank() || reason == "OK")) clean++
+                    if (score >= 85 && StoredReasons.isClean(reason)) clean++
                     if (ts.length >= 10) days.add(ts.substring(0, 10))  // día calendario distinto
                 } while (cursor.moveToNext())
             }
@@ -2469,7 +2470,7 @@ class CellDbHelper(
         var rf = 0
         val cleanWhere = "$COLUMN_CID=? AND $COLUMN_MNC=? AND $COLUMN_TAC=? AND $COLUMN_MCC=? " +
             "AND $COLUMN_RADIO=? AND $COLUMN_SCORE>=? " +
-            "AND ($COLUMN_FAILED_H IS NULL OR TRIM($COLUMN_FAILED_H)='' OR $COLUMN_FAILED_H='OK') " +
+            "AND ${StoredReasons.cleanSql(COLUMN_FAILED_H)} " +
             "AND ${observedSince()} AND length($COLUMN_TIMESTAMP)>=10"
         val temporalSummary = getDailyEvidenceSummary(cleanWhere, args)
         val recentCutoff = nowMs - 48L * 60 * 60 * 1000
@@ -2626,7 +2627,7 @@ class CellDbHelper(
               AND $COLUMN_RSRQ IS NOT NULL
               AND $COLUMN_SINR IS NOT NULL
               AND $COLUMN_SCORE >= ?
-              AND ($COLUMN_FAILED_H IS NULL OR TRIM($COLUMN_FAILED_H) = '' OR $COLUMN_FAILED_H = 'OK')
+              AND ${StoredReasons.cleanSql(COLUMN_FAILED_H)}
               AND ${observedSince(strict = true)}
             ORDER BY $NEWEST_FIRST
             LIMIT 200
@@ -2862,14 +2863,8 @@ class CellDbHelper(
 
         // H15 necesita conservar su propio baseline después de disparar. Además de filas limpias,
         // admite filas cuyo único fallo sea H15; otras heurísticas nunca contaminan esta historia.
-        val h15Patterns = arrayOf(
-            "Identidad RF inestable:%",
-            "$SUBTHRESHOLD_PREFIX Identidad RF inestable:%",
-            "[%ciclos confirmando] Identidad RF inestable:%"
-        )
-        val eligibleSql = "(($COLUMN_SCORE >= ? AND ($COLUMN_FAILED_H IS NULL OR TRIM($COLUMN_FAILED_H) = '' OR $COLUMN_FAILED_H = 'OK')) " +
-            "OR (($COLUMN_FAILED_H LIKE ? OR $COLUMN_FAILED_H LIKE ? OR $COLUMN_FAILED_H LIKE ?) " +
-            "AND $COLUMN_FAILED_H NOT LIKE '% | %'))"
+        val h15Patterns = StoredReasons.H15_ONLY_LIKE
+        val eligibleSql = StoredReasons.h15EligibleSql(COLUMN_SCORE, COLUMN_FAILED_H)
         val mature = db.rawQuery(
             "SELECT COUNT(*),COUNT(DISTINCT substr($COLUMN_TIMESTAMP,1,10)) FROM $TABLE_HISTORY " +
                 "WHERE $COLUMN_CID=? AND $COLUMN_MNC=? AND $COLUMN_TAC=? AND $COLUMN_MCC=? " +

@@ -576,7 +576,7 @@ object ThreatAnalyzer {
 
                 if (pciFlapping) {
                     hRfStability = false
-                    reasons.add("Identidad RF inestable: misma Cell ID alternando PCI en la misma portadora (posible clon)")
+                    reasons.add(com.alexisgordr.icdetector.models.StoredReasons.H15_REASON)
                     score -= 30
                 }
             }
@@ -683,7 +683,7 @@ object ThreatAnalyzer {
 
         return active.copy(
             isSuspicious = isSuspicious,
-            suspiciousReason = if (reasons.isNotEmpty()) reasons.joinToString(" | ") else null,
+            suspiciousReason = if (reasons.isNotEmpty()) reasons.joinToString(com.alexisgordr.icdetector.models.StoredReasons.SEPARATOR) else null,
             heuristicReport = report,
             securityScore = finalScore,
             anomalyConfidence = anomalyConfidence,

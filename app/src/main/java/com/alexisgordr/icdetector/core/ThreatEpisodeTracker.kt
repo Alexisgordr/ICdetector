@@ -98,7 +98,7 @@ class ThreatEpisodeTracker(
                 suspiciousReason = listOfNotNull(
                     cell.suspiciousReason,
                     "Episodio multiseñal ($names)"
-                ).joinToString(" | ")
+                ).joinToString(com.alexisgordr.icdetector.models.StoredReasons.SEPARATOR)
             )
         } else cell
 

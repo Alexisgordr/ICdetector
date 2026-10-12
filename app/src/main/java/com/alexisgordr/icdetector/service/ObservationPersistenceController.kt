@@ -91,7 +91,7 @@ internal class ObservationPersistenceController(
         if (now - lastPeriodicWrite < interval) return
         lastPeriodicWrite = now
 
-        val pending = pending(cell, cell.suspiciousReason ?: "OK", context)
+        val pending = pending(cell, cell.suspiciousReason ?: com.alexisgordr.icdetector.models.StoredReasons.CLEAN, context)
         writeGate.launch(scope, writeDispatcher) {
             val rowId = write(pending) ?: return@launch
             onWrite(rowId)
@@ -100,7 +100,7 @@ internal class ObservationPersistenceController(
         }
     }
 
-    private fun record(cell: CellData, context: ObservationContext, reason: String = cell.suspiciousReason ?: "OK") {
+    private fun record(cell: CellData, context: ObservationContext, reason: String = cell.suspiciousReason ?: com.alexisgordr.icdetector.models.StoredReasons.CLEAN) {
         if (!isRecordable(cell)) return
         val pending = pending(cell, reason, context)
         writeGate.launch(scope, writeDispatcher) {
