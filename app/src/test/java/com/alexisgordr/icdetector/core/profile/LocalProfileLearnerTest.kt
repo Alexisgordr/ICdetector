@@ -62,6 +62,29 @@ class LocalProfileLearnerTest {
         assertEquals(LearnOutcome.INCOMPLETE_CONTEXT, learner.learn(p, sample(-80, at, context = ctx.copy(cellId = "N/A")), at).outcome)
     }
 
+    @Test fun `future samples are refused and do not block later ones (F06)`() {
+        val future = learner.learn(null, sample(-80, t0 + 10 * DAY_MS), t0)
+        assertEquals(LearnOutcome.FUTURE, future.outcome)
+        assertEquals(null, future.profile)
+        assertEquals(LearnOutcome.LEARNED, learner.learn(null, sample(-80, t0 + 60_000L), t0).outcome)    // reloj 1 min adelantado
+        assertEquals(LearnOutcome.LEARNED, learner.learn(future.profile, sample(-80, t0 + 60_000L), t0 + 60_000L).outcome)
+    }
+
+    @Test fun `a stored reference dated in the future is rebuilt instead of blocking learning (F06)`() {
+        val ahead = train(days = 1, perDay = 5, from = t0 + 10 * DAY_MS)        // aprendida con el reloj 10 días adelantado
+        val now = t0 + DAY_MS                                                   // reloj ya corregido
+        val r = learner.learn(ahead, sample(-80, now), now)
+        assertEquals(LearnOutcome.LEARNED, r.outcome)
+        assertEquals(MetricProfile.generationAt(now), r.profile!!.generation)
+        assertEquals(now, r.profile!!.lastSampleMs)
+    }
+
+    @Test fun `bootstrap ignores rows dated in the future (F06)`() {
+        val rows = listOf(ProfileBootstrap.Row(1, ctx, -80, -10, t0 - 600_000L), ProfileBootstrap.Row(2, ctx, -80, -10, t0 + DAY_MS))
+        val plan = ProfileBootstrap.plan(rows, t0, restoredFromBackup = false)
+        assertEquals(listOf(1L), (plan.learn + plan.holdout).map { it.historyId })
+    }
+
     @Test fun `repeated and out-of-order samples count once`() {
         val first = learner.learn(null, sample(-80, t0), t0).profile
         assertEquals(LearnOutcome.DUPLICATE, learner.learn(first, sample(-80, t0 + 10_000), t0 + 10_000).outcome)

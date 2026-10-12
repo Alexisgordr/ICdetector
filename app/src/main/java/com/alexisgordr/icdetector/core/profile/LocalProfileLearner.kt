@@ -30,6 +30,8 @@ enum class LearnOutcome {
     INVALID,
     /** Más antigua que [LocalProfileLearner.Config.maxSampleAgeMs]. */
     TOO_OLD,
+    /** Fechada después de ahora (más allá de [LocalProfileLearner.Config.clockToleranceMs]). */
+    FUTURE,
     /** Repetida: dentro de la ventana de la anterior o fuera de orden. */
     DUPLICATE,
     /** Ya hay bastantes muestras de ese día: una sesión larga no pesa más que varios días. */
@@ -81,14 +83,19 @@ class LocalProfileLearner(private val config: Config = Config()) {
         val dailySpreadGrowthFloors: Double = 1.0,
         val matureSamples: Int = 30,
         val matureDays: Int = 3,
-        val staleAfterMs: Long = 30L * DAY_MS
+        val staleAfterMs: Long = 30L * DAY_MS,
+        /** Margen para relojes ligeramente adelantados; más allá, una fecha futura se rechaza. */
+        val clockToleranceMs: Long = CLOCK_TOLERANCE_MS
     )
 
     fun learn(stored: MetricProfile?, sample: ProfileSample, nowMs: Long): LearnResult {
         if (!sample.context.isComplete) return LearnResult(stored, LearnOutcome.INCOMPLETE_CONTEXT)
         // Una referencia de otra versión del algoritmo no se mezcla con la actual: se reaprende
         // desde cero, con una generación nueva. Otro teléfono, en cambio, exige reiniciar a mano.
+        // F06 — Una referencia con fechas futuras (el reloj iba adelantado y luego se corrigió, o una
+        // copia de otro reloj) bloquearía todo lo posterior como repetido: se rehace desde cero.
         val sameAlgorithm = stored?.takeIf { it.algorithmVersion == LocalProfile.ALGORITHM_VERSION }
+            ?.takeUnless { p -> listOfNotNull(p.lastSeenMs, p.lastSampleMs, p.lastEvidenceMs).any { it > nowMs + config.clockToleranceMs } }
         // F05 — Revalidación tras caducar: si entre la última evidencia y esta muestra pasaron más
         // de [Config.staleAfterMs], la referencia antigua no se reactiva con los contadores de
         // entonces (una sola muestra la devolvía a MATURE). Empieza una generación nueva, en
@@ -101,6 +108,7 @@ class LocalProfileLearner(private val config: Config = Config()) {
         }
         if (!sample.metric.isValid(sample.value)) return LearnResult(stored, LearnOutcome.INVALID)
         if (nowMs - sample.observedAtMs > config.maxSampleAgeMs) return LearnResult(stored, LearnOutcome.TOO_OLD)
+        if (sample.observedAtMs - nowMs > config.clockToleranceMs) return LearnResult(stored, LearnOutcome.FUTURE)
         val x = sample.value!!.toDouble()
         val day = dayOf(sample.observedAtMs)
 
@@ -187,6 +195,7 @@ class LocalProfileLearner(private val config: Config = Config()) {
 
     companion object {
         const val DAY_MS = 24L * 60L * 60L * 1000L
+        const val CLOCK_TOLERANCE_MS = 5L * 60L * 1000L
         fun dayOf(ms: Long): String = Instant.ofEpochMilli(ms).atZone(ZoneOffset.UTC).toLocalDate().toString()
     }
 }
@@ -203,7 +212,10 @@ object ProfileBootstrap {
 
     fun plan(rows: List<Row>, nowMs: Long, restoredFromBackup: Boolean, holdoutFraction: Double = 0.2, maxAgeMs: Long = 30L * LocalProfileLearner.DAY_MS): Plan {
         if (restoredFromBackup) return Plan(emptyList(), emptyList())
-        val usable = rows.filter { it.observedAtMs != null && nowMs - it.observedAtMs <= maxAgeMs && it.context.isComplete }
+        val usable = rows.filter {
+            it.observedAtMs != null && nowMs - it.observedAtMs <= maxAgeMs &&
+                it.observedAtMs - nowMs <= LocalProfileLearner.CLOCK_TOLERANCE_MS && it.context.isComplete
+        }
             .sortedWith(compareBy<Row> { it.observedAtMs }.thenBy { it.historyId })
         val holdoutCount = (usable.size * holdoutFraction).toInt()
         if (holdoutCount == 0) return Plan(usable, emptyList())
