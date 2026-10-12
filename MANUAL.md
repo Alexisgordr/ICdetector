@@ -613,9 +613,8 @@ ICdetection does not confirm a threat from one suspicious cycle:
    pre-event buffer.
 2. **`2/3` — suspicion persists.** A second consecutive cycle remains suspicious.
 3. **`3/3` — confirmed incident.** The behaviour persisted for the confirmation window. The app records
-   the confirmation, posts a **Network anomaly confirmed** notification once per episode on the
-   *Security alerts* channel and plays the alert tone at notification volume (respecting silent,
-   vibrate and Do Not Disturb).
+   the confirmation and posts a **Network anomaly confirmed** notification once per episode on the
+   *Security alerts* channel, which sounds as that channel allows (there is no separate tone).
 
 A single or weak anomaly needs three distinct modem observations. If two or more high-value checks —
 geographic consistency (H11), signal baseline (H13), RF identity stability (H15) and transition

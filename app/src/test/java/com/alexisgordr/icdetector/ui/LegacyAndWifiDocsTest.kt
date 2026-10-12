@@ -33,4 +33,11 @@ class LegacyAndWifiDocsTest {
         assertTrue(en.contains("«Allow 2G»") && en.contains("(not 3G)") && en.contains("Airplane mode is always your own choice"))
         listOf(es, en).forEach { assertFalse(it.contains("bloquea") || it.contains("blocks")) }
     }
+
+    @Test fun `the manual never promises a separate tone for a confirmed alarm`() {
+        val manual = doc("MANUAL.md")
+        assertFalse(manual.contains("plays the alert tone"))
+        val phase3 = manual.substringAfter("**`3/3` — confirmed incident.**").substringBefore("\n\n")
+        assertTrue(phase3.contains("which sounds as that channel allows (there is no separate tone)"))
+    }
 }
