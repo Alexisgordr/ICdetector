@@ -389,6 +389,9 @@
     <string name="profile_history_loading">Loading…</string>
     <string name="profile_history_empty">No local profile evaluations yet.</string>
     <string name="profile_history_empty_filter">No evaluations with this level.</string>
+    <string name="profile_history_error">Could not read the evaluations. Nothing was changed.</string>
+    <string name="profile_history_error_more">Could not load more evaluations. The list above is kept.</string>
+    <string name="profile_history_retry">RETRY</string>
     <string name="profile_history_load_more">LOAD MORE</string>
     <string name="profile_filter_deviations">deviations</string>
     <string name="profile_history_metrics">metrics %1$d/%2$d</string>

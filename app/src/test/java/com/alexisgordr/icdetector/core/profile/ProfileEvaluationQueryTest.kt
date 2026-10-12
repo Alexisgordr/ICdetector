@@ -71,4 +71,18 @@ class ProfileEvaluationQueryTest {
         assertTrue(sql.endsWith("LIMIT ${ProfileEvaluationQuery.PAGE_SIZE + 1}"))
         assertEquals(listOf("HIGH", "LOW", "MODERATE", "10", "10", "7"), args.toList())
     }
+
+    @Test fun `a response for another filter or an older request is never applied`() {
+        val current = ProfileEvaluationQuery.RequestToken(ProfileEvaluationQuery.LevelFilter.HIGH, 3)
+        assertTrue(ProfileEvaluationQuery.accepts(current, ProfileEvaluationQuery.RequestToken(ProfileEvaluationQuery.LevelFilter.HIGH, 3)))
+        assertFalse("otro filtro", ProfileEvaluationQuery.accepts(current, ProfileEvaluationQuery.RequestToken(ProfileEvaluationQuery.LevelFilter.ALL, 3)))
+        assertFalse("antes de reintentar o cambiar", ProfileEvaluationQuery.accepts(current, ProfileEvaluationQuery.RequestToken(ProfileEvaluationQuery.LevelFilter.HIGH, 2)))
+    }
+
+    @Test fun `appending a page never repeats an evaluation already listed`() {
+        fun entry(id: Long) = EvaluationEntry(id, id, id, 2, null, "k", ProfileMode.SHADOW, DeviationLevel.NONE, 0.5, 1, 2,
+            null, null, learned = true, holdout = false, observation = null)
+        val merged = ProfileEvaluationQuery.append(listOf(entry(5), entry(4)), listOf(entry(4), entry(3), entry(3), entry(2)))
+        assertEquals(listOf(5L, 4L, 3L, 2L), merged.map { it.evaluationId })
+    }
 }

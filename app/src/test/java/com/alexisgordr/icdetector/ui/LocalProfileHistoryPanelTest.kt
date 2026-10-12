@@ -23,7 +23,7 @@ class LocalProfileHistoryPanelTest {
 
     @Test fun `the panel only reads stored evaluations, never the current profile`() {
         val panel = ui("LocalProfileHistoryPanel.kt")
-        assertTrue(panel.contains("LocalProfileStore.evaluationsPage(dbHelper.readableDatabase, filter, after)"))
+        assertTrue(panel.contains("LocalProfileStore.evaluationsPage(dbHelper.readableDatabase, f, after)"))
         assertTrue(panel.contains("EvidenceParser.parse(entry.evidence)"))
         listOf("LocalProfileStore.profiles(", "LocalProfileStore.allProfiles(", "LocalProfileScorer", "LocalProfileLearner",
             "upsert(", "insertEvaluation(", "recordModeEvent(", "writableDatabase").forEach {
@@ -71,5 +71,27 @@ class LocalProfileHistoryPanelTest {
         assertTrue(es.getValue("profile_history_h13_note").contains("no es una confirmación independiente"))
         assertTrue(en.getValue("profile_history_h13_note").contains("not independent confirmation"))
         assertTrue(es.getValue("profile_history_metric_without_reference").contains("referencia no guardada"))
+    }
+
+    @Test fun `changing the filter cancels pending loads and stale responses are dropped`() {
+        val panel = ui("LocalProfileHistoryPanel.kt")
+        val effect = panel.substringAfter("LaunchedEffect(filter, generation) {").substringBefore("fun loadMore()")
+        assertTrue(effect.contains("loadMoreJob?.cancel()"))
+        assertTrue(effect.contains("entries = emptyList()"))
+        assertTrue(effect.contains("if (!ProfileEvaluationQuery.accepts(current(), token)) return@LaunchedEffect"))
+        val more = panel.substringAfter("fun loadMore()").substringBefore("Column(modifier")
+        assertTrue(more.contains("if (!ProfileEvaluationQuery.accepts(current(), token)) return@launch"))
+        assertTrue(more.contains("ProfileEvaluationQuery.append(entries,"))
+    }
+
+    @Test fun `read errors are shown with retry, keep the list and never swallow cancellation`() {
+        val panel = ui("LocalProfileHistoryPanel.kt")
+        assertFalse(panel.contains("getOrDefault(emptyList())"))
+        assertFalse("runCatching también captura la cancelación", panel.contains("runCatching"))
+        assertEquals(2, Regex("""catch \(e: CancellationException\) \{\s*throw e""").findAll(panel).count())
+        assertTrue(panel.contains("error == LoadError.FIRST_PAGE ->"))
+        assertTrue(panel.contains("onClick = { generation++ }"))
+        assertTrue(panel.contains("}.onFailure { error = LoadError.MORE }"))
+        assertTrue(panel.contains("R.string.profile_history_retry"))
     }
 }

@@ -63,6 +63,21 @@ object ProfileEvaluationQuery {
         return sql to args.toTypedArray()
     }
 
+    /**
+     * Identifica una petición de la lista: el filtro y una generación que aumenta con cada cambio de
+     * filtro o reintento. Una respuesta solo se aplica si su ficha coincide con la actual: así una
+     * página pedida con otro filtro (o antes de reintentar) nunca se mezcla con la lista nueva.
+     */
+    data class RequestToken(val filter: LevelFilter, val generation: Int)
+
+    fun accepts(current: RequestToken, response: RequestToken): Boolean = current == response
+
+    /** Añade una página sin repetir evaluaciones ya mostradas (la lista usa el id como clave). */
+    fun append(existing: List<EvaluationEntry>, page: List<EvaluationEntry>): List<EvaluationEntry> {
+        val seen = existing.mapTo(HashSet()) { it.evaluationId }
+        return existing + page.filter { seen.add(it.evaluationId) }
+    }
+
     /** Evaluaciones guardadas por nivel, para los filtros. */
     const val LEVEL_COUNTS_SQL = "SELECT deviation_level, COUNT(*) FROM profile_evaluations GROUP BY deviation_level"
 }

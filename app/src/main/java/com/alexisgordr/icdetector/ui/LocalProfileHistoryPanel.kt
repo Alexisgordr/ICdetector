@@ -23,6 +23,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -53,7 +54,9 @@ import com.alexisgordr.icdetector.core.profile.ProfileMode
 import com.alexisgordr.icdetector.storage.CellDbHelper
 import com.alexisgordr.icdetector.storage.LocalProfileStore
 import com.alexisgordr.icdetector.storage.ObservationTime
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.text.DateFormat
@@ -78,32 +81,80 @@ fun LocalProfileHistoryPanel(
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     var filter by remember { mutableStateOf(LevelFilter.ALL) }
+    // Generación de la lista: aumenta con cada cambio de filtro o reintento de la primera página.
+    // Junto con el filtro forma la ficha que debe llevar una respuesta para aplicarse.
+    var generation by remember { mutableIntStateOf(0) }
     var entries by remember { mutableStateOf<List<EvaluationEntry>>(emptyList()) }
     var hasMore by remember { mutableStateOf(false) }
     var loading by remember { mutableStateOf(true) }
+    /** Fallo de lectura: de la primera página (lista vacía) o de «Cargar más» (lista conservada). */
+    var error by remember { mutableStateOf<LoadError?>(null) }
+    var loadMoreJob by remember { mutableStateOf<Job?>(null) }
     var counts by remember { mutableStateOf<Map<DeviationLevel, Int>>(emptyMap()) }
     var lastResetMs by remember { mutableStateOf<Long?>(null) }
     val restored = remember {
         context.getSharedPreferences("miniic_prefs", Context.MODE_PRIVATE).getBoolean(FirstRunPolicy.PREF_HISTORY_RESTORED, false)
     }
 
-    suspend fun load(after: ProfileEvaluationQuery.PageCursor?) = withContext(Dispatchers.IO) {
-        runCatching { LocalProfileStore.evaluationsPage(dbHelper.readableDatabase, filter, after) }.getOrDefault(emptyList())
-    }
-
-    LaunchedEffect(filter) {
-        loading = true
+    // La cancelación se relanza: solo los fallos reales de lectura se convierten en error.
+    suspend fun load(f: LevelFilter, after: ProfileEvaluationQuery.PageCursor?): Result<List<EvaluationEntry>> =
         withContext(Dispatchers.IO) {
-            runCatching {
-                val db = dbHelper.readableDatabase
-                counts = LocalProfileStore.evaluationLevelCounts(db)
-                lastResetMs = LocalProfileStore.lastEventMs(db, LocalProfileOption.RESET_EVENT)
+            try {
+                Result.success(LocalProfileStore.evaluationsPage(dbHelper.readableDatabase, f, after))
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                Result.failure(e)
             }
         }
-        val page = load(null)
-        hasMore = ProfileEvaluationQuery.hasMore(page.size)
-        entries = page.take(ProfileEvaluationQuery.PAGE_SIZE)
+
+    fun current() = ProfileEvaluationQuery.RequestToken(filter, generation)
+
+    LaunchedEffect(filter, generation) {
+        // Cambiar de filtro o reintentar cancela un «Cargar más» pendiente y empieza una lista nueva:
+        // nada pedido con el filtro anterior puede añadirse a esta.
+        loadMoreJob?.cancel()
+        loadMoreJob = null
+        val token = current()
+        entries = emptyList()
+        hasMore = false
+        error = null
+        loading = true
+        withContext(Dispatchers.IO) {
+            try {
+                val db = dbHelper.readableDatabase
+                Pair(LocalProfileStore.evaluationLevelCounts(db), LocalProfileStore.lastEventMs(db, LocalProfileOption.RESET_EVENT))
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                null                                            // se conservan los recuentos anteriores
+            }
+        }?.let { (c, r) -> counts = c; lastResetMs = r }
+        val result = load(token.filter, null)
+        if (!ProfileEvaluationQuery.accepts(current(), token)) return@LaunchedEffect
+        result.onSuccess { page ->
+            hasMore = ProfileEvaluationQuery.hasMore(page.size)
+            entries = page.take(ProfileEvaluationQuery.PAGE_SIZE)
+        }.onFailure { error = LoadError.FIRST_PAGE }
         loading = false
+    }
+
+    fun loadMore() {
+        val token = current()
+        val cursor = ProfileEvaluationQuery.cursorAfter(entries)
+        loadMoreJob?.cancel()
+        loadMoreJob = scope.launch {
+            loading = true
+            error = null
+            val result = load(token.filter, cursor)
+            // Si entretanto cambió el filtro o se reinició la lista, esta respuesta ya no vale.
+            if (!ProfileEvaluationQuery.accepts(current(), token)) return@launch
+            result.onSuccess { page ->
+                hasMore = ProfileEvaluationQuery.hasMore(page.size)
+                entries = ProfileEvaluationQuery.append(entries, page.take(ProfileEvaluationQuery.PAGE_SIZE))
+            }.onFailure { error = LoadError.MORE }                    // la lista y «hay más» se conservan
+            loading = false
+        }
     }
 
     Column(modifier, verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -121,6 +172,13 @@ fun LocalProfileHistoryPanel(
             }
         }
         when {
+            error == LoadError.FIRST_PAGE -> Column(Modifier.fillMaxWidth().weight(1f), verticalArrangement = Arrangement.Center,
+                horizontalAlignment = Alignment.CenterHorizontally) {
+                Text(stringResource(R.string.profile_history_error), color = Color(0xFFFFA000), fontFamily = FontFamily.Monospace, fontSize = 11.sp)
+                OutlinedButton(onClick = { generation++ }, shape = RoundedCornerShape(4.dp)) {
+                    Text(stringResource(R.string.profile_history_retry), fontFamily = FontFamily.Monospace, fontSize = 10.sp)
+                }
+            }
             loading && entries.isEmpty() -> Box(Modifier.fillMaxWidth().weight(1f), contentAlignment = Alignment.Center) {
                 Text(stringResource(R.string.profile_history_loading), color = Color(0xFF555555), fontFamily = FontFamily.Monospace, fontSize = 11.sp)
             }
@@ -132,26 +190,26 @@ fun LocalProfileHistoryPanel(
                 items(entries, key = { it.evaluationId }) { entry ->
                     EvaluationCard(entry, LocalProfileSummary.fromPreviousProfile(entry.evaluatedAtMs, lastResetMs), onOpenCell)
                 }
+                if (error == LoadError.MORE) item {
+                    Text(stringResource(R.string.profile_history_error_more), color = Color(0xFFFFA000), fontFamily = FontFamily.Monospace, fontSize = 10.sp)
+                }
                 if (hasMore) item {
                     OutlinedButton(
-                        onClick = {
-                            scope.launch {
-                                loading = true
-                                val page = load(ProfileEvaluationQuery.cursorAfter(entries))
-                                hasMore = ProfileEvaluationQuery.hasMore(page.size)
-                                entries = entries + page.take(ProfileEvaluationQuery.PAGE_SIZE)
-                                loading = false
-                            }
-                        },
+                        onClick = { loadMore() },
                         enabled = !loading,
                         modifier = Modifier.fillMaxWidth(),
                         shape = RoundedCornerShape(4.dp)
-                    ) { Text(stringResource(R.string.profile_history_load_more), fontFamily = FontFamily.Monospace, fontSize = 10.sp) }
+                    ) {
+                        Text(stringResource(if (error == LoadError.MORE) R.string.profile_history_retry else R.string.profile_history_load_more),
+                            fontFamily = FontFamily.Monospace, fontSize = 10.sp)
+                    }
                 }
             }
         }
     }
 }
+
+private enum class LoadError { FIRST_PAGE, MORE }
 
 @Composable
 private fun EvaluationCard(entry: EvaluationEntry, beforeReset: Boolean, onOpenCell: (String) -> Unit) {
