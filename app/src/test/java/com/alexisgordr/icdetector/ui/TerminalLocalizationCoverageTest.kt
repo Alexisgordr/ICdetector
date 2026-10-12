@@ -55,6 +55,8 @@ class TerminalLocalizationCoverageTest {
         "[RADIO] Ping-Pong detectado a 42.0 km/h. Ignorando alerta.",
         "[RADIO] Cambios rápidos de celda observados a 0,0 km/h.",
         "🚨 Efecto Ping-Pong confirmado por TemporalConfidence.",
+        "[SYS] ⚠️ Poda de histórico fallida (SQLiteDiskIOException): no se ha borrado nada; se reintentará en el próximo mantenimiento.",
+        "[SYS] Poda de histórico: 12 registros de más de 120 días eliminados.",
         "[H15] Lectura del historial RF fallida: H15 no se evalúa hasta que vuelva a leerse.",
         "[H15] Lectura del historial RF restablecida.",
         "N/A: no se pudo leer el historial RF en este ciclo.",

@@ -115,6 +115,9 @@ private val replacements = linkedMapOf(
     "Se reintentará" to "Will retry",
     "no permite afirmar ni desmentir nada sobre esta antena" to "provides no evidence for or against this cell",
     "Firmas geográficas obtenidas" to "Geographic signatures obtained",
+    "Poda de histórico fallida" to "History pruning failed",
+    "no se ha borrado nada; se reintentará en el próximo mantenimiento." to
+        "nothing was deleted; it will be retried at the next maintenance.",
     "Poda de histórico" to "History pruning",
     "registros de más de" to "records older than",
     "días eliminados" to "days deleted",

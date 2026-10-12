@@ -1,6 +1,7 @@
 package com.alexisgordr.icdetector.service
 
 import android.os.SystemClock
+import com.alexisgordr.icdetector.core.MaintenanceReport
 import com.alexisgordr.icdetector.storage.CellDbHelper
 
 /** Applies bounded retention independently from the service lifecycle orchestration. */
@@ -19,11 +20,17 @@ internal class DatabaseMaintenance(
     }
 
     fun run() {
+        // 3.0 — La poda tiene su propio resultado: si falla (la transacción ya se revirtió), se dice
+        // una vez en este ciclo diario, sin el mensaje del error, y el tope forense se aplica igual.
+        val prune = try {
+            MaintenanceReport.Prune.Done(db.pruneOldRecords())
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            MaintenanceReport.Prune.Failed(e.javaClass.simpleName)
+        }
+        MaintenanceReport.pruneLine(prune, CellDbHelper.DEFAULT_RETENTION_DAYS)?.let(log)
         try {
-            val deleted = db.pruneOldRecords()
-            if (deleted > 0) {
-                log("Poda de histórico: $deleted registros de más de ${CellDbHelper.DEFAULT_RETENTION_DAYS} días eliminados.")
-            }
             // v2.8.0 — El tope forense se aplica por casos completos, no por muestras sueltas: un
             // paquete mutilado se exporta como si estuviera íntegro. Ver enforceForensicSampleCap.
             val pruned = db.enforceForensicSampleCap()
@@ -41,7 +48,7 @@ internal class DatabaseMaintenance(
                 )
             }
         } catch (e: Exception) {
-            log("⚠️ Mantenimiento de base de datos fallido: ${e.message}")
+            log("⚠️ Mantenimiento de base de datos fallido (${e.javaClass.simpleName}).")
         }
     }
 

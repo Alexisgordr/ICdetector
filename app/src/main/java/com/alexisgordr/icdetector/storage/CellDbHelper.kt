@@ -1947,63 +1947,65 @@ class CellDbHelper(
      * esto solo evita que la tabla crezca sin límite registrando 24/7. No toca el esquema ni
      * los datos recientes. Devuelve el número de filas borradas.
      */
+    /**
+     * Borra lo que supera la retención, todo en una transacción. Devuelve las filas de historial
+     * borradas. 3.0 — Un error ya no se devuelve como "0 filas borradas": la transacción se revierte
+     * y la excepción llega a [com.alexisgordr.icdetector.service.DatabaseMaintenance], que lo
+     * registra como fallo. Retención y condiciones de borrado sin cambios.
+     */
     fun pruneOldRecords(daysToKeep: Int = DEFAULT_RETENTION_DAYS): Int {
+        val cutoff = System.currentTimeMillis() - (daysToKeep.toLong() * 24 * 60 * 60 * 1000)
+        // 3.0 (#23) — Por instante cuando existe; las filas anteriores, por su texto local.
+        val cutoffArgs = since(cutoff)
+        val updatedBefore = ObservationTime.beforeClause(SchemaV20.UPDATED_AT_MS, "updated_at")
+        val db = this.writableDatabase
+        // Una sola transacción: si el proceso muere a mitad de la poda no quedan casos
+        // forenses sin sus muestras ni tablas de sitios a medio recortar.
+        db.beginTransaction()
         return try {
-            val cutoff = System.currentTimeMillis() - (daysToKeep.toLong() * 24 * 60 * 60 * 1000)
-            // 3.0 (#23) — Por instante cuando existe; las filas anteriores, por su texto local.
-            val cutoffArgs = since(cutoff)
-            val updatedBefore = ObservationTime.beforeClause(SchemaV20.UPDATED_AT_MS, "updated_at")
-            val db = this.writableDatabase
-            // Una sola transacción: si el proceso muere a mitad de la poda no quedan casos
-            // forenses sin sus muestras ni tablas de sitios a medio recortar.
-            db.beginTransaction()
-            try {
-                val historyDeleted = db.delete(TABLE_HISTORY, observedBefore(), cutoffArgs)
-                db.delete(TABLE_INCIDENTS, updatedBefore, cutoffArgs)
-                val oldCases = db.rawQuery("SELECT id FROM $TABLE_FORENSIC_CASES WHERE $updatedBefore", cutoffArgs).use { c ->
-                    buildList { while (c.moveToNext()) add(c.getLong(0)) }
-                }
-                oldCases.forEach { id -> db.delete(TABLE_FORENSIC_SAMPLES, "case_id=?", arrayOf(id.toString())) }
-                db.delete(TABLE_FORENSIC_CASES, updatedBefore, cutoffArgs)
-                db.delete(TABLE_CELL_TRANSITIONS, "last_seen_ms < ?", arrayOf(cutoff.toString()))
-                // v2.10.4 — Eventos de servicio: misma antigüedad que el historial y un tope de filas,
-                // por si un módem inestable genera cambios continuos.
-                try {
-                    db.delete(TABLE_SERVICE_STATE_EVENTS, "ts_ms < ?", arrayOf(cutoff.toString()))
-                    db.execSQL(
-                        "DELETE FROM $TABLE_SERVICE_STATE_EVENTS WHERE id NOT IN " +
-                            "(SELECT id FROM $TABLE_SERVICE_STATE_EVENTS ORDER BY ts_ms DESC, id DESC LIMIT $MAX_SERVICE_STATE_EVENTS)"
-                    )
-                } catch (_: Exception) {}
-                val siteCutoff = System.currentTimeMillis() - 120L * 24 * 60 * 60 * 1000
-                val eventCutoff = System.currentTimeMillis() - 14L * 24 * 60 * 60 * 1000
-                val hardSiteCutoff = System.currentTimeMillis() - 365L * 24 * 60 * 60 * 1000
-                db.delete(TABLE_SITE_EVENTS, "seen_ms < ?", arrayOf(eventCutoff.toString()))
-                db.delete(TABLE_SITE_CELLS, "last_seen_ms < ? AND observations < 3", arrayOf(siteCutoff.toString()))
-                db.delete(TABLE_SITE_CELLS, "last_seen_ms < ?", arrayOf(hardSiteCutoff.toString()))
-                db.delete(TABLE_SITE_DAYS, "day < ?", arrayOf(SimpleDateFormat("yyyy-MM-dd", Locale.ROOT).format(Date(siteCutoff))))
-                db.delete(TABLE_SITE_MOTION_DAYS, "day < ?", arrayOf(SimpleDateFormat("yyyy-MM-dd", Locale.ROOT).format(Date(siteCutoff))))
-                // v2.10.1 — RF-only neighbour context follows exactly the same retention as full
-                // neighbour identities. Without this, RF days older than 120 days kept counting towards
-                // site maturity while full-identity days expired, and the tables grew without bound.
-                db.delete(TABLE_SITE_RF_NEIGHBOUR_DAYS, "day < ?", arrayOf(SimpleDateFormat("yyyy-MM-dd", Locale.ROOT).format(Date(siteCutoff))))
-                db.delete(TABLE_SITE_RF_NEIGHBOURS, "last_seen_ms < ? AND observations < 3", arrayOf(siteCutoff.toString()))
-                db.delete(TABLE_SITE_RF_NEIGHBOURS, "last_seen_ms < ?", arrayOf(hardSiteCutoff.toString()))
-                db.execSQL("DELETE FROM $TABLE_SITE_RF_NEIGHBOUR_DAYS WHERE NOT EXISTS (SELECT 1 FROM $TABLE_SITE_RF_NEIGHBOURS r WHERE r.site_key=$TABLE_SITE_RF_NEIGHBOUR_DAYS.site_key AND r.fingerprint=$TABLE_SITE_RF_NEIGHBOUR_DAYS.fingerprint)")
-                db.delete(TABLE_SITE_HOLDS, "last_seen_ms < ? AND active=0", arrayOf(siteCutoff.toString()))
-                db.delete(TABLE_SITE_SHADOW_TRIGGERS, "last_seen_ms < ? AND closed_ms IS NOT NULL", arrayOf(siteCutoff.toString()))
-                // 3.0 — Perfil local: las evaluaciones siguen a su fila del historial (y se borran
-                // aquí también por si las claves foráneas estuvieran desactivadas); las referencias
-                // sin evidencia nueva en un año, como los sitios de Stable-Site.
-                db.execSQL("DELETE FROM ${SchemaV22.TABLE_EVALUATIONS} WHERE history_id NOT IN (SELECT $COLUMN_ID FROM $TABLE_HISTORY)")
-                LocalProfileStore.pruneProfiles(db, hardSiteCutoff)
-                db.setTransactionSuccessful()
-                historyDeleted
-            } finally {
-                db.endTransaction()
+            val historyDeleted = db.delete(TABLE_HISTORY, observedBefore(), cutoffArgs)
+            db.delete(TABLE_INCIDENTS, updatedBefore, cutoffArgs)
+            val oldCases = db.rawQuery("SELECT id FROM $TABLE_FORENSIC_CASES WHERE $updatedBefore", cutoffArgs).use { c ->
+                buildList { while (c.moveToNext()) add(c.getLong(0)) }
             }
-        } catch (_: Exception) {
-            0
+            oldCases.forEach { id -> db.delete(TABLE_FORENSIC_SAMPLES, "case_id=?", arrayOf(id.toString())) }
+            db.delete(TABLE_FORENSIC_CASES, updatedBefore, cutoffArgs)
+            db.delete(TABLE_CELL_TRANSITIONS, "last_seen_ms < ?", arrayOf(cutoff.toString()))
+            // v2.10.4 — Eventos de servicio: misma antigüedad que el historial y un tope de filas,
+            // por si un módem inestable genera cambios continuos.
+            try {
+                db.delete(TABLE_SERVICE_STATE_EVENTS, "ts_ms < ?", arrayOf(cutoff.toString()))
+                db.execSQL(
+                    "DELETE FROM $TABLE_SERVICE_STATE_EVENTS WHERE id NOT IN " +
+                        "(SELECT id FROM $TABLE_SERVICE_STATE_EVENTS ORDER BY ts_ms DESC, id DESC LIMIT $MAX_SERVICE_STATE_EVENTS)"
+                )
+            } catch (_: Exception) {}
+            val siteCutoff = System.currentTimeMillis() - 120L * 24 * 60 * 60 * 1000
+            val eventCutoff = System.currentTimeMillis() - 14L * 24 * 60 * 60 * 1000
+            val hardSiteCutoff = System.currentTimeMillis() - 365L * 24 * 60 * 60 * 1000
+            db.delete(TABLE_SITE_EVENTS, "seen_ms < ?", arrayOf(eventCutoff.toString()))
+            db.delete(TABLE_SITE_CELLS, "last_seen_ms < ? AND observations < 3", arrayOf(siteCutoff.toString()))
+            db.delete(TABLE_SITE_CELLS, "last_seen_ms < ?", arrayOf(hardSiteCutoff.toString()))
+            db.delete(TABLE_SITE_DAYS, "day < ?", arrayOf(SimpleDateFormat("yyyy-MM-dd", Locale.ROOT).format(Date(siteCutoff))))
+            db.delete(TABLE_SITE_MOTION_DAYS, "day < ?", arrayOf(SimpleDateFormat("yyyy-MM-dd", Locale.ROOT).format(Date(siteCutoff))))
+            // v2.10.1 — RF-only neighbour context follows exactly the same retention as full
+            // neighbour identities. Without this, RF days older than 120 days kept counting towards
+            // site maturity while full-identity days expired, and the tables grew without bound.
+            db.delete(TABLE_SITE_RF_NEIGHBOUR_DAYS, "day < ?", arrayOf(SimpleDateFormat("yyyy-MM-dd", Locale.ROOT).format(Date(siteCutoff))))
+            db.delete(TABLE_SITE_RF_NEIGHBOURS, "last_seen_ms < ? AND observations < 3", arrayOf(siteCutoff.toString()))
+            db.delete(TABLE_SITE_RF_NEIGHBOURS, "last_seen_ms < ?", arrayOf(hardSiteCutoff.toString()))
+            db.execSQL("DELETE FROM $TABLE_SITE_RF_NEIGHBOUR_DAYS WHERE NOT EXISTS (SELECT 1 FROM $TABLE_SITE_RF_NEIGHBOURS r WHERE r.site_key=$TABLE_SITE_RF_NEIGHBOUR_DAYS.site_key AND r.fingerprint=$TABLE_SITE_RF_NEIGHBOUR_DAYS.fingerprint)")
+            db.delete(TABLE_SITE_HOLDS, "last_seen_ms < ? AND active=0", arrayOf(siteCutoff.toString()))
+            db.delete(TABLE_SITE_SHADOW_TRIGGERS, "last_seen_ms < ? AND closed_ms IS NOT NULL", arrayOf(siteCutoff.toString()))
+            // 3.0 — Perfil local: las evaluaciones siguen a su fila del historial (y se borran
+            // aquí también por si las claves foráneas estuvieran desactivadas); las referencias
+            // sin evidencia nueva en un año, como los sitios de Stable-Site.
+            db.execSQL("DELETE FROM ${SchemaV22.TABLE_EVALUATIONS} WHERE history_id NOT IN (SELECT $COLUMN_ID FROM $TABLE_HISTORY)")
+            LocalProfileStore.pruneProfiles(db, hardSiteCutoff)
+            db.setTransactionSuccessful()
+            historyDeleted
+        } finally {
+            db.endTransaction()
         }
     }
 
