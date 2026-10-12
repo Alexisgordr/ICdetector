@@ -33,8 +33,10 @@ object LegacyNetwork {
  *  - **Empieza** con la primera observación 2G/3G sin episodio abierto. Solo entonces se avisa.
  *  - **Sigue abierto** mientras lleguen observaciones 2G/3G, aunque haya huecos sin servicio o
  *    vueltas breves a 4G/5G de menos de [closeAfterMs].
- *  - **Se cierra** tras [closeAfterMs] seguidos observando 4G/5G (sin ninguna lectura 2G/3G
- *    entremedias). Las lecturas sin servicio o de tipo desconocido no cierran ni prolongan.
+ *  - **Se cierra** tras [closeAfterMs] seguidos observando 4G/5G. Cualquier interrupción de esa
+ *    racha — una lectura 2G/3G, una lectura sin servicio o de tipo desconocido, o [interrupt]
+ *    (el servicio no tiene celda activa) — reinicia SOLO la cuenta de cierre: el episodio sigue
+ *    abierto y la cuenta empieza de nuevo con la siguiente lectura 4G/5G.
  *  - Tras cerrarse, la siguiente observación 2G/3G abre un episodio nuevo.
  */
 class LegacyNetworkEpisodeGate(private val closeAfterMs: Long = CLOSE_AFTER_MS) {
@@ -45,11 +47,12 @@ class LegacyNetworkEpisodeGate(private val closeAfterMs: Long = CLOSE_AFTER_MS) 
         USE
     }
 
-    var open = false
+    @Volatile var open = false
         private set
     private var modernSinceMs: Long? = null
 
     /** @return el tipo de episodio si esta observación ABRE uno nuevo (hay que avisar); si no, null. */
+    @Synchronized
     fun observe(networkType: String?, previousNetworkType: String?, nowMs: Long): Trigger? {
         when {
             LegacyNetwork.isLegacy(networkType) -> {
@@ -58,14 +61,20 @@ class LegacyNetworkEpisodeGate(private val closeAfterMs: Long = CLOSE_AFTER_MS) 
                 open = true
                 return if (LegacyNetwork.isModern(previousNetworkType)) Trigger.CHANGE_FROM_MODERN else Trigger.USE
             }
-            LegacyNetwork.isModern(networkType) && open -> {
+            LegacyNetwork.isModern(networkType) -> if (open) {
                 val since = modernSinceMs ?: nowMs.also { modernSinceMs = it }
                 if (nowMs - since >= closeAfterMs) { open = false; modernSinceMs = null }
             }
+            else -> interrupt()
         }
         return null
     }
 
+    /** Sin servicio o sin celda activa: no hay 4G/5G continuo. Reinicia la cuenta de cierre. */
+    @Synchronized
+    fun interrupt() { modernSinceMs = null }
+
+    @Synchronized
     fun reset() { open = false; modernSinceMs = null }
 
     companion object {

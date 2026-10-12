@@ -331,6 +331,8 @@ class MiniICService : Service() {
     private fun onSignalLost() {
         collectionGeneration.lose()
         latencyMonitor.reset()
+        // 3.0 — Sin celda activa no hay 4G/5G continuo: reinicia la cuenta de cierre del episodio 2G/3G.
+        if (::securityAlerts.isInitialized) securityAlerts.onServiceInterrupted()
     }
 
     fun forceRefresh() {
@@ -1166,6 +1168,8 @@ class MiniICService : Service() {
             // Esto evita que la heurística 12 lea el veredicto "ANOMALA" de la celda vieja
             // en el primer ciclo de la nueva, antes de que tenga su propio baseline.
             if (activeRaw != null && activeRaw.cellId != "N/A") resetLatencyIfCellChanged(activeRaw)
+            // 3.0 — Lista sin celda registrada: tampoco hay servicio continuo (ver onSignalLost).
+            if (activeRaw == null && ::securityAlerts.isInitialized) securityAlerts.onServiceInterrupted()
 
             writeGate.launchSource(scope, Dispatchers.IO) {
                 cellProcessingMutex.withLock {

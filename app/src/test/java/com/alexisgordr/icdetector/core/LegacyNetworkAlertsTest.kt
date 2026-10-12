@@ -45,7 +45,7 @@ class LegacyNetworkAlertsTest {
         assertEquals(Trigger.CHANGE_FROM_MODERN, g.observe("3G", "5G NR", 80_000))
     }
 
-    @Test fun `no service neither closes nor extends, and a legacy reading restarts the closing count`() {
+    @Test fun `no service and legacy readings restart the closing count`() {
         val g = LegacyNetworkEpisodeGate()
         g.observe("3G", null, 0)
         g.observe("N/A", "3G", 30_000)
@@ -63,6 +63,38 @@ class LegacyNetworkAlertsTest {
     @Test fun `modern networks never open an episode`() {
         val g = LegacyNetworkEpisodeGate()
         listOf("4G LTE", "5G NR", "N/A", "").forEach { assertNull(g.observe(it, "4G", 0)) }
+        assertFalse(g.open)
+    }
+
+    @Test fun `3G, 4G, no service, 4G does not close on time counted from the first 4G`() {
+        val g = LegacyNetworkEpisodeGate()
+        assertEquals(Trigger.USE, g.observe("3G", null, 0))
+        g.observe("4G LTE", "3G", 10_000)
+        g.observe("N/A", "4G LTE", 40_000)                       // pérdida de servicio
+        g.observe("4G LTE", "N/A", 75_000)                       // 65 s desde la primera 4G, pero no seguidos
+        assertTrue("la cuenta de cierre se reinició", g.open)
+        assertNull("sigue el mismo episodio: sin aviso nuevo", g.observe("3G", "4G LTE", 80_000))
+        // Ahora sí: 60 s seguidos en 4G desde 90 s.
+        g.observe("4G LTE", "3G", 90_000)
+        g.observe("4G LTE", "4G LTE", 149_999)
+        assertTrue(g.open)
+        g.observe("4G LTE", "4G LTE", 150_000)
+        assertFalse(g.open)
+    }
+
+    @Test fun `an interruption from the service restarts only the closing count`() {
+        val g = LegacyNetworkEpisodeGate()
+        g.observe("2G", null, 0)
+        g.observe("5G NR", "2G", 10_000)
+        g.interrupt()                                           // sin celda activa
+        assertTrue("el episodio sigue abierto", g.open)
+        g.observe("5G NR", null, 60_000)                         // empieza la cuenta de nuevo
+        g.observe("5G NR", "5G NR", 119_999)
+        assertTrue(g.open)
+        g.observe("5G NR", "5G NR", 120_000)
+        assertFalse(g.open)
+        // Sin episodio abierto, interrumpir no abre nada.
+        g.interrupt()
         assertFalse(g.open)
     }
 }

@@ -201,8 +201,10 @@ exception during calls.
 
 The alert is given **once per episode**. An episode starts with the first 2G/3G reading (marked as a
 *change from 4G/5G* when the previous reading was 4G/5G) and stays open while the phone keeps using
-2G/3G, including short returns to 4G/5G and readings without service. It closes after **1 minute in
-a row** on 4G/5G; the next 2G/3G reading then starts a new episode. Each episode leaves one line in
+2G/3G, including short returns to 4G/5G and moments without service. It closes after **1 minute in
+a row** on 4G/5G with service: a 2G/3G reading or a loss of service (no active cell, Airplane mode)
+restarts that minute without closing the episode. After it closes, the next 2G/3G reading starts a
+new episode. Each episode leaves one line in
 the terminal, also with alerts off. The notification has an **Airplane mode settings** button; the
 app never switches Airplane mode on by itself. The setting travels in backups; restoring a backup made before
 it existed sets *Notification only*.

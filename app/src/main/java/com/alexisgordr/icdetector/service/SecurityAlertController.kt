@@ -22,8 +22,9 @@ internal class SecurityAlertController(
     private val legacyAlertMode: () -> LegacyNetworkAlertMode,
     private val nowMs: () -> Long = System::currentTimeMillis
 ) {
-    private var previousNetworkType: String? = null
-    private var previousDbm: Int? = null
+    // 3.0 — También los toca onServiceInterrupted() desde el hilo de lectura de celdas.
+    @Volatile private var previousNetworkType: String? = null
+    @Volatile private var previousDbm: Int? = null
     private var lastStrongSignalAlarm = 0L
     private val alarmEpisodes = AlarmEpisodeGate()
     private val legacyEpisodes = LegacyNetworkEpisodeGate()
@@ -32,6 +33,17 @@ internal class SecurityAlertController(
     fun resetAlarmEpisode() {
         alarmEpisodes.reset()
         pingPongLogged = false
+    }
+
+    /**
+     * 3.0 — El servicio no tiene celda activa (sin señal, modo avión, primaria inutilizable). Un
+     * episodio 2G/3G abierto sigue abierto, pero su cuenta de cierre vuelve a empezar, y la lectura
+     * siguiente no cuenta como "cambio desde 4G/5G" porque no hubo continuidad.
+     */
+    fun onServiceInterrupted() {
+        legacyEpisodes.interrupt()
+        previousNetworkType = null
+        previousDbm = null
     }
 
     fun evaluate(cell: CellData, confirmed: Boolean, context: ObservationContext) {

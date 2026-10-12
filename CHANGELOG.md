@@ -19,7 +19,8 @@ GitHub pre-release of an earlier build was withdrawn.
 - **2G/3G network alerts.** A hidden flag fixed to "on" fired the 2G/3G response every 60 seconds, and
   the 4G/5G → 2G/3G path played its own tone outside any control. There is now a setting (*Off*,
   *Notification only* — default — and *Notification and sound*), every path goes through it, and the
-  alert is given once per continuous 2G/3G episode, closed after 1 minute in a row on 4G/5G. Texts
+  alert is given once per continuous 2G/3G episode, closed after 1 minute in a row on 4G/5G with
+  service; a loss of service restarts that minute instead of counting through it. Texts
   describe use of or a change to 2G/3G, with coverage and calls without VoLTE as possible causes. The
   setting travels in backups (same format); older backups restore the default.
 - **Airplane mode is manual.** The 2G/3G response tried to switch Airplane mode on by writing a secure

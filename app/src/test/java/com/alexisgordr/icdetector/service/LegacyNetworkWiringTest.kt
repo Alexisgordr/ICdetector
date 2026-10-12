@@ -54,4 +54,14 @@ class LegacyNetworkWiringTest {
         assertFalse(manual.contains("WRITE_SECURE_SETTINGS"))
         assertTrue(manual.contains("never turns it on by itself"))
     }
+
+    @Test fun `losing the active cell interrupts the 2G-3G closing count`() {
+        val service = src("MiniICService.kt")
+        val lost = service.substringAfter("private fun onSignalLost() {").substringBefore("\n    }")
+        assertTrue(lost.contains("securityAlerts.onServiceInterrupted()"))
+        assertTrue(service.contains("if (activeRaw == null && ::securityAlerts.isInitialized) securityAlerts.onServiceInterrupted()"))
+        val alerts = src("SecurityAlertController.kt").substringAfter("fun onServiceInterrupted() {").substringBefore("\n    }")
+        assertTrue(alerts.contains("legacyEpisodes.interrupt()"))
+        assertTrue("sin continuidad no hay «cambio desde 4G/5G»", alerts.contains("previousNetworkType = null"))
+    }
 }
