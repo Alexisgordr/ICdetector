@@ -49,7 +49,9 @@ internal class ObservationPersistenceController(
      * 3.0 — Perfil local en sombra, después de guardar la fila y en la misma cola. Su resultado no
      * vuelve aquí y sus fallos se absorben: la fila guardada y [onWrite] no cambian.
      */
-    private val afterWrite: (ObservationRow, Long) -> Unit = { _, _ -> }
+    private val afterWrite: (ObservationRow, Long) -> Unit = { _, _ -> },
+    /** 3.0 (F10) — Fallo absorbido de [afterWrite], para diagnóstico. Tampoco puede fallar hacia aquí. */
+    private val onAfterWriteError: (Throwable) -> Unit = {}
 ) {
     private var lastPeriodicWrite = 0L
 
@@ -110,7 +112,7 @@ internal class ObservationPersistenceController(
     }
 
     private fun shadow(row: ObservationRow, rowId: Long) {
-        if (rowId > 0) runCatching { afterWrite(row, rowId) }
+        if (rowId > 0) runCatching { afterWrite(row, rowId) }.onFailure { e -> runCatching { onAfterWriteError(e) } }
     }
 
     private fun isRecordable(cell: CellData): Boolean =

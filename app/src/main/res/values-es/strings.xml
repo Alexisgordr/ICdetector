@@ -366,6 +366,8 @@
     <string name="local_profile_last_abstain">Última evaluación: sin nivel (%1$s)</string>
     <string name="local_profile_last_when">%1$s · celda %2$s</string>
     <string name="local_profile_previous">Del perfil anterior al último reinicio.</string>
+    <string name="local_profile_errors">Errores del perfil local: %1$d (último %2$s — %3$s). No afectan a las filas guardadas ni a las alertas.</string>
+    <string name="local_profile_log_failed">La opción ha cambiado, pero no se pudo registrar el cambio.</string>
     <string name="local_profile_not_engine">EXPERIMENTAL — no es una decisión del motor. Sin calibrar: la desviación no es una probabilidad. Un perfil maduro no significa que el método esté validado.</string>
     <string name="local_profile_level_none">sin desviación</string>
     <string name="local_profile_level_low">baja</string>

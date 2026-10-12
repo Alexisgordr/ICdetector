@@ -44,10 +44,14 @@ object LocalProfileStore {
             put("generation", p.generation); put("day_start_variance", p.dayStartVariance)
             put("last_seen_ms", p.lastSeenMs)
         }
-        db.insertWithOnConflict(P, null, v, SQLiteDatabase.CONFLICT_REPLACE)
+        // F10 — Escritura comprobada: un fallo se propaga, deshace la transacción y queda registrado.
+        check(db.insertWithOnConflict(P, null, v, SQLiteDatabase.CONFLICT_REPLACE) != -1L) { "local_profile not written" }
     }
 
-    /** Una evaluación por fila del historial: si ya existe, se conserva la primera. */
+    /**
+     * Una evaluación por fila del historial: si ya existe, se conserva la primera. Devuelve -1 en ese
+     * caso o si SQLite no la guardó; [LocalProfileController] lo trata como fallo (F10).
+     */
     fun insertEvaluation(db: SQLiteDatabase, r: ProfileEvaluationRecord): Long {
         val v = ContentValues().apply {
             put("history_id", r.historyId); put("evaluated_at_ms", r.evaluatedAtMs)

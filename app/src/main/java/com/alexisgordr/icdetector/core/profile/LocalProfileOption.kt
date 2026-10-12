@@ -52,3 +52,22 @@ object LocalProfileSummary {
     fun fromPreviousProfile(evaluatedAtMs: Long, lastResetMs: Long?): Boolean =
         lastResetMs != null && evaluatedAtMs <= lastResetMs
 }
+
+/**
+ * 3.0 (F10) — Salud del perfil local. Sus fallos siguen aislados (nunca impiden guardar la fila ni
+ * tocan alertas), pero ya no se pierden: se cuentan, se guarda el último y se registran con una
+ * frecuencia acotada. Es diagnóstico de una función experimental, nunca una alerta de la red.
+ */
+object LocalProfileHealth {
+    const val PREF_ERROR_COUNT = "local_profile_error_count"
+    const val PREF_LAST_ERROR = "local_profile_last_error"
+    const val PREF_LAST_ERROR_MS = "local_profile_last_error_ms"
+    /** Como mucho una línea de log cada 10 minutos, aunque el fallo se repita en cada fila. */
+    const val LOG_INTERVAL_MS = 10L * 60L * 1000L
+
+    /** Texto corto del fallo: dónde, tipo y mensaje recortado (sin datos de la fila). */
+    fun describe(where: String, e: Throwable): String =
+        "$where: ${e.javaClass.simpleName}" + (e.message?.take(120)?.let { ": $it" } ?: "")
+
+    fun shouldLog(lastLoggedMs: Long?, nowMs: Long): Boolean = lastLoggedMs == null || nowMs - lastLoggedMs >= LOG_INTERVAL_MS
+}

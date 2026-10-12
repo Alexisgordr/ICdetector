@@ -54,6 +54,24 @@ class LocalProfileHookTest {
         assertEquals(listOf(1L, 2L, 3L), without.writes)
     }
 
+    @Test fun `a profile failure is reported for diagnosis and a failing reporter changes nothing (F10)`() {
+        val errors = mutableListOf<String>()
+        val rows = mutableListOf<ObservationRow>()
+        val writes = mutableListOf<Long>()
+        fun controller(onError: (Throwable) -> Unit) = ObservationPersistenceController(
+            scope = CoroutineScope(Dispatchers.Unconfined), insert = { rows += it; rows.size.toLong() }, location = { null },
+            onWrite = { writes += it }, onPeriodicMissingLocation = {}, writeDispatcher = Dispatchers.Unconfined, clock = { now },
+            afterWrite = { _, _ -> throw IllegalStateException("perfil roto") }, onAfterWriteError = onError
+        )
+        val c = controller { errors += it.message.orEmpty() }
+        c.recordHandover(cell, c.capture())
+        assertEquals(listOf("perfil roto"), errors)
+        val broken = controller { throw IllegalStateException("diagnóstico roto") }
+        broken.recordHandover(cell.copy(cellId = "200"), broken.capture())
+        assertEquals(listOf(1L, 2L), writes)
+        assertEquals(2, rows.size)
+    }
+
     @Test fun `the profile runs after the row is saved and only for saved rows`() {
         assertEquals(listOf("write:1", "profile:1", "write:2", "profile:2", "write:3", "profile:3"), run(afterWrite = { _, _ -> }).events)
         assertEquals(listOf("write:-1", "write:-1", "write:-1"), run(afterWrite = { _, _ -> }, insertResult = { -1L }).events)

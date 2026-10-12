@@ -36,6 +36,7 @@ import androidx.core.content.edit
 import com.alexisgordr.icdetector.R
 import com.alexisgordr.icdetector.core.AppBuildId
 import com.alexisgordr.icdetector.core.profile.DeviationLevel
+import com.alexisgordr.icdetector.core.profile.LocalProfileHealth
 import com.alexisgordr.icdetector.core.profile.LocalProfileOption
 import com.alexisgordr.icdetector.core.profile.LocalProfileSummary
 import com.alexisgordr.icdetector.core.profile.ProfileCompatibility
@@ -64,6 +65,7 @@ fun LocalProfileSection() {
     var latest by remember { mutableStateOf<ProfileEvaluationRecord?>(null) }
     var counts by remember { mutableStateOf(LocalProfileSummary.Counts(0, 0)) }
     var lastResetMs by remember { mutableStateOf<Long?>(null) }
+    var errorCount by remember { mutableIntStateOf(0) }
     var refresh by remember { mutableIntStateOf(0) }
     var confirmReset by remember { mutableStateOf(false) }
     var message by remember { mutableStateOf<String?>(null) }
@@ -89,6 +91,7 @@ fun LocalProfileSection() {
                     )
                 }.getOrNull()
             }?.let { (l, c, r) -> latest = l; counts = c; lastResetMs = r }
+            errorCount = prefs.getInt(LocalProfileHealth.PREF_ERROR_COUNT, 0)
             delay(LocalProfileSummary.REFRESH_MS)
         }
     }
@@ -103,10 +106,14 @@ fun LocalProfileSection() {
             onCheckedChange = { requested ->
                 enabled = requested
                 prefs.edit { putBoolean(LocalProfileOption.PREF_KEY, requested) }
-                scope.launch(Dispatchers.IO) {
-                    runCatching {
-                        LocalProfileStore.recordModeEvent(db(), LocalProfileOption.mode(requested), appVersion(), System.currentTimeMillis())
+                scope.launch {
+                    val logged = withContext(Dispatchers.IO) {
+                        runCatching {
+                            LocalProfileStore.recordModeEvent(db(), LocalProfileOption.mode(requested), appVersion(), System.currentTimeMillis())
+                        }.isSuccess
                     }
+                    // F10 — El modo ya cambió; si no se pudo registrar, se dice en vez de callarlo.
+                    message = if (logged) null else resources.getString(R.string.local_profile_log_failed)
                 }
             },
             colors = SwitchDefaults.colors(checkedThumbColor = Color.White, checkedTrackColor = Color(0xFF7E57C2))
@@ -139,6 +146,14 @@ fun LocalProfileSection() {
                     Text(stringResource(R.string.local_profile_previous), color = Color(0xFF888888), fontSize = 10.sp,
                         fontFamily = FontFamily.Monospace)
                 }
+            }
+            // F10 — Fallos del perfil (diagnóstico de la función experimental, no una alerta).
+            val errors = errorCount
+            if (errors > 0) {
+                val lastErrorAt = java.text.DateFormat.getDateTimeInstance(java.text.DateFormat.SHORT, java.text.DateFormat.SHORT)
+                    .format(java.util.Date(prefs.getLong(LocalProfileHealth.PREF_LAST_ERROR_MS, 0L)))
+                Text(stringResource(R.string.local_profile_errors, errors, lastErrorAt, prefs.getString(LocalProfileHealth.PREF_LAST_ERROR, null) ?: "-"),
+                    color = Color(0xFFFFA000), fontSize = 10.sp, fontFamily = FontFamily.Monospace, lineHeight = 13.sp)
             }
             Text(stringResource(R.string.local_profile_not_engine), color = Color(0xFF666666), fontSize = 9.sp,
                 fontFamily = FontFamily.Monospace, lineHeight = 12.sp)

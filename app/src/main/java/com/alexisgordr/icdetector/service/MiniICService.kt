@@ -502,7 +502,10 @@ class MiniICService : Service() {
             },
             appVersion = appVersion
         )
-        writeGate.launch(scope, historyWriteDispatcher) { runCatching { localProfile.bootstrapIfNeeded() } }
+        writeGate.launch(scope, historyWriteDispatcher) {
+            runCatching { localProfile.bootstrapIfNeeded() }
+                .onFailure { e -> runCatching { localProfile.recordFailure("bootstrap", e) } }
+        }
         observationPersistence = ObservationPersistenceController(
             scope = scope,
             insert = { row -> dbHelper.logObservation(row, appVersion) },
@@ -517,7 +520,8 @@ class MiniICService : Service() {
             writeGate = writeGate,
             historyGeneration = { historyEpoch.current() },
             locationMode = { locationMode.storedValue },
-            afterWrite = localProfile::onRowWritten
+            afterWrite = localProfile::onRowWritten,
+            onAfterWriteError = { e -> localProfile.recordFailure("evaluation", e) }
         )
         securityAlerts = SecurityAlertController(
             tone = { toneGenerator },

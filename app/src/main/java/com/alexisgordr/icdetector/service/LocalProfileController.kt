@@ -2,6 +2,7 @@ package com.alexisgordr.icdetector.service
 
 import android.content.SharedPreferences
 import com.alexisgordr.icdetector.core.profile.LocalProfile
+import com.alexisgordr.icdetector.core.profile.LocalProfileHealth
 import com.alexisgordr.icdetector.core.profile.LocalProfileLearner
 import com.alexisgordr.icdetector.core.profile.LocalProfileShadow
 import com.alexisgordr.icdetector.core.profile.MetricProfile
@@ -44,7 +45,8 @@ internal class LocalProfileController(
             val current = if (obs.context.isComplete) LocalProfileStore.profiles(db, obs.context.key) else emptyMap()
             val step = shadow.process(current, obs, mode(), clock())
             step.changed.forEach { LocalProfileStore.upsert(db, it) }
-            LocalProfileStore.insertEvaluation(db, step.record)
+            // F10 — Si la evaluación no se guarda, tampoco el aprendizaje: la transacción se deshace.
+            check(LocalProfileStore.insertEvaluation(db, step.record) != -1L) { "profile evaluation not written" }
             db.setTransactionSuccessful()
         } finally {
             db.endTransaction()
@@ -87,6 +89,26 @@ internal class LocalProfileController(
         }
         prefs.edit().putBoolean(key, true).apply()
     }
+
+    /**
+     * F10 — Registra un fallo absorbido: contador, último fallo y hora en las preferencias (los
+     * muestra Ajustes) y una línea de log como mucho cada [LocalProfileHealth.LOG_INTERVAL_MS].
+     */
+    fun recordFailure(where: String, e: Throwable) {
+        val now = clock()
+        val text = LocalProfileHealth.describe(where, e)
+        prefs.edit()
+            .putInt(LocalProfileHealth.PREF_ERROR_COUNT, prefs.getInt(LocalProfileHealth.PREF_ERROR_COUNT, 0) + 1)
+            .putString(LocalProfileHealth.PREF_LAST_ERROR, text)
+            .putLong(LocalProfileHealth.PREF_LAST_ERROR_MS, now)
+            .apply()
+        if (LocalProfileHealth.shouldLog(lastLoggedMs, now)) {
+            lastLoggedMs = now
+            android.util.Log.w("LocalProfile", text, e)
+        }
+    }
+
+    @Volatile private var lastLoggedMs: Long? = null
 
     private fun observation(r: ProfileBootstrap.Row) =
         LocalProfileShadow.Observation(r.historyId, r.context, r.dbm, r.rsrq, r.observedAtMs!!, deviceModel)

@@ -366,6 +366,8 @@
     <string name="local_profile_last_abstain">Latest evaluation: no level (%1$s)</string>
     <string name="local_profile_last_when">%1$s · cell %2$s</string>
     <string name="local_profile_previous">From the profile before the last reset.</string>
+    <string name="local_profile_errors">Local profile errors: %1$d (latest %2$s — %3$s). Saved rows and alerts are not affected.</string>
+    <string name="local_profile_log_failed">The option changed, but the change could not be logged.</string>
     <string name="local_profile_not_engine">EXPERIMENTAL — not an engine decision. Uncalibrated: the deviation is not a probability. A mature profile does not mean the method is validated.</string>
     <string name="local_profile_level_none">no deviation</string>
     <string name="local_profile_level_low">low</string>
