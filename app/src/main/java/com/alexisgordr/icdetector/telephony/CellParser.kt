@@ -10,6 +10,7 @@ import com.alexisgordr.icdetector.models.RadioTech
 import com.alexisgordr.icdetector.models.TimingAdvanceUnit
 import com.alexisgordr.icdetector.core.BandPlan
 import com.alexisgordr.icdetector.core.NeighbourPlaceholders
+import com.alexisgordr.icdetector.core.RadioChannels
 import com.alexisgordr.icdetector.core.TimingAdvanceInput
 
 object CellParser {
@@ -40,6 +41,9 @@ object CellParser {
     // OpenCellID pidiendo radio=UMTS. Hay un test por cada una de las cuatro clases.
 
 
+    // 3.0 — PCI, PSC y canales: solo `CellInfo.UNAVAILABLE` (Int.MAX_VALUE) pasa a null
+    // (RadioChannels.unavailableToNull). Un valor medido fuera de rango se guarda tal cual: H8 lo
+    // juzga. Antes el centinela llegaba como 2147483647 al historial y a H11.
     fun parseCell(info: CellInfo, networkTypeString: String, mcc: String, mnc: String): CellData? {
         val reg = info.isRegistered
 
@@ -60,7 +64,7 @@ object CellParser {
                 val extras = extrasLte(id)
                 // 3.0 (#11) — En vecinas LTE, TAC 65535 y Cell ID 268435455 son relleno: N/A.
                 // 3.0 (#32) — Banda: el EARFCN si está en la tabla; si no, la que declare el módem.
-                CellData(reg, networkTypeString, NeighbourPlaceholders.lteCellId(id.ci, reg), cellMnc, NeighbourPlaceholders.lteTac(id.tac, reg), dbm, cellMcc, timingAdvance = ta, timingAdvanceUnit = TimingAdvanceUnit.LTE_INDEX, radioTech = radioTechOf(info), arfcn = id.earfcn, pci = id.pci, rsrq = rsrq, sinr = sinr, band = BandPlan.resolveLteBand(id.earfcn.takeIf { it != Int.MAX_VALUE }, extras.bands))
+                CellData(reg, networkTypeString, NeighbourPlaceholders.lteCellId(id.ci, reg), cellMnc, NeighbourPlaceholders.lteTac(id.tac, reg), dbm, cellMcc, timingAdvance = ta, timingAdvanceUnit = TimingAdvanceUnit.LTE_INDEX, radioTech = radioTechOf(info), arfcn = RadioChannels.unavailableToNull(id.earfcn), pci = RadioChannels.unavailableToNull(id.pci), rsrq = rsrq, sinr = sinr, band = BandPlan.resolveLteBand(id.earfcn.takeIf { it != Int.MAX_VALUE }, extras.bands))
                     .withRadioContext(connectionOf(info), validBandwidth(id.bandwidth), extras)
             }
             is CellInfoNr -> {
@@ -90,7 +94,7 @@ object CellParser {
                     .let { if (it == Int.MAX_VALUE) null else it }
                 val sinr = strength.ssSinr
                     .let { if (it == Int.MAX_VALUE) null else it }
-                CellData(reg, networkTypeString, id.nci.valOrNa(), cellMnc, id.tac.valOrNa(), dbm, cellMcc, timingAdvance = ta, timingAdvanceUnit = taUnit, radioTech = radioTechOf(info), arfcn = id.nrarfcn, pci = id.pci, rsrq = rsrq, sinr = sinr)
+                CellData(reg, networkTypeString, id.nci.valOrNa(), cellMnc, id.tac.valOrNa(), dbm, cellMcc, timingAdvance = ta, timingAdvanceUnit = taUnit, radioTech = radioTechOf(info), arfcn = RadioChannels.unavailableToNull(id.nrarfcn), pci = RadioChannels.unavailableToNull(id.pci), rsrq = rsrq, sinr = sinr)
                     .withRadioContext(connectionOf(info), null, extrasNr(id))
             }
             is CellInfoWcdma -> {
@@ -99,7 +103,7 @@ object CellParser {
                 val cellMcc = identityOrFallback(id.mccString, reg, mcc)
                 val cellMnc = identityOrFallback(id.mncString, reg, mnc)
                 // Sin Timing Advance: CellSignalStrengthWcdma no lo expone en la API pública.
-                CellData(reg, networkTypeString, id.cid.valOrNa(), cellMnc, id.lac.valOrNa(), dbm, cellMcc, radioTech = radioTechOf(info), arfcn = id.uarfcn, pci = id.psc)
+                CellData(reg, networkTypeString, id.cid.valOrNa(), cellMnc, id.lac.valOrNa(), dbm, cellMcc, radioTech = radioTechOf(info), arfcn = RadioChannels.unavailableToNull(id.uarfcn), pci = RadioChannels.unavailableToNull(id.psc))
                     .withRadioContext(connectionOf(info), null, extrasWcdma(id))
             }
             is CellInfoGsm -> {
@@ -109,7 +113,7 @@ object CellParser {
                 val cellMnc = identityOrFallback(id.mncString, reg, mnc)
                 // Índice 0..219; centinelas y fuera de rango, sin TA.
                 val ta = TimingAdvanceInput.gsm(info.cellSignalStrength.timingAdvance)
-                CellData(reg, networkTypeString, id.cid.valOrNa(), cellMnc, id.lac.valOrNa(), dbm, cellMcc, timingAdvance = ta, timingAdvanceUnit = TimingAdvanceUnit.GSM_INDEX, radioTech = radioTechOf(info), arfcn = id.arfcn)
+                CellData(reg, networkTypeString, id.cid.valOrNa(), cellMnc, id.lac.valOrNa(), dbm, cellMcc, timingAdvance = ta, timingAdvanceUnit = TimingAdvanceUnit.GSM_INDEX, radioTech = radioTechOf(info), arfcn = RadioChannels.unavailableToNull(id.arfcn))
                     .withRadioContext(connectionOf(info), null, extrasGsm(id))
             }
             else -> null

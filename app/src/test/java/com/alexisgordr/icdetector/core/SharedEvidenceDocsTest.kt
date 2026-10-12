@@ -30,7 +30,7 @@ class SharedEvidenceDocsTest {
 
     @Test fun `PCI feeds H11 severity, H15 and local confidence, which still needs H11 or H16`() {
         val analyzer = src("core/ThreatAnalyzer.kt")
-        assertTrue(analyzer.contains("val pciMismatch = record.pci != null && active.pci != null && record.pci != active.pci"))
+        assertTrue(analyzer.contains("val rf = RadioChannels.rfDifference(active.radioTech, active.pci, active.arfcn, record.radio, record.pci, record.arfcn)"))
         val trust = src("core/LocalCellTrustEngine.kt")
         assertTrue(trust.contains("contradictions += \"PCI\""))
         assertTrue(trust.contains("val alarmCandidate = eligible && rfChanged && independentContradiction"))

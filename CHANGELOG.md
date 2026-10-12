@@ -21,6 +21,15 @@ GitHub pre-release of an earlier build was withdrawn.
   field names and whole numbers. New rows are identified by the app version column (`AppVersion`,
   which carries the build commit); earlier rows are not rewritten. This is a data-quality fix, not a
   calibration or a demonstrated detection improvement.
+- **Parser sentinels and H11 RF comparison (dataset cut for H11 severity).** The parser now stores
+  `CellInfo.UNAVAILABLE` (`Int.MAX_VALUE`) as empty for PCI, PSC and the LTE/NR/UMTS/GSM channels, so
+  new CSV rows show an **empty field** where they used to show `2147483647`. Other measured values,
+  even out of range, are kept so H8 can still fail them. H11's +25 "RF inconsistency" severity now
+  needs a valid, comparable value on both sides (same technology, checked with `RadioChannels`):
+  a sentinel, an unknown value, an out-of-range value, or a historical row without technology is no
+  longer a mismatch. The geographic part of H11 is unchanged. Side effect: local cell confidence no
+  longer lists an ARFCN/PCI contradiction caused by a sentinel in the current reading. Rows from
+  earlier builds keep their stored values; the `AppVersion` column separates them.
 
 - **Latency factor follows H12 (anomaly-confidence cut).** The uncalibrated anomaly confidence applied
   the latency likelihood ratio whenever the raw latency indicator was anomalous, even when H12 did not

@@ -75,43 +75,13 @@ object ThreatAnalyzer {
         val validRecords = history.filter { it.lat != null && it.lon != null }
         if (validRecords.isEmpty()) return Triple(true, 0, null)
 
-        data class RecordAnalysis(
-            val isAnomalous: Boolean,
-            val severity: Int,
-            val threatDetail: String?
-        )
-
         val analyses = validRecords.map { record ->
             val results = FloatArray(1)
             Location.distanceBetween(
                 currentLocation.latitude, currentLocation.longitude,
                 record.lat!!, record.lon!!, results
             )
-            val distance = results[0].toDouble()
-
-            if (distance > threshold) {
-                val pciMismatch = record.pci != null && active.pci != null && record.pci != active.pci
-                val arfcnMismatch = record.arfcn != null && active.arfcn != null && record.arfcn != active.arfcn
-
-                val distanceFactor = (distance / threshold).coerceAtMost(3.0)
-                var severity = when {
-                    distanceFactor > 2.5 -> 40
-                    distanceFactor > 1.8 -> 30
-                    distanceFactor > 1.2 -> 20
-                    else -> 10
-                }
-
-                val detail = if (pciMismatch || arfcnMismatch) {
-                    severity += 25
-                    "Inconsistencia RF (PCI/ARFCN) detectada a gran distancia"
-                } else {
-                    "Celda detectada a distancia anómala (> ${threshold.toInt()}m)"
-                }
-
-                RecordAnalysis(true, severity, detail)
-            } else {
-                RecordAnalysis(false, 0, null)
-            }
+            mobileCellRecord(active, record, results[0].toDouble(), threshold)
         }
 
         val anomalousRecords = analyses.filter { it.isAnomalous }
@@ -123,6 +93,44 @@ object ThreatAnalyzer {
 
         val worst = anomalousRecords.maxByOrNull { it.severity }!!
         return Triple(false, worst.severity.coerceAtMost(100), worst.threatDetail)
+    }
+
+    /** Resultado de H11 para un registro del historial. */
+    internal data class RecordAnalysis(
+        val isAnomalous: Boolean,
+        val severity: Int,
+        val threatDetail: String?
+    )
+
+    /**
+     * 3.0 — Parte pura de H11 para un registro: a [distance] metros de la posición actual. Misma
+     * lógica geográfica que antes; lo único nuevo es que la discrepancia de PCI/PSC o canal (+25)
+     * exige datos válidos y comparables en ambos lados ([RadioChannels.rfDifference]).
+     */
+    internal fun mobileCellRecord(active: CellData, record: HistoryRecord, distance: Double, threshold: Double): RecordAnalysis {
+        if (distance <= threshold) return RecordAnalysis(false, 0, null)
+        // 3.0 — Solo cuentan discrepancias entre datos válidos y comparables (misma tecnología,
+        // cada lado validado con RadioChannels). Un centinela del historial (2147483647) o un
+        // dato desconocido ya no suma severidad.
+        val rf = RadioChannels.rfDifference(active.radioTech, active.pci, active.arfcn, record.radio, record.pci, record.arfcn)
+        val pciMismatch = rf.physicalId
+        val arfcnMismatch = rf.channel
+
+        val distanceFactor = (distance / threshold).coerceAtMost(3.0)
+        var severity = when {
+            distanceFactor > 2.5 -> 40
+            distanceFactor > 1.8 -> 30
+            distanceFactor > 1.2 -> 20
+            else -> 10
+        }
+
+        val detail = if (pciMismatch || arfcnMismatch) {
+            severity += 25
+            "Inconsistencia RF (PCI/ARFCN) detectada a gran distancia"
+        } else {
+            "Celda detectada a distancia anómala (> ${threshold.toInt()}m)"
+        }
+        return RecordAnalysis(true, severity, detail)
     }
 
     fun analyzeThreats(

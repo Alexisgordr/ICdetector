@@ -37,9 +37,33 @@ object RadioChannels {
             RadioTech.UNKNOWN -> false
         }
 
+    /**
+     * 3.0 — Para el parser: SOLO el centinela "no disponible" de Android pasa a null. Cualquier otro
+     * valor medido, aunque esté fuera de rango, se conserva para que H8 pueda seguir juzgándolo.
+     * Nunca se convierte en 0.
+     */
+    fun unavailableToNull(value: Int): Int? = value.takeIf { it != ANDROID_UNAVAILABLE }
+
     /** La frecuencia si es válida para esa tecnología; null si no. */
     fun channelOrNull(radio: RadioTech, value: Int?): Int? = value?.takeIf { isValidChannel(radio, it) }
 
     /** El identificador físico si es válido para esa tecnología; null si no. */
     fun physicalIdOrNull(radio: RadioTech, value: Int?): Int? = value?.takeIf { isValidPhysicalId(radio, it) }
+
+    /**
+     * 3.0 — ¿Discrepan dos lecturas de RF? Cada lado se valida con SU tecnología. Solo hay discrepancia
+     * si ambos valores son válidos, de la misma tecnología (mismo espacio de identificadores) y
+     * distintos: desconocido o inválido frente a conocido no es discrepancia.
+     */
+    data class RfDifference(val physicalId: Boolean, val channel: Boolean)
+
+    fun rfDifference(radioA: RadioTech, pciA: Int?, channelA: Int?, radioB: RadioTech, pciB: Int?, channelB: Int?): RfDifference {
+        if (radioA != radioB) return RfDifference(false, false)
+        val pa = physicalIdOrNull(radioA, pciA); val pb = physicalIdOrNull(radioB, pciB)
+        val ca = channelOrNull(radioA, channelA); val cb = channelOrNull(radioB, channelB)
+        return RfDifference(
+            physicalId = pa != null && pb != null && pa != pb,
+            channel = ca != null && cb != null && ca != cb
+        )
+    }
 }
