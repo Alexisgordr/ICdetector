@@ -45,7 +45,8 @@ class StableSiteScreenTest {
         assertTrue(reset.contains("job?.cancel()") && reset.contains("generation++"))
         assertTrue(screen.contains("if (!StableSiteQuery.accepts(StableSiteQuery.RequestToken(scope, generation), token)) return@launch"))
         assertTrue(screen.contains("LaunchedEffect(filter) { sites.reset("))
-        assertTrue(screen.contains("LaunchedEffect(site.siteKey, section, episodeFilter)"))
+        assertTrue(screen.contains("LaunchedEffect(site.siteKey, technical, techSection)"))
+        assertTrue(screen.contains("LaunchedEffect(site.siteKey, episodeFilter)"))
         assertFalse(screen.contains("runCatching"))
         assertEquals(2, Regex("""catch \(e: CancellationException\) \{\s*throw e""").findAll(screen).count())
     }

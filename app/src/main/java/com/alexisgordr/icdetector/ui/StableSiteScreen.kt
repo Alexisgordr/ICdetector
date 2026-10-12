@@ -47,6 +47,7 @@ import com.alexisgordr.icdetector.core.RouteSiteGroup
 import com.alexisgordr.icdetector.core.StableSiteCell
 import com.alexisgordr.icdetector.core.StableSiteEpisode
 import com.alexisgordr.icdetector.core.StableSiteFeatureState
+import com.alexisgordr.icdetector.core.StableSitePresentation
 import com.alexisgordr.icdetector.core.StableSiteProgress
 import com.alexisgordr.icdetector.core.StableSiteQuery
 import com.alexisgordr.icdetector.core.StableSiteQuery.Page
@@ -182,8 +183,8 @@ private fun line(text: String, color: Color = Body, size: Int = 9) =
     Text(text, color = color, fontFamily = FontFamily.Monospace, fontSize = size.sp, lineHeight = (size + 3).sp)
 
 /**
- * Historial → Topología → Ver Stable-Site: lista de sitios por su clave guardada, con su estado
- * ACTUAL. Al pulsar un sitio se abre su detalle; la flecha vuelve a la lista y después a Topología.
+ * Historial → Topología → Ver Stable-Site: lista de sitios con su estado ACTUAL en lenguaje sencillo
+ * y lo que les falta. Los datos técnicos están en el detalle, en «Ver detalles técnicos».
  */
 @Composable
 fun StableSitePanel(dbHelper: CellDbHelper, modifier: Modifier = Modifier, onBack: () -> Unit) {
@@ -206,10 +207,11 @@ fun StableSitePanel(dbHelper: CellDbHelper, modifier: Modifier = Modifier, onBac
         item { BackRow(R.string.stable_site_view_back_topology, onBack) }
         item {
             Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                Text(stringResource(R.string.stable_site_view_title), color = Color.White, fontFamily = FontFamily.Monospace,
+                Text(stringResource(R.string.stable_site_simple_title), color = Color.White, fontFamily = FontFamily.Monospace,
                     fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                AnalysisOnly()
+                line(stringResource(R.string.stable_site_simple_intro), Dim)
                 line(stringResource(R.string.stable_site_view_shadow_note), Dim)
-                line(stringResource(R.string.stable_site_view_active_note), Dim)
                 line(stringResource(R.string.stable_site_view_key_note), Dim)
             }
         }
@@ -226,27 +228,36 @@ fun StableSitePanel(dbHelper: CellDbHelper, modifier: Modifier = Modifier, onBac
     }
 }
 
+/** «Solo análisis: no modifica las alarmas», siempre visible en las vistas de Stable-Site. */
+@Composable
+private fun AnalysisOnly() = line(stringResource(R.string.stable_site_analysis_only), Accent, 10)
+
 @Composable
 private fun SiteCard(site: StableSiteSummary, onOpen: () -> Unit) {
     val m = site.maturity
+    val simple = StableSitePresentation.simpleState(m.state)
     Card(onClick = onOpen, colors = CardDefaults.cardColors(containerColor = Color(0xFF111111)),
         border = BorderStroke(1.dp, stateColor(m.state).copy(alpha = 0.45f)), shape = RoundedCornerShape(4.dp)) {
         Column(Modifier.fillMaxWidth().padding(11.dp), verticalArrangement = Arrangement.spacedBy(3.dp)) {
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                Text(shortKey(site.siteKey), color = Color.White, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Bold, fontSize = 10.sp)
-                Text(stringResource(stateLabel(m.state)), color = stateColor(m.state), fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Bold, fontSize = 9.sp)
-            }
-            line(stringResource(R.string.stable_site_view_counts, site.servingDays, site.staticDays, site.servingObservations), Color(0xFFAAAAAA))
-            line(stringResource(capabilityLabel(m.capability)) + " · " + (formatMs(site.lastSeenMs) ?: "-"), Dim)
+            Text(stringResource(simpleStateLabel(simple)), color = stateColor(m.state), fontFamily = FontFamily.Monospace,
+                fontWeight = FontWeight.Bold, fontSize = 11.sp)
+            line(stringResource(missingLabel(StableSitePresentation.missing(m.reason))), Body)
+            line(shortKey(site.siteKey), Dim, 9)
+            line(stringResource(R.string.stable_site_simple_place_seen, formatMs(site.lastSeenMs) ?: stringResource(R.string.stable_site_no_info)), Dim)
         }
     }
 }
 
-/** Detalle de un sitio: estado ACTUAL, progreso, vecinas, celdas, huellas RF y episodios. */
+/**
+ * Detalle de un sitio. Arriba, lo sencillo: estado actual, qué falta y qué requisitos se cumplen, y
+ * los cambios de celda. En «Ver detalles técnicos»: clave, códigos, contadores, fechas, celdas y
+ * huellas RF. No se elimina información: solo cambia dónde se muestra.
+ */
 @Composable
 private fun StableSiteDetail(dbHelper: CellDbHelper, site: StableSiteSummary, modifier: Modifier, onBack: () -> Unit) {
     val cs = rememberCoroutineScope()
-    var section by remember(site.siteKey) { mutableIntStateOf(0) }                  // 0 celdas, 1 RF, 2 episodios
+    var technical by remember(site.siteKey) { mutableStateOf(false) }
+    var techSection by remember(site.siteKey) { mutableIntStateOf(0) }            // 0 celdas, 1 huellas RF
     var episodeFilter by remember(site.siteKey) { mutableStateOf(StableSiteQuery.EpisodeFilter.ALL) }
     val cells = remember(site.siteKey) { PagedList<StableSiteCell> { it.rowKey } }
     val rf = remember(site.siteKey) { PagedList<StableSiteRfFingerprint> { it.fingerprint } }
@@ -257,70 +268,98 @@ private fun StableSiteDetail(dbHelper: CellDbHelper, site: StableSiteSummary, mo
         StableSiteReadStore.episodes(dbHelper.readableDatabase, site.siteKey, episodeFilter, it)
     }
     DisposableEffect(site.siteKey) { onDispose { cells.job?.cancel(); rf.job?.cancel(); episodes.job?.cancel() } }
-    LaunchedEffect(site.siteKey, section) {
-        when (section) {
+    LaunchedEffect(site.siteKey, technical, techSection) {
+        if (!technical) return@LaunchedEffect
+        when (techSection) {
             0 -> if (!cells.loaded) { cells.reset("cells|${site.siteKey}"); loadCells(true) }
-            1 -> if (!rf.loaded) { rf.reset("rf|${site.siteKey}"); loadRf(true) }
+            else -> if (!rf.loaded) { rf.reset("rf|${site.siteKey}"); loadRf(true) }
         }
     }
-    LaunchedEffect(site.siteKey, section, episodeFilter) {
-        if (section == 2) { episodes.reset("episodes|${site.siteKey}|${episodeFilter.name}"); loadEpisodes(true) }
+    LaunchedEffect(site.siteKey, episodeFilter) {
+        episodes.reset("episodes|${site.siteKey}|${episodeFilter.name}"); loadEpisodes(true)
     }
     val m = site.maturity
+    val simple = StableSitePresentation.simpleState(m.state)
 
     LazyColumn(modifier, verticalArrangement = Arrangement.spacedBy(8.dp)) {
         item { BackRow(R.string.stable_site_view_back_sites, onBack) }
+        // 1. Lo sencillo.
         item {
             Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                Text(site.siteKey, color = Color.White, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Bold, fontSize = 9.sp)
-                line(stringResource(R.string.stable_site_view_current_state, stringResource(stateLabel(m.state)), m.reason), stateColor(m.state), 10)
-                line(stringResource(R.string.stable_site_view_active_note), Dim)
-                line(stringResource(capabilityLabel(m.capability)) + " — " + stringResource(capabilityNote(m.capability)), Body)
-                line(stringResource(R.string.stable_site_view_seen, formatMs(site.firstSeenMs) ?: "-", formatMs(site.lastSeenMs) ?: "-"), Dim)
+                Text(stringResource(simpleStateLabel(simple)), color = stateColor(m.state), fontFamily = FontFamily.Monospace,
+                    fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                line(stringResource(simpleStateNote(simple)), Body)
+                line(stringResource(missingLabel(StableSitePresentation.missing(m.reason))), Body)
+                AnalysisOnly()
             }
         }
         item {
-            Column(verticalArrangement = Arrangement.spacedBy(5.dp)) {
-                Text(stringResource(R.string.stable_site_view_progress), color = Color.White, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Bold, fontSize = 9.sp)
-                Progress(R.string.stable_site_view_serving_days, StableSiteProgress.servingDays(site))
-                Progress(R.string.stable_site_view_static_days, StableSiteProgress.staticDays(site))
-                Progress(R.string.stable_site_view_full_neighbour_days, StableSiteProgress.fullNeighbourDays(site))
-                Progress(R.string.stable_site_view_rf_neighbour_days, StableSiteProgress.rfNeighbourDays(site))
-                Progress(R.string.stable_site_view_serving_observations, StableSiteProgress.servingObservations(site))
-                line(stringResource(R.string.stable_site_view_neighbour_rule), Dim)
+            Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                Text(stringResource(R.string.stable_site_requirements_title), color = Color.White, fontFamily = FontFamily.Monospace,
+                    fontWeight = FontWeight.Bold, fontSize = 9.sp)
+                StableSitePresentation.requirements(site).forEach { r ->
+                    line(stringResource(if (r.met) R.string.stable_site_requirement_met else R.string.stable_site_requirement_pending,
+                        stringResource(requirementLabel(r.kind)), r.value, r.target), if (r.met) Accent else Body)
+                }
+                line(stringResource(R.string.stable_site_requirements_note), Dim)
             }
         }
+        // 2. Detalles técnicos, desplegables.
         item {
-            Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                listOf(R.string.stable_site_view_section_cells, R.string.stable_site_view_section_rf, R.string.stable_site_view_section_episodes)
-                    .forEachIndexed { i, label -> FilterChip(selected = section == i, onClick = { section = i }, label = { Text(stringResource(label), fontSize = 10.sp) }) }
+            TextButton(onClick = { technical = !technical }) {
+                Text(stringResource(if (technical) R.string.stable_site_hide_technical else R.string.stable_site_show_technical),
+                    color = Accent, fontFamily = FontFamily.Monospace, fontSize = 10.sp)
             }
         }
-        when (section) {
-            0 -> pagedItems(cells, R.string.stable_site_view_no_cells, key = { it.rowKey },
-                onRetryFirst = { cells.reset("cells|${site.siteKey}"); loadCells(true) }, onMore = { loadCells(false) }) { CellRow(it) }
-            1 -> {
-                item { line(stringResource(R.string.stable_site_view_rf_note), Dim) }
-                pagedItems(rf, R.string.stable_site_view_no_rf, key = { it.fingerprint },
-                    onRetryFirst = { rf.reset("rf|${site.siteKey}"); loadRf(true) }, onMore = { loadRf(false) }) { RfRow(it) }
-            }
-            else -> {
-                item {
-                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                        line(stringResource(R.string.stable_site_view_episodes_note), Dim)
-                        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                            FilterChip(selected = episodeFilter == StableSiteQuery.EpisodeFilter.ALL, onClick = { episodeFilter = StableSiteQuery.EpisodeFilter.ALL },
-                                label = { Text(stringResource(R.string.stable_site_view_episodes_all), fontSize = 10.sp) })
-                            FilterChip(selected = episodeFilter == StableSiteQuery.EpisodeFilter.SHADOW_RECORDED, onClick = { episodeFilter = StableSiteQuery.EpisodeFilter.SHADOW_RECORDED },
-                                label = { Text(stringResource(R.string.stable_site_view_episodes_recorded), fontSize = 10.sp) })
+        if (technical) {
+            item {
+                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    line(site.siteKey, Color.White)
+                    line(stringResource(R.string.stable_site_view_current_state, stringResource(stateLabel(m.state)), m.reason), stateColor(m.state))
+                    line(stringResource(R.string.stable_site_view_active_note), Dim)
+                    line(stringResource(capabilityLabel(m.capability)) + " (" + m.capability.name + ") — " + stringResource(capabilityNote(m.capability)), Body)
+                    Text(stringResource(R.string.stable_site_view_progress), color = Color.White, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Bold, fontSize = 9.sp)
+                    Progress(R.string.stable_site_view_serving_days, StableSiteProgress.servingDays(site))
+                    Progress(R.string.stable_site_view_static_days, StableSiteProgress.staticDays(site))
+                    Progress(R.string.stable_site_view_full_neighbour_days, StableSiteProgress.fullNeighbourDays(site))
+                    Progress(R.string.stable_site_view_rf_neighbour_days, StableSiteProgress.rfNeighbourDays(site))
+                    Progress(R.string.stable_site_view_serving_observations, StableSiteProgress.servingObservations(site))
+                    line(stringResource(R.string.stable_site_view_neighbour_rule), Dim)
+                    line(stringResource(R.string.stable_site_view_seen, formatMs(site.firstSeenMs) ?: "-", formatMs(site.lastSeenMs) ?: "-"), Dim)
+                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        listOf(R.string.stable_site_view_section_cells, R.string.stable_site_view_section_rf).forEachIndexed { i, label ->
+                            FilterChip(selected = techSection == i, onClick = { techSection = i }, label = { Text(stringResource(label), fontSize = 10.sp) })
                         }
                     }
                 }
-                pagedItems(episodes, R.string.stable_site_view_no_episodes, key = { it.episodeId },
-                    onRetryFirst = { episodes.reset("episodes|${site.siteKey}|${episodeFilter.name}"); loadEpisodes(true) },
-                    onMore = { loadEpisodes(false) }) { EpisodeCard(it) }
+            }
+            if (techSection == 0) {
+                pagedItems(cells, R.string.stable_site_view_no_cells, key = { "cell|" + it.rowKey },
+                    onRetryFirst = { cells.reset("cells|${site.siteKey}"); loadCells(true) }, onMore = { loadCells(false) }) { CellRow(it) }
+            } else {
+                item { line(stringResource(R.string.stable_site_view_rf_note), Dim) }
+                pagedItems(rf, R.string.stable_site_view_no_rf, key = { "rf|" + it.fingerprint },
+                    onRetryFirst = { rf.reset("rf|${site.siteKey}"); loadRf(true) }, onMore = { loadRf(false) }) { RfRow(it) }
             }
         }
+        // 3. Cambios de celda en este lugar (episodios), en lenguaje sencillo.
+        item {
+            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                HorizontalDivider(color = Color(0xFF222222))
+                Text(stringResource(R.string.stable_site_changes_title), color = Color.White, fontFamily = FontFamily.Monospace,
+                    fontWeight = FontWeight.Bold, fontSize = 10.sp)
+                line(stringResource(R.string.stable_site_changes_note), Dim)
+                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    FilterChip(selected = episodeFilter == StableSiteQuery.EpisodeFilter.ALL, onClick = { episodeFilter = StableSiteQuery.EpisodeFilter.ALL },
+                        label = { Text(stringResource(R.string.stable_site_changes_all), fontSize = 10.sp) })
+                    FilterChip(selected = episodeFilter == StableSiteQuery.EpisodeFilter.SHADOW_RECORDED, onClick = { episodeFilter = StableSiteQuery.EpisodeFilter.SHADOW_RECORDED },
+                        label = { Text(stringResource(R.string.stable_site_changes_recorded), fontSize = 10.sp) })
+                }
+            }
+        }
+        pagedItems(episodes, R.string.stable_site_view_no_episodes, key = { "episode|" + it.episodeId },
+            onRetryFirst = { episodes.reset("episodes|${site.siteKey}|${episodeFilter.name}"); loadEpisodes(true) },
+            onMore = { loadEpisodes(false) }) { EpisodeCard(it) }
     }
 }
 
@@ -351,34 +390,53 @@ private fun RfRow(r: StableSiteRfFingerprint) {
 }
 
 /**
- * Un episodio tal como se guardó. Distingue los registrados en sombra (`shadow_recorded=1`) de los
- * solo observados; su evidencia es la ÚLTIMA EVALUACIÓN GUARDADA, y el estado del sitio que muestra
- * es el registrado en el episodio, no el actual. Los datos ausentes se dicen ausentes.
+ * Un episodio en lenguaje sencillo, tal como se guardó:
+ *  - «Novedad registrada en sombra» si `shadow_recorded` se marcó EN ALGÚN MOMENTO del episodio;
+ *    «Cambio observado» si no. Esa marca es acumulada y no depende de la última evaluación.
+ *  - «Última evaluación guardada»: su fecha, el estado del lugar en ESE momento y el motivo
+ *    traducido. No es la evidencia inicial ni el estado actual del sitio.
+ * Lo que falta se muestra como «Sin información suficiente». Los códigos, identidades y contadores
+ * van en «Ver detalles técnicos».
  */
 @Composable
 private fun EpisodeCard(e: StableSiteEpisode) {
-    val border = if (e.shadowRecorded) Color(0xFFB39DDB) else Color(0xFF444444)
+    var technical by remember(e.episodeId) { mutableStateOf(false) }
+    val kind = StableSitePresentation.episodeKind(e)
+    val novelty = kind == StableSitePresentation.EpisodeKind.NOVELTY_RECORDED_IN_SHADOW
+    val border = if (novelty) Color(0xFFB39DDB) else Color(0xFF444444)
+    val noInfo = stringResource(R.string.stable_site_no_info)
     Card(colors = CardDefaults.cardColors(containerColor = Color(0xFF111111)), border = BorderStroke(1.dp, border.copy(alpha = 0.5f)),
         shape = RoundedCornerShape(4.dp)) {
         Column(Modifier.fillMaxWidth().padding(10.dp), verticalArrangement = Arrangement.spacedBy(3.dp)) {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                Text(formatMs(e.firstSeenMs) ?: "-", color = Color.White, fontFamily = FontFamily.Monospace, fontSize = 9.sp)
-                Text(stringResource(if (e.shadowRecorded) R.string.stable_site_view_episode_recorded else R.string.stable_site_view_episode_observed),
+                Text(formatMs(e.firstSeenMs) ?: noInfo, color = Color.White, fontFamily = FontFamily.Monospace, fontSize = 9.sp)
+                Text(stringResource(if (novelty) R.string.stable_site_kind_novelty else R.string.stable_site_kind_observed),
                     color = border, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Bold, fontSize = 9.sp)
             }
-            line((e.previousIdentity ?: stringResource(R.string.profile_history_not_available)) + "  →  " + e.candidateIdentity, Body)
-            line(e.siteKey?.let { stringResource(R.string.stable_site_view_episode_site, shortKey(it)) } ?: stringResource(R.string.stable_site_view_no_site), Dim)
-            line(stringResource(R.string.stable_site_view_episode_period, formatMs(e.lastSeenMs) ?: "-",
-                formatMs(e.closedMs) ?: stringResource(R.string.stable_site_view_episode_open)), Dim)
+            line(stringResource(if (novelty) R.string.stable_site_kind_novelty_note else R.string.stable_site_kind_observed_note), Body)
             HorizontalDivider(color = Color(0xFF222222))
             Text(stringResource(R.string.stable_site_view_last_evaluation), color = Color.White, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Bold, fontSize = 8.sp)
             if (e.evaluatedMs == null) {
-                line(stringResource(R.string.stable_site_view_no_evaluation), Dim)
+                line(noInfo, Dim)
             } else {
-                line(stringResource(R.string.stable_site_view_evaluated_at, formatMs(e.evaluatedMs) ?: "-"), Dim)
+                line(stringResource(R.string.stable_site_view_evaluated_at, formatMs(e.evaluatedMs) ?: noInfo), Dim)
+                line(stringResource(R.string.stable_site_state_then, StableSitePresentation.simpleStateOf(e.featureStateAtEpisode)
+                    ?.let { stringResource(simpleStateLabel(it)) } ?: noInfo), Body)
+                line(stringResource(episodeReasonLabel(StableSitePresentation.episodeReason(e.reason))), Body)
+                line(stringResource(R.string.stable_site_motion_then, stringResource(motionLabel(StableSitePresentation.motion(e.motionState)))), Body)
+            }
+            TextButton(onClick = { technical = !technical }) {
+                Text(stringResource(if (technical) R.string.stable_site_hide_technical else R.string.stable_site_show_technical),
+                    color = Accent, fontFamily = FontFamily.Monospace, fontSize = 9.sp)
+            }
+            if (technical) {
                 val na = stringResource(R.string.profile_history_not_available)
-                line(stringResource(R.string.stable_site_view_state_at_episode, e.featureStateAtEpisode ?: na), Body)
-                line(stringResource(R.string.stable_site_view_episode_evidence, e.motionState ?: na, e.reason ?: na), Body)
+                line((e.previousIdentity ?: na) + "  →  " + e.candidateIdentity, Body)
+                line(e.siteKey ?: stringResource(R.string.stable_site_view_no_site), Dim)
+                line(stringResource(R.string.stable_site_view_episode_period, formatMs(e.lastSeenMs) ?: "-",
+                    formatMs(e.closedMs) ?: stringResource(R.string.stable_site_view_episode_open)), Dim)
+                line("shadow_recorded=${if (e.shadowRecorded) 1 else 0} · feature_state=${e.featureStateAtEpisode ?: "-"} · " +
+                    "motion_state=${e.motionState ?: "-"} · reason=${e.reason ?: "-"}", Dim)
                 line(stringResource(R.string.stable_site_view_episode_flags, yesNo(e.knownAtSite), yesNo(e.globallyKnown), yesNo(e.seenAsNeighbour),
                     e.servingDays?.toString() ?: na, e.neighbourDays?.toString() ?: na, yesNo(e.corroborated)), Dim)
             }
@@ -409,6 +467,7 @@ fun RouteDetailPanel(
     var groups by remember(routeKey) { mutableStateOf<List<RouteSiteGroup>?>(null) }
     var failed by remember(routeKey) { mutableStateOf(false) }
     var attempt by remember(routeKey) { mutableIntStateOf(0) }
+    var technical by remember(routeKey) { mutableStateOf(false) }
     // Una lista paginada por sitio (null = sin sitio asociado), creada al conocer los grupos.
     val lists = remember(routeKey) { mutableMapOf<String?, PagedList<StableSiteEpisode>>() }
     fun listFor(site: String?) = lists.getOrPut(site) { PagedList { it.episodeId } }
@@ -438,10 +497,19 @@ fun RouteDetailPanel(
         item { BackRow(R.string.stable_site_view_back_topology, onBack) }
         item {
             Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                Text(stringResource(R.string.handover_route), color = Dim, fontFamily = FontFamily.Monospace, fontSize = 8.sp)
-                line(stringResource(R.string.route_detail_identities, route.fromIdentity, route.toIdentity), Color.White, 10)
-                line(stringResource(R.string.route_detail_counts, route.observations, route.trustedObservations, statusText, route.tripCount), Body)
+                Text(stringResource(R.string.stable_site_route_simple, route.observations), color = Color.White, fontFamily = FontFamily.Monospace,
+                    fontWeight = FontWeight.Bold, fontSize = 11.sp)
                 line(stringResource(R.string.route_detail_last_seen, formatMs(route.lastSeenMs) ?: "-"), Dim)
+                AnalysisOnly()
+                TextButton(onClick = { technical = !technical }) {
+                    Text(stringResource(if (technical) R.string.stable_site_hide_technical else R.string.stable_site_show_technical),
+                        color = Accent, fontFamily = FontFamily.Monospace, fontSize = 10.sp)
+                }
+                if (technical) {
+                    Text(stringResource(R.string.handover_route), color = Dim, fontFamily = FontFamily.Monospace, fontSize = 8.sp)
+                    line(stringResource(R.string.route_detail_identities, route.fromIdentity, route.toIdentity), Color.White)
+                    line(stringResource(R.string.route_detail_counts, route.observations, route.trustedObservations, statusText, route.tripCount), Body)
+                }
                 HorizontalDivider(color = Color(0xFF222222))
                 Text(stringResource(R.string.stable_site_route_title), color = Color.White, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Bold, fontSize = 9.sp)
                 line(stringResource(R.string.stable_site_route_note), Dim)
@@ -475,6 +543,52 @@ fun RouteDetailPanel(
 
 /** Clave guardada abreviada para la lista; el detalle muestra la clave completa. */
 private fun shortKey(key: String) = if (key.length > 18) key.take(10) + "…" + key.takeLast(6) else key
+
+private fun simpleStateLabel(s: StableSitePresentation.SimpleState): Int = when (s) {
+    StableSitePresentation.SimpleState.LEARNING_PLACE -> R.string.stable_site_simple_learning
+    StableSitePresentation.SimpleState.REFERENCE_PREPARING -> R.string.stable_site_simple_preparing
+    StableSitePresentation.SimpleState.REFERENCE_READY -> R.string.stable_site_simple_ready
+    StableSitePresentation.SimpleState.NOT_ENOUGH_DATA -> R.string.stable_site_simple_not_enough
+}
+
+private fun simpleStateNote(s: StableSitePresentation.SimpleState): Int = when (s) {
+    StableSitePresentation.SimpleState.LEARNING_PLACE -> R.string.stable_site_simple_learning_note
+    StableSitePresentation.SimpleState.REFERENCE_PREPARING -> R.string.stable_site_simple_preparing_note
+    StableSitePresentation.SimpleState.REFERENCE_READY -> R.string.stable_site_simple_ready_note
+    StableSitePresentation.SimpleState.NOT_ENOUGH_DATA -> R.string.stable_site_simple_not_enough_note
+}
+
+private fun missingLabel(m: StableSitePresentation.Missing): Int = when (m) {
+    StableSitePresentation.Missing.SERVING_DAYS -> R.string.stable_site_missing_serving_days
+    StableSitePresentation.Missing.STATIC_DAYS -> R.string.stable_site_missing_static_days
+    StableSitePresentation.Missing.SERVING_OBSERVATIONS -> R.string.stable_site_missing_serving_observations
+    StableSitePresentation.Missing.NEIGHBOUR_DAYS -> R.string.stable_site_missing_neighbour_days
+    StableSitePresentation.Missing.NO_NEIGHBOUR_DATA -> R.string.stable_site_missing_no_neighbour_data
+    StableSitePresentation.Missing.NOTHING -> R.string.stable_site_missing_nothing
+    StableSitePresentation.Missing.UNKNOWN -> R.string.stable_site_missing_unknown
+}
+
+private fun requirementLabel(k: StableSitePresentation.Requirement.Kind): Int = when (k) {
+    StableSitePresentation.Requirement.Kind.SERVING_DAYS -> R.string.stable_site_requirement_serving_days
+    StableSitePresentation.Requirement.Kind.STATIC_DAYS -> R.string.stable_site_requirement_static_days
+    StableSitePresentation.Requirement.Kind.NEIGHBOUR_DAYS -> R.string.stable_site_requirement_neighbour_days
+    StableSitePresentation.Requirement.Kind.SERVING_OBSERVATIONS -> R.string.stable_site_requirement_serving_observations
+}
+
+private fun episodeReasonLabel(r: StableSitePresentation.EpisodeReason): Int = when (r) {
+    StableSitePresentation.EpisodeReason.NEW_CELL_WHILE_STILL_AT_REFERENCE -> R.string.stable_site_reason_new_cell
+    StableSitePresentation.EpisodeReason.NOT_ENOUGH_CONTEXT -> R.string.stable_site_reason_not_enough_context
+    StableSitePresentation.EpisodeReason.HOLD_APPLIED -> R.string.stable_site_reason_hold
+    StableSitePresentation.EpisodeReason.NO_RELIABLE_LOCATION -> R.string.stable_site_reason_no_location
+    StableSitePresentation.EpisodeReason.NO_SITE_DATA -> R.string.stable_site_reason_no_site_data
+    StableSitePresentation.EpisodeReason.UNKNOWN -> R.string.stable_site_no_info
+}
+
+private fun motionLabel(m: StableSitePresentation.Motion): Int = when (m) {
+    StableSitePresentation.Motion.STILL -> R.string.stable_site_motion_still
+    StableSitePresentation.Motion.MOVING -> R.string.stable_site_motion_moving
+    StableSitePresentation.Motion.UNKNOWN -> R.string.stable_site_no_info
+}
 
 private fun stateLabel(s: StableSiteFeatureState): Int = when (s) {
     StableSiteFeatureState.UNAVAILABLE -> R.string.stable_site_state_unavailable
