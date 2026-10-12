@@ -125,6 +125,11 @@ object LocalProfileStore {
             if (c.moveToFirst() && !c.isNull(0)) c.getLong(0) else null
         }
 
+    /** Reiniciar el perfil (todo, o un contexto). Las evaluaciones ya hechas se conservan. */
+    fun reset(db: SQLiteDatabase, contextKey: String? = null) {
+        if (contextKey == null) db.delete(P, null, null) else db.delete(P, "context_key=?", arrayOf(contextKey))
+    }
+
     /** Retención: referencias sin evidencia nueva en [cutoffMs] o antes. */
     fun pruneProfiles(db: SQLiteDatabase, cutoffMs: Long): Int =
         db.delete(P, "COALESCE(last_evidence_ms, updated_at_ms) < ?", arrayOf(cutoffMs.toString()))

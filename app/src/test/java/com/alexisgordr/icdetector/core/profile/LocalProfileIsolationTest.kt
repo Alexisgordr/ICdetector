@@ -62,4 +62,19 @@ class LocalProfileIsolationTest {
         assertTrue(controller.contains("val restored = prefs.getBoolean(PREF_HISTORY_RESTORED, false)"))
         assertTrue(controller.contains("if (!restored) {"))
     }
+
+    /**
+     * Toda función de [com.alexisgordr.icdetector.storage.LocalProfileStore] que se llama desde el
+     * código existe. Una edición de la revisión técnica borró `reset()` sin que lo detectara ninguna
+     * prueba JVM (CellDbHelper y Ajustes solo compilan con Android).
+     */
+    @Test fun `every LocalProfileStore call in the app has its function`() {
+        val store = source("storage/LocalProfileStore.kt")
+        val declared = Regex("""fun (\w+)\(""").findAll(store).map { it.groupValues[1] }.toSet()
+        val called = root.walkTopDown().filter { it.isFile && it.extension == "kt" }
+            .flatMap { f -> Regex("""LocalProfileStore\.(\w+)\(""").findAll(f.readText()).map { it.groupValues[1] to f.name } }
+            .toList()
+        assertTrue(called.any { it.first == "reset" })
+        called.forEach { (fn, file) -> assertTrue("$file llama a LocalProfileStore.$fn, que no existe", fn in declared) }
+    }
 }
