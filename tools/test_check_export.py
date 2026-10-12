@@ -7,7 +7,7 @@ import sys
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from check_export import (
     LTE_EARFCN_RANGES, bands_outside_table, calendar_period_stats, dataset_cut_summary, evaluation_coverage, gps_accuracy_issues,
-    instant_issues, location_mode_summary, profile_summary, EXPECTED_COLUMNS_V30_PROFILE, radio_context_summary, row_instant, version_key,
+    instant_issues, location_mode_summary, profile_summary, profile_row_issue, EXPECTED_COLUMNS_V30_PROFILE, PROFILE_ABSTAIN_REASONS, radio_context_summary, row_instant, version_key,
     ta_consistency_issues, ta_unit_diagnostic
 )
 
@@ -232,6 +232,41 @@ class LteBandTableTest(unittest.TestCase):
         self.assertEqual((1, 1, 1), (levels["NONE"], levels["HIGH"], levels["ABSTAIN"]))
         self.assertEqual(3, modes["SHADOW"])
         self.assertEqual((2, 3), (missing, invalid))
+
+    def test_profile_rows_with_impossible_values_are_flagged(self):
+        good = {"ProfileMode": "SHADOW", "ProfileLevel": "HIGH", "ProfileScore": "4.20", "ProfileCoverage": "1/2",
+                "ProfileAbstainReason": "", "ProfileAlgorithm": "2", "ProfileLearned": "1", "ProfileHoldout": "0"}
+        self.assertIsNone(profile_row_issue(good))
+        abstain = dict(good, ProfileLevel="ABSTAIN", ProfileScore="", ProfileCoverage="0/2",
+                       ProfileAbstainReason="PROFILE_IMMATURE")
+        self.assertIsNone(profile_row_issue(abstain))
+        # Redondeo: 1.996 se exporta como 2.00 con nivel NONE, y 3.996 como 4.00 con MODERATE.
+        self.assertIsNone(profile_row_issue(dict(good, ProfileLevel="NONE", ProfileScore="2.00")))
+        self.assertIsNone(profile_row_issue(dict(good, ProfileLevel="MODERATE", ProfileScore="4.00")))
+        bad = [
+            dict(good, ProfileScore="not-a-number"), dict(good, ProfileScore="NaN"), dict(good, ProfileScore="-10"),
+            dict(good, ProfileScore="inf"), dict(good, ProfileScore="1.20"), dict(good, ProfileLevel="LOW", ProfileScore="3.50"),
+            dict(good, ProfileCoverage="5/2"), dict(good, ProfileCoverage="0/2"), dict(good, ProfileCoverage="x"),
+            dict(good, ProfileCoverage="1/0"), dict(abstain, ProfileCoverage="1/2"),
+            dict(good, ProfileAlgorithm="-1"), dict(good, ProfileAlgorithm="0"),
+            dict(good, ProfileLearned="1", ProfileHoldout="1"), dict(good, ProfileLearned="yes"),
+            dict(abstain, ProfileAbstainReason="BECAUSE"),
+        ]
+        for row in bad:
+            self.assertIsNotNone(profile_row_issue(row), row)
+        _, _, _, invalid = profile_summary(bad)
+        self.assertEqual(len(bad), invalid)
+
+    def test_abstain_reasons_match_the_app(self):
+        kotlin = (Path(__file__).resolve().parent.parent /
+                  "app/src/main/java/com/alexisgordr/icdetector/core/profile/LocalProfileModel.kt").read_text(encoding="utf-8")
+        body = kotlin.split("enum class AbstainReason {")[1].split("}")[0]
+        body = re.sub(r"/\*\*.*?\*/", "", body, flags=re.S)
+        names = [n.strip() for n in body.split(",") if n.strip()]
+        self.assertEqual(list(PROFILE_ABSTAIN_REASONS), names)
+
+    def test_old_exports_without_the_extra_profile_columns_are_not_rejected(self):
+        self.assertIsNone(profile_row_issue({"ProfileMode": "SHADOW", "ProfileLevel": "LOW", "ProfileScore": "2.5"}))
 
     def test_profile_columns_match_the_app_and_come_last(self):
         kotlin = (Path(__file__).resolve().parent.parent /

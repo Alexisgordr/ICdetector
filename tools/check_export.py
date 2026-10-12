@@ -326,9 +326,68 @@ def location_mode_summary(rows):
     return modes, unknown, invalid
 
 
+PROFILE_ABSTAIN_REASONS = (
+    "INCOMPLETE_CONTEXT", "NO_PROFILE", "PROFILE_IMMATURE", "PROFILE_STALE", "INCOMPATIBLE_DEVICE",
+    "INCOMPATIBLE_RADIO", "INCOMPATIBLE_ALGORITHM", "NO_COMPATIBLE_METRIC",
+)
+# Cortes de nivel (LocalProfileScorer): NONE < 2 <= LOW < 3 <= MODERATE < 4 <= HIGH. La puntuación se
+# exporta con 2 decimales, así que se admite medio centésimo de margen en cada corte.
+PROFILE_LEVEL_RANGES = {"NONE": (0.0, 2.0), "LOW": (2.0, 3.0), "MODERATE": (3.0, 4.0), "HIGH": (4.0, math.inf)}
+ROUNDING = 0.005
+
+
+def profile_row_issue(r):
+    """Primer problema de una fila evaluada por el perfil local, o None. Solo comprueba las columnas
+    presentes, para no rechazar exports anteriores que no las tengan."""
+    level = (r.get("ProfileLevel") or "").strip()
+    mode = (r.get("ProfileMode") or "").strip()
+    reason = (r.get("ProfileAbstainReason") or "").strip()
+    score = (r.get("ProfileScore") or "").strip()
+    if level not in PROFILE_LEVELS:
+        return "nivel desconocido"
+    if mode not in PROFILE_MODES:
+        return "modo desconocido"
+    if level == "ABSTAIN":
+        if not reason or score:
+            return "ABSTAIN sin motivo o con puntuación"
+        if reason not in PROFILE_ABSTAIN_REASONS:
+            return "motivo de abstención desconocido"
+    else:
+        if reason or not score:
+            return "nivel con motivo de abstención o sin puntuación"
+        try:
+            value = float(score)
+        except ValueError:
+            return "puntuación no numérica"
+        if not math.isfinite(value) or value < 0:
+            return "puntuación no finita o negativa"
+        low, high = PROFILE_LEVEL_RANGES[level]
+        if value < low - ROUNDING or value >= high + ROUNDING:
+            return "puntuación incoherente con el nivel"
+    if "ProfileCoverage" in r:
+        parts = (r.get("ProfileCoverage") or "").strip().split("/")
+        if len(parts) != 2 or not all(p.isdigit() for p in parts):
+            return "cobertura no es a/b"
+        evaluated, total = int(parts[0]), int(parts[1])
+        if total < 1 or evaluated > total:
+            return "cobertura imposible"
+        if (level == "ABSTAIN") != (evaluated == 0):
+            return "cobertura incoherente con el nivel"
+    if "ProfileAlgorithm" in r:
+        algorithm = (r.get("ProfileAlgorithm") or "").strip()
+        if not algorithm.isdigit() or int(algorithm) < 1:
+            return "versión de algoritmo no válida"
+    flags = [(r.get(c) or "").strip() for c in ("ProfileLearned", "ProfileHoldout") if c in r]
+    if any(f not in ("0", "1") for f in flags):
+        return "ProfileLearned/ProfileHoldout no son 0 o 1"
+    if flags == ["1", "1"]:
+        return "aprendida y reservada a la vez"
+    return None
+
+
 def profile_summary(rows):
-    """Evaluaciones del perfil local: por nivel, por modo, sin evaluar y filas incoherentes (un nivel
-    desconocido, ABSTAIN sin motivo o con puntuación, o un nivel con motivo de abstención)."""
+    """Evaluaciones del perfil local: por nivel, por modo, sin evaluar y filas incoherentes (ver
+    [profile_row_issue])."""
     levels, modes = Counter(), Counter()
     missing = invalid = 0
     for r in rows:
@@ -336,16 +395,11 @@ def profile_summary(rows):
         if not level:
             missing += 1
             continue
-        mode = (r.get("ProfileMode") or "").strip()
-        reason = (r.get("ProfileAbstainReason") or "").strip()
-        score = (r.get("ProfileScore") or "").strip()
-        bad = level not in PROFILE_LEVELS or mode not in PROFILE_MODES
-        bad = bad or (level == "ABSTAIN" and (not reason or score)) or (level != "ABSTAIN" and (reason or not score))
-        if bad:
+        if profile_row_issue(r):
             invalid += 1
             continue
         levels[level] += 1
-        modes[mode] += 1
+        modes[(r.get("ProfileMode") or "").strip()] += 1
     return levels, modes, missing, invalid
 
 
@@ -705,8 +759,9 @@ def main(path):
         for level in PROFILE_LEVELS:
             print(f"  {level}: {levels.get(level, 0)} filas")
         print(f"  sin evaluar: {missing} filas; por modo: " + ", ".join(f"{m} {modes.get(m, 0)}" for m in PROFILE_MODES))
-        check("ProfileLevel/Mode/Score/AbstainReason coherentes", invalid == 0,
-              f"{invalid} filas incoherentes" if invalid else "")
+        issues = Counter(i for i in (profile_row_issue(r) for r in rows if (r.get("ProfileLevel") or "").strip()) if i)
+        check("Columnas Profile* coherentes", invalid == 0,
+              f"{invalid} filas incoherentes: " + "; ".join(f"{k} ({n})" for k, n in issues.most_common()) if invalid else "")
 
     if "Bands" in columns:
         with_bands, outside, declared = bands_outside_table(rows)
