@@ -300,21 +300,30 @@ never used as labels.
 **Protections.** Missing, impossible or older-than-30-days values are not learned. At most one
 sample per minute (repeated and out-of-order readings are ignored) and 48 per day, so a long session
 weighs no more than a day. Once a reference has 20 samples, a value more than 4 spreads away is
-**quarantined** (counted, not learned). The mean can move by at most one noise floor per day. A
-strange burst therefore cannot redefine normal in a day; a slow, sustained change over many days is
-only slowed, not prevented.
+**quarantined** (counted once, not learned; repeating the same reading does not count again). A
+value that is far but below the quarantine threshold enters the reference clipped to 2.5 spreads.
+The mean can move, and the spread can grow, by at most one noise floor per day. A strange burst
+therefore cannot redefine normal in a day, nor make the reference permissive; a slow, sustained
+change over many days is only slowed, not prevented. The cost: a cell that really is noisier takes
+several days to show its full spread. Readings dated more than 5 minutes in the future are refused;
+a reference stored with future times (a clock that was ahead) is rebuilt instead of blocking
+learning.
 
 **Maturity.** A reference is *mature* with 30 samples on 3 different days and recent evidence; with
-no evidence for 30 days it becomes *stale*. **Maturity is not validation**: a mature profile says the
+no evidence for 30 days it becomes *stale*. A stale reference is not revived by one new reading: it
+starts again in learning, as a new generation, and needs 30 samples on 3 days again. **Maturity is
+not validation**: a mature profile says the
 phone has seen enough of that cell, not that the method has been shown to find anything.
 
 **Shadow mode (always on).** After each history row is saved, the profile first evaluates it with
-the previous reference and then learns from it. About 1 row in 10 (chosen from the row id, the same
-on every phone) is only evaluated, never learned, to keep an honest evaluation set. The first time,
-the profile learns from the last 30 days of history that have an exact instant, and keeps the most
-recent 20% for evaluation only. It never learns from a history restored from a backup. Nothing it
+the previous reference and then learns from it. About 1 observation in 10 (chosen from the cell and
+the instant of the reading, the same on every phone) is only evaluated, never learned, to keep an
+honest evaluation set; every row of that reading (periodic, handover or confirmed alarm) shares the
+decision. The first time, the profile learns from the last 30 days of history that have an exact
+instant, and keeps the most recent 20% for evaluation only (rows of the same instant stay together). It never learns from a history restored from a backup. Nothing it
 does reaches the score, temporal confirmation, alerts, Local Cell Trust, Stable-Site or forensic
-cases; if it fails, the row is still saved unchanged.
+cases; if it fails, the row is still saved unchanged. Failures are counted and the latest is shown in
+Settings as diagnosis of the experimental feature, never as a network alert.
 
 **Levels.** The deviation is `|value − mean| / spread` (spread never below the noise floor); the
 level uses the largest one: below 2 `NONE`, below 3 `LOW`, below 4 `MODERATE`, otherwise `HIGH`.
@@ -324,12 +333,18 @@ there is no reference, it is immature or stale, it was learned on another phone 
 algorithm version, or no metric is available.
 
 **Experimental option.** **Settings → Local profile (experimental)** is off by default. Turning it on
-only shows the latest evaluation and how many references are mature, marked *EXPERIMENTAL — not an
-engine decision*. It cannot add, silence or lower an alert, or skip the `1/3 → 3/3` confirmation;
+only shows the latest evaluation (when and in which cell) and how many references are usable now —
+mature by the current clock and learned on this phone — marked *EXPERIMENTAL — not an engine
+decision*. It refreshes every 30 seconds while visible, and says when the evaluation shown was made
+before the last reset. It cannot add, silence or lower an alert, or skip the `1/3 → 3/3` confirmation;
 turning it off is always possible and immediate. Every change of the option, every reset and the
 first activation are logged with time and app version, and every evaluation stores the mode it ran
 in (`SHADOW` or `EXPERIMENTAL_DISPLAY`). **RESET LOCAL PROFILE** deletes only what was learned;
-history, alerts and past evaluations are kept.
+history, alerts and past evaluations are kept. Each reference has a **generation**, new after a
+reset, after going stale or after an algorithm change, so evaluations of two different references
+are never confused even when their revision numbers repeat. The option itself is not saved in
+backups: a restored installation starts with it off. **Delete history** clears the profile and its
+evaluations but keeps the log of mode changes, so it remains known when the option was active.
 
 **Before giving it a larger role.** Showing extra alerts, or anything stronger, would need evidence
 the app cannot produce by itself: deviations measured on the held-out rows across several phones,
@@ -343,11 +358,13 @@ restoring a backup on a different model, they stay inactive (`INCOMPATIBLE_DEVIC
 not learned into them; use **RESET LOCAL PROFILE** so the profile learns again on the new phone.
 Restoring on the same model keeps them in use, but they are as old as the backup.
 
-**Keeping the database vs comparing results.** Schema 22 only adds tables; existing data is kept and
-no reinstall is needed. Rows recorded before the profile existed have empty profile columns
+**Keeping the database vs comparing results.** Schemas 22 and 23 only add tables and columns; existing
+data is kept and no reinstall is needed. Rows recorded before the profile existed have empty profile columns
 (unknown). A different algorithm version is a methodological cut: its references abstain until
 relearned, and its evaluations should not be compared with older ones without separating them by
-`ProfileAlgorithm`.
+`ProfileAlgorithm`. Algorithm 2 replaced algorithm 1 after a technical review (bounded spread,
+holdout per observation, revalidation after going stale, future readings refused): references of
+version 1 are relearned automatically on this phone.
 
 ---
 
@@ -774,8 +791,9 @@ ProfileAlgorithm, ProfileRevision, ProfileEvidence, ProfileLearned, ProfileHoldo
   `FailedHeuristics`. `ProfileMode` is `SHADOW` or `EXPERIMENTAL_DISPLAY`; `ProfileLevel` is `NONE`,
   `LOW`, `MODERATE`, `HIGH` or `ABSTAIN` (then `ProfileAbstainReason` says why and `ProfileScore` is
   empty); `ProfileScore` is the largest deviation, uncalibrated and not a probability;
-  `ProfileCoverage` is metrics evaluated / available; `ProfileRevision` is the version of each
-  reference used; `ProfileEvidence` shows value, mean, spread and deviation per metric;
+  `ProfileCoverage` is metrics evaluated / available; `ProfileRevision` is the generation and version of
+  each reference used (`SIGNAL_DBM@g1790000000000:42`); `ProfileEvidence` shows value, mean, spread
+  and deviation per metric with three decimals, enough to recompute the deviation;
   `ProfileLearned` = 1 if the row was then learned; `ProfileHoldout` = 1 if it was kept for
   evaluation only. For an honest estimate of how the profile behaves, analyse the `ProfileHoldout`
   rows separately. Separate rows by `ProfileAlgorithm` before comparing.

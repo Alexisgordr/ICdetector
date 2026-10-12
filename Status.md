@@ -9,7 +9,7 @@ The current state of the project in one page. What changed in each release is in
 | | Version | Version code | DB schema | Where |
 |---|---|---|---|---|
 | **Stable release** | v2.10.10 | 38 | 19 | GitHub Releases · used by the field campaign |
-| **Development** | 3.0.0-beta4 | 39 | 22 | Branch `ICdetection-v3.0.0-beta` · draft PR #34 · source only, no APK published |
+| **Development** | 3.0.0-beta4 | 39 | 23 | Branch `ICdetection-v3.0.0-beta` · draft PR #34 · source only, no APK published |
 | **Campaign baseline** | v2.10.5 | 33 | 19 | Day 1 of the field dataset ([IMPORTANT.md](IMPORTANT.md)) |
 
 - **App identity:** `com.alexisgordr.icdetector`, *ICdetection*, for stable releases and betas
@@ -42,8 +42,8 @@ mode stored per row (schema 21); the main-screen GPS
 indicator uses the same validated position as the analysis; backup and restore from Settings
 (validated, journaled and safe against interruptions; v2.10.x backups refused), a first-start
 question that blocks collection until answered, and no app data in Android's backup or
-phone-to-phone transfer; a local statistical profile in shadow mode (schema 22, additive) with an
-experimental, display-only option in Settings, off by default.
+phone-to-phone transfer; a local statistical profile in shadow mode (schemas 22–23, additive; algorithm 2
+after a technical review) with an experimental, display-only option in Settings, off by default.
 
 ## Dataset cuts in 3.0
 
@@ -86,7 +86,7 @@ be told apart.
 Run on every push to the beta branch through draft PR #34:
 
 - JVM unit tests (`testDebugUnitTest`), Android lint and the release build.
-- Instrumented storage and migration tests on an emulator (schemas 15–19 → 20, 20 → 21 and 21 → 22).
+- Instrumented storage and migration tests on an emulator (schemas 15–19 → 20, 20 → 21, 21 → 22 and 22 → 23).
 - `tools/check_export.py` regression tests, SQL affinity and query-plan checks, `when` exhaustiveness.
 
 ## Before the 3.0 release

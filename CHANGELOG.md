@@ -9,7 +9,7 @@ Version numbers follow the app's `versionName`; the Android `versionCode` is giv
 Available as source on the `ICdetection-v3.0.0-beta` branch; no APK is published. A short-lived
 GitHub pre-release of an earlier build was withdrawn.
 
-### Local profile (shadow mode, experimental) — schema 22
+### Local profile (shadow mode, experimental) — schemas 22 and 23
 
 A local statistical profile, complementary to H1–H16. **Not a dataset cut for any rule:** scores,
 confirmation, alerts, current learning and forensic decisions are unchanged; the profile only adds
@@ -36,6 +36,18 @@ its own tables and CSV columns.
   restoring on another phone model).
 - **Known limitations.** Not an IMSI-catcher detector; no resistance to evasion; a transmitter present
   while learning becomes normal; slow multi-day drift is only slowed; not validated.
+- **Technical review of 637761d — algorithm 2, schema 23 (additive).** Fixed: a unit test that did
+  not compile (F01); the spread could grow from 3 to 22 dB in one day and turn a HIGH reading into
+  NONE — residuals are now clipped and the spread grows at most one noise floor a day (F02); one
+  reading saved as several rows could be learned through one row and evaluated as holdout through
+  another — the holdout is now decided per observation (F03); revisions repeated after a reset — each
+  reference has a generation, exported as `SIGNAL_DBM@<generation>:<revision>`, with evidence to three
+  decimals (F04); one sample revived a stale reference as mature — it now relearns as a new generation
+  (F05); readings dated in the future were learned and blocked later ones — refused beyond 5 minutes,
+  and future-dated references are rebuilt (F06); `check_export.py` now rejects impossible `Profile*`
+  values (F07); the Settings card refreshes every 30 s and counts only references usable now (F08);
+  a repeated quarantined reading is counted once (F09); profile failures are counted and shown as
+  diagnosis instead of being dropped (F10). References of algorithm 1 are relearned automatically.
 
 ### Phase 4 — Maintenance backlog and documentation
 

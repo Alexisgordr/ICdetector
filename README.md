@@ -374,7 +374,7 @@ Local Cell Trust, temporal confidence, alerts or forensic decisions.
 
 ## 🧪 Local profile (shadow mode, experimental)
 
-A local statistical profile, complementary to H1–H16 (3.0, schema 22). For each cell and radio
+A local statistical profile, complementary to H1–H16 (3.0, schemas 22–23, algorithm 2). For each cell and radio
 technology it learns how the serving level (`DBM`) and quality (`RSRQ`) usually look **on this
 phone**, and records for every saved row how far the observation deviates. It is **not** an
 IMSI-catcher detector, does not resist evasion and its levels are **not calibrated probabilities**.
@@ -382,14 +382,16 @@ IMSI-catcher detector, does not resist evasion and its levels are **not calibrat
 - **Learned vs fixed:** only the per-cell mean and spread are learned; metrics, noise floors,
   protections, maturity and level cut-offs are fixed and identical on every phone. The detector's
   own score and alerts are never used as labels.
-- **Protected learning:** invalid, old, repeated and out-of-order readings are ignored; at most 48
-  samples a day; outliers are quarantined; the mean moves at most one noise floor per day. A slow,
-  sustained change over many days is slowed, not prevented.
-- **Shadow mode, always:** evaluated before it learns, about 1 row in 10 held out for evaluation
-  only, results in their own table and appended `Profile*` CSV columns. It cannot change scores,
+- **Protected learning:** invalid, old, future, repeated and out-of-order readings are ignored; at
+  most 48 samples a day; outliers are quarantined; residuals are clipped and both the mean and the
+  spread move at most one noise floor per day. A slow, sustained change over many days is slowed,
+  not prevented.
+- **Shadow mode, always:** evaluated before it learns, about 1 observation in 10 held out for
+  evaluation only, results in their own table and appended `Profile*` CSV columns. It cannot change scores,
   confirmation, alerts, current learning or forensic decisions.
 - **Maturity is not validation:** a reference needs 30 samples over 3 days to be used; until then,
-  or when stale or learned on another phone model, it abstains.
+  or when stale or learned on another phone model, it abstains. A stale reference relearns as a new
+  generation instead of reviving.
 - **Experimental option** (Settings, off by default): only shows the latest evaluation, labelled as
   not an engine decision. It cannot add, silence or lower alerts. Changes are logged.
 
