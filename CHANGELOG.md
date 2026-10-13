@@ -11,6 +11,12 @@ GitHub pre-release of an earlier build was withdrawn.
 
 ### Audit fixes
 
+- **Forensic `cells.csv`: `role=SECONDARY` (export format change).** An entry stored as
+  `SECONDARY_SERVING` is now exported with `role=SECONDARY` instead of `NEIGHBOR`; `SERVING` and
+  `NEIGHBOR` are unchanged. Based only on the stored `connection_state`; samples without it (before
+  v2.10.4) or in `NONE`/`UNKNOWN` state keep `NEIGHBOR`. Identities and other columns are unchanged.
+  No validator in `tools/` reads `role`; scripts filtering `role == "NEIGHBOR"` will no longer see
+  secondary carriers there.
 - **Stable-Site export privacy.** README, MANUAL and a new confirmation dialog before the export
   (EN/ES) state that site keys are deterministic, unsalted hashes of a ~500 m grid that can be linked
   to an approximate location by a candidate search, and that identities, times and counts can reveal

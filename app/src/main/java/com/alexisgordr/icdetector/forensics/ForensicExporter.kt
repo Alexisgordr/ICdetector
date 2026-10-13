@@ -82,7 +82,7 @@ object ForensicExporter {
                 ).joinToString(",") { csv(it) })
                 row("SERVING", j.getJSONObject("serving"))
                 val n = j.optJSONArray("neighbors") ?: JSONArray()
-                for (i in 0 until n.length()) row("NEIGHBOR", n.getJSONObject(i))
+                for (i in 0 until n.length()) n.getJSONObject(i).let { c -> row(neighborRole(c), c) }
             }
         }.toByteArray()
 
@@ -119,6 +119,16 @@ object ForensicExporter {
         }.toByteArray()
         return LinkedHashMap(files)
     }
+
+    /**
+     * 3.0 — Papel de una entrada de la lista `neighbors` de la muestra (todas las celdas no
+     * registradas, secundarias incluidas). Solo por el `connectionState` GUARDADO en la muestra, sin
+     * deducir nada de la tecnología: `SECONDARY_SERVING` es una portadora secundaria de la conexión
+     * (por ejemplo la pata NR de NSA), no una vecina. Sin estado guardado (muestras anteriores a
+     * v2.10.4) o con `NONE`/`UNKNOWN`, se conserva `NEIGHBOR` como antes; ahí no se puede distinguir.
+     */
+    internal fun neighborRole(cell: JSONObject): String =
+        if (cell.optString("connectionState") == "SECONDARY_SERVING") "SECONDARY" else "NEIGHBOR"
 
     private fun nullable(o: JSONObject, key: String): Any = if (!o.has(key) || o.isNull(key)) "" else o.get(key)
     // 3.0 — Escapado y protección de texto compartidos (ver CsvText). Siempre entre comillas, como antes.

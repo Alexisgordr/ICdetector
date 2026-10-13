@@ -822,11 +822,18 @@ ICD-YYYY-MM-DD-NNNN.zip
 |---|---|
 | `case.json` | Case metadata, state, timing, summary and device/app context |
 | `timeline.csv` | Chronological measurements and analysis state |
-| `cells.csv` | Serving and neighbour-cell observations |
+| `cells.csv` | Serving, secondary-carrier and neighbour-cell observations (`role`) |
 | `heuristics.csv` | Rule state and explanation by cycle |
 | `capabilities.json` | Data the device could and could not provide |
 | `terminal.log` | Relevant diagnostic log entries |
 | `SHA256SUMS.txt` | SHA-256 digests to detect later modification |
+
+In `cells.csv`, `role` is `SERVING` (the analysed cell), `SECONDARY` (an entry the modem declared
+`SECONDARY_SERVING` in the stored sample, such as the NR leg of 5G NSA) or `NEIGHBOR` (any other
+non-serving entry). `SECONDARY` is new in 3.0 and comes only from the stored `connection_state`,
+never from the technology. Samples recorded before v2.10.4 have no connection state, and entries in
+`NONE` or `UNKNOWN` state cannot be told apart, so they stay `NEIGHBOR` as before. Identities and all
+other columns are unchanged.
 
 To verify an extracted package on Linux or WSL:
 
