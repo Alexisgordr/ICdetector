@@ -51,8 +51,11 @@ object RestoreStartup {
         return result
     }
 
-    /** Repetible: escribe los mismos valores si se vuelve a llamar tras un corte. */
-    private fun applySettings(context: Context, file: File) {
+    /**
+     * Repetible: escribe los mismos valores si se vuelve a llamar tras un corte. `internal` solo para
+     * que las pruebas instrumentadas de restauración usen exactamente este paso.
+     */
+    internal fun applySettings(context: Context, file: File) {
         val values = BackupSettings.fromJson(runCatching { file.readText() }.getOrNull())
         val editor = prefs(context).edit()
         values.forEach { (key, value) ->

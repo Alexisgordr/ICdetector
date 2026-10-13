@@ -232,22 +232,34 @@ class BackupRestoreTest {
         damageDatabase: Boolean = false,
         modifyDatabase: ((SQLiteDatabase) -> Unit)? = null,
         change: (BackupManifest) -> BackupManifest
-    ): ByteArray {
-        val work = File(dir, "rewrite").apply { mkdirs() }
-        val contents = BackupArchive.read(ByteArrayInputStream(backup), work, "db")
-        val db = contents.database!!
-        var manifest = contents.manifest!!
-        if (modifyDatabase != null) {
-            SQLiteDatabase.openDatabase(db.path, null, SQLiteDatabase.OPEN_READWRITE).use(modifyDatabase)
-            listOf("-journal", "-wal", "-shm").forEach { File(db.path + it).delete() }
-            val sha = java.security.MessageDigest.getInstance("SHA-256").digest(db.readBytes())
-                .joinToString("") { "%02x".format(it) }
-            manifest = manifest.copy(databaseSha256 = sha, databaseBytes = db.length())
+    ): ByteArray = rewrite(context, dir, backup, damageDatabase, modifyDatabase, change)
+
+    companion object {
+        /** Reescribe una copia: base modificada (con su SHA recalculado), dañada o índice cambiado. */
+        fun rewrite(
+            context: Context,
+            dir: File,
+            backup: ByteArray,
+            damageDatabase: Boolean = false,
+            modifyDatabase: ((SQLiteDatabase) -> Unit)? = null,
+            change: (BackupManifest) -> BackupManifest
+        ): ByteArray {
+            val work = File(dir, "rewrite").apply { mkdirs() }
+            val contents = BackupArchive.read(ByteArrayInputStream(backup), work, "db")
+            val db = contents.database!!
+            var manifest = contents.manifest!!
+            if (modifyDatabase != null) {
+                SQLiteDatabase.openDatabase(db.path, null, SQLiteDatabase.OPEN_READWRITE).use(modifyDatabase)
+                listOf("-journal", "-wal", "-shm").forEach { File(db.path + it).delete() }
+                val sha = java.security.MessageDigest.getInstance("SHA-256").digest(db.readBytes())
+                    .joinToString("") { "%02x".format(it) }
+                manifest = manifest.copy(databaseSha256 = sha, databaseBytes = db.length())
+            }
+            if (damageDatabase) db.appendBytes(byteArrayOf(1, 2, 3))
+            val out = ByteArrayOutputStream()
+            BackupArchive.write(out, change(manifest), db, contents.settingsJson ?: "{}")
+            work.deleteRecursively()
+            return out.toByteArray()
         }
-        if (damageDatabase) db.appendBytes(byteArrayOf(1, 2, 3))
-        val out = ByteArrayOutputStream()
-        BackupArchive.write(out, change(manifest), db, contents.settingsJson ?: "{}")
-        work.deleteRecursively()
-        return out.toByteArray()
     }
 }

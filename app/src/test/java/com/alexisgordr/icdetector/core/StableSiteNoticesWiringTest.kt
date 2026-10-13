@@ -126,7 +126,7 @@ class StableSiteNoticesWiringTest {
 
     @Test fun `a restore clears the pending episode so restored episodes never notify`() {
         val restore = src("backup/RestoreStartup.kt")
-        val apply = restore.substringAfter("private fun applySettings(").substringBefore("fun prefs(")
+        val apply = restore.substringAfter("internal fun applySettings(").substringBefore("fun prefs(")
         assertTrue(apply.indexOf("editor.remove(com.alexisgordr.icdetector.core.StableSiteNotices.PREF_PENDING_EPISODE)") in 0 until apply.indexOf("editor.commit()"))
     }
 

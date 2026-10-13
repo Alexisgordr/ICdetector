@@ -163,7 +163,7 @@ class MobilityTripClockTest {
         assertNull(com.alexisgordr.icdetector.backup.BackupSettings.fromJson("{\"${MobilityTripAnchor.PREF_KEY}\":\"x\"}")[MobilityTripAnchor.PREF_KEY])
         val main = listOf(java.io.File("src/main/java"), java.io.File("app/src/main/java")).first { it.exists() }
         val restore = main.resolve("com/alexisgordr/icdetector/backup/RestoreStartup.kt").readText()
-        val apply = restore.substringAfter("private fun applySettings(").substringBefore("fun prefs(")
+        val apply = restore.substringAfter("internal fun applySettings(").substringBefore("fun prefs(")
         assertTrue(apply.indexOf("editor.remove(com.alexisgordr.icdetector.core.MobilityTripAnchor.PREF_KEY)") in 0 until apply.indexOf("editor.commit()"))
     }
 }
