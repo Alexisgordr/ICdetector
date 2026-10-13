@@ -21,7 +21,13 @@ data class ObservationContext(
     /** Último estado de servicio conocido en ese instante. */
     val service: ServiceStateSnapshot?,
     /** 3.0 — Modo de ubicación en ese instante ([LocationMode.storedValue]); null = desconocido. */
-    val locationMode: String? = null
+    val locationMode: String? = null,
+    /**
+     * 3.0 (L2) — Identidad de la observación, creada al recibir la lectura y compartida por todas las
+     * filas que se guarden de ella (periódica o de handover y alarma confirmada). No se deduce de los
+     * valores: dos lecturas distintas con la misma señal tienen identidades distintas.
+     */
+    val observationId: String = java.util.UUID.randomUUID().toString()
 )
 
 /** Posición GPS de una observación. [accuracyM] null si el fix no declaraba precisión. */

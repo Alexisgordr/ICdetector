@@ -462,8 +462,12 @@ not want to wait, use **RESET LOCAL PROFILE** (below). None of this reaches the 
 new evidence it becomes *stale* and starts learning again. **Maturity is not validation**: it means
 the phone has seen enough of that cell, not that the method has been shown to detect anything.
 
-**Shadow mode (always on).** Each saved row is first evaluated against the existing reference and
-then learned. About 1 observation in 10 is kept for evaluation only, so held-out results stay honest.
+**Shadow mode (always on).** Each new **observation** is first evaluated against the existing
+reference and then learned. One reading can be saved in several history rows (for example the
+periodic row and a confirmed alarm of the same cycle); all of them carry the same observation
+identity, and the profile evaluates, learns and counts that observation **once**, linked to the
+first row saved. The other rows stay in the history and are shown with that evaluation. The check
+uses what is stored, so it also holds after a restart or a restore. About 1 observation in 10 is kept for evaluation only, so held-out results stay honest.
 On first use, the profile also learns from the last 30 days of history (never from a restored
 backup), holding out the most recent 20%. Nothing reaches the score, confirmation, alerts, trust or
 forensic cases; if the profile fails, the row is saved unchanged and, with the option on, Settings
@@ -498,7 +502,11 @@ after a major change of surroundings.
 `OFF`). References learned on a different phone model stay inactive until you reset the profile;
 on the same model they keep working but are as old as the backup.
 
-**Comparing results.** Schemas 22 and 23 only add tables and columns, so existing data is kept.
+**Comparing results.** Schemas 22, 23 and 24 only add tables, columns and indexes, so existing data
+is kept. Schema 24 adds the observation identity to new history rows and evaluations; rows and
+evaluations stored before it have none and are **not** rewritten: before this change a reading saved
+as two rows could be evaluated twice (the second time against a reference that already contained
+it), so evaluation counts from earlier builds may include such duplicates.
 Older rows have empty profile columns. Each reference carries a *generation* (new after a reset,
 staleness or algorithm change), so evaluations of different references are never confused. Compare
 evaluations only within the same `ProfileAlgorithm`; references from algorithm 1 are relearned

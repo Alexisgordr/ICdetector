@@ -409,6 +409,7 @@
     <string name="profile_history_holdout">Reservada solo para evaluar (no se aprendió).</string>
     <string name="profile_history_learned">Se aprendió después de evaluarla.</string>
     <string name="profile_history_not_learned">No se aprendió (repetida, en cuarentena o no válida).</string>
+    <string name="profile_history_observation_rows">Una sola evaluación para las %1$d filas del historial de esta observación (por ejemplo, la periódica y una alarma confirmada).</string>
     <string name="profile_history_section_values">VALORES Y REFERENCIA USADA</string>
     <string name="profile_metric_dbm">Nivel de señal (dBm)</string>
     <string name="profile_metric_rsrq">Calidad de señal (RSRQ)</string>

@@ -263,6 +263,8 @@ private fun EvaluationDetail(entry: EvaluationEntry, beforeReset: Boolean, onOpe
         entry.learned -> R.string.profile_history_learned
         else -> R.string.profile_history_not_learned
     }))
+    // 3.0 (L2) — Una evaluación para todas las filas de la misma observación.
+    if (entry.observationRows > 1) line(stringResource(R.string.profile_history_observation_rows, entry.observationRows), dim)
     if (beforeReset) line(stringResource(R.string.local_profile_previous), dim)
 
     // Valores y referencia: SOLO lo guardado en la evaluación. Sin evidencia no hay referencia.

@@ -164,6 +164,7 @@ internal fun CellDbHelper.logObservation(row: ObservationRow, appVersion: String
         notEvaluatedHeuristics = cell.heuristicReport.notEvaluatedIds(),
         gpsAccuracyM = fix?.accuracyM,
         appVersion = appVersion,
-        locationMode = row.context.locationMode
+        locationMode = row.context.locationMode,
+        observationId = row.context.observationId
     )
 }

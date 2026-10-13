@@ -29,7 +29,7 @@ class RestoreUnexpectedObjectsTest {
         }
     }
 
-    @Test fun `every supported schema, 20 to 23, has no triggers or views`() {
+    @Test fun `every supported schema, 20 to 24, has no triggers or views`() {
         SchemaV20MigrationTest.V19_TABLES.forEach { exec(it) }
         SchemaV20.STATEMENTS.forEach { exec(it) }
         assertEquals("esquema 20", emptyList<String>(), unexpected())
@@ -39,6 +39,8 @@ class RestoreUnexpectedObjectsTest {
         assertEquals("esquema 22", emptyList<String>(), unexpected())
         SchemaV23.STATEMENTS.forEach { exec(it) }
         assertEquals("esquema 23", emptyList<String>(), unexpected())
+        SchemaV24.STATEMENTS.forEach { exec(it) }
+        assertEquals("esquema 24", emptyList<String>(), unexpected())
     }
 
     @Test fun `sqlite internal objects are not reported`() {

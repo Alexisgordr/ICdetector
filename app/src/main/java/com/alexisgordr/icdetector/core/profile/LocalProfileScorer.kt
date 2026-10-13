@@ -110,7 +110,9 @@ class LocalProfileShadow(private val learner: LocalProfileLearner = LocalProfile
         val dbm: Int?,
         val rsrq: Int?,
         val observedAtMs: Long,
-        val deviceModel: String
+        val deviceModel: String,
+        /** 3.0 (L2) — Identidad de la observación, compartida por todas sus filas; null en filas antiguas. */
+        val observationId: String? = null
     ) {
         val values: Map<ProfileMetric, Int?> get() = mapOf(ProfileMetric.SIGNAL_DBM to dbm, ProfileMetric.SIGNAL_RSRQ to rsrq)
     }
@@ -136,7 +138,8 @@ class LocalProfileShadow(private val learner: LocalProfileLearner = LocalProfile
             historyId = obs.historyId, evaluatedAtMs = nowMs, algorithmVersion = LocalProfile.ALGORITHM_VERSION,
             profileRevision = r.revision, contextKey = obs.context.key, mode = mode, level = r.level, score = r.score,
             metricsEvaluated = r.metricsEvaluated, metricsTotal = r.metricsTotal, evidence = r.evidence,
-            abstainReason = r.abstainReason, learned = learned, holdout = holdout
+            abstainReason = r.abstainReason, learned = learned, holdout = holdout,
+            observationId = obs.observationId
         )
         return Step(record, changed)
     }

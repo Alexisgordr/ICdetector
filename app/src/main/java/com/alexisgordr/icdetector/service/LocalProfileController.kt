@@ -29,7 +29,13 @@ internal class LocalProfileController(
     private val clock: () -> Long = System::currentTimeMillis
 ) {
     private val shadow = LocalProfileShadow(LocalProfileLearner())
+    private val processor = com.alexisgordr.icdetector.core.profile.ProfileObservationProcessor(shadow)
 
+    /**
+     * 3.0 (L2) — Una evaluación por observación: la segunda fila de una misma observación (p. ej. la
+     * de alarma confirmada) no se vuelve a evaluar, aprender ni contar (ver ProfileObservationProcessor).
+     * La comprobación y la escritura van en la misma transacción.
+     */
     fun onRowWritten(row: ObservationRow, historyId: Long) {
         val cell = row.cell
         val obs = LocalProfileShadow.Observation(
@@ -37,16 +43,14 @@ internal class LocalProfileController(
             context = ProfileContext(cell.mcc, cell.mnc, cell.tac, cell.cellId, cell.radioTech),
             dbm = cell.dbm, rsrq = cell.rsrq,
             observedAtMs = row.context.observedAtMs,
-            deviceModel = deviceModel
+            deviceModel = deviceModel,
+            observationId = row.context.observationId
         )
         val db = dbHelper.writableDatabase
         db.beginTransaction()
         try {
-            val current = if (obs.context.isComplete) LocalProfileStore.profiles(db, obs.context.key) else emptyMap()
-            val step = shadow.process(current, obs, mode(), clock())
-            step.changed.forEach { LocalProfileStore.upsert(db, it) }
-            // F10 — Si la evaluación no se guarda, tampoco el aprendizaje: la transacción se deshace.
-            check(LocalProfileStore.insertEvaluation(db, step.record) != -1L) { "profile evaluation not written" }
+            // F10 — Si la evaluación no se guarda, lanza y la transacción se deshace con el aprendizaje.
+            processor.onRow(LocalProfileStore.processorStore(db), obs, mode(), clock())
             db.setTransactionSuccessful()
         } finally {
             db.endTransaction()
@@ -121,7 +125,7 @@ internal class LocalProfileController(
     }
 
     private fun observation(r: ProfileBootstrap.Row) =
-        LocalProfileShadow.Observation(r.historyId, r.context, r.dbm, r.rsrq, r.observedAtMs!!, deviceModel)
+        LocalProfileShadow.Observation(r.historyId, r.context, r.dbm, r.rsrq, r.observedAtMs!!, deviceModel, r.observationId)
 
     companion object {
         const val PREF_BOOTSTRAP_DONE_PREFIX = "local_profile_bootstrap_v"

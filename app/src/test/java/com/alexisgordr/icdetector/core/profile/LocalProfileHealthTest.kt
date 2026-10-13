@@ -27,7 +27,9 @@ class LocalProfileHealthTest {
         assertTrue(service.contains(".onFailure { e -> runCatching { localProfile.recordFailure(\"bootstrap\", e) } }"))
         assertTrue(service.contains("onAfterWriteError = { e -> localProfile.recordFailure(\"evaluation\", e) }"))
         assertTrue(source("storage/LocalProfileStore.kt").contains("check(db.insertWithOnConflict(P, null, v, SQLiteDatabase.CONFLICT_REPLACE) != -1L)"))
-        assertTrue(source("service/LocalProfileController.kt").contains("check(LocalProfileStore.insertEvaluation(db, step.record) != -1L)"))
+        // 3.0 (L2) — La comprobación vive en el procesador, que el controlador ejecuta dentro de su transacción.
+        assertTrue(source("core/profile/ProfileObservationProcessor.kt").contains("check(store.insertEvaluation(step.record) != -1L)"))
+        assertTrue(source("service/LocalProfileController.kt").contains("processor.onRow(LocalProfileStore.processorStore(db), obs, mode(), clock())"))
     }
 
     @Test fun `settings show profile errors as diagnosis, never as an alert`() {

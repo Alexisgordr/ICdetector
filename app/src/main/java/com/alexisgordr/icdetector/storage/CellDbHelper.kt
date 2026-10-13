@@ -71,7 +71,7 @@ class CellDbHelper(
             }
 
         const val DATABASE_NAME = "icdetector_history.db"
-        const val DATABASE_VERSION = SchemaV23.VERSION
+        const val DATABASE_VERSION = SchemaV24.VERSION
         const val TABLE_HISTORY = "history"
         const val COLUMN_ID = "id"
         const val COLUMN_TIMESTAMP = "timestamp"
@@ -129,6 +129,8 @@ class CellDbHelper(
         const val COLUMN_APP_VERSION = SchemaV20.COLUMN_APP_VERSION
         /** 3.0 — Modo de ubicación con el que se observó la fila (esquema 21). */
         const val COLUMN_LOCATION_MODE = SchemaV21.COLUMN_LOCATION_MODE
+        /** 3.0 (L2) — Ver [SchemaV24]. */
+        const val COLUMN_OBSERVATION_ID = "observation_id"
         // v2.10.4 — Contexto de radio (schema 19). Solo recolección: ninguna consulta de
         // detección lee estas columnas. NULL en filas anteriores = "no se recogía", no "no había".
         const val COLUMN_CONN_STATUS = "conn_status"
@@ -351,6 +353,7 @@ class CellDbHelper(
         applySchemaV21(db)
         applySchemaV22(db)
         applySchemaV23(db)
+        applySchemaV24(db)
     }
 
     override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {
@@ -441,6 +444,7 @@ class CellDbHelper(
         if (oldVersion < 21) applySchemaV21(db)
         if (oldVersion < 22) applySchemaV22(db)
         if (oldVersion < 23) applySchemaV23(db)
+        if (oldVersion < 24) applySchemaV24(db)
     }
 
     /**
@@ -469,6 +473,22 @@ class CellDbHelper(
     private fun applySchemaV23(db: SQLiteDatabase) {
         applySchemaV22(db)
         SchemaV23.STATEMENTS.forEach { sql ->
+            try {
+                db.execSQL(sql)
+            } catch (e: android.database.sqlite.SQLiteException) {
+                if (e.message?.contains("duplicate column", ignoreCase = true) != true) throw e
+            }
+        }
+    }
+
+    /**
+     * 3.0 (L2) — Esquema 24 (ver [SchemaV24]): identidad de la observación en `history` y en
+     * `profile_evaluations`. Las tablas se aseguran antes; una columna que ya existe se acepta y
+     * cualquier otro fallo se propaga, como en [applySchemaV23].
+     */
+    private fun applySchemaV24(db: SQLiteDatabase) {
+        applySchemaV23(db)
+        SchemaV24.STATEMENTS.forEach { sql ->
             try {
                 db.execSQL(sql)
             } catch (e: android.database.sqlite.SQLiteException) {
@@ -1598,7 +1618,9 @@ class CellDbHelper(
         /** 3.0 (#30) — Versión de la app que hizo la observación. */
         appVersion: String? = null,
         /** 3.0 — Modo de ubicación con el que se observó (`CONTINUOUS` / `INTELLIGENT` / `ADAPTIVE`). */
-        locationMode: String? = null
+        locationMode: String? = null,
+        /** 3.0 (L2) — Identidad de la observación, igual en todas sus filas (esquema 24). */
+        observationId: String? = null
     ): Long {
         val db = this.writableDatabase
         val values = ContentValues().apply {
@@ -1648,6 +1670,7 @@ class CellDbHelper(
             if (gpsAccuracyM != null && lat != null && lon != null) put(COLUMN_GPS_ACCURACY_M, gpsAccuracyM.toDouble())
             if (appVersion != null) put(COLUMN_APP_VERSION, appVersion)
             if (locationMode != null) put(COLUMN_LOCATION_MODE, locationMode)
+            if (observationId != null) put(COLUMN_OBSERVATION_ID, observationId)
         }
         return db.insert(TABLE_HISTORY, null, values)
     }

@@ -190,5 +190,7 @@ data class ProfileEvaluationRecord(
     /** La observación se usó después para aprender. */
     val learned: Boolean,
     /** Reservada solo para evaluar (nunca se aprende de ella). */
-    val holdout: Boolean
+    val holdout: Boolean,
+    /** 3.0 (L2) — Observación evaluada (todas sus filas la comparten); null en evaluaciones antiguas. */
+    val observationId: String? = null
 )

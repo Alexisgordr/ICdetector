@@ -57,7 +57,10 @@ object ProfileEvaluationQuery {
             "e.context_key, e.mode, e.deviation_level, e.deviation_score, e.metrics_evaluated, e.metrics_total, " +
             "e.evidence, e.abstain_reason, e.learned, e.holdout, h.id AS h_id, h.timestamp, h.observed_at_ms, " +
             "h.mcc, h.mnc, h.tac, h.cid, h.radio, h.dbm, h.rsrq, h.sinr, h.score, h.failed_heuristics, " +
-            "h.not_evaluated_heuristics, h.location_mode, h.app_version " +
+            "h.not_evaluated_heuristics, h.location_mode, h.app_version, " +
+            // 3.0 (L2) — Filas del historial de la misma observación (1 en evaluaciones antiguas).
+            "CASE WHEN e.observation_id IS NULL THEN 1 ELSE " +
+            "(SELECT COUNT(*) FROM history r WHERE r.observation_id = e.observation_id) END AS observation_rows " +
             "FROM profile_evaluations e LEFT JOIN history h ON h.id = e.history_id " +
             "WHERE $where ORDER BY $SORT_KEY DESC, e.id DESC LIMIT ${limit + 1}"
         return sql to args.toTypedArray()
@@ -102,7 +105,9 @@ data class EvaluationEntry(
     val abstainReason: AbstainReason?,
     val learned: Boolean,
     val holdout: Boolean,
-    val observation: HistoricalObservation?
+    val observation: HistoricalObservation?,
+    /** 3.0 (L2) — Filas del historial que guardan esta misma observación (una sola evaluación para todas). */
+    val observationRows: Int = 1
 ) {
     /** Clave de orden: instante de la observación, o el de la evaluación si no se conoce. */
     val sortKeyMs: Long get() = observation?.observedAtMs ?: evaluatedAtMs

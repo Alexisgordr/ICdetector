@@ -211,7 +211,9 @@ class LocalProfileLearner(private val config: Config = Config()) {
  * evaluarlo, nunca para aprender. No se arranca con un historial restaurado de otro teléfono.
  */
 object ProfileBootstrap {
-    data class Row(val historyId: Long, val context: ProfileContext, val dbm: Int?, val rsrq: Int?, val observedAtMs: Long?)
+    /** [observationId] (esquema 24): filas de la misma observación lo comparten; null en filas antiguas. */
+    data class Row(val historyId: Long, val context: ProfileContext, val dbm: Int?, val rsrq: Int?, val observedAtMs: Long?,
+                   val observationId: String? = null)
     data class Plan(val learn: List<Row>, val holdout: List<Row>)
 
     fun plan(rows: List<Row>, nowMs: Long, restoredFromBackup: Boolean, holdoutFraction: Double = 0.2, maxAgeMs: Long = 30L * LocalProfileLearner.DAY_MS): Plan {
@@ -221,12 +223,23 @@ object ProfileBootstrap {
                 it.observedAtMs - nowMs <= LocalProfileLearner.CLOCK_TOLERANCE_MS && it.context.isComplete
         }
             .sortedWith(compareBy<Row> { it.observedAtMs }.thenBy { it.historyId })
+            .let(::onePerObservation)
         val holdoutCount = (usable.size * holdoutFraction).toInt()
         if (holdoutCount == 0) return Plan(usable, emptyList())
         // Corte por instante: filas del mismo instante (una misma observación) nunca quedan a los
         // dos lados; todas van a la reserva (F03).
         val cutoff = usable[usable.size - holdoutCount].observedAtMs!!
         return Plan(usable.filter { it.observedAtMs!! < cutoff }, usable.filter { it.observedAtMs!! >= cutoff })
+    }
+
+    /**
+     * 3.0 (L2) — Una fila por observación (la primera guardada): la observación se aprende o se
+     * evalúa una vez aunque tenga varias filas. Las filas sin identidad (anteriores al esquema 24)
+     * se mantienen una a una, como antes.
+     */
+    fun onePerObservation(rows: List<Row>): List<Row> {
+        val seen = HashSet<String>()
+        return rows.filter { r -> r.observationId == null || seen.add(r.observationId) }
     }
 
     /**

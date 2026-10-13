@@ -27,6 +27,7 @@ class ProfileEvaluationPageTest {
         SchemaV21.STATEMENTS.forEach { exec(it) }
         SchemaV22.STATEMENTS.forEach { exec(it) }
         SchemaV23.STATEMENTS.forEach { exec(it) }
+        SchemaV24.STATEMENTS.forEach { exec(it) }
         val levels = listOf("NONE", "LOW", "ABSTAIN", "HIGH", "NONE", "MODERATE", "NONE")
         levels.forEachIndexed { i, level ->
             val observedAt = if (i == 0) "NULL" else (1_000L * (i + 1)).toString()      // fila 1: anterior a 3.0

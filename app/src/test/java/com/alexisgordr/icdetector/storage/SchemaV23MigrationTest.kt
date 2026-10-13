@@ -47,7 +47,8 @@ class SchemaV23MigrationTest {
             File("src/main/java/com/alexisgordr/icdetector/storage/CellDbHelper.kt"),
             File("app/src/main/java/com/alexisgordr/icdetector/storage/CellDbHelper.kt")
         ).first { it.exists() }.readText()
-        assertTrue(helper.contains("const val DATABASE_VERSION = SchemaV23.VERSION"))
+        // 3.0 (L2) — La versión actual es la 24; la 23 se sigue aplicando al actualizar desde la 22.
+        assertTrue(helper.contains("const val DATABASE_VERSION = SchemaV24.VERSION"))
         assertTrue(helper.contains("if (oldVersion < 23) applySchemaV23(db)"))
         val v23 = helper.substringAfter("private fun applySchemaV23(db: SQLiteDatabase) {").substringBefore("SchemaV23.STATEMENTS")
         assertTrue("la tabla existe antes de alterarla", v23.contains("applySchemaV22(db)"))

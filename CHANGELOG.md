@@ -11,6 +11,19 @@ GitHub pre-release of an earlier build was withdrawn.
 
 ### Audit fixes
 
+- **Local profile: one evaluation per observation (schema 24, interpretation change for profile
+  statistics).** One reading saved as two rows (periodic or handover row and a confirmed alarm of the
+  same cycle) was evaluated by the profile once per row: the second evaluation used a reference that
+  already contained the reading, and both counted in the statistics. Each observation now gets an
+  identity when it is received (`observation_id`, shared by all its rows, never deduced from signal
+  values). Schema 24 adds it to `history` and to `profile_evaluations` with a unique index; the
+  profile checks it in the same transaction as the evaluation and the learning, so an observation is
+  evaluated against the previous reference, learned at most once and counted once, also after a
+  restart or a restore. Reserved observations still never learn; a failed evaluation write rolls back
+  and the next row of the observation evaluates it. Bootstrap uses each observation once and reserves
+  20 % of observations. All rows are kept; the evaluation detail says how many rows share it. Earlier
+  rows and evaluations are not rewritten (no identity, possibly double-counted). Additive migration;
+  backups from schemas 20–23 still restore. History exports unchanged.
 - **Local profile: sustained quarantine documented.** The manual explains that the profile is per
   cell identity, not per place, so a legitimate permanent change can stay quarantined and keep
   showing high deviations; that quarantined readings do not move the last learned evidence; and that
