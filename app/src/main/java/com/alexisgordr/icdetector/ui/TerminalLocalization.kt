@@ -257,6 +257,13 @@ private val replacements = linkedMapOf(
     "familias independientes" to "independent families",
     "todavía no se ha observado un handover evaluable" to "no evaluable handover has been observed yet",
     "faltan dos posiciones GPS contemporáneas" to "two contemporaneous GPS positions are unavailable",
+    // 3.0 (V4) — Configuración de OpenCellID
+    "Configuración de OpenCellID actualizada; las consultas anteriores se descartan." to
+        "OpenCellID settings updated; earlier queries are discarded.",
+    "consulta descartada; la configuración cambió mientras se hacía." to
+        "query discarded; the settings changed while it was running.",
+    "consulta anulada porque cambió la configuración (clave o ruta)." to
+        "query cancelled because the settings changed (key or route).",
     // 3.0 (G4) — HandoverReference.INTERRUPTION_EXPLANATION
     "hubo una interrupción del servicio celular; esta celda es la nueva referencia, no un handover observado." to
         "cellular service was interrupted; this cell is the new reference, not an observed handover.",

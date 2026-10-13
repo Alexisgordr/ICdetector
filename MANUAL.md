@@ -232,6 +232,12 @@ incomplete or outdated. Verification is a label and never changes the score.
 If your threat model requires it, configure the SOCKS5 proxy and a compatible service such as Orbot,
 then check that verification requests still succeed.
 
+The API key and the proxy choice are applied **together** when you save Settings, and each query
+uses one consistent copy of both from start to end. Changing the route (proxy on or off) cancels
+queries still in progress; any change discards the results of queries started with the earlier
+settings, so they never fill the caches or pauses of the new ones. A new query never starts with
+settings that are no longer current.
+
 ### Latency detection (experimental)
 
 Off by default. When you enable it in Settings, and only while traffic leaves over mobile data (not

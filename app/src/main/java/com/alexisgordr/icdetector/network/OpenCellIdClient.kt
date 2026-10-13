@@ -29,19 +29,31 @@ import java.net.Proxy
  */
 object OpenCellIdClient {
 
+    /** Proxy SOCKS de Orbot/Tor. */
+    val TOR_PROXY = Proxy(Proxy.Type.SOCKS, InetSocketAddress("127.0.0.1", 9050))
+
+    /**
+     * 3.0 (V4) — Cliente para una configuración. Con proxy, el proxy es EXPLÍCITO: OkHttp no prueba
+     * otra ruta si no está disponible (sin ProxySelector ni salida directa de reserva); la petición
+     * falla. Sin proxy, `Proxy.NO_PROXY`: tampoco hereda un proxy del sistema por sorpresa.
+     */
+    fun clientFor(config: com.alexisgordr.icdetector.core.VerificationConfig, base: OkHttpClient): OkHttpClient =
+        base.newBuilder().proxy(if (config.proxyEnabled) TOR_PROXY else Proxy.NO_PROXY).build()
+
+    /**
+     * Consulta con una INSTANTÁNEA de la configuración ([config]): clave y ruta de la misma versión
+     * durante toda la consulta. [holder] (si se da) registra la llamada para cancelarla si cambia la
+     * ruta, y comprueba justo antes de conectar que la configuración sigue vigente.
+     */
     fun tryOpenCellIdSyncWithData(
         cell: CellData,
-        openCellIdKey: String,
-        isProxyEnabled: Boolean,
-        client: OkHttpClient
+        config: com.alexisgordr.icdetector.core.VerificationConfig,
+        client: OkHttpClient,
+        holder: com.alexisgordr.icdetector.core.VerificationConfigHolder? = null
     ): VerificationOutcome {
-        val currentClient = if (isProxyEnabled) {
-            client.newBuilder()
-                .proxy(Proxy(Proxy.Type.SOCKS, InetSocketAddress("127.0.0.1", 9050)))
-                .build()
-        } else {
-            client
-        }
+        if (holder != null && !holder.isCurrent(config)) return configChanged()
+        val currentClient = clientFor(config, client)
+        val openCellIdKey = config.apiKey
 
         return try {
             val cleanKey = openCellIdKey.trim()
@@ -58,7 +70,11 @@ object OpenCellIdClient {
                 .addQueryParameter("format", "json")
                 .build()
             val request = Request.Builder().url(url).build()
-            currentClient.newCall(request).execute().use { response ->
+            val call = currentClient.newCall(request)
+            val untrack = holder?.track(config) { call.cancel() } ?: {}
+            try {
+            if (call.isCanceled()) return configChanged()
+            call.execute().use { response ->
                 val body = response.body.string()
                 val json = runCatching { JSONObject(body) }.getOrNull()
 
@@ -110,7 +126,15 @@ object OpenCellIdClient {
                     reason = veredicto.reason
                 )
             }
+            } finally {
+                untrack()
+            }
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
         } catch (_: Exception) {
+            // 3.0 (V4) — Cancelada por un cambio de ruta, o la configuración cambió mientras tanto:
+            // no es un fallo de red de la configuración nueva.
+            if (holder != null && !holder.isCurrent(config)) return configChanged()
             // IOException (red) o JSONException (respuesta malformada): no se sabe.
             VerificationOutcome(
                 status = VerificationStatus.ERROR,
@@ -120,6 +144,13 @@ object OpenCellIdClient {
         }
     }
 }
+
+private fun configChanged() = VerificationOutcome(
+    status = VerificationStatus.ERROR,
+    source = VerificationSource.OPENCELLID,
+    reason = "OpenCellID: consulta anulada porque cambió la configuración (clave o ruta).",
+    failure = VerificationFailure.CONFIG_CHANGED
+)
 
 /**
  * Valor de un campo como texto, sea número o cadena en el JSON, o null si no está.

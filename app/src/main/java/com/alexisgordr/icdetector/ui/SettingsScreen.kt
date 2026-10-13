@@ -334,8 +334,8 @@ fun SettingsPanel(
                         putString(LegacyNetworkAlertMode.PREF_KEY, legacyMode.storedValue)
                         putBoolean(StableSiteNotices.PREF_ENABLED, stableSiteNotices)
                     }
-                    service?.openCellIdKey = cleanToken
-                    service?.isProxyEnabled = proxyEnabled
+                    // 3.0 (V4) — Clave y proxy, juntos.
+                    service?.updateVerificationSettings(cleanToken, proxyEnabled)
                     service?.isLatencyDetectionEnabled = latencyDetectionEnabled
                     service?.locationMode = selectedMode
                     service?.legacyNetworkAlertMode = legacyMode

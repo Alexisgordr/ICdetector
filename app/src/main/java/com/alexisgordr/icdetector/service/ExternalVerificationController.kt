@@ -21,8 +21,8 @@ internal class ExternalVerificationController(
     private val db: CellDbHelper,
     private val client: OkHttpClient,
     private val coordinateValidator: ApiCoordinateValidator,
-    private val apiKey: () -> String,
-    private val proxyEnabled: () -> Boolean,
+    /** 3.0 (V4) — Clave y ruta juntas, publicadas de forma atómica; cada consulta usa una instantánea. */
+    private val config: com.alexisgordr.icdetector.core.VerificationConfigHolder,
     private val currentLocation: () -> Location?,
     private val cache: ConcurrentHashMap<String, VerificationStatus>,
     private val errorTimes: ConcurrentHashMap<String, Long>,
@@ -53,8 +53,9 @@ internal class ExternalVerificationController(
         if (!mayAttempt(key, cache[key])) return
         val generation = historyEpoch.current()
 
-        val token = apiKey().trim()
-        if (token.isBlank() || token.startsWith("pk.YOUR")) {
+        // 3.0 (V4) — Una instantánea para toda la consulta: la clave y la ruta de la misma versión.
+        val snapshot = config.current()
+        if (!snapshot.hasCredentials) {
             // v2.10.10 — La re-comprobación de un VERIFIED en memoria es local (base de datos y su
             // TTL) y no necesita OpenCellID: antes, sin credenciales, se salía aquí y la etiqueta
             // podía seguir caducada indefinidamente.
@@ -80,7 +81,9 @@ internal class ExternalVerificationController(
 
         scope.launch(Dispatchers.IO) {
             try {
-                verifyNow(cell, key, token, generation)
+                verifyNow(cell, key, snapshot, generation)
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
             } catch (e: Exception) {
                 // Sin esto la antena se quedaba en PENDING en la caché y mayAttempt() no la
                 // volvía a intentar hasta reiniciar el servicio. Como ERROR se reintenta sola.
@@ -115,7 +118,7 @@ internal class ExternalVerificationController(
         }
     }
 
-    private fun verifyNow(cell: CellData, key: String, token: String, generation: Long) {
+    private fun verifyNow(cell: CellData, key: String, snapshot: com.alexisgordr.icdetector.core.VerificationConfig, generation: Long) {
         val loc = currentLocation()
         val stored = db.getKnownStatus(
             cell.mnc, cell.tac, cell.cellId, cell.mcc,
@@ -133,7 +136,14 @@ internal class ExternalVerificationController(
         }
 
         log("Verificando antena MCC ${cell.mcc} · MNC ${cell.mnc} · TAC ${cell.tac} · CID ${cell.cellId}")
-        val result = OpenCellIdClient.tryOpenCellIdSyncWithData(cell, token, proxyEnabled(), client)
+        val result = OpenCellIdClient.tryOpenCellIdSyncWithData(cell, snapshot, client, config)
+        // 3.0 (V4) — Si la configuración cambió durante la consulta, su resultado no se aplica: ni
+        // cachés, ni tiempos de reintento, ni pantalla. La celda queda libre para la nueva.
+        if (result.failure == com.alexisgordr.icdetector.network.VerificationFailure.CONFIG_CHANGED || !config.isCurrent(snapshot)) {
+            ifCurrent(generation) { if (cache[key] == VerificationStatus.PENDING) cache.remove(key) }
+            log("OpenCellID: consulta descartada; la configuración cambió mientras se hacía.")
+            return
+        }
         log("OpenCellID → ${result.status.name}")
         result.reason?.let(log)
 

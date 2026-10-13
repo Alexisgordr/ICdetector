@@ -294,8 +294,24 @@ class MiniICService : Service() {
     private var cacheTimestamp = 0L
     private val CELL_CACHE_TTL = 60_000L
 
+    /**
+     * 3.0 (V4) — Clave de OpenCellID y proxy, juntos e inmutables (ver VerificationConfigHolder). Se
+     * cambian a la vez con [updateVerificationSettings]; un cambio de ruta cancela lo que esté en curso.
+     */
+    private val verificationConfig = com.alexisgordr.icdetector.core.VerificationConfigHolder()
+
+    /** Proxy de OpenCellID activo (lectura de la configuración vigente). */
+    val isProxyEnabled: Boolean get() = verificationConfig.current().proxyEnabled
+
+    /** 3.0 (V4) — Ajustes guardados: clave y ruta se publican juntas. */
+    fun updateVerificationSettings(apiKey: String, proxyEnabled: Boolean) {
+        val change = verificationConfig.update(apiKey, proxyEnabled)
+        if (change != com.alexisgordr.icdetector.core.VerificationConfigHolder.Change.NONE) {
+            appendLog("[API]", "Configuración de OpenCellID actualizada; las consultas anteriores se descartan.")
+        }
+    }
+
     // Latency anomaly detection
-    var openCellIdKey: String = ""
     private val client = OkHttpClient.Builder()
         .connectTimeout(10, TimeUnit.SECONDS)
         .readTimeout(10, TimeUnit.SECONDS)
@@ -331,7 +347,6 @@ class MiniICService : Service() {
     /** 3.0 — Avisos de red 2G/3G (Ajustes). Predeterminado: solo notificación. */
     @Volatile var legacyNetworkAlertMode: com.alexisgordr.icdetector.core.LegacyNetworkAlertMode =
         com.alexisgordr.icdetector.core.LegacyNetworkAlertMode.DEFAULT
-    var isProxyEnabled = false
     var isLatencyDetectionEnabled: Boolean = false
     /** 3.0 — Modo de ubicación (Ajustes). Continuo por defecto; adaptativo ahorra batería. */
     @Volatile var locationMode: com.alexisgordr.icdetector.core.LocationMode =
@@ -513,8 +528,7 @@ class MiniICService : Service() {
             db = dbHelper,
             client = client,
             coordinateValidator = apiCoordinateValidator,
-            apiKey = { openCellIdKey },
-            proxyEnabled = { isProxyEnabled },
+            config = verificationConfig,
             currentLocation = { getCurrentLocation() },
             cache = verificationCache,
             errorTimes = lastVerificationErrorTime,
@@ -614,7 +628,6 @@ class MiniICService : Service() {
             },
             writeFailureText = { getString(R.string.write_failure_notification) }
         )
-        openCellIdKey = (prefs.getString("opencellid_key", "") ?: "").trim()
         // WiGLE ya no participa en la verificación. Elimina secretos y estado heredados.
         prefs.edit()
             .remove("wigle_api_name")
@@ -627,7 +640,8 @@ class MiniICService : Service() {
         // deja escrito, para que una interrupción sea un hecho observable y no una sorpresa en
         // diciembre al ver un agujero en el CSV.
         collectionHealthController.restore()?.let { appendLog("[SYS]", it) }
-        isProxyEnabled = prefs.getBoolean("proxy_enabled", false)
+        // 3.0 (V4) — Clave y proxy se cargan juntos.
+        verificationConfig.update((prefs.getString("opencellid_key", "") ?: "").trim(), prefs.getBoolean("proxy_enabled", false))
         isLatencyDetectionEnabled = prefs.getBoolean("latency_detection_enabled", false)
         locationMode = com.alexisgordr.icdetector.core.LocationMode.fromStored(
             prefs.getString(com.alexisgordr.icdetector.core.LocationMode.PREF_KEY, null)

@@ -7,7 +7,11 @@ import org.json.JSONObject
 enum class VerificationSource { OPENCELLID }
 
 /** Motivo técnico que puede requerir una política de reintento específica. */
-enum class VerificationFailure { NONE, RATE_LIMITED }
+enum class VerificationFailure {
+    NONE, RATE_LIMITED,
+    /** 3.0 (V4) — La configuración cambió durante la consulta: el resultado no se aplica. */
+    CONFIG_CHANGED
+}
 
 /**
  * Resultado de consultar a una base pública.

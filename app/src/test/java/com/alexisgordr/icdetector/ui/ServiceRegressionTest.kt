@@ -115,7 +115,7 @@ class ServiceRegressionTest {
 
     @Test fun `verified label is rechecked locally without api credentials`() {
         val verification = source("service/ExternalVerificationController.kt")
-        val noToken = verification.substringAfter("if (token.isBlank() || token.startsWith(\"pk.YOUR\")) {")
+        val noToken = verification.substringAfter("if (!snapshot.hasCredentials) {")
             .substringBefore("return\n")
         assertTrue(noToken.contains("recheckVerifiedLocally(cell, key, generation)"))
         assertFalse(verification.substringAfter("private fun recheckVerifiedLocally").substringBefore("private fun verifyNow")
