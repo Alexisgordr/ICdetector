@@ -157,6 +157,11 @@ object ThreatAnalyzer {
         rfFingerprint: CellRfFingerprint? = null,
         transitionCoherence: TransitionCoherenceResult = TransitionCoherenceResult(),
         isolatedCellConfirmed: Boolean = true,
+        /**
+         * 3.0 — Edad del fix de [currentLocation] (reloj monotónico). Su VELOCIDAD solo decide H10 si
+         * el fix es en vivo (PingPongRule.liveSpeed); null = edad desconocida, no se usa la velocidad.
+         */
+        locationFixAgeMs: Long? = null,
         nowMs: Long = System.currentTimeMillis()
     ): CellData {
         val reasons = mutableListOf<String>()
@@ -364,7 +369,7 @@ object ThreatAnalyzer {
         // cambios de los últimos 10 s (antes, una ráfaga antigua seguía fallando durante horas
         // con el móvil quieto) y, sin velocidad GPS, H10 queda N/A en vez de suponer 0 km/h.
         // La regla no cambia. Corte de dataset solo para H10.
-        val speedMps = currentLocation?.takeIf { it.hasSpeed() }?.speed
+        val speedMps = PingPongRule.liveSpeed(currentLocation?.takeIf { it.hasSpeed() }?.speed, locationFixAgeMs)
         when (PingPongRule.evaluate(cellChangeHistory.map { it.second }, nowMs, speedMps)) {
             PingPongRule.Outcome.PASSED, PingPongRule.Outcome.PASSED_MOVING -> Unit
             PingPongRule.Outcome.NOT_EVALUATED -> ePingPong = false

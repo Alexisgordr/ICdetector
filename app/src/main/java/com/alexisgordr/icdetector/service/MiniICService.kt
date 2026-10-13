@@ -1554,7 +1554,10 @@ class MiniICService : Service() {
                             reputation = reputation,
                             rfFingerprint = rfFingerprint,
                             transitionCoherence = transitionCoherence,
-                            isolatedCellConfirmed = isolatedCellConfirmed
+                            isolatedCellConfirmed = isolatedCellConfirmed,
+                            // 3.0 — La velocidad de H10 solo vale con un fix en vivo; sin marca monotónica, vieja.
+                            locationFixAgeMs = currentLocation?.elapsedRealtimeNanos?.takeIf { it > 0 }
+                                ?.let { SystemClock.elapsedRealtime() - it / 1_000_000L }
                         ).copy(distanceToTowerMeters = towerDistance)
                         com.alexisgordr.icdetector.core.LocalCellTrustEngine.apply(
                             analyzed,

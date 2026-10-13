@@ -2,7 +2,9 @@ package com.alexisgordr.icdetector.core
 
 import com.alexisgordr.icdetector.core.PingPongRule.Outcome
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Test
+import java.io.File
 
 /** v2.10.9 — H10 sin Android: tiempos de los cambios de celda y velocidad (nullable). */
 class PingPongRuleTest {
@@ -43,5 +45,34 @@ class PingPongRuleTest {
     @Test fun `future timestamps do not count`() {
         val skewed = listOf(now + 1_000L, now + 2_000L, now + 3_000L)
         assertEquals(Outcome.PASSED, PingPongRule.evaluate(skewed, now, speedMps = 0f))
+    }
+
+    // ── 3.0 — La velocidad caduca antes que la posición ─────────────────────────────────────
+
+    @Test fun `an old speed does not decide H10`() {
+        val now = 100_000L
+        val burst = listOf(now - 9_000, now - 5_000, now - 1_000)
+        // Parado hace 90 s (semáforo) y tres handovers ahora (tren arrancando): antes FAILED.
+        assertEquals(PingPongRule.Outcome.NOT_EVALUATED, PingPongRule.evaluate(burst, now, PingPongRule.liveSpeed(0f, 90_000)))
+        // Con un fix en vivo, la velocidad sí decide.
+        assertEquals(PingPongRule.Outcome.FAILED, PingPongRule.evaluate(burst, now, PingPongRule.liveSpeed(0f, 2_000)))
+        assertEquals(PingPongRule.Outcome.PASSED_MOVING, PingPongRule.evaluate(burst, now, PingPongRule.liveSpeed(20f, 2_000)))
+    }
+
+    @Test fun `live speed needs a known, non-negative age under the live limit`() {
+        assertEquals(3f, PingPongRule.liveSpeed(3f, 0)!!, 0f)
+        assertEquals(3f, PingPongRule.liveSpeed(3f, GpsFixAge.LIVE_MAX_AGE_MS - 1)!!, 0f)
+        listOf(null, -1L, GpsFixAge.LIVE_MAX_AGE_MS, 120_000L).forEach { age ->
+            assertEquals("$age", null, PingPongRule.liveSpeed(3f, age))
+        }
+        assertEquals(null, PingPongRule.liveSpeed(null, 0))
+    }
+
+    @Test fun `the analyzer and the service pass the fix age`() {
+        fun src(p: String) = listOf("app/src/main/java/com/alexisgordr/icdetector/$p", "src/main/java/com/alexisgordr/icdetector/$p")
+            .map(::File).first { it.exists() }.readText()
+        assertTrue(src("core/ThreatAnalyzer.kt").contains("PingPongRule.liveSpeed(currentLocation?.takeIf { it.hasSpeed() }?.speed, locationFixAgeMs)"))
+        val service = src("service/MiniICService.kt")
+        assertTrue(service.contains("locationFixAgeMs = currentLocation?.elapsedRealtimeNanos?.takeIf { it > 0 }"))
     }
 }

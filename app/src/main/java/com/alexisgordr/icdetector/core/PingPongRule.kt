@@ -24,6 +24,17 @@ internal object PingPongRule {
     }
 
     /**
+     * 3.0 — La velocidad caduca mucho antes que la posición. La ubicación acepta fixes de hasta
+     * 120 s, pero una velocidad de hace 90 s (parado en un semáforo) no dice nada de los tres
+     * handovers de ahora (un tren que arranca). Solo cuenta si su fix es «en vivo»
+     * ([GpsFixAge.LIVE_MAX_AGE_MS], reloj monotónico); si no, null y H10 queda N/A, igual que sin GPS.
+     *
+     * @param fixAgeMs edad del fix de la velocidad; null si no se sabe (cuenta como vieja).
+     */
+    fun liveSpeed(speedMps: Float?, fixAgeMs: Long?): Float? =
+        speedMps?.takeIf { fixAgeMs != null && fixAgeMs in 0 until GpsFixAge.LIVE_MAX_AGE_MS }
+
+    /**
      * @param changeTimesMs momento de cada cambio de celda guardado.
      * @param speedMps velocidad GPS, o null si no hay posición o no trae velocidad.
      */
