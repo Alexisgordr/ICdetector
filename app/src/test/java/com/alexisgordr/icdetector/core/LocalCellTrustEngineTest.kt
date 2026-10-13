@@ -161,6 +161,24 @@ class LocalCellTrustEngineTest {
         assertEquals("sin duplicar", out.suspiciousReason, again.suspiciousReason)
     }
 
+    // 3.0 — Una lectura con Cell ID ilegible no hereda la evidencia (en caché) de la celda anterior.
+
+    @Test fun `a reading without a readable Cell ID never uses the previous cell's evidence`() {
+        val unreadable = cell(pci = 311, arfcn = 6400).copy(cellId = "N/A")
+        val out = LocalCellTrustEngine.apply(unreadable, mature())
+        assertTrue(out.localCellTrust.contradictions.isEmpty())
+        assertNotEquals(LocalCellTrustState.CHANGED, out.localCellTrust.state)
+        assertNull("sin marcador de reconfiguración", out.suspiciousReason)
+        assertEquals(0, out.localCellTrust.confidencePercent)
+        val blank = LocalCellTrustEngine.apply(unreadable.copy(cellId = " "), mature())
+        assertTrue(blank.localCellTrust.contradictions.isEmpty())
+    }
+
+    @Test fun `a readable Cell ID still uses its evidence`() {
+        val out = LocalCellTrustEngine.apply(cell(pci = 311), mature())
+        assertEquals(LocalCellTrustState.CHANGED, out.localCellTrust.state)
+    }
+
     @Test fun `append helper never empties or duplicates`() {
         assertNull(StoredReasons.append(null, null))
         assertNull(StoredReasons.append(" ", ""))

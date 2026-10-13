@@ -34,6 +34,17 @@ object LocalCellTrustEngine {
     }
 
     fun apply(cell: CellData, evidence: LocalCellTrustEvidence, stableSite: StableSiteDecision = StableSiteDecision()): CellData {
+        // 3.0 — Without a readable Cell ID nobody knows which cell this reading is. The service
+        // only refreshes its cached evidence for a readable one, so here it would be the previous
+        // cell's: a mature profile could then accuse another cell of a PCI/ARFCN change. Such a
+        // reading is judged with no local evidence at all.
+        val usable = if (ServingIdentityChange.hasReadableCellId(ServingIdentityChange.of(cell))) {
+            evidence
+        } else LocalCellTrustEvidence()
+        return evaluate(cell, usable, stableSite)
+    }
+
+    private fun evaluate(cell: CellData, evidence: LocalCellTrustEvidence, stableSite: StableSiteDecision): CellData {
         val confidence = confidence(cell, evidence)
         val rfIdentityReady = when (cell.radioTech) {
             RadioTech.LTE -> evidence.knownPcisByArfcn.isNotEmpty()

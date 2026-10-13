@@ -11,6 +11,11 @@ GitHub pre-release of an earlier build was withdrawn.
 
 ### Audit fixes
 
+- **A reading with an unreadable Cell ID no longer gets the previous cell's local trust.** The service
+  only refreshes its cached trust evidence for a readable Cell ID, and the engine did not check it, so
+  a "N/A" reading of another cell could be judged against a mature foreign profile and marked as a
+  PCI/ARFCN change. It never reached an alarm (H11 and H16 are N/A without a Cell ID) and such rows
+  feed nothing; the engine now judges them with no local evidence.
 - **An unverified Stable-Site marker no longer replaces the reasons of other rules.** With the site
   protection enforced, the stored reason became `[sitio-sin-verificar] …` alone, so a power jump (H2)
   seen in the same cycle lost its reason in the history. The marker is now added after the existing
