@@ -1,62 +1,49 @@
 package com.alexisgordr.icdetector.service
 
 import android.location.Location
+import android.os.SystemClock
+import com.alexisgordr.icdetector.core.ApiCoordinateCheck
+import com.alexisgordr.icdetector.core.CoordinateReference
 import com.alexisgordr.icdetector.models.CellData
 import com.alexisgordr.icdetector.storage.CellDbHelper
 
-/** Validates antenna coordinates returned by OpenCellID without owning verification policy. */
+/**
+ * Validates antenna coordinates returned by OpenCellID without owning verification policy.
+ * 3.0 (V3) — The decision lives in [ApiCoordinateCheck]; the fallback age is monotonic.
+ */
 internal class ApiCoordinateValidator(
     private val db: CellDbHelper,
     private val currentLocation: () -> Location?,
     private val lastAcceptedLocation: () -> Location?,
-    private val log: (String) -> Unit
+    private val log: (String) -> Unit,
+    private val elapsedNowMs: () -> Long = SystemClock::elapsedRealtime
 ) {
-    fun isValid(lat: Double, lon: Double, cell: CellData? = null): Boolean {
-        if (lat == 0.0 && lon == 0.0) return false
-        if (lat !in -90.0..90.0 || lon !in -180.0..180.0) return false
-
-        if (cell != null) {
+    fun check(lat: Double, lon: Double, cell: CellData? = null): ApiCoordinateCheck.Outcome {
+        val shared = cell?.let {
             try {
-                val sharedBy = db.countDistinctAreasWithApiCoordinate(
-                    lat, lon, cell.mcc, cell.mnc, cell.tac
-                )
-                if (sharedBy >= SENTINEL_MIN_AREAS) {
-                    log("Coordenada rechazada: ya consta en $sharedBy áreas de seguimiento sin relación entre sí (valor por defecto de la API, no identifica ninguna antena).")
-                    return false
-                }
+                db.countDistinctAreasWithApiCoordinate(lat, lon, it.mcc, it.mnc, it.tac)
             } catch (_: Exception) {
-                // A database failure must not bypass the independent distance barriers.
+                null // A database failure must not bypass the independent distance barriers.
             }
         }
-
-        val live = currentLocation()
-        val reference: Location?
-        val maxDistanceMeters: Float
-        if (live != null) {
-            reference = live
-            maxDistanceMeters = LIVE_MAX_DISTANCE_METERS
-        } else {
-            val fallback = lastAcceptedLocation()
-            val age = if (fallback != null) System.currentTimeMillis() - fallback.time else Long.MAX_VALUE
-            reference = if (fallback != null && age in 0..REFERENCE_MAX_AGE_MS) fallback else null
-            maxDistanceMeters = FALLBACK_MAX_DISTANCE_METERS
+        val outcome = ApiCoordinateCheck.check(
+            lat, lon, shared,
+            live = currentLocation()?.toReference(),
+            recent = lastAcceptedLocation()?.toReference(),
+            nowElapsedMs = elapsedNowMs()
+        )
+        when (outcome.reason) {
+            ApiCoordinateCheck.Reason.SHARED_ACROSS_AREAS ->
+                log("Coordenada rechazada: ya consta en $shared áreas de seguimiento sin relación entre sí (valor por defecto de la API, no identifica ninguna antena).")
+            ApiCoordinateCheck.Reason.TOO_FAR_FROM_LIVE, ApiCoordinateCheck.Reason.TOO_FAR_FROM_RECENT ->
+                log("Coordenada rechazada: a ${((outcome.distanceM ?: 0.0) / 1000).toInt()} km de tu posición de referencia.")
+            else -> Unit
         }
-
-        if (reference == null) return true
-
-        val distance = FloatArray(1)
-        Location.distanceBetween(reference.latitude, reference.longitude, lat, lon, distance)
-        if (distance[0] > maxDistanceMeters) {
-            log("Coordenada rechazada: a ${(distance[0] / 1000f).toInt()} km de tu posición de referencia.")
-            return false
-        }
-        return true
+        return outcome
     }
 
-    private companion object {
-        const val SENTINEL_MIN_AREAS = 3
-        const val REFERENCE_MAX_AGE_MS = 6L * 60L * 60L * 1000L
-        const val LIVE_MAX_DISTANCE_METERS = 50_000f
-        const val FALLBACK_MAX_DISTANCE_METERS = 500_000f
-    }
+    /** elapsedRealtimeNanos 0 = sin tiempo monotónico (p. ej. restaurada de otro arranque). */
+    private fun Location.toReference() = CoordinateReference(
+        latitude, longitude, (elapsedRealtimeNanos / 1_000_000L).takeIf { it > 0L }
+    )
 }

@@ -11,6 +11,14 @@ GitHub pre-release of an earlier build was withdrawn.
 
 ### Audit fixes
 
+- **OpenCellID coordinates: monotonic reference age.** The 6-hour limit on the fallback position used
+  civil time, so changing the phone clock could make an old position look recent or discard a fresh
+  one. The age now comes from `Location.elapsedRealtimeNanos` against `SystemClock.elapsedRealtime`;
+  a saved reference keeps its monotonic time only when the boot count matches (otherwise, or with a
+  missing, zero or future time, it is not used). Range, (0,0), the three-area sentinel and the
+  50 km / 500 km limits are unchanged. Without a usable reference the record is not auto-rejected,
+  but the outcome is now "found without distance check" and the terminal says so; it does not claim
+  legitimacy and the status stays VERIFIED. Pure decision in `ApiCoordinateCheck` with tests.
 - **OpenCellID: retries by failure class, with one global pause.** An ERROR was retried every minute
   per cell, even with an invalid key or the daily quota exhausted, and moving to another cell queried
   again. Failures are now classified by HTTP status and the documented API code (2 invalid key,

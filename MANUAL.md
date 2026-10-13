@@ -666,6 +666,12 @@ or Android did not provide the field.
 
 - **VERIFIED** (shown as *REGISTERED*): a configured external source returned a compatible record.
   Context, not proof of legitimacy: a cloned identity can also be registered. The label is re-checked after 30 days.
+  Before accepting the record, its coordinates must be in range, not (0,0), not shared by three or
+  more unrelated areas, and within 50 km of a live GPS fix or 500 km of your last accepted position
+  if that position is at most 6 h old. That age is measured with the monotonic clock, so changing
+  the phone's time does not affect it; a position saved before a reboot cannot prove its age and is
+  not used. Without a usable position the record is still accepted, but the terminal says it was
+  found **without a distance check** — it does not confirm that the cell is where the database says.
 - **PENDING:** verification has not finished or is waiting for required data.
 - **NOT FOUND:** no matching public record. Common for new, indoor, rural or unmapped cells.
 - **ERROR / REJECTED:** credentials, connectivity, proxy configuration or the external service

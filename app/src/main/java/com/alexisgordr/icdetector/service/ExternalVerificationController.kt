@@ -3,6 +3,7 @@ package com.alexisgordr.icdetector.service
 import com.alexisgordr.icdetector.core.HistoryEpoch
 
 import android.location.Location
+import com.alexisgordr.icdetector.core.ApiCoordinateCheck
 import com.alexisgordr.icdetector.core.ExternalFailure
 import com.alexisgordr.icdetector.core.MobilityClock
 import com.alexisgordr.icdetector.core.VerificationDecision
@@ -182,7 +183,10 @@ internal class ExternalVerificationController(
             val lat = data.optDouble("lat", Double.NaN)
             val lon = data.optDouble("lon", Double.NaN)
             val hasCoordinates = !lat.isNaN() && !lon.isNaN()
-            if (hasCoordinates && coordinateValidator.isValid(lat, lon, cell)) {
+            val check = if (hasCoordinates) coordinateValidator.check(lat, lon, cell) else null
+            if (check != null && check.result != ApiCoordinateCheck.Result.REJECTED) {
+                // 3.0 (V3) — Sin posición propia fiable no se rechaza, pero se dice que no hubo contraste.
+                if (check.result == ApiCoordinateCheck.Result.FOUND_WITHOUT_DISTANCE_CHECK) log(ApiCoordinateCheck.LOG_NO_DISTANCE_CHECK)
                 completeVerified(cell, key, lat, lon, generation)
                 return
             }

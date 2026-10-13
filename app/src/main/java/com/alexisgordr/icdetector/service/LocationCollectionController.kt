@@ -334,24 +334,38 @@ internal class LocationCollectionController(
         lastAcceptedLocation = Location(candidate)
         if (candidate.time > lastPersistedLocationTime) {
             lastPersistedLocationTime = candidate.time
+            // 3.0 (V3) — Con su tiempo monotónico y el número de arranque: tras reiniciar el
+            // servicio en el mismo arranque la edad sigue siendo demostrable; tras otro, no.
             prefs.edit().putString(KEY_LAST_LOCATION,
-                "${candidate.latitude},${candidate.longitude},${candidate.time}").apply()
+                "${candidate.latitude},${candidate.longitude},${candidate.time}," +
+                    "${candidate.elapsedRealtimeNanos / 1_000_000L},${bootCount().orEmpty()}").apply()
         }
         true
     }
 
+    private fun bootCount(): String? = try {
+        android.provider.Settings.Global.getInt(context.contentResolver, android.provider.Settings.Global.BOOT_COUNT, -1)
+            .takeIf { it >= 0 }?.toString()
+    } catch (_: Exception) { null }
+
     private fun restoreReference() {
         try {
             val parts = prefs.getString(KEY_LAST_LOCATION, null)?.split(",") ?: return
-            if (parts.size != 3) return
+            if (parts.size != 3 && parts.size != 5) return
             val lat = parts[0].toDoubleOrNull() ?: return
             val lon = parts[1].toDoubleOrNull() ?: return
             val time = parts[2].toLongOrNull() ?: return
             if (System.currentTimeMillis() - time !in 0..REFERENCE_MAX_AGE_MS) return
+            // 3.0 (V3) — El tiempo monotónico guardado solo vale en el MISMO arranque; si no consta
+            // (formato anterior) o es de otro, la referencia queda sin él y no sirve para validar
+            // coordenadas de OpenCellID (ApiCoordinateCheck se abstiene).
+            val elapsed = parts.getOrNull(3)?.toLongOrNull()
+                ?.takeIf { it > 0 && it <= SystemClock.elapsedRealtime() && parts[4].isNotEmpty() && parts[4] == bootCount() }
             lastAcceptedLocation = Location(LocationManager.GPS_PROVIDER).apply {
                 latitude = lat
                 longitude = lon
                 this.time = time
+                if (elapsed != null) elapsedRealtimeNanos = elapsed * 1_000_000L
             }
             lastPersistedLocationTime = time
         } catch (_: Exception) {}

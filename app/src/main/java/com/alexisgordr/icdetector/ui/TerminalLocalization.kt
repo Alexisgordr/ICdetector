@@ -257,6 +257,9 @@ private val replacements = linkedMapOf(
     "familias independientes" to "independent families",
     "todavía no se ha observado un handover evaluable" to "no evaluable handover has been observed yet",
     "faltan dos posiciones GPS contemporáneas" to "two contemporaneous GPS positions are unavailable",
+    // 3.0 (V3) — ApiCoordinateCheck.LOG_NO_DISTANCE_CHECK
+    "registro encontrado sin contraste de distancia (no hay posición propia reciente y fiable). No confirma que la antena esté donde dice la base." to
+        "record found without a distance check (no recent, reliable own position). It does not confirm that the cell is where the database says.",
     // 3.0 (V1) — Pausa global de OpenCellID y códigos documentados
     "OpenCellID en pausa: la API key no es válida. No se consultará hasta que la cambies en Ajustes." to
         "OpenCellID paused: the API key is invalid. No queries until you change it in Settings.",
