@@ -11,6 +11,13 @@ GitHub pre-release of an earlier build was withdrawn.
 
 ### Audit fixes
 
+- **Wi-Fi state per observation.** The rule explanations re-queried Wi-Fi when publishing, so a
+  Wi-Fi change between analysis and publication could explain a result with another reason (for
+  example "neighbours needed" for a rule that abstained because of Wi-Fi). They now use the value
+  captured for that analysis. Rule exclusions are unchanged. Concurrency: `isServiceRunning` is
+  `@Volatile` (a simple flag written on the main thread and read by the periodic loop), and
+  `applyLocationMode()` always runs on the main thread, so the compare-and-log of the location mode
+  is confined to one thread instead of relying on `@Volatile`.
 - **Airplane mode on the main thread.** The periodic loop invalidated the running cycle and emptied
   the cell list from a background thread, so it could slip between a cycle's `mayPublish` check and
   its publication and leave old data on screen. The invalidation, the emptying and the notification

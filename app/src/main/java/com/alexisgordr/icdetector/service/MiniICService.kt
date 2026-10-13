@@ -199,7 +199,10 @@ class MiniICService : Service() {
     @Volatile private var isScreenOn = true
     @Volatile private var isUiVisible = false
     @Volatile private var collectionPausedForCriticalBattery = false
-    private var isServiceRunning = false
+    // 3.0 — Se escribe en el hilo principal (onCreate/onDestroy) y lo lee el bucle periódico en
+    // Dispatchers.Default. Es un indicador simple (una escritura, lecturas sin operación compuesta),
+    // así que @Volatile basta para la visibilidad; el bucle también se para al cancelar el scope.
+    @Volatile private var isServiceRunning = false
     
     // v2.10.9 — Android no expone a una app normal el estado de cifrado del módem: no hay fuente
     // que rellene estos valores, así que H9 queda siempre N/A (nunca "superada" por suposición).
@@ -305,7 +308,12 @@ class MiniICService : Service() {
     /** 3.0 — Modo de ubicación (Ajustes). Continuo por defecto; adaptativo ahorra batería. */
     @Volatile var locationMode: com.alexisgordr.icdetector.core.LocationMode =
         com.alexisgordr.icdetector.core.LocationMode.CONTINUOUS
-    /** Último modo anotado en el terminal, para dejar constancia de cada cambio. */
+    /**
+     * Último modo anotado en el terminal, para dejar constancia de cada cambio. 3.0 — Solo se toca
+     * desde [applyLocationMode], que se ejecuta siempre en el hilo principal (onCreate, receptor de
+     * pantalla y, desde el bucle periódico, con withContext(Main)). Comparar y asignar es una
+     * operación compuesta: @Volatile no la haría atómica; confinarla a un hilo, sí.
+     */
     private var loggedLocationMode: com.alexisgordr.icdetector.core.LocationMode? = null
 
     /** 3.0 (#19) — Identidad completa de la última servidora; ver ServingIdentityChange. */
@@ -671,8 +679,10 @@ class MiniICService : Service() {
                             collectionPausedForCriticalBattery = false
                             appendLog("[SYS]", "Alimentación recuperada: ubicación continua y recolección 24/7 reanudadas.")
                         }
-                        // GPS y reintentos limitados según modo, pantalla y recepción.
-                        applyLocationMode()
+                        // GPS y reintentos limitados según modo, pantalla y recepción. 3.0 — En el
+                        // hilo principal, como el resto de llamadas: loggedLocationMode y el
+                        // controlador de ubicación quedan en un solo hilo. Es una llamada ligera.
+                        withContext(Dispatchers.Main) { applyLocationMode() }
                     }
 
                     val isAirplaneModeOn = Settings.Global.getInt(
@@ -1413,6 +1423,7 @@ class MiniICService : Service() {
                 // The modem can briefly publish an empty neighbour list even in ordinary
                 // coverage. Do not let one such snapshot become H1 evidence that an episode can
                 // retain: require three fresh consecutive deliveries for the same serving cell.
+                // 3.0 — Una sola lectura por observación: la usan el análisis y su explicación.
                 val wifiActive = isWifiConnected()
                 val isolatedCellConfirmed = activeRaw?.let { active ->
                     isolatedCellConfidence.observe(
@@ -1587,7 +1598,10 @@ class MiniICService : Service() {
                         )
                         val diagnosticInputs = com.alexisgordr.icdetector.core.DiagnosticEngine.Inputs(
                             neighborCount = neighbors.size,
-                            wifiActive = isWifiConnected(),
+                            // 3.0 — El Wi-Fi capturado para ESTE análisis: volver a consultarlo al
+                            // publicar podía explicar el resultado con otro estado (p. ej. "faltan
+                            // vecinas" para una regla que se abstuvo por Wi-Fi).
+                            wifiActive = wifiActive,
                             isolationProgress = isolatedCellConfidence.progress to isolatedCellConfidence.required,
                             locationAvailable = currentLocation != null,
                             historyWithLocation = preloadedHistory.count { it.lat != null && it.lon != null },
