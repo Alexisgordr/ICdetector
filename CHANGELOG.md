@@ -11,6 +11,13 @@ GitHub pre-release of an earlier build was withdrawn.
 
 ### Audit fixes
 
+- **Stable-Site motion uses monotonic time.** The motion classifier ordered fixes and measured
+  durations with `Location.time` and checked freshness against the civil clock, so a date/time
+  change or a late fix could shift them. It now uses `Location.elapsedRealtimeNanos` and
+  `SystemClock.elapsedRealtime` for order, freshness and duration; a fix older than the existing
+  60 s grace period, or stamped in a previous boot, is ignored. Thresholds unchanged; civil time
+  still names the day of each row. Motion state is in memory only, so a restart starts from
+  `UNKNOWN`.
 - **Multi-signal episodes use a clock that counts deep sleep.** The episode tracker used its default
   clock (`System.nanoTime`), which stops in deep sleep on Android, so its 90 s evidence window and
   30 s promotion hold could stretch across a sleep. The service now injects

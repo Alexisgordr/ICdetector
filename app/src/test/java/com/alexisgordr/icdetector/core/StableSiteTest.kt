@@ -96,7 +96,7 @@ class StableSiteTest {
         val c = MotionClassifier()
         val one = fix(0)
         repeat(20) { assertEquals(MotionState.UNKNOWN, c.observe(one).state) }
-        assertEquals(0L, c.current(one.timeMs).durationSeconds)
+        assertEquals(0L, c.current(one.elapsedRealtimeMs).durationSeconds)
         c.observe(fix(30_000))
         val before = c.current(30_001)
         c.observe(fix(10_000))

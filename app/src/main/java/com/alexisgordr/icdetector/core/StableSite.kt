@@ -103,7 +103,13 @@ object StableSiteMaturityPolicy {
 // Field rollout switch. v2.9.1 records wouldTrigger but does not freeze trust learning.
 const val STABLE_SITE_ENFORCEMENT_ENABLED = false
 
-data class MotionFix(val latitude: Double, val longitude: Double, val timeMs: Long, val accuracyM: Float, val speedMps: Float?)
+/**
+ * 3.0 — [elapsedRealtimeMs] is MONOTONIC time since boot (Location.elapsedRealtimeNanos / 1e6), the
+ * same clock as SystemClock.elapsedRealtime. It keeps counting in deep sleep and is not affected by
+ * civil-clock changes. It is only meaningful within one boot and is never persisted; civil time is
+ * used only to name the day a row belongs to (recordStableSiteContext).
+ */
+data class MotionFix(val latitude: Double, val longitude: Double, val elapsedRealtimeMs: Long, val accuracyM: Float, val speedMps: Float?)
 data class MotionEvidence(
     val state: MotionState,
     val durationSeconds: Long = 0,
@@ -112,7 +118,13 @@ data class MotionEvidence(
     val reason: MotionReason? = null
 )
 
-/** Conservative rolling classifier driven only by distinct GNSS fixes. */
+/**
+ * Conservative rolling classifier driven only by distinct GNSS fixes.
+ *
+ * 3.0 — All times (fix order, freshness, durations) are monotonic elapsedRealtime milliseconds;
+ * no civil (epoch) time enters here. The state lives only in memory, so a process restart starts
+ * again from UNKNOWN and never reuses monotonic times from an earlier boot.
+ */
 class MotionClassifier(
     private val requiredStaticMs: Long = 120_000L,
     private val expectedFixIntervalMs: Long = 15_000L
@@ -122,22 +134,28 @@ class MotionClassifier(
     private var lastAcceptedFixTime = Long.MIN_VALUE
     private var latest = MotionEvidence(MotionState.UNKNOWN, reason = MotionReason.NO_RECENT_FIX)
 
-    @Synchronized fun observe(fix: MotionFix): MotionEvidence {
+    /**
+     * [nowElapsedMs] is SystemClock.elapsedRealtime at delivery. A fix older than the grace period
+     * (a cached or late callback) or stamped in the future (a Location from an earlier boot, whose
+     * monotonic time does not belong to this one) is not motion evidence and is ignored.
+     */
+    @Synchronized fun observe(fix: MotionFix, nowElapsedMs: Long = fix.elapsedRealtimeMs): MotionEvidence {
+        if (fix.elapsedRealtimeMs > nowElapsedMs + FUTURE_TOLERANCE_MS || nowElapsedMs - fix.elapsedRealtimeMs > gracePeriodMs) return latest
         // A Location can arrive through both the continuous and one-shot listeners. It is
         // evidence only once, and an older callback must not rewind or inflate the window.
-        if (fix.timeMs <= lastAcceptedFixTime) return latest
-        if (fix.timeMs <= 0 || fix.accuracyM > MAX_ACCURACY_M || !fix.accuracyM.isFinite()) {
-            if (lastAcceptedFixTime == Long.MIN_VALUE || fix.timeMs - lastAcceptedFixTime > gracePeriodMs) fixes.clear()
+        if (fix.elapsedRealtimeMs <= lastAcceptedFixTime) return latest
+        if (fix.elapsedRealtimeMs <= 0 || fix.accuracyM > MAX_ACCURACY_M || !fix.accuracyM.isFinite()) {
+            if (lastAcceptedFixTime == Long.MIN_VALUE || fix.elapsedRealtimeMs - lastAcceptedFixTime > gracePeriodMs) fixes.clear()
             latest = MotionEvidence(MotionState.UNKNOWN, accuracyM = fix.accuracyM, reason = MotionReason.ACCURACY_POOR)
             return latest
         }
-        if (lastAcceptedFixTime != Long.MIN_VALUE && fix.timeMs - lastAcceptedFixTime > gracePeriodMs) fixes.clear()
-        lastAcceptedFixTime = fix.timeMs
+        if (lastAcceptedFixTime != Long.MIN_VALUE && fix.elapsedRealtimeMs - lastAcceptedFixTime > gracePeriodMs) fixes.clear()
+        lastAcceptedFixTime = fix.elapsedRealtimeMs
         fixes.addLast(fix)
-        while (fixes.isNotEmpty() && fix.timeMs - fixes.first().timeMs > requiredStaticMs + 60_000L) fixes.removeFirst()
+        while (fixes.isNotEmpty() && fix.elapsedRealtimeMs - fixes.first().elapsedRealtimeMs > requiredStaticMs + 60_000L) fixes.removeFirst()
         val first = fixes.first()
         val distance = distanceMeters(first.latitude, first.longitude, fix.latitude, fix.longitude)
-        val duration = ((fix.timeMs - first.timeMs) / 1_000L).coerceAtLeast(0)
+        val duration = ((fix.elapsedRealtimeMs - first.elapsedRealtimeMs) / 1_000L).coerceAtLeast(0)
         val reliableSpeed = fix.speedMps?.takeIf { it.isFinite() && it >= 0f }
         val movementThreshold = max(40f, first.accuracyM + fix.accuracyM)
         if ((reliableSpeed != null && reliableSpeed >= 2.5f) || distance > movementThreshold) {
@@ -156,8 +174,9 @@ class MotionClassifier(
         return latest
     }
 
-    @Synchronized fun current(nowMs: Long): MotionEvidence {
-        if (lastAcceptedFixTime == Long.MIN_VALUE || nowMs - lastAcceptedFixTime > gracePeriodMs) {
+    /** [nowElapsedMs]: SystemClock.elapsedRealtime. Deep sleep counts, so a long sleep expires the window. */
+    @Synchronized fun current(nowElapsedMs: Long): MotionEvidence {
+        if (lastAcceptedFixTime == Long.MIN_VALUE || nowElapsedMs - lastAcceptedFixTime > gracePeriodMs) {
             fixes.clear()
             latest = MotionEvidence(MotionState.UNKNOWN, reason = MotionReason.NO_RECENT_FIX)
         }
@@ -165,6 +184,8 @@ class MotionClassifier(
     }
     companion object {
         private const val MAX_ACCURACY_M = 50f
+        /** Clock granularity between the Location stamp and the delivery read; not a new threshold. */
+        private const val FUTURE_TOLERANCE_MS = 1_000L
         fun distanceMeters(aLat: Double, aLon: Double, bLat: Double, bLon: Double): Float {
             val r = 6_371_000.0; val p1 = Math.toRadians(aLat); val p2 = Math.toRadians(bLat)
             val dp = p2 - p1; val dl = Math.toRadians(bLon - aLon)

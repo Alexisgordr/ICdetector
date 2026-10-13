@@ -282,7 +282,10 @@ overlapping grids reduce false site changes caused by GNSS jitter near a boundar
 **Motion.** Motion evidence advances only when Android delivers a genuinely new GPS fix. Two minutes
 of precise, coherent fixes are required for `STATIC_CONFIRMED`; missing or inaccurate GPS yields
 `UNKNOWN`. A poor fix temporarily reports `UNKNOWN` but preserves the good window for up to
-60 seconds; longer gaps reset it.
+60 seconds; longer gaps reset it. Order, freshness and durations use the phone's monotonic clock
+(time since boot, which keeps counting in deep sleep), so changing the date or time does not affect
+them; a late or cached fix older than 60 s, or one from before a reboot, is ignored. The calendar
+date is used only to group rows by day.
 
 **Neighbour capability.** A complete neighbour identity follows the full path. When Android withholds
 the Cell ID but supplies RAT, ARFCN and PCI, the app records a local `RF_CONTEXT` fingerprint scoped

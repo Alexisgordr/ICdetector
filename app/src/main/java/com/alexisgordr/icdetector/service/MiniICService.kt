@@ -1231,7 +1231,8 @@ class MiniICService : Service() {
                 val currentLocation = deliveryLocation
                 // Cellular polling only reads motion. New evidence enters from real Location
                 // callbacks, so a repeated lastKnownLocation cannot manufacture static time.
-                val motionEvidence = stableSiteMotion.current(System.currentTimeMillis()).also {
+                // 3.0 — Reloj monotónico, el mismo con que se sellan los fixes (no la hora civil).
+                val motionEvidence = stableSiteMotion.current(SystemClock.elapsedRealtime()).also {
                     latestMotionEvidence = it
                 }
                 // Mobility is contextual metadata only. Its result is deliberately not passed to
@@ -1819,14 +1820,17 @@ class MiniICService : Service() {
     )
 
     private fun observeMotionFix(location: Location) {
+        // 3.0 — Orden, frescura y duración con el reloj monotónico del fix (elapsedRealtimeNanos),
+        // comparado con SystemClock.elapsedRealtime. location.time (hora del GPS/civil) ya no entra.
         latestMotionEvidence = stableSiteMotion.observe(
             com.alexisgordr.icdetector.core.MotionFix(
                 location.latitude,
                 location.longitude,
-                location.time,
+                location.elapsedRealtimeNanos / 1_000_000L,
                 location.accuracy,
                 if (location.hasSpeed()) location.speed else null
-            )
+            ),
+            SystemClock.elapsedRealtime()
         )
     }
 
