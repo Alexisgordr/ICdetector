@@ -23,13 +23,13 @@ class StableSiteTest {
         assertNotEquals(a,b); assertNotEquals(a,c)
     }
 
-    @Test fun `rf ranges follow the physical radio and accept channel zero`() {
+    @Test fun `rf ranges follow the physical radio and accept channel zero except NR`() {
         fun fp(radio:RadioTech,arfcn:Int,pci:Int)=StableSiteNeighbourEvidence.rfFingerprint(
             CellData(false,radio.name,"N/A","N/A","N/A",-100,"N/A",radioTech=radio,arfcn=arfcn,pci=pci)
         )
         assertNotNull(fp(RadioTech.LTE,0,0));assertNotNull(fp(RadioTech.LTE,262_143,503))
         assertNull(fp(RadioTech.LTE,262_144,503));assertNull(fp(RadioTech.LTE,100,504))
-        assertNotNull(fp(RadioTech.NR,0,0));assertNotNull(fp(RadioTech.NR,3_279_165,1007))
+        assertNull("NR-ARFCN 0: sin banda, mismo criterio que H8", fp(RadioTech.NR,0,0)); assertNotNull(fp(RadioTech.NR,1,0)); assertNotNull(fp(RadioTech.NR,3_279_165,1007))
         assertNull(fp(RadioTech.NR,3_279_166,1007));assertNull(fp(RadioTech.NR,100,1008))
         assertNotNull(fp(RadioTech.UMTS,0,0));assertNotNull(fp(RadioTech.UMTS,16_383,511))
         assertNull(fp(RadioTech.UMTS,16_384,511));assertNull(fp(RadioTech.UMTS,100,512))

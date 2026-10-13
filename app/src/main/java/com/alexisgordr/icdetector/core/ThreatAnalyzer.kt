@@ -311,11 +311,12 @@ object ThreatAnalyzer {
         // medido fuera de rango sigue fallando como antes. Corte de dataset solo para H8.
         //
         // 3.0 (#22) — Los rangos vienen de RadioChannels, el mismo validador que usa el
-        // aprendizaje. El NR-ARFCN 0 no lo usa ninguna banda y H8 lo sigue tratando como sospechoso.
+        // aprendizaje. El NR-ARFCN 0 no lo usa ninguna banda: RadioChannels ya no lo acepta, así que H8
+        // lo sigue tratando como sospechoso y el aprendizaje no lo toma por una portadora legítima.
         active.arfcn?.takeUnless { it == ARFCN_UNAVAILABLE }?.let { arfcn ->
             if (active.radioTech == RadioTech.NR) {
                 eArfcn = true
-                if (!RadioChannels.isValidChannel(RadioTech.NR, arfcn) || arfcn == 0) {
+                if (!RadioChannels.isValidChannel(RadioTech.NR, arfcn)) {
                     hArfcn = false
                     reasons.add("Frecuencia (ARFCN) 5G sospechosa")
                     score -= 15

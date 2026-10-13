@@ -11,6 +11,11 @@ GitHub pre-release of an earlier build was withdrawn.
 
 ### Audit fixes
 
+- **NR-ARFCN 0: one criterion.** `RadioChannels` accepted 0 as an NR channel while `NrFrequency`
+  rejected it and H8 penalised it, so Stable-Site and local cell trust could learn a "carrier 0" as a
+  legitimate fingerprint that H8 flagged. NR channels are now valid from 1; H8 keeps failing on 0
+  (same result, one rule) and learning no longer takes it as a carrier. EARFCN 0 (LTE Band 1) stays
+  valid. Already learned data is not recalculated.
 - **Serving-cell selection: no secondary as fallback, no "unknown = same" duplicates.** When no entry
   declares PRIMARY_SERVING, the fallback took the first registered entry with signal even if it
   declared SECONDARY_SERVING (a modem that only fills the state on the NR leg would make that leg

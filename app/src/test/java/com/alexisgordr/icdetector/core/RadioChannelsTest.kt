@@ -64,4 +64,15 @@ class RadioChannelsTest {
         // 3.0 — Tres: aprendizaje del historial, H15 y el par actual del candidato de reconfiguración.
         assertEquals(3, Regex("RadioChannels\\.channelOrNull\\(").findAll(helper + accumulator).count())
     }
+
+    @Test fun `NR-ARFCN 0 is one criterion for learning and H8`() {
+        // Ni el aprendizaje (RadioChannels) ni la clasificación de frecuencia lo aceptan; H8 lo marca.
+        assertFalse(RadioChannels.isValidChannel(RadioTech.NR, 0))
+        assertNull(RadioChannels.channelOrNull(RadioTech.NR, 0))
+        assertNull(NrFrequency.dlMhz(0))
+        assertTrue(RadioChannels.isValidChannel(RadioTech.NR, 1))
+        assertTrue("el EARFCN 0 sí es válido (Banda 1)", RadioChannels.isValidChannel(RadioTech.LTE, 0))
+        // Una portadora NR 0 no cuenta como coincidencia ni discrepancia de canal.
+        assertFalse(RadioChannels.rfDifference(RadioTech.NR, 100, 0, RadioTech.NR, 100, 632_448).channel)
+    }
 }

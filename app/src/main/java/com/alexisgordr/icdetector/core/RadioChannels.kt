@@ -13,10 +13,15 @@ import com.alexisgordr.icdetector.models.RadioTech
  * que de verdad no tienen frecuencia.
  *
  * `CellInfo.UNAVAILABLE` (Int.MAX_VALUE) nunca es válido. Los rangos son los de 3GPP:
- * EARFCN 0..262143, NR-ARFCN 0..3279165, UARFCN 0..16383, ARFCN GSM 0..1023; PCI LTE 0..503,
+ * EARFCN 0..262143, NR-ARFCN 1..3279165, UARFCN 0..16383, ARFCN GSM 0..1023; PCI LTE 0..503,
  * PCI NR 0..1007, PSC UMTS 0..511. GSM sí tiene un identificador físico en la API (BSIC,
  * `CellIdentityGsm.getBsic()`), pero la app no lo lee ni lo guarda en el campo PCI, así que aquí
  * no hay identificador físico GSM que validar.
+ *
+ * 3.0 — El NR-ARFCN 0 está en el raster pero no pertenece a ninguna banda (NrFrequency no lo
+ * clasifica y H8 lo marca). Antes era válido aquí, así que Stable-Site y la confianza local podían
+ * aprender una «portadora 0» como huella legítima mientras H8 la marcaba. Un solo criterio: no es
+ * válido. El EARFCN 0 sí lo es (Banda 1).
  */
 object RadioChannels {
     const val ANDROID_UNAVAILABLE = Int.MAX_VALUE
@@ -24,7 +29,7 @@ object RadioChannels {
     fun isValidChannel(radio: RadioTech, value: Int): Boolean =
         value != ANDROID_UNAVAILABLE && when (radio) {
             RadioTech.LTE -> value in 0..262_143
-            RadioTech.NR -> value in 0..3_279_165
+            RadioTech.NR -> value in 1..3_279_165
             RadioTech.UMTS -> value in 0..16_383
             RadioTech.GSM -> value in 0..1_023
             RadioTech.UNKNOWN -> false
