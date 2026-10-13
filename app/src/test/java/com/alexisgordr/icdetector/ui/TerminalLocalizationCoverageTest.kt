@@ -103,6 +103,7 @@ class TerminalLocalizationCoverageTest {
         "N/A: no hubo cambio de celda.",
         "N/A: el intervalo entre observaciones no permite atribuir el desplazamiento al handover.",
         "[API] Configuración de OpenCellID actualizada; las consultas anteriores se descartan.",
+        "[RADIO] H1 en N/A: el módem repite la misma marca de tiempo en sus lecturas, así que no se puede confirmar una celda aislada.",
         "[API] " + com.alexisgordr.icdetector.core.ApiCoordinateCheck.LOG_NO_DISTANCE_CHECK,
         "[API] OpenCellID en pausa: la API key no es válida. No se consultará hasta que la cambies en Ajustes.",
         "[API] OpenCellID en pausa: la API key no tiene acceso (código 4). No se consultará hasta que cambies la configuración.",

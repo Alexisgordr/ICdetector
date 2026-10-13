@@ -261,6 +261,7 @@ class MiniICService : Service() {
         nowMs = SystemClock::elapsedRealtime
     )
     private val isolatedCellConfidence = com.alexisgordr.icdetector.core.IsolatedCellConfidence()
+    @Volatile private var loggedStuckObservationToken = false
     @Volatile private var intensiveMonitoringUntilMs = 0L
     private var intensiveMonitoringStartedAtMs = 0L
     // Todas las lecturas comparten cachés, transición y confirmación temporal. Serializarlas evita
@@ -1269,7 +1270,8 @@ class MiniICService : Service() {
             val nonServingContext = com.alexisgordr.icdetector.core.ServingCellSelection.nonServingEntries(list)
             val activeRaw = list.firstOrNull { it.isRegistered }
             // Milisegundos desde el arranque de la celda registrada aceptada por el parser.
-            val observationToken = activeObservationToken ?: 0L
+            // 3.0 — Sin marca de tiempo (o 0), desconocido: IsolatedCellConfidence lo trata como fresco.
+            val observationToken = activeObservationToken?.takeIf { it > 0L }
 
             // Reset del estado de latencia ANTES del análisis si la celda ha cambiado.
             // Esto evita que la heurística 12 lea el veredicto "ANOMALA" de la celda vieja
@@ -1518,6 +1520,13 @@ class MiniICService : Service() {
                         observationToken = observationToken
                     )
                 } ?: false
+                // 3.0 — Un módem que repite siempre la misma marca de tiempo deja H1 en N/A: decirlo una vez.
+                if (isolatedCellConfidence.stuckOnRepeatedToken) {
+                    if (!loggedStuckObservationToken) {
+                        loggedStuckObservationToken = true
+                        appendLog("[RADIO]", ISOLATED_TOKEN_STUCK_LOG)
+                    }
+                } else loggedStuckObservationToken = false
 
                 // v2.10.4 — Solo se analiza la servidora (posición 0). Las demás entradas
                 // registradas son portadoras secundarias: se muestran, no se juzgan con el
@@ -1656,7 +1665,7 @@ class MiniICService : Service() {
                         // Aplicar confirmación temporal antes de alertas
                         val episode = threatEpisodeTracker.apply(
                             active,
-                            observationToken.takeIf { it > 0L },
+                            observationToken,
                             isFreshDelivery = isFreshDelivery
                         )
                         if (episode.startedWatching) {
@@ -1680,7 +1689,7 @@ class MiniICService : Service() {
 
                         val temporalActive = temporalConfidence.apply(
                             episode.cell,
-                            observationToken.takeIf { it > 0L },
+                            observationToken,
                             isFreshDelivery = isFreshDelivery
                         )
                         updateIntensiveMonitoring(
@@ -2300,6 +2309,9 @@ class MiniICService : Service() {
     }
 
     companion object {
+        /** 3.0 — Ver IsolatedCellConfidence.stuckOnRepeatedToken. */
+        const val ISOLATED_TOKEN_STUCK_LOG =
+            "H1 en N/A: el módem repite la misma marca de tiempo en sus lecturas, así que no se puede confirmar una celda aislada."
         const val CHANNEL_ID = ServiceNotificationController.CHANNEL_ID
         const val ALERT_CHANNEL_ID = ServiceNotificationController.ALERT_CHANNEL_ID
         const val NOTIFICATION_ID = ServiceNotificationController.NOTIFICATION_ID

@@ -260,6 +260,9 @@ private val replacements = linkedMapOf(
     // 3.0 (V3) — ApiCoordinateCheck.LOG_NO_DISTANCE_CHECK
     "registro encontrado sin contraste de distancia (no hay posición propia reciente y fiable). No confirma que la antena esté donde dice la base." to
         "record found without a distance check (no recent, reliable own position). It does not confirm that the cell is where the database says.",
+    // 3.0 — MiniICService.ISOLATED_TOKEN_STUCK_LOG
+    "H1 en N/A: el módem repite la misma marca de tiempo en sus lecturas, así que no se puede confirmar una celda aislada." to
+        "H1 N/A: the modem repeats the same timestamp in its readings, so an isolated cell cannot be confirmed.",
     // 3.0 (V1) — Pausa global de OpenCellID y códigos documentados
     "sin código de la API; puede venir de un proxy o un intermediario, no prueba que la clave falle. Se reintentará." to
         "without an API code; it may come from a proxy or an intermediary and does not prove the key is wrong. Will retry.",

@@ -11,6 +11,12 @@ GitHub pre-release of an earlier build was withdrawn.
 
 ### Audit fixes
 
+- **H1 freshness token: unknown is not "repeated".** The service passed 0 when the modem gave no
+  reading timestamp, while `IsolatedCellConfidence` treats null as a fresh delivery; with a modem
+  whose `timestampMillis` is 0 the first delivery counted and every later one was taken as a repeat,
+  leaving H1 N/A forever without explanation. A null, zero or negative token is now unknown (fresh).
+  A constant non-zero token still cannot be told apart from re-polling the same snapshot, so it does
+  not count, but after 20 such deliveries the terminal says once that the modem repeats its timestamp.
 - **H10 only uses a live speed.** The ping-pong rule took the speed of the current location, which
   accepts fixes up to 120 s old: a speed from 90 s ago (stopped at a light) with three handovers now
   (a train pulling out) gave FAILED instead of PASSED_MOVING. Position can be that old; speed cannot.
