@@ -1,5 +1,7 @@
 package com.alexisgordr.icdetector.core
 
+import com.alexisgordr.icdetector.models.CellData
+import com.alexisgordr.icdetector.models.RadioTech
 import com.alexisgordr.icdetector.models.TimingAdvanceUnit
 
 /**
@@ -57,6 +59,15 @@ import com.alexisgordr.icdetector.models.TimingAdvanceUnit
  * atribuye a ninguna: cada unidad empieza vacía y se rederiva en unos minutos de uso. Igual que
  * antes, un TA 0 aislado sigue siendo legítimo, un TA nulo no aporta evidencia y distintas
  * identidades no se dan por emplazamientos distintos más allá del umbral [MIN_DISTINCT_CELLS].
+ *
+ * ── 3.0: QUÉ SE CUENTA COMO «DISTINTO» ([evidenceKey]) ──────────────────────────────────────
+ *
+ * Antes la clave era la identidad completa de la celda (MCC-MNC-TAC-CID-tecnología), así que
+ * contaban como tres: tres sectores o portadoras del MISMO eNodeB (justo el caso de quien vive a
+ * menos de 78 m de un emplazamiento), una lectura con CID «N/A» y la misma celda con el TAC
+ * primero en «N/A» y luego rellenado. Ahora: con el CID ilegible no se observa ningún cero; en LTE
+ * cuenta el eNodeB ([LteSite.key]); en las demás tecnologías, la tecnología y el CID, sin TAC.
+ * Las claves guardadas por versiones anteriores se convierten al restaurar ([normalizeStoredKey]).
  */
 class TimingAdvanceSanity {
 
@@ -101,18 +112,19 @@ class TimingAdvanceSanity {
             e.hasSeenRealValue = true
             e.zeroOnlyCells.clear()
         } else {
-            e.zeroOnlyCells.addAll(zeroOnlyCellKeys.take(MAX_PERSISTED_CELLS))
+            e.zeroOnlyCells.addAll(zeroOnlyCellKeys.mapNotNull(::normalizeStoredKey).take(MAX_PERSISTED_CELLS))
         }
         return before != e.isStub
     }
 
     /**
-     * Registra una observación con la unidad que declaró el parser. [cellKey] debe ser la
-     * identidad completa de la celda; un TA null no aporta evidencia y se ignora.
+     * Registra una observación con la unidad que declaró el parser. [cellKey] es [evidenceKey] de la
+     * celda; null (CID ilegible, LTE sin red conocida) solo impide contar un cero, nunca un TA real.
+     * Un TA null no aporta evidencia y se ignora.
      *
      * Devuelve true si la EVIDENCIA cambió y conviene volver a guardarla en disco.
      */
-    fun observe(unit: TimingAdvanceUnit, cellKey: String, timingAdvance: Int?): Boolean {
+    fun observe(unit: TimingAdvanceUnit, cellKey: String?, timingAdvance: Int?): Boolean {
         if (timingAdvance == null || unit !in EVIDENCE_UNITS) return false
         val e = of(unit)
         if (timingAdvance != 0) {
@@ -121,7 +133,7 @@ class TimingAdvanceSanity {
             e.zeroOnlyCells.clear()
             return true
         }
-        if (e.hasSeenRealValue) return false
+        if (e.hasSeenRealValue || cellKey == null) return false
         if (e.zeroOnlyCells.size >= MAX_PERSISTED_CELLS) return false
         return e.zeroOnlyCells.add(cellKey)
     }
@@ -140,10 +152,11 @@ class TimingAdvanceSanity {
 
     companion object {
         /**
-         * Celdas distintas que deben reportar 0 antes de concluir que el campo no se rellena.
-         * Tres es suficiente: estar a menos de 78 m de tres antenas distintas, en tres
-         * emplazamientos distintos, no ocurre. Y es lo bastante bajo como para resolverse en los
-         * primeros minutos de uso en movimiento.
+         * Claves de evidencia distintas ([evidenceKey]) que deben reportar 0 antes de concluir que
+         * el campo no se rellena. En LTE son tres eNodeB: estar a menos de 78 m de tres
+         * emplazamientos distintos no ocurre. En las demás tecnologías son tres CID (no se puede
+         * deducir el emplazamiento), lo que puede incluir sectores de uno mismo. Es lo bastante bajo
+         * como para resolverse en los primeros minutos de uso en movimiento.
          */
         const val MIN_DISTINCT_CELLS = 3
 
@@ -153,6 +166,33 @@ class TimingAdvanceSanity {
          * preferencias durante una campaña larga.
          */
         const val MAX_PERSISTED_CELLS = 64
+
+        /**
+         * 3.0 — Qué identifica un emplazamiento «distinto» para la evidencia del stub: el eNodeB en
+         * LTE (sectores y portadoras del mismo eNodeB cuentan una vez; sin MCC/MNC conocidos no se
+         * cuenta), tecnología + CID en las demás. Null si el CID es ilegible.
+         */
+        fun evidenceKey(cell: CellData): String? {
+            if (!known(cell.cellId)) return null
+            if (cell.radioTech == RadioTech.LTE) return LteSite.key(cell)?.let { "site:LTE:$it" }
+            return "cell:${cell.radioTech.name}:${cell.cellId}"
+        }
+
+        /**
+         * Clave guardada → clave actual. Las anteriores eran la identidad completa
+         * (`mcc-mnc-tac-cid-RADIO`); se convierten para no contar dos veces el mismo emplazamiento.
+         * Una clave que no se reconoce o con CID ilegible se descarta.
+         */
+        fun normalizeStoredKey(key: String): String? {
+            if (key.startsWith("site:") || key.startsWith("cell:")) return key
+            val p = key.split("-")
+            if (p.size != 5) return null
+            val radio = runCatching { RadioTech.valueOf(p[4]) }.getOrNull() ?: return null
+            return evidenceKey(CellData(isRegistered = true, networkType = radio.name, cellId = p[3], mnc = p[1],
+                tac = p[2], dbm = 0, mcc = p[0], radioTech = radio))
+        }
+
+        private fun known(value: String) = value.isNotBlank() && value != "N/A"
 
         /** 3.0 (#33) — Unidades con evidencia propia. STUB_ZERO es un resultado, no una unidad declarada. */
         val EVIDENCE_UNITS: List<TimingAdvanceUnit> = TimingAdvanceUnit.values().filter { it != TimingAdvanceUnit.STUB_ZERO }

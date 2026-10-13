@@ -1248,7 +1248,9 @@ class MiniICService : Service() {
                 // esto, cualquier celda fuerte sin verificar arrastraría un -15 perpetuo por
                 // "Proximidad anómala (TA)" originado en el firmware, no en la red.
                 val current = list[activeIndex]
-                val taKey = current.identityKey
+                // 3.0 — Clave por emplazamiento (eNodeB en LTE), no por identidad completa; con el CID
+                // ilegible un cero no cuenta (ver TimingAdvanceSanity.evidenceKey).
+                val taKey = com.alexisgordr.icdetector.core.TimingAdvanceSanity.evidenceKey(current)
                 // v2.5 — La evidencia sobrevive a los reinicios del servicio; sin esto, la misma
                 // lectura de TA=0 se etiquetaba LTE_INDEX o STUB_ZERO según cuánto llevara vivo el
                 // proceso, y el historial dejaba de ser autoconsistente (medido: 319 vs 394 filas).

@@ -16,7 +16,7 @@ class TimingAdvanceSanityTest {
     private val NR = TimingAdvanceUnit.NR_RAW
 
 
-    private fun key(cid: Int) = "214-07-31601-$cid"
+    private fun key(cid: Int) = "cell:UMTS:$cid"
 
     @Test fun `una sola celda a cero no basta para sospechar`() {
         val s = TimingAdvanceSanity()
@@ -150,5 +150,56 @@ class TimingAdvanceSanityTest {
         assertFalse(service.contains("\"ta_zero_only_cells\""))
         assertTrue(service.contains("taSanity.observe(current.timingAdvanceUnit, taKey, current.timingAdvance)"))
     }
-}
 
+    // ── 3.0 — Qué cuenta como «distinto» ────────────────────────────────────────────────────
+
+    private fun lte(cid: Long, tac: String = "31601", mcc: String = "214", mnc: String = "07") =
+        com.alexisgordr.icdetector.models.CellData(isRegistered = true, networkType = "LTE", cellId = cid.toString(), mnc = mnc,
+            tac = tac, dbm = -60, mcc = mcc, radioTech = com.alexisgordr.icdetector.models.RadioTech.LTE)
+
+    @Test fun `three sectors or carriers of the same eNodeB count once`() {
+        val enb = 12_345L shl 8
+        val s = TimingAdvanceSanity()
+        listOf(1L, 2L, 3L, 11L).forEach { s.observe(LTE, TimingAdvanceSanity.evidenceKey(lte(enb + it)), 0) }
+        assertFalse("misma azotea: no son tres emplazamientos", s.isStub(LTE))
+        assertEquals(1, s.zeroOnlyCellCount(LTE))
+        // Tres eNodeB distintos sí.
+        listOf(1L, 2L).forEach { s.observe(LTE, TimingAdvanceSanity.evidenceKey(lte(((12_345L + it) shl 8) + 1)), 0) }
+        assertTrue(s.isStub(LTE))
+    }
+
+    @Test fun `an unreadable Cell ID or a TAC filled later do not add keys`() {
+        assertEquals(null, TimingAdvanceSanity.evidenceKey(lte(1).copy(cellId = "N/A")))
+        assertEquals(TimingAdvanceSanity.evidenceKey(lte(256, tac = "N/A")), TimingAdvanceSanity.evidenceKey(lte(256)))
+        val umts = com.alexisgordr.icdetector.models.CellData(isRegistered = true, networkType = "3G", cellId = "777", mnc = "07",
+            tac = "N/A", dbm = -60, mcc = "214", radioTech = com.alexisgordr.icdetector.models.RadioTech.UMTS)
+        assertEquals("cell:UMTS:777", TimingAdvanceSanity.evidenceKey(umts))
+        assertEquals(TimingAdvanceSanity.evidenceKey(umts), TimingAdvanceSanity.evidenceKey(umts.copy(tac = "1200")))
+        // LTE sin red conocida: no se puede identificar el eNodeB, no se cuenta.
+        assertEquals(null, TimingAdvanceSanity.evidenceKey(lte(256, mcc = "N/A")))
+        // Una lectura sin clave no cuenta un cero, pero un TA real sí cierra la sospecha.
+        val s = TimingAdvanceSanity()
+        assertFalse(s.observe(LTE, null, 0))
+        assertTrue(s.observe(LTE, null, 4))
+        assertTrue(s.hasSeenRealValue(LTE))
+    }
+
+    @Test fun `legacy stored keys are converted so one site is not counted three times`() {
+        val enb = (54_321L shl 8)
+        val legacy = setOf("214-07-31601-${enb + 1}-LTE", "214-07-31601-${enb + 2}-LTE", "214-07-N/A-${enb + 3}-LTE",
+            "214-07-31601-N/A-LTE", "basura", "214-07-1-9-RADIO_RARO")
+        val s = TimingAdvanceSanity()
+        s.restore(LTE, false, legacy)
+        assertEquals(setOf("site:LTE:214-07-54321"), s.zeroOnlyCellKeys(LTE))
+        assertFalse(s.isStub(LTE))
+        assertEquals("cell:GSM:42", TimingAdvanceSanity.normalizeStoredKey("214-07-1200-42-GSM"))
+        assertEquals("cell:GSM:42", TimingAdvanceSanity.normalizeStoredKey("cell:GSM:42"))
+    }
+
+    @Test fun `the service observes with the evidence key`() {
+        val service = listOf(java.io.File("src/main/java/com/alexisgordr/icdetector/service/MiniICService.kt"),
+            java.io.File("app/src/main/java/com/alexisgordr/icdetector/service/MiniICService.kt")).first { it.exists() }.readText()
+        assertTrue(service.contains("val taKey = com.alexisgordr.icdetector.core.TimingAdvanceSanity.evidenceKey(current)"))
+        assertFalse(service.contains("val taKey = current.identityKey"))
+    }
+}

@@ -11,6 +11,13 @@ GitHub pre-release of an earlier build was withdrawn.
 
 ### Audit fixes
 
+- **TA stub evidence counts sites, not cell identities.** The "three distinct cells reporting 0"
+  threshold used the full identity, so three sectors or carriers of the same eNodeB (someone living
+  next to a site), a reading with Cell ID "N/A", or the same cell before and after its TAC was
+  filled all counted as different. Now a zero with an unreadable Cell ID is not counted, LTE counts
+  eNodeBs (`LteSite.key`; not counted without a known MCC/MNC) and other technologies count
+  technology + Cell ID without TAC. Keys stored by earlier versions are converted on restore; a
+  non-zero TA still proves real reporting whatever the key.
 - **H2 and H7 only compare power with neighbours of the same technology.** They mixed LTE/NR RSRP
   with GSM RSSI and UMTS RSCP: an LTE serving cell at −70 dBm (RSRP) and a GSM neighbour at −106 dBm
   (RSSI) gave "Salto potencia (>35dB)" from a units artefact, and H7's −110 dBm threshold means a
