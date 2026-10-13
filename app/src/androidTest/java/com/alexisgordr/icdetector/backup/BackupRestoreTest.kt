@@ -131,7 +131,12 @@ class BackupRestoreTest {
         val control = File(dir, "control.db")
         BackupArchive.read(ByteArrayInputStream(tampered), File(dir, "control-work").apply { mkdirs() }, "db")
             .database!!.copyTo(control)
-        assertTrue(helper(control).getRecords().any { it.cid == "TRIGGER_RAN" })
+        // Se cuenta con SQL directo: la fila que inserta el trigger no tiene hora y getRecords() deja de
+        // leer al llegar a ella (HistoryRecord exige timestamp), así que no la vería aunque exista.
+        val ran = helper(control).readableDatabase
+            .rawQuery("SELECT COUNT(*) FROM history WHERE cid = 'TRIGGER_RAN'", null)
+            .use { it.moveToFirst(); it.getInt(0) }
+        assertEquals("el trigger se ejecuta en cuanto el helper abre la base", 1, ran)
         helpers.last().close()
 
         val tgt = helper(target)
