@@ -1242,13 +1242,14 @@ class MiniICService : Service() {
                 } else com.alexisgordr.icdetector.core.MobilityObservation(
                     com.alexisgordr.icdetector.core.MobilityFamiliarity.UNKNOWN_ON_ROUTE
                 )
-                val mobilityLog = "${mobility.tripId}|${mobility.familiarity}|${mobility.goodEdges}|${mobility.event}"
+                val mobilityLog = "${mobility.tripId}|${mobility.familiarity}|${mobility.goodEdges}|${mobility.arrivalPriorTrips}|${mobility.event}"
                 if (mobilityLog != lastMobilityLog) {
                     lastMobilityLog = mobilityLog
                     appendLog(
                         "[MOBILITY]",
-                        "familiarity=${mobility.familiarity} trip=${mobility.tripId ?: "none"} " +
-                            "priorTrips=${mobility.priorTrips} goodEdges=${mobility.goodEdges}" +
+                        // 3.0 (G2) — Dos conceptos: la celda en viajes anteriores y la llegada en este viaje.
+                        "cellHistory=${mobility.familiarity} goodEdges=${mobility.goodEdges} trip=${mobility.tripId ?: "none"} " +
+                            "arrival=${mobility.arrivalPriorTrips?.let { "priorTrips=$it" } ?: "none"}" +
                             (mobility.event?.let { " event=$it" } ?: "")
                     )
                 }

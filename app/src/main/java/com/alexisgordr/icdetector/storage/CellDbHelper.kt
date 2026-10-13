@@ -844,9 +844,12 @@ class CellDbHelper(
             if(c.isNull(4))null else c.getString(4), c.getInt(5)!=0, c.getInt(6), c.getInt(7),
             if(c.isNull(8))null else c.getString(8)
         ) }
-        val openId = trips.firstOrNull { it.state == "OPEN" }?.tripId
-        val pending = if (openId == null) emptySet() else tripEdges(openId)
-        return MobilityGeometryProjection.build(transitions, trips, pending)
+        val open = trips.firstOrNull { it.state == "OPEN" }
+        val pending = if (open == null) emptySet() else tripEdges(open.tripId)
+        // 3.0 (G2) — La celda actual del viaje, con todas sus aristas (sin el tope de la pantalla) y
+        // la misma política que el servicio: muestra lo mismo que la evaluación en directo.
+        val currentCell = open?.lastServing?.let { com.alexisgordr.icdetector.core.MobilityFamiliarityPolicy.assess(historicalEdgeCounts(it).values) }
+        return MobilityGeometryProjection.build(transitions, trips, pending).copy(currentCell = currentCell)
     }
 
     /** PASSED incrementa el baseline fiable; FAILED/N/A solo quedan auditados como observación. */
@@ -955,6 +958,14 @@ class CellDbHelper(
             ).use { c -> if (c.moveToFirst()) c.getInt(0) else 0 }
             put(edge, count)
         }
+    }
+
+    override fun historicalEdgeCounts(identity: String): Map<MobilityEdge, Int> = buildMap {
+        readableDatabase.rawQuery(
+            "SELECT from_identity,to_identity,trip_count FROM $TABLE_CELL_TRANSITIONS " +
+                "WHERE (from_identity=? OR to_identity=?) AND trip_count>0",
+            arrayOf(identity, identity)
+        ).use { c -> while (c.moveToNext()) put(MobilityEdge(c.getString(0), c.getString(1)), c.getInt(2)) }
     }
 
     override fun commitMobilityTrip(tripId: String, reason: MobilityTripCloseReason, closedAtMs: Long) {

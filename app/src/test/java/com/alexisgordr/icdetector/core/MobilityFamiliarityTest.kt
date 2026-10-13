@@ -108,6 +108,7 @@ class MobilityFamiliarityTest {
         override fun tripCells(tripId:String)=cells.toSet()
         override fun tripEdges(tripId:String)=edges.toSet()
         override fun priorTripCounts(edges:Set<MobilityEdge>)=edges.associateWith{counts[it]?:0}
+        override fun historicalEdgeCounts(identity:String)=counts.filter{(e,n)->n>0&&(e.from==identity||e.to==identity)}
         override fun commitMobilityTrip(tripId:String,reason:MobilityTripCloseReason,closedAtMs:Long){
             if(trip?.id!=tripId)return; edges.forEach{counts[it]=(counts[it]?:0)+1};closedReason=reason;trip=null
         }

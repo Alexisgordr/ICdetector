@@ -256,7 +256,7 @@
     <string name="mobility_moving_observed">MOVIMIENTO OBSERVADO</string>
     <string name="mobility_no_evidence">SIN EVIDENCIA</string>
     <string name="mobility_distinct_cells_edges">Celdas / aristas distintas</string>
-    <string name="mobility_current_cell">Celda actual</string>
+    <string name="mobility_current_cell">Celda actual · viajes anteriores</string>
     <string name="mobility_prior_good_edges">Aristas buenas previas</string>
     <string name="mobility_transitions_total">Transiciones observadas acumuladas</string>
     <string name="mobility_max_trips_per_edge">Máx. viajes históricos por arista</string>
@@ -269,7 +269,7 @@
     <string name="intel_verified">REGISTRADAS</string>
     <string name="intel_not_found">NO ENCONTRADAS</string>
     <string name="geometry_local_cell_trust">Confianza local</string>
-    <string name="geometry_mobility">Movilidad</string>
+    <string name="geometry_mobility">Familiaridad · viajes anteriores</string>
     <string name="geometry_good_edges">Aristas buenas</string>
     <string name="mobility_familiarity_unknown">DESCONOCIDA EN RUTA</string>
     <string name="mobility_familiarity_observed">OBSERVADA EN RUTA</string>

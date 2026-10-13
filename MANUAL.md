@@ -268,6 +268,17 @@ already valid. Closed trip detail is kept for 90 days; pruning it does not reduc
 `trip_count`. The experimental familiarity rule requires two incident edges that each appeared in at
 least three earlier trips.
 
+**Two different things.** *Familiarity · earlier trips* describes the **cell**: the rule above,
+applied to every stored edge that enters or leaves it, counting only trips already committed. The
+service (the `[MOBILITY]` terminal line, `cellHistory=`) and Geometry (*Current cell · earlier
+trips* and each node) use the same rule on the same data, so they show the same value. The
+**arrival** in the current trip is separate: the terminal line gives `arrival=priorTrips=n`, how
+many earlier trips used the connection just taken, or `arrival=none` when the trip has not changed
+cell. A cell can be known from earlier trips and still be reached by a new connection. Before this
+change (3.0 beta) the service only counted the edges of the current trip touching the cell, so on
+arrival it could almost never reach `KNOWN_ON_ROUTE` while Geometry did; terminal lines from earlier
+builds used that rule and are not recalculated.
+
 Geometry shows accumulated transitions and confirmed historical trips separately. During an open
 valid trip, an optional `n → n+1` preview never changes the confirmed count until the service closes
 and commits the trip. Opening or closing Geometry has no effect on a trip. **EXPORT GEOMETRY**

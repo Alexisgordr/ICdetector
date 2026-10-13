@@ -20,6 +20,36 @@ data class MobilityFamiliarityConfig(
 )
 
 data class MobilityEdge(val from: String, val to: String)
+
+/**
+ * 3.0 (G2) — Única política de familiaridad histórica, la misma para el servicio (en directo) y
+ * para Geometry/exportación. Mide lo aprendido de VIAJES ANTERIORES YA CONFIRMADOS: cada arista
+ * cuenta los viajes cerrados válidos que la recorrieron (trip_count). Una celda es:
+ *  - KNOWN_ON_ROUTE: al menos [MobilityFamiliarityConfig.goodEdgesRequired] (2) aristas suyas, de
+ *    entrada o de salida, recorridas en [MobilityFamiliarityConfig.priorTripsRequired] (3) viajes;
+ *  - OBSERVED_ON_ROUTE: alguna arista suya aparece en algún viaje anterior;
+ *  - UNKNOWN_ON_ROUTE: ninguna.
+ * El viaje abierto nunca cuenta (sus aristas solo suman al cerrarse), así que un viaje no puede
+ * validarse a sí mismo. Es memoria contextual, no confianza ni legitimidad.
+ */
+object MobilityFamiliarityPolicy {
+    data class Assessment(val familiarity: MobilityFamiliarity, val goodEdges: Int, val maxPriorTrips: Int)
+
+    /** [priorTripCounts]: viajes anteriores confirmados de cada arista incidente en la celda. */
+    fun assess(priorTripCounts: Collection<Int>, config: MobilityFamiliarityConfig = MobilityFamiliarityConfig()): Assessment {
+        val good = priorTripCounts.count { it >= config.priorTripsRequired }
+        val familiarity = when {
+            good >= config.goodEdgesRequired -> MobilityFamiliarity.KNOWN_ON_ROUTE
+            priorTripCounts.any { it > 0 } -> MobilityFamiliarity.OBSERVED_ON_ROUTE
+            else -> MobilityFamiliarity.UNKNOWN_ON_ROUTE
+        }
+        return Assessment(familiarity, good, priorTripCounts.maxOrNull() ?: 0)
+    }
+
+    /** ¿La arista por la que se acaba de llegar está aprendida (≥ K viajes anteriores)? */
+    fun arrivalKnown(arrivalPriorTrips: Int, config: MobilityFamiliarityConfig = MobilityFamiliarityConfig()): Boolean =
+        arrivalPriorTrips >= config.priorTripsRequired
+}
 data class MobilityTrip(
     val id: String,
     val startedAtMs: Long,
@@ -39,17 +69,25 @@ interface MobilityFamiliarityStore {
     fun tripCells(tripId: String): Set<String>
     fun tripEdges(tripId: String): Set<MobilityEdge>
     fun priorTripCounts(edges: Set<MobilityEdge>): Map<MobilityEdge, Int>
+    /** 3.0 (G2) — Todas las aristas guardadas que entran o salen de [identity], con sus viajes anteriores confirmados. */
+    fun historicalEdgeCounts(identity: String): Map<MobilityEdge, Int>
     fun commitMobilityTrip(tripId: String, reason: MobilityTripCloseReason, closedAtMs: Long)
     fun discardMobilityTrip(tripId: String, reason: MobilityTripCloseReason, closedAtMs: Long)
     fun pruneMobilityTripDetails(beforeMs: Long)
 }
 
+/**
+ * [familiarity]/[goodEdges]: familiaridad HISTÓRICA de la celda actual ([MobilityFamiliarityPolicy]),
+ * la misma que muestra Geometry. [arrivalPriorTrips]: lo observado en ESTE viaje, la arista por la
+ * que se llegó a la celda y sus viajes anteriores confirmados; null si no hubo llegada (misma celda
+ * o primera celda del viaje). Son conceptos distintos y se presentan por separado.
+ */
 data class MobilityObservation(
     val familiarity: MobilityFamiliarity,
     val tripId: String? = null,
-    val priorTrips: Int = 0,
     val goodEdges: Int = 0,
-    val event: String? = null
+    val event: String? = null,
+    val arrivalPriorTrips: Int? = null
 )
 
 /**
@@ -77,6 +115,11 @@ class MobilityFamiliarityEngine(
         }
 
         val priorServing = trip.lastServing
+        // 3.0 (G2) — Se evalúa ANTES de incorporar esta observación al viaje, y solo con viajes
+        // anteriores confirmados: el viaje abierto no puede validarse a sí mismo.
+        val historical = MobilityFamiliarityPolicy.assess(store.historicalEdgeCounts(identity).values, config)
+        val arrivalEdge = if (priorServing != null && priorServing != identity) MobilityEdge(priorServing, identity) else null
+        val arrivalPriorTrips = arrivalEdge?.let { store.priorTripCounts(setOf(it))[it] ?: 0 }
         var event: String? = null
         val sameServingSince = if (priorServing == identity) trip.sameServingSinceMs else nowMs
         val staticSince = when (motion.state) {
@@ -91,24 +134,13 @@ class MobilityFamiliarityEngine(
             staticSinceMs = staticSince
         )
         store.addTripCell(trip.id, identity)
-        if (priorServing != null && priorServing != identity) {
-            val edge = MobilityEdge(priorServing, identity)
-            if (edge !in store.tripEdges(trip.id)) event = "edge_seen ${edge.from}->${edge.to}"
-            store.addTripEdge(trip.id, edge)
+        if (arrivalEdge != null) {
+            if (arrivalEdge !in store.tripEdges(trip.id)) event = "edge_seen ${arrivalEdge.from}->${arrivalEdge.to}"
+            store.addTripEdge(trip.id, arrivalEdge)
         }
         store.updateTrip(trip)
 
-        // Snapshot comes exclusively from committed prior trips. Pending edges are a separate table.
-        val related = store.tripEdges(trip.id).filterTo(linkedSetOf()) { it.from == identity || it.to == identity }
-        val prior = store.priorTripCounts(related)
-        val good = related.count { (prior[it] ?: 0) >= config.priorTripsRequired }
-        val anyPrior = related.any { (prior[it] ?: 0) > 0 }
-        val familiarity = when {
-            good >= config.goodEdgesRequired -> MobilityFamiliarity.KNOWN_ON_ROUTE
-            anyPrior -> MobilityFamiliarity.OBSERVED_ON_ROUTE
-            else -> MobilityFamiliarity.UNKNOWN_ON_ROUTE
-        }
-        var result = MobilityObservation(familiarity, trip.id, prior.values.maxOrNull() ?: 0, good, event)
+        var result = MobilityObservation(historical.familiarity, trip.id, historical.goodEdges, event, arrivalPriorTrips)
 
         val closeReason = when {
             nowMs - trip.startedAtMs >= config.maxTripDurationMs -> MobilityTripCloseReason.MAX_DURATION

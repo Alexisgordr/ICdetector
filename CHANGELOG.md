@@ -11,6 +11,15 @@ GitHub pre-release of an earlier build was withdrawn.
 
 ### Audit fixes
 
+- **Route familiarity: one rule for the service and Geometry.** The service judged a cell only by the
+  edges of the current trip that touched it, so on arrival it had a single edge and could almost
+  never reach `KNOWN_ON_ROUTE`; Geometry judged the same cell by all its stored edges. Both now use
+  `MobilityFamiliarityPolicy` (still two edges with three earlier trips each; the open trip never
+  counts) on every stored edge of the cell, and Geometry's current-cell line reads all of them, not
+  only the routes loaded on screen. The arrival in the current trip is reported apart
+  (`[MOBILITY] … arrival=priorTrips=n`), and the labels now say *earlier trips*. Contextual memory
+  only: no score, rule, alarm or Stable-Site change. Terminal lines from earlier builds are not
+  recalculated. No schema change.
 - **H16 needs a recent GPS fix at each end (behaviour cut for H16).** The transition snapshots kept the
   accepted position, which can be up to 120 s old or the same fix at both ends, so a cached position
   could read as "0 m travelled" and, with distant learned zones, give `FAILED` (or let a shortcut
