@@ -638,7 +638,10 @@ quarantined from learning.
 PCI values are learned inside their ARFCN carrier, so legitimate carrier aggregation does not look
 like an identity change. A permanent operator reconfiguration is kept apart from the trusted profile
 for at least fourteen coherent days, and accepted only with enough located observations, trusted
-transitions and no recent alternation with the previous PCI on the same carrier.
+transitions and no recent alternation with the previous PCI on the same carrier. A carrier added
+beside the old one (carrier aggregation, or a new carrier from the operator) follows the same path:
+until it matures it is reported as changed and kept out of learning, and then it is accepted even
+though the old carrier stays in use, because the veto only looks at the same carrier.
 
 ---
 

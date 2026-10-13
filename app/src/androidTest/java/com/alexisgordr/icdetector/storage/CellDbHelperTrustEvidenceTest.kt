@@ -99,6 +99,27 @@ class CellDbHelperTrustEvidenceTest {
     }
 
     @Test
+    fun addedCarrierIsNotVetoedByTheOldCarrierStillInUse() {
+        // 3.0 — Agregación de portadoras: 200/6400 sigue limpia cada día (también hoy) y 473/3600
+        // lleva 14 días en cuarentena. El veto del par viejo es por portadora: no aplica.
+        insertRows(countPerDay = 5, days = 30, pci = 200, arfcn = 6400, failedHeuristics = "OK")
+        insertRows(
+            countPerDay = 5,
+            days = 14,
+            pci = 473,
+            arfcn = 3600,
+            failedHeuristics = "$SUBTHRESHOLD_PREFIX $LOCAL_TRUST_RECONFIGURATION_REASON (ARFCN)"
+        )
+
+        val evidence = helper.getLocalCellTrustEvidence(cell(pci = 473, arfcn = 3600))
+        assertEquals(setOf(200), evidence.knownPcisByArfcn[6400])
+        val candidate = evidence.reconfigurationCandidate
+        assertNotNull(candidate)
+        assertEquals(14, candidate!!.distinctDays)
+        assertFalse(candidate.oldPairSeenRecently)
+    }
+
+    @Test
     fun h15RealTraceKeepsOwnRowsButCountsOneAlternativeEpisode() {
         seedH15Baseline()
         val base = System.currentTimeMillis() - 60_000

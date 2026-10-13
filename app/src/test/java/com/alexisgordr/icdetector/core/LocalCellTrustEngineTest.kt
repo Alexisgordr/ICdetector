@@ -179,6 +179,43 @@ class LocalCellTrustEngineTest {
         assertEquals(LocalCellTrustState.CHANGED, out.localCellTrust.state)
     }
 
+    // 3.0 — Portadora AÑADIDA (no sustituida): la vieja sigue en uso y la nueva se acepta al madurar.
+
+    private fun carrierAggregation(candidate: LocalRfReconfiguration?) = mature().copy(
+        knownPcis = setOf(200), knownArfcns = setOf(6400),
+        knownPcisByArfcn = mapOf(6400 to setOf(200)),
+        reconfigurationCandidate = candidate
+    )
+
+    private val addedCarrier = LocalRfReconfiguration(
+        pci = 473, arfcn = 3600, distinctDays = 30, cappedObservations = 60,
+        locatedObservations = 30, ageHours = 30L * 24L,
+        // Como lo calcula CellDbHelper: ninguna fila limpia de OTRO PCI en 3600 en 48 h. El par
+        // 200/6400 sigue vivo, pero en otra portadora.
+        oldPairSeenRecently = false
+    )
+
+    @Test fun `an added carrier is accepted once mature while the old one stays in use`() {
+        val onNew = LocalCellTrustEngine.apply(cell(pci = 473, arfcn = 3600), carrierAggregation(addedCarrier))
+        assertEquals(LocalCellTrustState.ESTABLISHED, onNew.localCellTrust.state)
+        assertTrue(onNew.localCellTrust.contradictions.isEmpty())
+        assertNull(onNew.suspiciousReason)
+        val onOld = LocalCellTrustEngine.apply(cell(pci = 200, arfcn = 6400), carrierAggregation(null))
+        assertEquals(LocalCellTrustState.ESTABLISHED, onOld.localCellTrust.state)
+    }
+
+    @Test fun `an added carrier stays changed only while it is immature`() {
+        val young = addedCarrier.copy(distinctDays = 5, cappedObservations = 15, ageHours = 5L * 24L)
+        val out = LocalCellTrustEngine.apply(cell(pci = 473, arfcn = 3600), carrierAggregation(young))
+        assertEquals(setOf("ARFCN"), out.localCellTrust.contradictions)
+    }
+
+    @Test fun `old pair veto is computed on the current carrier only`() {
+        val db = listOf(java.io.File("app/src/main/java"), java.io.File("src/main/java")).first { it.exists() }
+            .resolve("com/alexisgordr/icdetector/storage/CellDbHelper.kt").readText()
+        assertTrue(db.contains("oldPairSeenRecently = recentCleanPcisByArfcn[currentArfcn].orEmpty().any { it != currentPci }"))
+    }
+
     @Test fun `append helper never empties or duplicates`() {
         assertNull(StoredReasons.append(null, null))
         assertNull(StoredReasons.append(" ", ""))
