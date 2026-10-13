@@ -12,6 +12,16 @@ internal object PingPongRule {
     /** Por encima de esta velocidad los cambios rápidos son normales (desplazamiento). */
     const val MOVING_FAST_MPS = 8f
 
+    /**
+     * 3.0 — Edad máxima del fix cuya velocidad decide H10. Propia de H10: no es
+     * [GpsFixAge.LIVE_MAX_AGE_MS] (10 s), que decide movimiento en vivo y energía en la política de
+     * GPS. 30 s: un fix de esa edad sigue describiendo el estado de movimiento casi siempre, y una
+     * ráfaga de tres handovers en 10 s dentro de una ventana GPS recién abierta encuentra fix con
+     * más facilidad. Pasar de parado (semáforo) a tres handovers (tren arrancando) lleva más de 30 s.
+     * Revisar con la frecuencia real de H10 en N/A (columna de reglas no evaluadas del historial).
+     */
+    const val SPEED_MAX_AGE_MS = 30_000L
+
     enum class Outcome {
         /** Menos de [MIN_CHANGES] cambios en la ventana: H10 superada. */
         PASSED,
@@ -26,13 +36,13 @@ internal object PingPongRule {
     /**
      * 3.0 — La velocidad caduca mucho antes que la posición. La ubicación acepta fixes de hasta
      * 120 s, pero una velocidad de hace 90 s (parado en un semáforo) no dice nada de los tres
-     * handovers de ahora (un tren que arranca). Solo cuenta si su fix es «en vivo»
-     * ([GpsFixAge.LIVE_MAX_AGE_MS], reloj monotónico); si no, null y H10 queda N/A, igual que sin GPS.
+     * handovers de ahora (un tren que arranca). Solo cuenta si su fix tiene menos de
+     * [SPEED_MAX_AGE_MS] (reloj monotónico); si no, null y H10 queda N/A, igual que sin GPS.
      *
      * @param fixAgeMs edad del fix de la velocidad; null si no se sabe (cuenta como vieja).
      */
     fun liveSpeed(speedMps: Float?, fixAgeMs: Long?): Float? =
-        speedMps?.takeIf { fixAgeMs != null && fixAgeMs in 0 until GpsFixAge.LIVE_MAX_AGE_MS }
+        speedMps?.takeIf { fixAgeMs != null && fixAgeMs in 0 until SPEED_MAX_AGE_MS }
 
     /**
      * @param changeTimesMs momento de cada cambio de celda guardado.

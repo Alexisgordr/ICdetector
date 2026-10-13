@@ -54,15 +54,18 @@ class PingPongRuleTest {
         val burst = listOf(now - 9_000, now - 5_000, now - 1_000)
         // Parado hace 90 s (semáforo) y tres handovers ahora (tren arrancando): antes FAILED.
         assertEquals(PingPongRule.Outcome.NOT_EVALUATED, PingPongRule.evaluate(burst, now, PingPongRule.liveSpeed(0f, 90_000)))
-        // Con un fix en vivo, la velocidad sí decide.
+        // Con un fix reciente (< 30 s), la velocidad sí decide.
         assertEquals(PingPongRule.Outcome.FAILED, PingPongRule.evaluate(burst, now, PingPongRule.liveSpeed(0f, 2_000)))
         assertEquals(PingPongRule.Outcome.PASSED_MOVING, PingPongRule.evaluate(burst, now, PingPongRule.liveSpeed(20f, 2_000)))
     }
 
-    @Test fun `live speed needs a known, non-negative age under the live limit`() {
+    @Test fun `speed needs a known, non-negative age under the H10 limit`() {
+        assertEquals("constante propia de H10, no la de la política de GPS", 30_000L, PingPongRule.SPEED_MAX_AGE_MS)
+        assertEquals(10_000L, GpsFixAge.LIVE_MAX_AGE_MS)
         assertEquals(3f, PingPongRule.liveSpeed(3f, 0)!!, 0f)
-        assertEquals(3f, PingPongRule.liveSpeed(3f, GpsFixAge.LIVE_MAX_AGE_MS - 1)!!, 0f)
-        listOf(null, -1L, GpsFixAge.LIVE_MAX_AGE_MS, 120_000L).forEach { age ->
+        assertEquals(3f, PingPongRule.liveSpeed(3f, 20_000)!!, 0f)
+        assertEquals(3f, PingPongRule.liveSpeed(3f, PingPongRule.SPEED_MAX_AGE_MS - 1)!!, 0f)
+        listOf(null, -1L, PingPongRule.SPEED_MAX_AGE_MS, 90_000L, 120_000L).forEach { age ->
             assertEquals("$age", null, PingPongRule.liveSpeed(3f, age))
         }
         assertEquals(null, PingPongRule.liveSpeed(null, 0))
@@ -74,5 +77,6 @@ class PingPongRuleTest {
         assertTrue(src("core/ThreatAnalyzer.kt").contains("PingPongRule.liveSpeed(currentLocation?.takeIf { it.hasSpeed() }?.speed, locationFixAgeMs)"))
         val service = src("service/MiniICService.kt")
         assertTrue(service.contains("locationFixAgeMs = currentLocation?.elapsedRealtimeNanos?.takeIf { it > 0 }"))
+        assertTrue("edad en la entrega", service.contains("?.let { deliveredAtElapsedMs - it / 1_000_000L }"))
     }
 }

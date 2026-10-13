@@ -158,8 +158,9 @@ object ThreatAnalyzer {
         transitionCoherence: TransitionCoherenceResult = TransitionCoherenceResult(),
         isolatedCellConfirmed: Boolean = true,
         /**
-         * 3.0 — Edad del fix de [currentLocation] (reloj monotónico). Su VELOCIDAD solo decide H10 si
-         * el fix es en vivo (PingPongRule.liveSpeed); null = edad desconocida, no se usa la velocidad.
+         * 3.0 — Edad del fix de [currentLocation] en el momento de la entrega (reloj monotónico). Su
+         * VELOCIDAD solo decide H10 si es reciente (PingPongRule.liveSpeed, [PingPongRule.SPEED_MAX_AGE_MS]);
+         * null = edad desconocida, no se usa la velocidad.
          */
         locationFixAgeMs: Long? = null,
         nowMs: Long = System.currentTimeMillis()

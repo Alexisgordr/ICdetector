@@ -20,8 +20,10 @@ GitHub pre-release of an earlier build was withdrawn.
 - **H10 only uses a live speed.** The ping-pong rule took the speed of the current location, which
   accepts fixes up to 120 s old: a speed from 90 s ago (stopped at a light) with three handovers now
   (a train pulling out) gave FAILED instead of PASSED_MOVING. Position can be that old; speed cannot.
-  The speed now counts only if its fix is younger than the live limit (10 s, monotonic clock);
-  otherwise H10 is N/A, as without GPS.
+  The speed now counts only if its fix is younger than 30 s (`PingPongRule.SPEED_MAX_AGE_MS`, its
+  own constant: the 10 s live limit of the GPS policy is unchanged), measured at delivery on the
+  monotonic clock; otherwise H10 is N/A, as without GPS. To be reviewed with how often H10 is N/A in
+  the not-evaluated column of real history.
 - **TA stub evidence counts sites, not cell identities.** The "three distinct cells reporting 0"
   threshold used the full identity, so three sectors or carriers of the same eNodeB (someone living
   next to a site), a reading with Cell ID "N/A", or the same cell before and after its TAC was
