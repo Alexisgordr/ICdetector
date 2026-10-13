@@ -11,6 +11,11 @@ GitHub pre-release of an earlier build was withdrawn.
 
 ### Audit fixes
 
+- **Multi-signal episodes use a clock that counts deep sleep.** The episode tracker used its default
+  clock (`System.nanoTime`), which stops in deep sleep on Android, so its 90 s evidence window and
+  30 s promotion hold could stretch across a sleep. The service now injects
+  `SystemClock.elapsedRealtime`, the clock temporal confirmation already uses. Windows unchanged;
+  tests still inject a fake clock. Nothing stored changes.
 - **Local confidence validates the current PCI/ARFCN (dataset cut for local confidence).** The
   learned references were already validated per technology (`RadioChannels`), but the current PCI and
   ARFCN were compared raw: a sentinel (`Int.MAX_VALUE`) or an out-of-range value could appear as a new

@@ -26,6 +26,11 @@ import com.alexisgordr.icdetector.models.identityKey
 class ThreatEpisodeTracker(
     private val windowMs: Long = 90_000L,
     private val promotionHoldMs: Long = 30_000L,
+    /**
+     * Monotonic clock in ms. The service injects SystemClock.elapsedRealtime, which keeps counting in
+     * deep sleep, so both windows expire in real time. The default (System.nanoTime) stops in deep
+     * sleep on Android; it stays only as a portable default, and tests inject a fake clock.
+     */
     private val nowMs: () -> Long = { System.nanoTime() / 1_000_000L }
 ) {
     enum class Family { RF_DOMINANCE, IDENTITY, MOBILITY, CROSS_LAYER }

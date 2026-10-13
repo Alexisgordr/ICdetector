@@ -218,7 +218,12 @@ class MiniICService : Service() {
         CONFIRMATION_CYCLES,
         elapsedRealtimeMs = SystemClock::elapsedRealtime
     )
-    private val threatEpisodeTracker = com.alexisgordr.icdetector.core.ThreatEpisodeTracker()
+    // 3.0 — Mismo reloj que la confirmación temporal: elapsedRealtime cuenta el sueño profundo, así
+    // que tras dormir la evidencia (90 s) y la promoción (30 s) caducan por el tiempo real. El reloj
+    // por defecto (System.nanoTime) se detiene en sueño profundo y las alargaba.
+    private val threatEpisodeTracker = com.alexisgordr.icdetector.core.ThreatEpisodeTracker(
+        nowMs = SystemClock::elapsedRealtime
+    )
     private val isolatedCellConfidence = com.alexisgordr.icdetector.core.IsolatedCellConfidence()
     @Volatile private var intensiveMonitoringUntilMs = 0L
     private var intensiveMonitoringStartedAtMs = 0L
