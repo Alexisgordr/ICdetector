@@ -1121,7 +1121,18 @@ class CellDbHelper(
         if (episodeId == null && decision.wouldTrigger) {
             episodeId = observeStableSiteEpisode(current.identityKey, candidate.evidence?.previousIdentity)
         }
-        episodeId?.let { updateStableSiteEpisode(it, decision, current.identityKey) }
+        // 3.0 — ¿Es ESTA evaluación la que registra el episodio en sombra por primera vez
+        // (shadow_recorded 0 → 1)? El cambio es un UPDATE condicional, atómico. Ver StableSiteNotices.
+        episodeId?.let { id ->
+            val newlyRecorded = updateStableSiteEpisode(id, decision, current.identityKey)
+            val firstSeenMs = readableDatabase.rawQuery(
+                "SELECT first_seen_ms FROM $TABLE_SITE_SHADOW_TRIGGERS WHERE episode_id=? AND candidate_identity=?",
+                arrayOf(id, current.identityKey)
+            ).use { if (it.moveToFirst()) it.getLong(0) else null }
+            if (firstSeenMs != null) decision = decision.copy(episodeRecord = com.alexisgordr.icdetector.core.StableSiteEpisodeRecord(
+                episodeId = id, firstSeenMs = firstSeenMs, newlyRecorded = newlyRecorded
+            ))
+        }
         val existingHold = findActiveStableSiteHold(current.identityKey, candidateSiteKeys)
         val corroborated = currentServingDays >= 3 || currentNeighbourDays >= 2
         if (corroborated && existingHold != null) releaseStableSiteHold(existingHold)
@@ -1137,20 +1148,24 @@ class CellDbHelper(
     }
 
     private fun openStableSiteEpisodeId(identity:String) = readableDatabase.rawQuery("SELECT episode_id FROM $TABLE_SITE_SHADOW_TRIGGERS WHERE candidate_identity=? AND closed_ms IS NULL LIMIT 1",arrayOf(identity)).use{if(it.moveToFirst())it.getString(0) else null}
-    private fun updateStableSiteEpisode(id:String, decision:StableSiteDecision, identity:String) {
+    /** Updates the episode; true only if this call set shadow_recorded from 0 to 1. */
+    private fun updateStableSiteEpisode(id:String, decision:StableSiteDecision, identity:String): Boolean {
         val e=decision.evidence
         val now=System.currentTimeMillis()
+        val newlyRecorded = decision.wouldTrigger && writableDatabase.update(TABLE_SITE_SHADOW_TRIGGERS,
+            ContentValues().apply { put("shadow_recorded",1) },
+            "episode_id=? AND candidate_identity=? AND shadow_recorded=0", arrayOf(id,identity)) > 0
         writableDatabase.update(TABLE_SITE_SHADOW_TRIGGERS,ContentValues().apply{
             put("site_key",decision.siteKey)
             put("last_seen_ms",now)
             put("evaluated_ms",now)
-            if(decision.wouldTrigger) put("shadow_recorded",1)
             put("reason",decision.reason)
             put("motion_state",e?.motion?.state?.name);put("feature_state",decision.featureState.name)
             put("globally_known",if(e?.currentSeenGlobally==true)1 else 0);put("known_at_site",if((e?.currentServingDays?:0)>=3)1 else 0)
             put("seen_as_neighbour",if((e?.currentNeighbourDays?:0)>0)1 else 0);put("serving_days",e?.currentServingDays?:0);put("neighbour_days",e?.currentNeighbourDays?:0)
             put("corroborated",if((e?.currentServingDays?:0)>=3||(e?.currentNeighbourDays?:0)>=2)1 else 0)
         },"episode_id=? AND candidate_identity=?",arrayOf(id,identity))
+        return newlyRecorded
     }
     private fun findActiveStableSiteHold(identity:String, candidateSites:List<String>):String? {
         val placeholders=candidateSites.joinToString(","){"?"}

@@ -86,6 +86,36 @@ class StableSiteStorageTest {
         assertEquals(0,count(db.readableDatabase,"SELECT COUNT(*) FROM site_holds WHERE active=1"))
     }
 
+    @Test fun episodeIsNewlyRecordedOnceAcrossReadingsAndHelperRestart(){
+        val previous=cell("100").identityKey;val current=cell("999")
+        db.observeStableSiteEpisode(current.identityKey,previous,1_000)
+        val moving=StableSiteEvidence("B",StableSiteFeatureState.ACTIVE,7,3,3,0,0,false,7,MotionEvidence(MotionState.MOVING,60,8f,300f),35,previous)
+        val d0=db.applyStableSiteDecision(StableSiteEvaluator.evaluate(moving),current)
+        assertEquals(false,d0.episodeRecord!!.newlyRecorded);assertEquals(1_000L,d0.episodeRecord!!.firstSeenMs)
+        val still=moving.copy(motion=MotionEvidence(MotionState.STATIC_CONFIRMED,130,8f,2f))
+        val d1=db.applyStableSiteDecision(StableSiteEvaluator.evaluate(still),current)
+        assertTrue(d1.episodeRecord!!.newlyRecorded)
+        assertTrue(StableSiteNotices.shouldNotify(d1,enabled=true,notifySinceMs=0L))
+        repeat(5){assertEquals(false,db.applyStableSiteDecision(StableSiteEvaluator.evaluate(still),current).episodeRecord!!.newlyRecorded)}
+        db.close();db=CellDbHelper(context);db.writableDatabase
+        val afterRestart=db.applyStableSiteDecision(StableSiteEvaluator.evaluate(still),current)
+        assertEquals(false,afterRestart.episodeRecord!!.newlyRecorded)
+        assertTrue(!StableSiteNotices.shouldNotify(afterRestart,enabled=true,notifySinceMs=0L))
+        assertEquals(1,count(db.readableDatabase,"SELECT COUNT(*) FROM site_shadow_triggers WHERE shadow_recorded=1"))
+    }
+
+    @Test fun episodeRecordedBeforeMaturityIsNotNewlyRecordedAtMaturity(){
+        val previous=cell("100").identityKey;val current=cell("999")
+        db.observeStableSiteEpisode(current.identityKey,previous,1_000)
+        val ready=StableSiteEvidence("B",StableSiteFeatureState.SHADOW_READY,5,2,0,0,0,false,7,MotionEvidence(MotionState.STATIC_CONFIRMED,130,8f,2f),20,previous)
+        val before=db.applyStableSiteDecision(StableSiteEvaluator.evaluate(ready),current)
+        assertTrue(before.episodeRecord!!.newlyRecorded)
+        assertTrue("inmaduro: no avisa",!StableSiteNotices.shouldNotify(before,enabled=true,notifySinceMs=0L))
+        val mature=db.applyStableSiteDecision(StableSiteEvaluator.evaluate(ready.copy(featureState=StableSiteFeatureState.ACTIVE)),current)
+        assertEquals(false,mature.episodeRecord!!.newlyRecorded)
+        assertTrue(!StableSiteNotices.shouldNotify(mature,enabled=true,notifySinceMs=0L))
+    }
+
     @Test fun shadowReadyNeverEnforcesEvenWhenFutureFlagIsEnabled(){
         val previous=cell("100").identityKey;val current=cell("999")
         db.observeStableSiteEpisode(current.identityKey,previous,1_000)
