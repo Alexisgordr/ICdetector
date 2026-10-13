@@ -155,5 +155,76 @@ class NetworkLatencyMonitorTest {
         val lost = service.substringAfter("private fun onSignalLost() {").substringBefore("\n    }\n")
         assertTrue(lost.contains("latencyMonitor.reset()"))
     }
-}
 
+    // ── 3.0 — La misma celda cambia de clave al rellenarse un campo que faltaba ─────────────
+
+    private val partial = "N/A-N/A-100-1-LTE"      // primera lectura sin MCC/MNC
+    private val filled = "214-07-100-1-LTE"
+
+    @Test fun `after a rename, checks with the new key are recorded`() = runBlocking {
+        val now = learnBaseline(partial, 30_000L)
+        published.clear()
+        monitor.renameActiveCell(partial, filled)
+        assertEquals("renombrar no publica ni reinicia", emptyList<String>(), published)
+        monitor.check(filled, now)
+        assertEquals("se registra y el baseline aprendido se conserva", listOf("OK"), published)
+        // La clave antigua ya no es la activa.
+        published.clear()
+        monitor.check(partial, now + 30_000L)
+        assertEquals(emptyList<String>(), published)
+    }
+
+    @Test fun `without the rename the new key would be silently discarded (regression)`() = runBlocking {
+        val now = learnBaseline(partial, 30_000L)
+        published.clear()
+        monitor.check(filled, now)
+        assertEquals(emptyList<String>(), published)
+    }
+
+    @Test fun `a measurement started with the old key and finished after the rename still counts`() = runBlocking {
+        val now = learnBaseline(partial, 30_000L)
+        val started = CompletableDeferred<Unit>()
+        val gate = CompletableDeferred<List<Long>>()
+        next = { started.complete(Unit); gate.await() }
+        published.clear()
+        val running = async(Dispatchers.Default) { monitor.check(partial, now) }
+        started.await()
+        monitor.renameActiveCell(partial, filled)
+        gate.complete(listOf(50L, 50L, 50L))
+        running.await()
+        assertEquals(listOf("OK"), published)
+    }
+
+    @Test fun `rename keeps the anomaly streak and is ignored for a cell that is not active`() = runBlocking {
+        var now = learnBaseline(partial, 30_000L)
+        next = { listOf(500L, 500L, 500L) }
+        published.clear()
+        monitor.check(partial, now); now += 30_000L
+        monitor.renameActiveCell(partial, filled)
+        monitor.check(filled, now); now += 30_000L
+        assertEquals("la racha sigue: 2 anomalías seguidas en la misma celda", listOf("ANOMALA", "ANOMALA"), published)
+        // Renombrar una celda que no es la activa no cambia nada.
+        monitor.renameActiveCell("otra", "otra-2")
+        published.clear()
+        next = { listOf(50L, 50L, 50L) }
+        monitor.check(filled, now)
+        assertEquals(listOf("OK"), published)
+        // Un cambio de celda real sí reinicia: la clave antigua deja de valer.
+        monitor.onCellChanged("214-07-100-2-LTE", NetworkLatencyMonitor.STATE_NOT_MEASURED)
+        published.clear()
+        monitor.check(partial, now + 30_000L)
+        assertEquals(emptyList<String>(), published)
+    }
+
+    @Test fun `pruning never drops the renamed active cell`() = runBlocking {
+        val now = learnBaseline(partial, 30_000L)
+        monitor.renameActiveCell(partial, filled)
+        // Otras celdas para forzar la poda; la clave «cruda» de la lectura sería otra.
+        repeat(5) { monitor.onCellChanged("other-$it", "IDLE"); monitor.check("other-$it", now + it * 30_000L) }
+        monitor.onCellChanged(filled, "IDLE")
+        monitor.prune("N/A-07-100-1-LTE", 1)
+        published.clear()
+        monitor.check(filled, now + 300_000L)
+        assertEquals("su baseline sigue: OK, no aprendiendo", listOf("OK"), published)
+    }
+}

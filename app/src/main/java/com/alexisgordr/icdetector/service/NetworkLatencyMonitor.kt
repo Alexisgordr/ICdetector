@@ -50,7 +50,36 @@ internal class NetworkLatencyMonitor(
     @Synchronized
     fun onCellChanged(cellKey: String, state: String) {
         activeCellKey = cellKey
+        renamedFrom = null
         reset(state)
+    }
+
+    /**
+     * Clave anterior de la celda activa tras [renameActiveCell]. Solo vale para una medición que ya
+     * estaba en curso al renombrar ([renames] la distingue); las que empiezan después usan la nueva.
+     */
+    private var renamedFrom: String? = null
+    private var renames = 0L
+
+    /**
+     * 3.0 — La celda activa es LA MISMA, pero su clave ha cambiado porque una lectura posterior
+     * rellenó un campo que faltaba (TAC, MCC o MNC «N/A» en la primera lectura). No es un cambio de
+     * celda: no abre generación nueva ni toca el estado publicado, la racha ni la última medición.
+     * Solo actualiza la clave activa y mueve su historial. Sin esto, [record] descartaba en silencio
+     * todas las mediciones con la clave nueva y la celda se quedaba en «no medido» hasta el siguiente
+     * handover. No hace nada si [oldKey] no es la celda activa.
+     */
+    @Synchronized
+    fun renameActiveCell(oldKey: String, newKey: String) {
+        if (oldKey == newKey || activeCellKey != oldKey) return
+        historyByCell.remove(oldKey)?.let { moved ->
+            val target = historyByCell.getOrPut(newKey) { mutableListOf() }
+            target.addAll(moved)
+            while (target.size > HISTORY_SIZE) target.removeAt(0)
+        }
+        activeCellKey = newKey
+        renamedFrom = oldKey
+        renames++
     }
 
     /** Último estado publicado por este monitor. */
@@ -86,9 +115,9 @@ internal class NetworkLatencyMonitor(
         expireIfStale(nowMs)
         if (!isDue(nowMs)) return
         lastCheckMs = nowMs
-        val startedGeneration = synchronized(this) { generation }
+        val (startedGeneration, startedRenames) = synchronized(this) { generation to renames }
         val latencies = measurement?.invoke() ?: measure()
-        record(cellKey, latencies, startedGeneration, nowMs)
+        record(cellKey, latencies, startedGeneration, startedRenames, nowMs)
     }
 
     private suspend fun measure(): List<Long> = coroutineScope {
@@ -107,7 +136,9 @@ internal class NetworkLatencyMonitor(
 
     /** Publica el resultado solo si no hubo un reset (cambio de celda) durante la medición. */
     @Synchronized
-    private fun record(cellKey: String, latencies: List<Long>, startedGeneration: Long, nowMs: Long) {
+    private fun record(requestedKey: String, latencies: List<Long>, startedGeneration: Long, startedRenames: Long, nowMs: Long) {
+        // Una medición que ya estaba en curso con la clave anterior de la MISMA celda se atribuye a la nueva.
+        val cellKey = if (requestedKey == renamedFrom && startedRenames < renames) activeCellKey ?: return else requestedKey
         if (startedGeneration != generation || cellKey != activeCellKey) return
         if (latencies.size < 2) {
             log("Latencia: sin suficientes endpoints disponibles")
@@ -148,9 +179,11 @@ internal class NetworkLatencyMonitor(
         if (history.size > HISTORY_SIZE) history.removeAt(0)
     }
 
-    fun prune(activeCellKey: String?, maximumCells: Int) {
+    /** Acota el historial; nunca borra [protectedKey] ni la celda activa del propio monitor (puede estar renombrada). */
+    @Synchronized
+    fun prune(protectedKey: String?, maximumCells: Int) {
         if (historyByCell.size <= maximumCells) return
-        historyByCell.keys.filter { it != activeCellKey }
+        historyByCell.keys.filter { it != protectedKey && it != activeCellKey }
             .take(historyByCell.size - maximumCells)
             .forEach(historyByCell::remove)
     }

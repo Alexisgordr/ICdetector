@@ -919,12 +919,18 @@ class MiniICService : Service() {
      */
     @Synchronized
     private fun resetLatencyIfCellChanged(cell: CellData) {
+        val previousKey = latencyServingIdentity?.key
         val step = com.alexisgordr.icdetector.core.ServingIdentityChange.step(
             latencyServingIdentity, com.alexisgordr.icdetector.core.ServingIdentityChange.of(cell))
         latencyServingIdentity = step.next
-        if (!step.handover) return
-        // 3.0 (#26) — Celda nueva: todavía no medida. Antes se mostraba "OK" sin medir nada.
-        latencyMonitor.onCellChanged(step.next!!.key, NetworkLatencyMonitor.STATE_NOT_MEASURED)
+        val nextKey = step.next?.key ?: return
+        if (step.handover) {
+            // 3.0 (#26) — Celda nueva: todavía no medida. Antes se mostraba "OK" sin medir nada.
+            latencyMonitor.onCellChanged(nextKey, NetworkLatencyMonitor.STATE_NOT_MEASURED)
+        } else if (previousKey != null && nextKey != previousKey) {
+            // Misma celda; un campo que faltaba se ha rellenado y su clave cambia. Sin reiniciar.
+            latencyMonitor.renameActiveCell(previousKey, nextKey)
+        }
     }
 
     private fun checkLatencyAnomaly() {

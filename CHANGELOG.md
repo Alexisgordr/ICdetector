@@ -36,7 +36,11 @@ GitHub pre-release of an earlier build was withdrawn.
   readings, so a first reading with "N/A" does not block detection. A reading with an unreadable
   Cell ID fills nothing (it may not be the same cell). The latency state follows the same rule: a
   transient "N/A" no longer resets it twice (H12 back to "not measured"), and a measurement is only
-  attributed to the cell when the reading's Cell ID is readable.
+  attributed to the cell when the reading's Cell ID is readable. When a later reading fills a field
+  that was missing (TAC, MCC or MNC "N/A" in the first reading), the latency monitor renames the
+  active cell instead of discarding every measurement under the new key (which left it "not
+  measured" until the next handover); the baseline, state and streak are kept, a measurement in
+  flight during the rename still counts, and pruning never drops the renamed active cell.
 - **Handover routes: last reading separate from the last evaluated result (schema 25).** Every
   handover overwrote `last_status`, also with NOT_EVALUATED, so an earlier FAILED disappeared; `N/A`
   was shown as LEARNING and the REVIEW filter included it. Schema 25 adds to `cell_transitions` the

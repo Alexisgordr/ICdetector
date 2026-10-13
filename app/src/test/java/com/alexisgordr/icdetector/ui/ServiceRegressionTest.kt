@@ -35,7 +35,9 @@ class ServiceRegressionTest {
         // un CID «N/A» transitorio no lo reinicia (ServingIdentityChangeTest).
         assertTrue(service.contains("val activeCellKey = latencyServingIdentity?.key ?: return"))
         // 3.0 (#26) — Celda nueva: "no medida", nunca un OK sin medir.
-        assertTrue(service.contains("latencyMonitor.onCellChanged(step.next!!.key, NetworkLatencyMonitor.STATE_NOT_MEASURED)"))
+        assertTrue(service.contains("latencyMonitor.onCellChanged(nextKey, NetworkLatencyMonitor.STATE_NOT_MEASURED)"))
+        // Misma celda con un campo rellenado: se renombra, no se reinicia.
+        assertTrue(service.contains("latencyMonitor.renameActiveCell(previousKey, nextKey)"))
         assertFalse(service.contains("activeRaw.cellId != prevCid) {\n                latencyMonitor.reset"))
         assertTrue(service.contains("latencyMonitor.check(activeCellKey)"))
     }
