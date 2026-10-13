@@ -127,12 +127,11 @@ class AnalysisHealthTest {
         assertTrue(cycle.indexOf("collectionGeneration.isLatest(cycleTicket)") < cycle.indexOf("AnalysisHealth.guard("))
         assertTrue(cycle.contains("withContext(Dispatchers.Main) { onAnalysisFailed(cycleTicket, errorType) }"))
         val publish = cycle.substringAfter("if (!collectionGeneration.mayPublish(cycleTicket)) return@withContext")
-        assertTrue("recuperación al final de la publicación",
-            publish.indexOf("onAnalysisPublished(cycleTicket)") > publish.indexOf("updateNotificationText(getString(R.string.searching_network))"))
+        assertEquals("recuperación en las dos ramas de publicación", 2, Regex("""onAnalysisPublished\(cycleTicket\)""").findAll(publish).count())
         val failed = service.substringAfter("private fun onAnalysisFailed(").substringBefore("private fun onAnalysisPublished(")
         listOf("checkAlerts", "securityAlerts", "dbHelper", "_cellFlow", "temporalConfidence", "threatEpisodeTracker", "forensicRecorder")
             .forEach { assertFalse("el fallo no toca $it", failed.contains(it)) }
-        assertTrue(failed.contains("updateNotificationText(getString(R.string.analysis_unavailable), force = true)"))
+        assertTrue(failed.contains("publishNotification { updateNotificationText(getString(R.string.analysis_unavailable), force = true) }"))
         assertTrue(failed.contains("collectionGeneration.mayPublish(ticket)"))
         listOf("values", "values-es").forEach { dir ->
             val strings = res.resolve("$dir/strings.xml").readText()

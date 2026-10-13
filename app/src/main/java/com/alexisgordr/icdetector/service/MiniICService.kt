@@ -389,8 +389,7 @@ class MiniICService : Service() {
         notificationController.createChannels()
         val serving = _cellFlow.value.firstOrNull { it.isRegistered }
         if (serving != null) {
-            lastNotificationTime = 0L
-            updateNotification(serving)
+            updateNotification(serving, force = true)
         } else {
             updateNotificationText(getString(R.string.monitoring_active), force = true)
         }
@@ -699,7 +698,7 @@ class MiniICService : Service() {
                         withContext(Dispatchers.Main) {
                             onSignalLost()
                             _cellFlow.value = emptyList()
-                            updateNotificationText(getString(R.string.no_signal_airplane))
+                            updateNotificationText(getString(R.string.no_signal_airplane), kind = com.alexisgordr.icdetector.core.MonitoringNotificationText.TextKind.NO_SIGNAL)
                         }
                         appendLog("[SYS]", "⚠️ Modo Avión activo. Suspendiendo escaneo.")
                         wasAirplaneModeOn = true
@@ -1091,7 +1090,7 @@ class MiniICService : Service() {
                 // 3.0 (#24) — Una pérdida de señal invalida el ciclo que aún esté analizando.
                 onSignalLost()
                 _cellFlow.value = emptyList()
-                updateNotificationText(getString(R.string.no_signal_airplane))
+                updateNotificationText(getString(R.string.no_signal_airplane), kind = com.alexisgordr.icdetector.core.MonitoringNotificationText.TextKind.NO_SIGNAL)
                 return
             }
 
@@ -1109,7 +1108,7 @@ class MiniICService : Service() {
                 onSignalLost()
                 _cellFlow.value = com.alexisgordr.icdetector.core.ServingCellSelection.abstentionPublication()
                 if (declaredPrimary) logUnusablePrimaryAbstention()
-                updateNotificationText(getString(R.string.searching_network))
+                updateNotificationText(getString(R.string.searching_network), kind = com.alexisgordr.icdetector.core.MonitoringNotificationText.TextKind.NO_SIGNAL)
                 return
             }
             activeObservationToken = parsedTokens.getOrNull(servingIndex)
@@ -1664,15 +1663,10 @@ class MiniICService : Service() {
                         verificationController.verify(active)
                         
                         val finalStatus = verificationCache[cacheKey] ?: knownStatus
-                        
-                        _cellFlow.value = sorted.mapIndexed { index, cell ->
-                            if (index == 0) confirmedActive.copy(verified = finalStatus) else cell
-                        }
-                        
-                        updateNotification(confirmedActive.copy(verified = finalStatus))
 
                         // Actualizar estado de banda para la heurística 14 (tras el análisis,
-                        // de modo que el PRÓXIMO ciclo compare contra estos valores).
+                        // de modo que el PRÓXIMO ciclo compare contra estos valores). 3.0 — Antes
+                        // de publicar: con esto el ciclo queda completo.
                         val isLteActive = active.radioTech == RadioTech.LTE
                         prevBand = if (isLteActive) {
                             active.band ?: active.arfcn?.let { com.alexisgordr.icdetector.core.BandPlan.earfcnToBandLte(it) }
@@ -1684,13 +1678,25 @@ class MiniICService : Service() {
                             recentRegisteredDbmTrend.add(active.dbm)
                             while (recentRegisteredDbmTrend.size > 6) recentRegisteredDbmTrend.removeAt(0)
                         }
+
+                        // 3.0 — El resultado visible y su fecha de validez se publican juntos, sin
+                        // nada entre medias que pueda fallar: la pantalla nunca enseña un resultado
+                        // nuevo con la salud del anterior.
+                        _cellFlow.value = sorted.mapIndexed { index, cell ->
+                            if (index == 0) confirmedActive.copy(verified = finalStatus) else cell
+                        }
+                        val recovered = onAnalysisPublished(cycleTicket)
+                        // La notificación es presentación: si falla, no es un fallo del análisis.
+                        // Al recuperarse se fuerza, para que el aviso no quede por el límite de 2 s.
+                        publishNotification { updateNotification(confirmedActive.copy(verified = finalStatus), force = recovered) }
                     } else {
                         stableSiteIntensiveActive = false
                         _cellFlow.value = emptyList()
-                        updateNotificationText(getString(R.string.searching_network))
+                        val recovered = onAnalysisPublished(cycleTicket)
+                        publishNotification {
+                            updateNotificationText(getString(R.string.searching_network), force = recovered, kind = com.alexisgordr.icdetector.core.MonitoringNotificationText.TextKind.NO_SIGNAL)
+                        }
                     }
-                    // 3.0 — Solo aquí, con el ciclo completo y publicado, cuenta como recuperación.
-                    onAnalysisPublished(cycleTicket)
                 }
                 }
                 }
@@ -1718,16 +1724,36 @@ class MiniICService : Service() {
         _analysisHealth.value = analysisHealthTracker.state
         if (change == com.alexisgordr.icdetector.core.AnalysisHealth.Change.BECAME_UNAVAILABLE) {
             appendLog("[SYS]", "${com.alexisgordr.icdetector.core.AnalysisHealth.FAILURE_LOG} [$errorType]")
-            updateNotificationText(getString(R.string.analysis_unavailable), force = true)
+            publishNotification { updateNotificationText(getString(R.string.analysis_unavailable), force = true) }
         }
     }
 
-    /** 3.0 — Un ciclo válido terminó de publicarse (hilo principal). */
-    private fun onAnalysisPublished(ticket: com.alexisgordr.icdetector.core.CollectionGeneration.Ticket) {
+    /**
+     * 3.0 — El resultado de un ciclo válido acaba de publicarse en pantalla (hilo principal): su fecha
+     * de validez pasa a ser ahora. Devuelve true si cierra una racha de fallos, para forzar el
+     * repintado de la notificación.
+     */
+    private fun onAnalysisPublished(ticket: com.alexisgordr.icdetector.core.CollectionGeneration.Ticket): Boolean {
         val change = analysisHealthTracker.onCyclePublished(ticket.generation, System.currentTimeMillis())
         _analysisHealth.value = analysisHealthTracker.state
         if (change == com.alexisgordr.icdetector.core.AnalysisHealth.Change.RECOVERED) {
             appendLog("[SYS]", com.alexisgordr.icdetector.core.AnalysisHealth.RECOVERY_LOG)
+            return true
+        }
+        return false
+    }
+
+    /**
+     * 3.0 — Actualizar la notificación sin que un fallo suyo pase por fallo del análisis: el resultado
+     * ya está publicado y es válido. Solo se anota en el registro del sistema, con el tipo de error.
+     */
+    private inline fun publishNotification(block: () -> Unit) {
+        try {
+            block()
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            Log.w("MiniIC", "No se pudo actualizar la notificación de monitorización (${e.javaClass.simpleName}).")
         }
     }
 
@@ -2038,7 +2064,7 @@ class MiniICService : Service() {
         securityAlerts.evaluate(cell, confirmed, context)
     }
 
-    private fun updateNotification(cell: CellData) {
+    private fun updateNotification(cell: CellData, force: Boolean = false) {
         val vStatus = when (cell.verified) {
             VerificationStatus.VERIFIED -> getString(R.string.verified_label)
             // El aspa roja sobraba: que una base colaborativa no conozca una antena no es un fallo
@@ -2050,7 +2076,7 @@ class MiniICService : Service() {
             VerificationStatus.PENDING -> getString(R.string.pending_label)
         }
         val content = "$vStatus | ${cell.networkType} | CID: ${cell.cellId} | ${cell.dbm} dBm"
-        updateNotificationText(content)
+        updateNotificationText(content, force)
     }
 
     /**
@@ -2074,20 +2100,34 @@ class MiniICService : Service() {
         }
     }
 
-    private var lastNotificationTime = 0L
+    /** 3.0 — Prioridad y límite de repintado de la notificación (ver MonitoringNotificationText). */
+    private val monitoringNotificationText = com.alexisgordr.icdetector.core.MonitoringNotificationText()
+
     @Synchronized
-    private fun updateNotificationText(text: String, force: Boolean = false) {
+    private fun updateNotificationText(
+        text: String,
+        force: Boolean = false,
+        kind: com.alexisgordr.icdetector.core.MonitoringNotificationText.TextKind =
+            com.alexisgordr.icdetector.core.MonitoringNotificationText.TextKind.OTHER
+    ) {
         // Throttle: no repintar la notificación más de una vez cada 2 s. El callback de telefonía
         // puede dispararse muchas veces por segundo en zonas de transición; repintar cada vez satura
         // el System Server (IPC + batería) y Android acaba silenciando con "rate limit exceeded".
         // Los datos (BD, logs y el TONO de alarma) van en tiempo real por su cuenta: esto solo
         // limita el DIBUJO visual de la notificación, no la detección ni el registro.
+        // 3.0 — El texto se resuelve con el estado de salud en CADA actualización: mientras el
+        // análisis no esté disponible, ningún otro texto (salvo falta de señal) lo sustituye. Se lee
+        // del StateFlow, seguro desde cualquier hilo.
         val now = System.currentTimeMillis()
-        if (!force && now - lastNotificationTime < 2000L) return
-        lastNotificationTime = now
+        val resolved = monitoringNotificationText.next(
+            requested = text, kind = kind, force = force,
+            analysisUnavailable = _analysisHealth.value.unavailable,
+            unavailableText = getString(R.string.analysis_unavailable),
+            nowMs = now
+        ) ?: return
         // Un fallo de escritura tapa cualquier otro texto: es la única condición en la que la app
         // parece funcionar y no está recogiendo nada.
-        val visible = collectionHealthController.visibleNotification(text, now)
+        val visible = collectionHealthController.visibleNotification(resolved, now)
         notificationController.notifyForeground(visible)
     }
 

@@ -31,7 +31,12 @@ GitHub pre-release of an earlier build was withdrawn.
   the last valid result is shown as earlier, not updated. No alarm, no publication of an incomplete
   cycle and no retry. Only a cycle that could still publish counts, so a discarded generation
   cannot change the state of a newer one. What a cycle already did before failing stays done once;
-  it is not a global transaction (see `onAnalysisFailed`).
+  it is not a global transaction (see `onAnalysisFailed`). The notification text is resolved from
+  the health state on every update, so no later text replaces the notice while the analysis is
+  unavailable; priority: write failure, then missing signal / airplane mode / searching, then the
+  notice, then any other text. Recovery forces a repaint past the 2-second limit. The visible result
+  and its validity time are published together, with nothing in between that can fail; a
+  notification failure is logged as such and is not an analysis failure.
 - **Restore refuses databases with triggers or views.** No version of the app creates them (audited
   for every supported backup schema, 20–23, and the whole code history; SQLite's own objects and
   `android_metadata` are tables or indexes). A trigger in a backup would have run when the app

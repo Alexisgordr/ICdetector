@@ -74,7 +74,7 @@ class AirplanePublicationTest {
         val service = main.resolve("com/alexisgordr/icdetector/service/MiniICService.kt").readText()
         val branch = service.substringAfter("if (isAirplaneModeOn) {").substringBefore("} else {")
         val onMain = branch.substringAfter("withContext(Dispatchers.Main) {").substringBefore("}")
-        listOf("onSignalLost()", "_cellFlow.value = emptyList()", "updateNotificationText(getString(R.string.no_signal_airplane))")
+        listOf("onSignalLost()", "_cellFlow.value = emptyList()", "updateNotificationText(getString(R.string.no_signal_airplane), kind = com.alexisgordr.icdetector.core.MonitoringNotificationText.TextKind.NO_SIGNAL)")
             .forEach { assertTrue(it, onMain.contains(it)) }
         assertTrue("el ajuste se sigue leyendo fuera", service.substringBefore("if (isAirplaneModeOn) {")
             .substringAfterLast("scope.launch(Dispatchers.Default) {").contains("Settings.Global.AIRPLANE_MODE_ON"))
