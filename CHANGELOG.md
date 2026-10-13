@@ -11,6 +11,16 @@ GitHub pre-release of an earlier build was withdrawn.
 
 ### Audit fixes
 
+- **A transmitter alternating identities can be confirmed.** Temporal confirmation counted phases per
+  serving identity and every identity change restarted it, so an emitter switching between two of its
+  own identities every few seconds never reached `3/3`, even with every cycle suspicious, while H10
+  (the rule for that behaviour) failed. While H10 fails, the phases now count on the sorted set of
+  identities in the ping-pong window (`PingPongRule.confirmationKey`), and the alarm episode uses the
+  same key so each switch does not notify again. **Effect on alarms:** H10 alone is unchanged (score
+  75, no suspicion); a new adversarial test scenario (alternating emitter) alarms and a new benign one
+  (border ping-pong while stationary) does not. The scenario bench now feeds identity changes and a
+  GPS speed through H10; `ThreatAnalyzer` takes the H10 speed as an input whose default is the
+  location's (the service does not change).
 - **A held multi-signal episode no longer supplies its own confirmation phases.** After two
   sub-threshold failures of different families opened an episode, the 30 s hold kept the cell
   suspicious, and each clean observation inside it advanced the temporal streak: two weak failures

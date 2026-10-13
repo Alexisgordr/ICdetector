@@ -40,6 +40,11 @@ internal class SecurityAlertController(
         pingPongLogged = false
     }
 
+    /** Cambio de celda: cierra el episodio de alarma salvo que sea el de un ping-pong. */
+    fun onHandover() {
+        if (!alarmEpisodes.onHandover()) pingPongLogged = false
+    }
+
     /**
      * 3.0 — El servicio no tiene celda activa (sin señal, modo avión, primaria inutilizable). Un
      * episodio 2G/3G abierto sigue abierto, pero su cuenta de cierre vuelve a empezar, y la lectura
@@ -51,7 +56,16 @@ internal class SecurityAlertController(
         previousDbm = null
     }
 
-    fun evaluate(cell: CellData, confirmed: Boolean, context: ObservationContext) {
+    /**
+     * @param episodeKey clave del episodio de alarma: la identidad de la celda o, durante un
+     * ping-pong, la misma clave de conjunto con la que se confirmó (una notificación por episodio).
+     */
+    fun evaluate(
+        cell: CellData,
+        confirmed: Boolean,
+        context: ObservationContext,
+        episodeKey: String = cell.identityKey
+    ) {
         val dbm = cell.dbm
         val network = cell.networkType
 
@@ -87,7 +101,7 @@ internal class SecurityAlertController(
             pingPongLogged = pingPongConfirmed
             // v2.10.10 — Un episodio por identidad completa que se cierra tras 60 s sin alarma
             // (ver AlarmEpisodeGate). Antes solo se cerraba al cambiar de celda.
-            if (confirmed && alarmEpisodes.onConfirmedAlarm(cell.identityKey)) {
+            if (confirmed && alarmEpisodes.onConfirmedAlarm(episodeKey)) {
                 persistConfirmedAlarm(cell, context)
                 // v2.10.8 — Aviso visible, una vez por episodio (antes solo tono y registro).
                 notifyConfirmedAlarm(cell)

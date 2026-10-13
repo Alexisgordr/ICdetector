@@ -230,4 +230,20 @@ class DiagnosticsTest {
         assertEquals(BaselineLevel.EMPTY, waiting.signalLevel)
         assertEquals(DiagnosticEngine.maturity(inputs(false)).copy(trustGateMet = true), waiting)
     }
+
+    @Test
+    fun `alternating identities reset the streak unless they share a confirmation key`() {
+        val a = cell().copy(isSuspicious = true, suspiciousReason = "test")
+        val b = a.copy(cellId = "124")
+
+        val perCell = TemporalConfidence(3)
+        val plain = listOf(a, b, a, b).map { perCell.apply(it) }
+        assertTrue(plain.all { it.temporalProgress.phase == 1 })
+
+        val grouped = TemporalConfidence(3)
+        val key = PingPongRule.CONFIRMATION_KEY_PREFIX + "A,B"
+        val results = listOf(a, b, a).map { grouped.apply(it, confirmationKey = key) }
+        assertEquals(listOf(1, 2, 3), results.map { it.temporalProgress.phase })
+        assertTrue(results.last().isSuspicious)
+    }
 }

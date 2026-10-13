@@ -71,12 +71,51 @@ class PingPongRuleTest {
         assertEquals(null, PingPongRule.liveSpeed(null, 0))
     }
 
+    private fun src(p: String) = listOf("app/src/main/java/com/alexisgordr/icdetector/$p", "src/main/java/com/alexisgordr/icdetector/$p")
+        .map(::File).first { it.exists() }.readText()
+
     @Test fun `the analyzer and the service pass the fix age`() {
-        fun src(p: String) = listOf("app/src/main/java/com/alexisgordr/icdetector/$p", "src/main/java/com/alexisgordr/icdetector/$p")
-            .map(::File).first { it.exists() }.readText()
-        assertTrue(src("core/ThreatAnalyzer.kt").contains("PingPongRule.liveSpeed(currentLocation?.takeIf { it.hasSpeed() }?.speed, locationFixAgeMs)"))
+        val analyzer = src("core/ThreatAnalyzer.kt")
+        assertTrue(analyzer.contains("""pingPongSpeedMps: Float? = PingPongRule.liveSpeed(
+            currentLocation?.takeIf { it.hasSpeed() }?.speed, locationFixAgeMs
+        ),"""))
+        assertTrue(analyzer.contains("PingPongRule.evaluate(cellChangeHistory.map { it.second }, nowMs, pingPongSpeedMps)"))
+        assertTrue("el servicio usa el valor por defecto", !src("service/MiniICService.kt").contains("pingPongSpeedMps"))
         val service = src("service/MiniICService.kt")
         assertTrue(service.contains("locationFixAgeMs = currentLocation?.elapsedRealtimeNanos?.takeIf { it > 0 }"))
         assertTrue("edad en la entrega", service.contains("?.let { deliveredAtElapsedMs - it / 1_000_000L }"))
+    }
+
+    @Test fun `without a failed ping-pong the confirmation key is the serving identity`() {
+        val history = listOf("A" to now - 3_000L, "B" to now - 2_000L, "A" to now - 1_000L)
+        assertEquals("A", PingPongRule.confirmationKey("A", history, now, pingPongFailed = false))
+    }
+
+    @Test fun `a failed ping-pong keys the confirmation on the sorted identity set`() {
+        val history = listOf("B" to now - 6_000L, "A" to now - 3_000L, "B" to now - 1_000L)
+        val onA = PingPongRule.confirmationKey("A", history, now, pingPongFailed = true)
+        val onB = PingPongRule.confirmationKey("B", history + ("A" to now), now + 2_000L, pingPongFailed = true)
+        assertEquals("pingpong:A,B", onA)
+        assertEquals("alternar no cambia la clave", onA, onB)
+    }
+
+    @Test fun `identities outside the ping-pong window are not part of the key`() {
+        val history = listOf("OLD" to now - 30_000L, "A" to now - 3_000L, "B" to now - 1_000L)
+        assertEquals("pingpong:A,B", PingPongRule.confirmationKey("A", history, now, pingPongFailed = true))
+    }
+
+    @Test fun `the service confirms a ping-pong on the identity set and keeps one alarm episode`() {
+        val service = src("service/MiniICService.kt")
+        val key = service.substringAfter("val confirmationKey = com.alexisgordr.icdetector.core.PingPongRule.confirmationKey(")
+            .substringBefore("\n                        )")
+        assertTrue(key.contains("history = cellChangeHistory"))
+        assertTrue("mismo reloj que el historial", key.contains("nowMs = System.currentTimeMillis()"))
+        assertTrue(key.contains("heuristicReport.pingPong == HeuristicStatus.FAILED"))
+        assertTrue(service.contains("confirmationKey = confirmationKey\n"))
+        assertTrue(service.contains("episodeKey = confirmationKey"))
+        assertTrue(service.contains("securityAlerts.evaluate(cell, confirmed, context, episodeKey)"))
+        val handover = service.substringAfter("if (identityStep.handover) {").substringBefore("cellChangeHistory.add(")
+        assertTrue(handover.contains("securityAlerts.onHandover()"))
+        assertTrue("el cambio de celda ya no cierra a ciegas", !handover.contains("resetAlarmEpisode()"))
     }
 }

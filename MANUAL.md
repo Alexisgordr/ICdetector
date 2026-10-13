@@ -914,7 +914,12 @@ is always `N/A`. ICdetection does not claim null-cipher or IMSI-disclosure detec
 
 **Ping-Pong (H10).** Three changes of the full serving identity (MCC, MNC, TAC, Cell ID or
 technology) within 10 s while the phone is not moving fast. Without a GPS speed it cannot tell
-whether you are stationary, so it reports `N/A`.
+whether you are stationary, so it reports `N/A`. H10 alone subtracts 25 (score 75) and is not a
+suspicion. While it fails, the temporal phases count on the set of identities in the ping-pong
+instead of the current cell, so a transmitter alternating between its own identities can still be
+confirmed when its cycles are suspicious; and changing between those identities does not notify the
+same alarm again. Multi-signal episodes (section 7) still correlate per identity, and the incident
+history still records one entry per identity.
 
 **Geographic consistency (H11).** The phone's own GPS history can reveal a Cell ID appearing in
 physically inconsistent places. Geographic evidence passes a GNSS continuity gate: a displacement

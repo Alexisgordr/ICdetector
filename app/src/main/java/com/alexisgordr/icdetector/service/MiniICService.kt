@@ -1688,11 +1688,22 @@ class MiniICService : Service() {
                         }
                         lastLoggedPromotion = promotionLogKey
 
+                        // 3.0 — Durante un ping-pong (H10 fallida) la racha se acumula sobre el
+                        // conjunto de identidades, no sobre la celda actual: alternar entre ellas
+                        // es justo lo sospechoso y no debe reiniciarla. Mismo reloj que el
+                        // historial de cambios.
+                        val confirmationKey = com.alexisgordr.icdetector.core.PingPongRule.confirmationKey(
+                            currentIdentity = episode.cell.identityKey,
+                            history = cellChangeHistory,
+                            nowMs = System.currentTimeMillis(),
+                            pingPongFailed = episode.cell.heuristicReport.pingPong == HeuristicStatus.FAILED
+                        )
                         val temporalActive = temporalConfidence.apply(
                             episode.cell,
                             observationToken,
                             isFreshDelivery = isFreshDelivery,
-                            heldWithoutEvidence = episode.heldWithoutEvidence
+                            heldWithoutEvidence = episode.heldWithoutEvidence,
+                            confirmationKey = confirmationKey
                         )
                         updateIntensiveMonitoring(
                             watching = episode.watching || stableSiteDecision.enforced,
@@ -1761,7 +1772,12 @@ class MiniICService : Service() {
                         }
 
                         // 2. Lanzar alertas y registro con el estado actual
-                        checkAlerts(confirmedActive.copy(verified = knownStatus), confirmed = true, context = observationContext)
+                        checkAlerts(
+                            confirmedActive.copy(verified = knownStatus),
+                            confirmed = true,
+                            context = observationContext,
+                            episodeKey = confirmationKey
+                        )
 
                         // 3. Iniciar proceso de verificación (solo si es necesario)
                         verificationController.verify(active)
@@ -2157,7 +2173,12 @@ class MiniICService : Service() {
         }
     }
 
-    private fun checkAlerts(cell: CellData, confirmed: Boolean, context: com.alexisgordr.icdetector.core.ObservationContext) {
+    private fun checkAlerts(
+        cell: CellData,
+        confirmed: Boolean,
+        context: com.alexisgordr.icdetector.core.ObservationContext,
+        episodeKey: String = cell.identityKey
+    ) {
         val cid = cell.cellId
         val dbm = cell.dbm
         val net = cell.networkType
@@ -2179,7 +2200,8 @@ class MiniICService : Service() {
         val identityStep = com.alexisgordr.icdetector.core.ServingIdentityChange.step(prevServingIdentity, servingIdentity)
         if (identityStep.handover) {
             telemetryHistory.onHandover()
-            securityAlerts.resetAlarmEpisode()
+            // 3.0 — Cierra el episodio de alarma, salvo el de un ping-pong (ver AlarmEpisodeGate).
+            securityAlerts.onHandover()
             appendLog("[RADIO]", "Handover celular completado -> Nueva celda CID: $cid ($net)")
             // Esta celda queda pendiente de coordenadas frescas hasta que un fix las rellene.
             locationController.markCoordinatesPending()
@@ -2228,7 +2250,7 @@ class MiniICService : Service() {
 
         telemetryHistory.record(cell)
 
-        securityAlerts.evaluate(cell, confirmed, context)
+        securityAlerts.evaluate(cell, confirmed, context, episodeKey)
     }
 
     private fun updateNotification(cell: CellData, force: Boolean = false) {

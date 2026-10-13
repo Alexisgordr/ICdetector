@@ -64,4 +64,23 @@ class AlarmEpisodeGateTest {
         now = 60_900L                            // 59,9 s sin alarma
         assertFalse(gate.onConfirmedAlarm("A"))
     }
+
+    @Test fun `a handover closes a normal alarm episode`() {
+        assertTrue(gate.onConfirmedAlarm("A"))
+        assertFalse(gate.onHandover())
+        assertTrue(gate.onConfirmedAlarm("A"))
+    }
+
+    @Test fun `a handover keeps a ping-pong alarm episode open`() {
+        val key = PingPongRule.CONFIRMATION_KEY_PREFIX + "A,B"
+        assertTrue(gate.onConfirmedAlarm(key))
+        now += 3_000L
+        assertTrue(gate.onHandover())
+        assertFalse("una notificación por episodio, no por alternancia", gate.onConfirmedAlarm(key))
+        now += 3_000L
+        assertTrue(gate.onHandover())
+        assertFalse(gate.onConfirmedAlarm(key))
+        // Termina el ping-pong: la alarma de una celda concreta es otro episodio.
+        assertTrue(gate.onConfirmedAlarm("A"))
+    }
 }

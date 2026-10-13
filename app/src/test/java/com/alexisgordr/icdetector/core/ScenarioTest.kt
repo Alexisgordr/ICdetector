@@ -2,8 +2,10 @@ package com.alexisgordr.icdetector.core
 
 import com.alexisgordr.icdetector.models.CellData
 import com.alexisgordr.icdetector.models.CellRfStability
+import com.alexisgordr.icdetector.models.HeuristicStatus
 import com.alexisgordr.icdetector.models.TimingAdvanceUnit
 import com.alexisgordr.icdetector.models.VerificationStatus
+import com.alexisgordr.icdetector.models.identityKey
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -45,36 +47,65 @@ class ScenarioTest {
         val rfStability: CellRfStability? = null,
         val previousBand: Int? = null,
         val previousDbm: Int? = null,
-        val recentDbm: List<Int> = emptyList()
+        val recentDbm: List<Int> = emptyList(),
+        /** Velocidad GPS que decide H10; null = sin velocidad (H10 en N/A si hay ráfaga). */
+        val speedMps: Float? = null
     )
 
-    private data class Outcome(val alarms: Int, val cycles: Int, val reasons: List<String>)
+    private data class Outcome(
+        val alarms: Int,
+        val cycles: Int,
+        val reasons: List<String>,
+        /** Ciclos con H10 (ping-pong) fallida, para saber que un escenario de ping-pong lo es. */
+        val pingPongFailures: Int = 0
+    )
 
-    /** Recorre un escenario por la cadena completa y cuenta alarmas CONFIRMADAS. */
+    /**
+     * Recorre un escenario por la cadena completa y cuenta alarmas CONFIRMADAS. Un ciclo cada
+     * [CYCLE_MS]; los cambios de identidad se guardan como en el servicio (después del análisis) y
+     * alimentan H10 y la clave de confirmación del ping-pong.
+     */
     private fun run(cycles: List<Cycle>): Outcome {
         val confirmation = TemporalConfidence()
+        val changes = mutableListOf<Pair<String, Long>>()
+        var previousIdentity: String? = null
         var alarms = 0
+        var pingPongFailures = 0
         val reasons = mutableListOf<String>()
-        cycles.forEach { c ->
+        cycles.forEachIndexed { i, c ->
+            val nowMs = START_MS + i * CYCLE_MS
             val analyzed = ThreatAnalyzer.analyzeThreats(
                 active = c.active,
                 neighbors = c.neighbors,
                 isHardwareCipheringActive = true,
                 isHardwareCipheringAvailable = false,
-                cellChangeHistory = emptyList(),
+                cellChangeHistory = changes.toList(),
                 currentLocation = null,
                 rfStability = c.rfStability,
                 previousBand = c.previousBand,
                 previousDbm = c.previousDbm,
-                recentRegisteredDbm = c.recentDbm
+                recentRegisteredDbm = c.recentDbm,
+                pingPongSpeedMps = c.speedMps,
+                nowMs = nowMs
             )
-            val confirmed = confirmation.apply(analyzed)
+            val key = PingPongRule.confirmationKey(
+                analyzed.identityKey, changes, nowMs,
+                pingPongFailed = analyzed.heuristicReport.pingPong == HeuristicStatus.FAILED
+            )
+            val confirmed = confirmation.apply(analyzed, confirmationKey = key)
+            if (analyzed.heuristicReport.pingPong == HeuristicStatus.FAILED) pingPongFailures++
+            val identity = c.active.identityKey
+            if (previousIdentity != null && identity != previousIdentity) {
+                changes.add(identity to nowMs)
+                changes.removeAll { nowMs - it.second > PingPongRule.WINDOW_MS }
+            }
+            previousIdentity = identity
             if (confirmed.isSuspicious) {
                 alarms++
                 reasons.add(confirmed.suspiciousReason ?: "sin motivo")
             }
         }
-        return Outcome(alarms, cycles.size, reasons)
+        return Outcome(alarms, cycles.size, reasons, pingPongFailures)
     }
 
     private fun cell(
@@ -231,7 +262,34 @@ class ScenarioTest {
         }
     }
 
+    /**
+     * Frontera entre dos celdas legítimas, móvil quieto: cambia de celda cada pocos segundos (H10
+     * falla, −25), pero la señal y las vecinas son normales. Score 75: no hay sospecha que
+     * confirmar, aunque la racha ya no se reinicie al alternar.
+     */
+    private fun borderPingPong() = (1..10).map { i ->
+        Cycle(
+            cell(cid = if (i % 2 == 0) "1000" else "1001", dbm = -88),
+            neighbors = listOf(neighbor(-92), neighbor(-97), neighbor(-101)),
+            speedMps = 0f
+        )
+    }
+
     // ------------------------------------------------------------------ escenarios adversarios
+
+    /**
+     * Emisor que alterna dos identidades propias cada ciclo, con el móvil quieto: el transmisor
+     * dominante de arriba, pero cambiando de Cell ID. Antes la racha se reiniciaba en cada cambio y
+     * nunca llegaba a 3/3; ahora se acumula sobre el conjunto de identidades del ping-pong.
+     */
+    private fun pingPongEmitter() = (1..8).map { i ->
+        Cycle(
+            active = cell(cid = if (i % 2 == 0) "999998" else "999999", dbm = -60,
+                verified = VerificationStatus.PENDING),
+            neighbors = listOf(neighbor(-112), neighbor(-115)),
+            speedMps = 0f
+        )
+    }
 
     /** Transmisor dominante: señal muy fuerte, entorno RF artificialmente muerto, sostenido. */
     private fun dominantTransmitter() = (1..5).map {
@@ -307,11 +365,17 @@ class ScenarioTest {
     @Test fun `escenario benigno - TA de unidad desconocida`() { expectNoAlarm("TA_SCRAPED", scrapedTimingAdvance()) }
     @Test fun `escenario benigno - sospecha intermitente sin 3 ciclos seguidos`() { expectNoAlarm("INTERMITTENT", intermittentSuspicion()) }
     @Test fun `una sola vecina extranjera ya no cuenta dos veces (H3 sin H5)`() { expectNoAlarm("FOREIGN_NEIGHBOUR_ONLY", foreignNeighbourOnly()) }
+    @Test fun `escenario benigno - ping-pong de frontera en parado`() {
+        expectNoAlarm("BORDER_PINGPONG", borderPingPong())
+        assertTrue("H10 tiene que fallar para que el escenario pruebe algo", run(borderPingPong()).pingPongFailures >= 3)
+        assertTrue(run(pingPongEmitter()).pingPongFailures >= 3)
+    }
 
     @Test fun `escenario adversario - transmisor dominante`() { expectAlarm("DOMINANT_TX", dominantTransmitter()) }
     @Test fun `escenario adversario - clon con PCI alternante en la misma portadora`() { expectAlarm("CLONE_SAME_CARRIER", clonedIdentitySameCarrier()) }
     @Test fun `escenario adversario - red incoherente (MCC y TAC)`() { expectAlarm("INCONSISTENT_NET", inconsistentNetwork()) }
     @Test fun `escenario adversario - downgrade forzado con tiron de potencia`() { expectAlarm("FORCED_DOWNGRADE", forcedBandDowngrade()) }
+    @Test fun `escenario adversario - emisor que alterna dos identidades`() { expectAlarm("PINGPONG_EMITTER", pingPongEmitter()) }
 
     /**
      * La métrica que de verdad se puede citar: tasa de falsos positivos sobre el banco benigno.
@@ -327,7 +391,8 @@ class ScenarioTest {
             "NSA_LABEL_FLAP" to nsaLabelFlap(),
             "BORDER_AREA" to borderArea(),
             "TA_SCRAPED" to scrapedTimingAdvance(),
-            "INTERMITTENT" to intermittentSuspicion()
+            "INTERMITTENT" to intermittentSuspicion(),
+            "BORDER_PINGPONG" to borderPingPong()
         )
         var totalCycles = 0
         var totalAlarms = 0
@@ -351,10 +416,17 @@ class ScenarioTest {
             "DOMINANT_TX" to dominantTransmitter(),
             "CLONE_SAME_CARRIER" to clonedIdentitySameCarrier(),
             "INCONSISTENT_NET" to inconsistentNetwork(),
-            "FORCED_DOWNGRADE" to forcedBandDowngrade()
+            "FORCED_DOWNGRADE" to forcedBandDowngrade(),
+            "PINGPONG_EMITTER" to pingPongEmitter()
         )
         val detected = adversarial.count { (_, cycles) -> run(cycles).alarms > 0 }
         println("[BANCO ADVERSARIO] detectados $detected de ${adversarial.size}")
         assertEquals("escenarios adversarios no detectados", adversarial.size, detected)
+    }
+
+    private companion object {
+        const val START_MS = 1_700_000_000_000L
+        /** Un ciclo cada 3 s: tres cambios de celda caben en la ventana de 10 s de H10. */
+        const val CYCLE_MS = 3_000L
     }
 }

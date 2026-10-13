@@ -52,7 +52,8 @@ class LegacyNetworkWiringTest {
         val alerts = src("SecurityAlertController.kt")
         val suspicious = alerts.substringAfter("if (cell.isSuspicious) {").substringBefore("} else {")
         assertFalse(suspicious.contains("startTone"))
-        assertTrue(suspicious.contains("if (confirmed && alarmEpisodes.onConfirmedAlarm(cell.identityKey))"))
+        assertTrue(suspicious.contains("if (confirmed && alarmEpisodes.onConfirmedAlarm(episodeKey))"))
+        assertTrue("por defecto, la identidad de la celda", alerts.contains("episodeKey: String = cell.identityKey"))
         assertTrue(suspicious.contains("notifyConfirmedAlarm(cell)"))
         // Los avisos independientes se conservan: potencia fuerte (aquí) y latencia (servicio).
         assertTrue(alerts.contains("TONE_CDMA_ALERT_CALL_GUARD"))

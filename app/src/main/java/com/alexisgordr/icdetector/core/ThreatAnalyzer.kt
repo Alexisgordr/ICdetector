@@ -172,6 +172,14 @@ object ThreatAnalyzer {
          * null = edad desconocida, no se usa la velocidad.
          */
         locationFixAgeMs: Long? = null,
+        /**
+         * 3.0 — Velocidad que decide H10: la del fix si es reciente ([PingPongRule.liveSpeed]).
+         * Es un parámetro para que los escenarios de la JVM puedan recorrer H10 (Location es de
+         * Android); el servicio no lo pasa y usa siempre este valor por defecto.
+         */
+        pingPongSpeedMps: Float? = PingPongRule.liveSpeed(
+            currentLocation?.takeIf { it.hasSpeed() }?.speed, locationFixAgeMs
+        ),
         nowMs: Long = System.currentTimeMillis()
     ): CellData {
         val reasons = mutableListOf<String>()
@@ -385,8 +393,7 @@ object ThreatAnalyzer {
         // cambios de los últimos 10 s (antes, una ráfaga antigua seguía fallando durante horas
         // con el móvil quieto) y, sin velocidad GPS, H10 queda N/A en vez de suponer 0 km/h.
         // La regla no cambia. Corte de dataset solo para H10.
-        val speedMps = PingPongRule.liveSpeed(currentLocation?.takeIf { it.hasSpeed() }?.speed, locationFixAgeMs)
-        when (PingPongRule.evaluate(cellChangeHistory.map { it.second }, nowMs, speedMps)) {
+        when (PingPongRule.evaluate(cellChangeHistory.map { it.second }, nowMs, pingPongSpeedMps)) {
             PingPongRule.Outcome.PASSED, PingPongRule.Outcome.PASSED_MOVING -> Unit
             PingPongRule.Outcome.NOT_EVALUATED -> ePingPong = false
             PingPongRule.Outcome.FAILED -> {

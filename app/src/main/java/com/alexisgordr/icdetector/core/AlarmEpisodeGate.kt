@@ -43,7 +43,20 @@ class AlarmEpisodeGate(
         if (now - since >= closeAfterMs) reset()
     }
 
-    /** Cambio de celda o historial borrado: el siguiente aviso es siempre un episodio nuevo. */
+    /**
+     * 3.0 — Cambio de celda. Cierra el episodio, salvo si es el de un ping-pong
+     * ([PingPongRule.confirmationKey]): ahí cambiar de celda es el propio comportamiento del
+     * episodio, y cerrarlo notificaría la misma alarma en cada alternancia.
+     *
+     * @return true si el episodio sigue abierto.
+     */
+    fun onHandover(): Boolean {
+        if (activeIdentity?.startsWith(PingPongRule.CONFIRMATION_KEY_PREFIX) == true) return true
+        reset()
+        return false
+    }
+
+    /** Historial borrado o servicio reiniciado: el siguiente aviso es siempre un episodio nuevo. */
     fun reset() {
         activeIdentity = null
         clearSinceMs = null

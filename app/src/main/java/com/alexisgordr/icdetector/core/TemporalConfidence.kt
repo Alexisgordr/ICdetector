@@ -77,9 +77,15 @@ class TemporalConfidence(
          * evidencia nueva en esta observación. El ciclo cuenta para la continuidad, pero la racha
          * no avanza ni se rompe.
          */
-        heldWithoutEvidence: Boolean = false
+        heldWithoutEvidence: Boolean = false,
+        /**
+         * Clave de la racha; por defecto, la identidad de la celda. Durante un ping-pong (H10
+         * fallida) el servicio pasa [PingPongRule.confirmationKey], el conjunto de identidades, para
+         * que alternar entre ellas no reinicie la racha.
+         */
+        confirmationKey: String? = null
     ): CellData {
-        val streakKey = keyOf(cell)
+        val streakKey = confirmationKey ?: keyOf(cell)
 
         // Si cambia la celda activa, resetear todos los streaks
         if (streakKey != lastStreakKey) {

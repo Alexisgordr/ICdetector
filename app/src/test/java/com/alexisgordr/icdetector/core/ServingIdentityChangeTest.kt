@@ -96,8 +96,10 @@ class ServingIdentityChangeTest {
         val alerts = src.substringAfter("private fun checkAlerts(").substringBefore("private fun updateNotification(")
         assertTrue(alerts.contains("ServingIdentityChange.step(prevServingIdentity, servingIdentity)"))
         val handover = alerts.substringAfter("if (identityStep.handover) {").substringBefore("} else {")
-        assertTrue(handover.contains("securityAlerts.resetAlarmEpisode()"))
+        // 3.0 — onHandover() cierra el episodio salvo el de un ping-pong (AlarmEpisodeGate).
+        assertTrue(handover.contains("securityAlerts.onHandover()"))
         assertFalse(alerts.substringBefore("if (identityStep.handover) {").contains("resetAlarmEpisode"))
+        assertFalse(alerts.substringBefore("if (identityStep.handover) {").contains("onHandover"))
         assertFalse(alerts.contains("isHandover("))
     }
 
