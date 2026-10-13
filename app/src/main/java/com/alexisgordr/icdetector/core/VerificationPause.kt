@@ -147,13 +147,11 @@ class VerificationPauseGate(private val store: VerificationPauseStore = InMemory
      */
     @Synchronized fun onResult(fingerprint: String, failure: ExternalFailure, retryAfterMs: Long?, clock: MobilityClock): VerificationPauseState? =
         when (failure) {
-            ExternalFailure.NONE, ExternalFailure.INVALID_INPUT -> {
-                // Hubo respuesta interpretable: la red funciona y no hubo límite.
-                transientStreak = 0; rateStreak = 0; transient = null
-                null
-            }
-            ExternalFailure.INVALID_CREDENTIAL, ExternalFailure.ACCESS_RESTRICTED ->
-                persist(VerificationPauseState(failure, fingerprint, null, null, clock.bootId, null))
+            // Hubo respuesta interpretable: la red funciona y no hubo límite.
+            ExternalFailure.NONE -> answered()
+            ExternalFailure.INVALID_INPUT -> answered()
+            ExternalFailure.INVALID_CREDENTIAL -> untilConfigChange(failure, fingerprint, clock)
+            ExternalFailure.ACCESS_RESTRICTED -> untilConfigChange(failure, fingerprint, clock)
             ExternalFailure.RATE_LIMITED -> {
                 transientStreak = 0; rateStreak++
                 persist(timed(failure, fingerprint, retryAfterMs ?: backoff(RATE_BASE_MS, rateStreak, RATE_MAX_MS), clock))
@@ -176,6 +174,14 @@ class VerificationPauseGate(private val store: VerificationPauseStore = InMemory
         transient = null; transientStreak = 0; rateStreak = 0
         if (persisted != null && persisted?.fingerprint != fingerprint) { persisted = null; store.save(null) }
     }
+
+    private fun answered(): VerificationPauseState? {
+        transientStreak = 0; rateStreak = 0; transient = null
+        return null
+    }
+
+    private fun untilConfigChange(kind: ExternalFailure, fp: String, c: MobilityClock) =
+        persist(VerificationPauseState(kind, fp, null, null, c.bootId, null))
 
     private fun persist(p: VerificationPauseState): VerificationPauseState {
         // Consultas concurrentes: si ya hay una pausa igual o más larga para la misma credencial, se queda.
