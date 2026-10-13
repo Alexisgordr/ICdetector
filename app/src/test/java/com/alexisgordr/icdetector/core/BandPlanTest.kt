@@ -123,6 +123,8 @@ class BandPlanTest {
     fun `fuera de tabla se usa la banda declarada`() {
         assertEquals(252, BandPlan.resolveLteBand(255_500, listOf(252)))   // LAA: fuera de tabla
         assertEquals(74, BandPlan.resolveLteBand(null, listOf(74)))
+        // Una sola banda declarada que la app no conoce no se guarda tal cual.
+        listOf(6, 23, 999, 65_535).forEach { assertNull("$it", BandPlan.resolveLteBand(null, listOf(it))) }
         assertNull(BandPlan.resolveLteBand(255_500, emptyList()))
         assertNull(BandPlan.resolveLteBand(null, listOf(0, -1)))
     }

@@ -60,9 +60,13 @@ class TimingAdvanceInputTest {
         assertEquals(12, TimingAdvanceInput.scrapedNr("{timingAdvance=12, x=1}"))
         assertEquals(0, TimingAdvanceInput.scrapedNr("ta=0"))
         assertEquals(3846, TimingAdvanceInput.scrapedNr("ta=3846"))
+        // Formato AOSP, con espacios alrededor del `=`.
+        assertEquals(5, TimingAdvanceInput.scrapedNr("CellSignalStrengthNr:{ csiRsrp = -95 ssRsrp = -90 timingAdvance = 5 parametersUseForLevel = 0 }"))
+        assertEquals(3, TimingAdvanceInput.scrapedNr("ta= 3"))
+        assertNull("el campo de microsegundos no es este", TimingAdvanceInput.scrapedNr("timingAdvanceMicros = 9"))
         listOf(
             "data=0", "delta=0", "mData=5 delta=3", "beta=4", "x_ta=3", "ta2=5",
-            "ta=12.5", "ta=-1", "ta=12abc", "ta=", "ta= 3",
+            "ta=12.5", "ta=-1", "ta=12abc", "ta=", "ta = -3", "ta = 12.5",
             "ta=99999999999999999999", "ta=2147483647", "ta=3847", "timingAdvanceMicros=9"
         ).forEach { assertNull(it, TimingAdvanceInput.scrapedNr(it)) }
         assertNull(TimingAdvanceInput.scrapedNr(null))

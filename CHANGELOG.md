@@ -11,6 +11,11 @@ GitHub pre-release of an earlier build was withdrawn.
 
 ### Audit fixes
 
+- **Minor: unknown declared LTE band and AOSP timing-advance text.** With an EARFCN outside the table
+  and a single declared band, that band was used as is even if the app does not know it (6, 23 or
+  modem garbage), and history/CSV stored it; now only known bands are used, otherwise no band (H14
+  already failed closed). The NR timing-advance text extraction now accepts spaces around `=`
+  (`timingAdvance = N`, the AOSP `toString()` format); the value keeps its unknown unit and range.
 - **NR-ARFCN 0: one criterion.** `RadioChannels` accepted 0 as an NR channel while `NrFrequency`
   rejected it and H8 penalised it, so Stable-Site and local cell trust could learn a "carrier 0" as a
   legitimate fingerprint that H8 flagged. NR channels are now valid from 1; H8 keeps failing on 0

@@ -52,5 +52,7 @@ object TimingAdvanceInput {
         return null
     }
 
-    private val FIELD = Regex("""(?<![A-Za-z0-9_])(?:ta|timingAdvance)=(\d+)(?![\w.])""")
+    // 3.0 — Admite espacios alrededor del `=`: el toString() de AOSP escribe `timingAdvance = N`; sin
+    // ellos la extracción solo casaba con formatos de fabricante.
+    private val FIELD = Regex("""(?<![A-Za-z0-9_])(?:ta|timingAdvance)[ \t]*=[ \t]*(\d+)(?![\w.])""")
 }

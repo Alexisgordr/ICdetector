@@ -144,7 +144,9 @@ object BandPlan {
      *
      *  - El EARFCN manda cuando está en la tabla: cada EARFCN pertenece a una sola banda en
      *    36.101, así que es la medida más fiable. Si el módem declara otra, se ignora lo declarado.
-     *  - Fuera de tabla, una sola banda declarada se usa tal cual.
+     *  - Fuera de tabla, una sola banda declarada se usa solo si es CONOCIDA (está en [BANDS]). Una banda
+ *    fuera de la lista (6, 23 o basura del módem) da null: antes se devolvía tal cual y el historial
+ *    y el CSV guardaban una banda que la app no reconoce.
      *  - Fuera de tabla y varias declaradas: se usa la de número menor solo si todas son de la
      *    misma clase (alta o baja) y conocidas; si no, null (H14 queda N/A en vez de adivinar).
      *  - Sin nada utilizable, null.
@@ -155,7 +157,7 @@ object BandPlan {
         val reported = reportedBands.filter { it > 0 }.distinct().sorted()
         return when {
             reported.isEmpty() -> null
-            reported.size == 1 -> reported.single()
+            reported.size == 1 -> reported.single().takeIf { it in BY_NUMBER }
             reported.all { isLowBand(it) } || reported.all { isHighBand(it) } -> reported.first()
             else -> null
         }
