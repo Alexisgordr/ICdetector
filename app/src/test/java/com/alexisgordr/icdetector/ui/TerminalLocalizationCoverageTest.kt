@@ -58,6 +58,7 @@ class TerminalLocalizationCoverageTest {
         "[SYS] ⚠️ Poda de histórico fallida (SQLiteDiskIOException): no se ha borrado nada; se reintentará en el próximo mantenimiento.",
         "[SYS] Poda de histórico: 12 registros de más de 120 días eliminados.",
         "[H15] Lectura del historial RF fallida: H15 no se evalúa hasta que vuelva a leerse.",
+        "[SITE] Aviso silencioso publicado: cambio inusual de celda en este lugar con el teléfono quieto. No confirma un ataque.",
         "[H15] Lectura del historial RF restablecida.",
         "[SYS] Análisis temporalmente no disponible por un fallo interno (no es falta de señal ni una anomalía de red): se mantiene el último resultado válido, no actualizado. [SQLiteException]",
         "[SYS] Análisis restablecido: resultado actualizado.",

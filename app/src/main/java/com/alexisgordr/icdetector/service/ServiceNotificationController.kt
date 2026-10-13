@@ -52,6 +52,19 @@ internal class ServiceNotificationController(
                 NotificationManager.IMPORTANCE_DEFAULT
             ).apply { description = context.getString(R.string.channel_legacy_network_description) }
         )
+        // 3.0 — Avisos silenciosos de Stable-Site: canal propio, importancia baja, sin sonido ni
+        // vibración. No es el canal de alarmas y no usa ningún tono.
+        manager.createNotificationChannel(
+            NotificationChannel(
+                STABLE_SITE_CHANNEL_ID,
+                context.getString(R.string.channel_stable_site_name),
+                NotificationManager.IMPORTANCE_LOW
+            ).apply {
+                description = context.getString(R.string.channel_stable_site_description)
+                setSound(null, null)
+                enableVibration(false)
+            }
+        )
     }
 
     fun foregroundNotification(text: String): Notification {
@@ -137,6 +150,37 @@ internal class ServiceNotificationController(
     }
 
     /**
+     * 3.0 — Aviso silencioso de Stable-Site, uno por episodio (ver StableSiteNotices). Describe un
+     * cambio inusual de celda en un lugar conocido, nunca un ataque. Al tocarlo se abre el episodio.
+     * Cada episodio tiene su propio id de notificación y su propio PendingIntent.
+     */
+    fun showStableSiteNotice(episodeId: String) {
+        val id = com.alexisgordr.icdetector.core.StableSiteNotices.notificationId(episodeId)
+        val openEpisode = PendingIntent.getActivity(
+            context,
+            id,
+            Intent(context, MainActivity::class.java)
+                .putExtra(com.alexisgordr.icdetector.core.StableSiteNotices.EXTRA_EPISODE_ID, episodeId)
+                .addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP),
+            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
+        )
+        val body = context.getString(R.string.notif_stable_site_body)
+        val notification = NotificationCompat.Builder(context, STABLE_SITE_CHANNEL_ID)
+            .setContentTitle(context.getString(R.string.notif_stable_site_title))
+            .setContentText(body)
+            .setStyle(NotificationCompat.BigTextStyle().bigText(body))
+            .setSmallIcon(android.R.drawable.ic_dialog_info)
+            .setPriority(NotificationCompat.PRIORITY_LOW)
+            .setCategory(NotificationCompat.CATEGORY_STATUS)
+            .setSilent(true)
+            .setOnlyAlertOnce(true)
+            .setContentIntent(openEpisode)
+            .setAutoCancel(true)
+            .build()
+        context.getSystemService(NotificationManager::class.java).notify(id, notification)
+    }
+
+    /**
      * v2.10.8 — Una alarma confirmada solo sonaba y se guardaba: si el móvil estaba en el bolsillo
      * o con el sonido apagado, no quedaba ningún aviso visible. Se publica una notificación por
      * episodio (la misma regla que decide cuándo se guarda la alarma). No cambia la detección.
@@ -175,6 +219,8 @@ internal class ServiceNotificationController(
         const val ALERT_CHANNEL_ID = "miniic_security_alerts"
         /** 3.0 — Avisos de red 2G/3G (uno por episodio). */
         const val LEGACY_CHANNEL_ID = "miniic_legacy_network"
+        /** 3.0 — Avisos silenciosos de Stable-Site (uno por episodio, sin sonido). */
+        const val STABLE_SITE_CHANNEL_ID = "miniic_stable_site_notices"
         const val NOTIFICATION_ID = 202
         const val LEGACY_NETWORK_NOTIFICATION_ID = 204
         const val CONFIRMED_ALARM_NOTIFICATION_ID = 205

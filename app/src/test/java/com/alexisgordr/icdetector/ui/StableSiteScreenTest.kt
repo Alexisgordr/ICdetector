@@ -48,7 +48,8 @@ class StableSiteScreenTest {
         assertTrue(screen.contains("LaunchedEffect(site.siteKey, technical, techSection)"))
         assertTrue(screen.contains("LaunchedEffect(site.siteKey, episodeFilter)"))
         assertFalse(screen.contains("runCatching"))
-        assertEquals(2, Regex("""catch \(e: CancellationException\) \{\s*throw e""").findAll(screen).count())
+        // 3.0 — La tercera es la carga del episodio de un aviso silencioso (StableSiteEpisodeFocus).
+        assertEquals(3, Regex("""catch \(e: CancellationException\) \{\s*throw e""").findAll(screen).count())
     }
 
     @Test fun `route detail pages episodes per site in a lazy list, with stored data only`() {

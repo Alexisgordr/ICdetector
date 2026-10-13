@@ -145,6 +145,9 @@ private val replacements = linkedMapOf(
     "Análisis temporalmente no disponible por un fallo interno (no es falta de señal ni una anomalía de red): se mantiene el último resultado válido, no actualizado." to
         "Analysis temporarily unavailable due to an internal error (not a missing signal or a network anomaly): the last valid result is kept, not updated.",
     "Análisis restablecido: resultado actualizado." to "Analysis restored: result updated.",
+    // 3.0 — StableSiteNotices.NOTICE_LOG
+    "Aviso silencioso publicado: cambio inusual de celda en este lugar con el teléfono quieto. No confirma un ataque." to
+        "Silent notice posted: unusual cell change at this place while the phone was still. It does not confirm an attack.",
     "N/A: no se pudo leer el historial RF en este ciclo." to "N/A: the RF history could not be read in this cycle.",
     "última señal anterior observada" to "last earlier signal observed",
     "señal previa desconocida" to "earlier signal unknown",

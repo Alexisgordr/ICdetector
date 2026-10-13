@@ -228,6 +228,8 @@ fun MainScreenContent(dbHelper: CellDbHelper, service: MiniICService?) {
     val active = cellList.firstOrNull { it.isRegistered }
     var showHistory by remember { mutableStateOf(false) }
     var showSettings by remember { mutableStateOf(false) }
+    // 3.0 — Episodio de un aviso silencioso de Stable-Site: se enseña encima de lo demás.
+    val noticeEpisodeId by StableSiteNoticeTarget.episodeId.collectAsStateWithLifecycle()
     // 3.0 — Pestaña con que se abre Historial ("profile" desde Ajustes → Ver evaluaciones).
     var historyTab by remember { mutableStateOf<String?>(null) }
     // 3.0 — El botón/gesto «atrás» del sistema cierra Ajustes o Historial y vuelve a la pantalla
@@ -280,7 +282,10 @@ fun MainScreenContent(dbHelper: CellDbHelper, service: MiniICService?) {
             }
         }
 
-        if (showSettings) {
+        val noticeEpisode = noticeEpisodeId
+        if (noticeEpisode != null) {
+            StableSiteEpisodeFocus(dbHelper, noticeEpisode, Modifier.fillMaxSize()) { StableSiteNoticeTarget.clear() }
+        } else if (showSettings) {
             SettingsPanel(
                 service,
                 onOpenProfileEvaluations = { showSettings = false; historyTab = "profile"; showHistory = true },

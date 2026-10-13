@@ -47,6 +47,7 @@ import com.alexisgordr.icdetector.core.RouteSiteGroup
 import com.alexisgordr.icdetector.core.StableSiteCell
 import com.alexisgordr.icdetector.core.StableSiteEpisode
 import com.alexisgordr.icdetector.core.StableSiteFeatureState
+import com.alexisgordr.icdetector.core.StableSiteNotices
 import com.alexisgordr.icdetector.core.StableSitePresentation
 import com.alexisgordr.icdetector.core.StableSiteProgress
 import com.alexisgordr.icdetector.core.StableSiteQuery
@@ -242,6 +243,7 @@ private fun SiteCard(site: StableSiteSummary, onOpen: () -> Unit) {
             Text(stringResource(simpleStateLabel(simple)), color = stateColor(m.state), fontFamily = FontFamily.Monospace,
                 fontWeight = FontWeight.Bold, fontSize = 11.sp)
             InfoLine(stringResource(missingLabel(StableSitePresentation.missing(m.reason))), Body)
+            NoticeStatusLine(m.state)
             InfoLine(shortKey(site.siteKey), Dim, 9)
             InfoLine(stringResource(R.string.stable_site_simple_place_seen, formatMs(site.lastSeenMs) ?: stringResource(R.string.stable_site_no_info)), Dim)
         }
@@ -290,6 +292,7 @@ private fun StableSiteDetail(dbHelper: CellDbHelper, site: StableSiteSummary, mo
                     fontWeight = FontWeight.Bold, fontSize = 13.sp)
                 InfoLine(stringResource(simpleStateNote(simple)), Body)
                 InfoLine(stringResource(missingLabel(StableSitePresentation.missing(m.reason))), Body)
+                NoticeStatusLine(m.state)
                 AnalysisOnly()
             }
         }
@@ -623,4 +626,94 @@ private fun siteFilterLabel(f: StableSiteQuery.SiteFilter): Int = when (f) {
     StableSiteQuery.SiteFilter.ACTIVE -> R.string.stable_site_state_active
     StableSiteQuery.SiteFilter.SHADOW_READY -> R.string.stable_site_state_shadow_ready
     StableSiteQuery.SiteFilter.LEARNING -> R.string.stable_site_state_learning
+}
+
+/**
+ * 3.0 — Episodio que hay que abrir al tocar un aviso silencioso de Stable-Site. MainActivity lo fija
+ * con el extra del Intent (al crearse y en onNewIntent) y la pantalla principal lo enseña encima de
+ * todo. Se vacía al cerrarlo.
+ */
+object StableSiteNoticeTarget {
+    val episodeId = kotlinx.coroutines.flow.MutableStateFlow<String?>(null)
+
+    /** Toma el extra del Intent, si lo hay, y lo quita para no volver a abrirlo. */
+    fun consume(intent: android.content.Intent?) {
+        val id = intent?.getStringExtra(StableSiteNotices.EXTRA_EPISODE_ID) ?: return
+        intent.removeExtra(StableSiteNotices.EXTRA_EPISODE_ID)
+        if (id.isNotBlank() && id.length <= 64) episodeId.value = id
+    }
+
+    fun clear() { episodeId.value = null }
+}
+
+/** 3.0 — Estado de los avisos silenciosos para un sitio (StableSiteNotices.status). */
+@Composable
+private fun NoticeStatusLine(state: StableSiteFeatureState) {
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val enabled = remember {
+        context.getSharedPreferences(com.alexisgordr.icdetector.backup.BackupSettings.PREFS_FILE, android.content.Context.MODE_PRIVATE)
+            .getBoolean(StableSiteNotices.PREF_ENABLED, StableSiteNotices.DEFAULT_ENABLED)
+    }
+    InfoLine(stringResource(noticeStatusLabel(StableSiteNotices.status(state, enabled))), Dim)
+}
+
+private fun noticeStatusLabel(s: StableSiteNotices.Status): Int = when (s) {
+    StableSiteNotices.Status.LEARNING -> R.string.stable_site_notice_status_learning
+    StableSiteNotices.Status.READY -> R.string.stable_site_notice_status_ready
+    StableSiteNotices.Status.DISABLED_BY_USER -> R.string.stable_site_notice_status_disabled
+}
+
+/**
+ * 3.0 — Lo que se abre al tocar un aviso silencioso: el episodio guardado, con la misma tarjeta que
+ * en el detalle del sitio. Si ya no está (poda a los 120 días, reinicio del aprendizaje o del
+ * historial), se explica en vez de enseñar una pantalla vacía.
+ */
+@Composable
+fun StableSiteEpisodeFocus(dbHelper: CellDbHelper, episodeId: String, modifier: Modifier = Modifier, onClose: () -> Unit) {
+    var showSites by remember(episodeId) { mutableStateOf(false) }
+    // null: cargando; Result con null dentro: ya no está guardado.
+    var loaded by remember(episodeId) { mutableStateOf<Result<StableSiteEpisode?>?>(null) }
+    LaunchedEffect(episodeId) {
+        loaded = withContext(Dispatchers.IO) {
+            try {
+                Result.success(StableSiteReadStore.episodeById(dbHelper.readableDatabase, episodeId))
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                Result.failure(e)
+            }
+        }
+    }
+    if (showSites) {
+        StableSitePanel(dbHelper, modifier) { showSites = false }
+        return
+    }
+    androidx.activity.compose.BackHandler { onClose() }
+    LazyColumn(modifier, verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        item {
+            TextButton(onClick = onClose) {
+                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.back), tint = Accent)
+            }
+        }
+        item {
+            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Text(stringResource(R.string.stable_site_episode_focus_title), color = Color.White, fontFamily = FontFamily.Monospace,
+                    fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                AnalysisOnly()
+                InfoLine(stringResource(R.string.stable_site_episode_focus_note), Body)
+            }
+        }
+        val result = loaded
+        when {
+            result == null -> item { LinearProgressIndicator(modifier = Modifier.fillMaxWidth().height(2.dp), color = Accent) }
+            result.isFailure -> item { InfoLine(stringResource(R.string.stable_site_view_error), Color(0xFFFFA000)) }
+            result.getOrNull() == null -> item { InfoLine(stringResource(R.string.stable_site_episode_focus_missing), Body) }
+            else -> item { EpisodeCard(result.getOrNull()!!) }
+        }
+        item {
+            OutlinedButton(onClick = { showSites = true }) {
+                Text(stringResource(R.string.stable_site_episode_focus_open_sites), color = Accent, fontFamily = FontFamily.Monospace, fontSize = 10.sp)
+            }
+        }
+    }
 }

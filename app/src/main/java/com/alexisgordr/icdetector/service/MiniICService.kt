@@ -437,6 +437,13 @@ class MiniICService : Service() {
             }
         }
         notificationController = ServiceNotificationController(this, MiniICService::class.java) { locationMode }
+        // 3.0 — Corte de los avisos de Stable-Site: los episodios anteriores al primer arranque con
+        // esta versión no avisan nunca. Solo se fija si falta (la restauración lo pone a «ahora»).
+        getSharedPreferences(com.alexisgordr.icdetector.backup.BackupSettings.PREFS_FILE, MODE_PRIVATE).let { prefs ->
+            if (!prefs.contains(com.alexisgordr.icdetector.core.StableSiteNotices.PREF_NOTIFY_SINCE_MS)) {
+                prefs.edit().putLong(com.alexisgordr.icdetector.core.StableSiteNotices.PREF_NOTIFY_SINCE_MS, System.currentTimeMillis()).apply()
+            }
+        }
         databaseMaintenance = DatabaseMaintenance(dbHelper) { appendLog("[SYS]", it) }
         latencyMonitor = NetworkLatencyMonitor(
             client = latencyClient,
@@ -1265,6 +1272,7 @@ class MiniICService : Service() {
                 } else com.alexisgordr.icdetector.core.StableSiteDecision(reason = "NO_SERVING_CELL")
                 val stableSiteDecision = if (activeRaw != null && activeRaw.cellId != "N/A") {
                     dbHelper.applyStableSiteDecision(stableSiteCandidate, activeRaw, siteKeys)
+                        .also { maybeNotifyStableSite(it) }
                 } else stableSiteCandidate
                 val siteKey = stableSiteDecision.siteKey
 
@@ -1725,6 +1733,28 @@ class MiniICService : Service() {
      * transacción global; no se deshace ni se repite nada. La siguiente entrega es una observación
      * nueva, no un reintento.
      */
+    /**
+     * 3.0 — Aviso silencioso de Stable-Site (ver StableSiteNotices). Solo informa: no toca la
+     * puntuación, la confianza temporal ni las alarmas. El episodio ya está guardado; si la
+     * notificación falla (permiso denegado, canal bloqueado), el análisis sigue igual.
+     */
+    private fun maybeNotifyStableSite(decision: com.alexisgordr.icdetector.core.StableSiteDecision) {
+        val notices = com.alexisgordr.icdetector.core.StableSiteNotices
+        val prefs = getSharedPreferences(com.alexisgordr.icdetector.backup.BackupSettings.PREFS_FILE, MODE_PRIVATE)
+        val enabled = prefs.getBoolean(notices.PREF_ENABLED, notices.DEFAULT_ENABLED)
+        val since = if (prefs.contains(notices.PREF_NOTIFY_SINCE_MS)) prefs.getLong(notices.PREF_NOTIFY_SINCE_MS, 0L) else null
+        if (!notices.shouldNotify(decision, enabled, since)) return
+        val episodeId = decision.episodeRecord?.episodeId ?: return
+        appendLog("[SITE]", notices.NOTICE_LOG)
+        try {
+            notificationController.showStableSiteNotice(episodeId)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            Log.w("MiniIC", "Stable-Site notice not shown (${e.javaClass.simpleName})")
+        }
+    }
+
     private fun onAnalysisFailed(ticket: com.alexisgordr.icdetector.core.CollectionGeneration.Ticket, errorType: String) {
         val change = analysisHealthTracker.onCycleFailed(ticket.generation, collectionGeneration.mayPublish(ticket))
         _analysisHealth.value = analysisHealthTracker.state

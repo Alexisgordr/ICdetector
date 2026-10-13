@@ -59,6 +59,9 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         dbHelper = CellDbHelper.getInstance(this)
         firstRunPending = com.alexisgordr.icdetector.backup.FirstRun.isPending(this)
+        // 3.0 — Un aviso silencioso de Stable-Site abre su episodio. Solo en la primera creación:
+        // al girar la pantalla el destino ya está fijado (o cerrado) y no se vuelve a abrir.
+        if (savedInstanceState == null) com.alexisgordr.icdetector.ui.StableSiteNoticeTarget.consume(intent)
         
         // No iniciamos el servicio aquí directamente para evitar crasheos por permisos en Android 14+
         // El inicio del servicio se gestionará desde el MainLayout cuando los permisos sean otorgados.
@@ -80,6 +83,13 @@ class MainActivity : ComponentActivity() {
                 com.alexisgordr.icdetector.ui.RestoreResultDialog()
             }
         }
+    }
+
+    /** 3.0 — Con la app ya abierta, tocar un aviso de Stable-Site llega aquí (singleTop). */
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        com.alexisgordr.icdetector.ui.StableSiteNoticeTarget.consume(intent)
     }
 
     fun startAndBindService() {

@@ -30,6 +30,7 @@ import com.alexisgordr.icdetector.service.MiniICService
 import com.alexisgordr.icdetector.R
 import com.alexisgordr.icdetector.util.LocaleController
 import com.alexisgordr.icdetector.core.LegacyNetworkAlertMode
+import com.alexisgordr.icdetector.core.StableSiteNotices
 import com.alexisgordr.icdetector.core.LocationMode
 import kotlin.time.Duration.Companion.milliseconds
 
@@ -55,6 +56,10 @@ fun SettingsPanel(
     }
     var selectedLegacyAlertMode by remember {
         mutableStateOf(LegacyNetworkAlertMode.fromStored(prefs.getString(LegacyNetworkAlertMode.PREF_KEY, null)))
+    }
+    // 3.0 — Avisos silenciosos de Stable-Site: activados por defecto; si se apagan, siguen apagados.
+    var stableSiteNotices by remember {
+        mutableStateOf(prefs.getBoolean(StableSiteNotices.PREF_ENABLED, StableSiteNotices.DEFAULT_ENABLED))
     }
 
     val scrollState = rememberScrollState()
@@ -288,6 +293,31 @@ fun SettingsPanel(
             Text(stringResource(R.string.legacy_alert_description), color = Color(0xFF888888), fontSize = 11.sp,
                 fontFamily = FontFamily.Monospace, lineHeight = 15.sp)
 
+            HorizontalDivider(color = Color(0xFF222222), modifier = Modifier.padding(vertical = 4.dp))
+
+            // 3.0 — Avisos silenciosos de Stable-Site (StableSiteNotices). Sin alarmas ni sonido.
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(stringResource(R.string.stable_site_notices_title), color = Color.White,
+                        fontSize = 14.sp, fontFamily = FontFamily.Monospace)
+                    Text(stringResource(R.string.stable_site_notices_description), color = Color(0xFF888888),
+                        fontSize = 11.sp, fontFamily = FontFamily.Monospace, lineHeight = 15.sp)
+                }
+                Spacer(Modifier.width(8.dp))
+                Switch(
+                    checked = stableSiteNotices,
+                    onCheckedChange = { stableSiteNotices = it },
+                    colors = SwitchDefaults.colors(
+                        checkedThumbColor = Color.White,
+                        checkedTrackColor = Color(0xFF4CAF50)
+                    )
+                )
+            }
+
             Button(
                 onClick = {
                     val cleanToken = token.trim()
@@ -302,6 +332,7 @@ fun SettingsPanel(
                         putBoolean("latency_detection_enabled", latencyDetectionEnabled)
                         putString(LocationMode.PREF_KEY, selectedMode.storedValue)
                         putString(LegacyNetworkAlertMode.PREF_KEY, legacyMode.storedValue)
+                        putBoolean(StableSiteNotices.PREF_ENABLED, stableSiteNotices)
                     }
                     service?.openCellIdKey = cleanToken
                     service?.isProxyEnabled = proxyEnabled

@@ -96,6 +96,16 @@ class StableSiteReadQueryTest {
         assertEquals(listOf("e1"), paged)
     }
 
+    @Test fun `a notice episode is found by id, and a deleted one reads as absent`() {
+        val q = StableSiteQuery.episodeByIdSql("e1")
+        assertEquals(listOf("e1"), rows(q) { it.getString("episode_id") })
+        assertEquals(listOf(1), rows(q) { it.getInt("shadow_recorded") })
+        assertEquals("sin sitio también se encuentra", listOf("e3"), rows(StableSiteQuery.episodeByIdSql("e3")) { it.getString("episode_id") })
+        exec("DELETE FROM site_shadow_triggers WHERE episode_id='e1'")       // poda a los 120 días o reinicio
+        assertEquals(emptyList<String>(), rows(StableSiteQuery.episodeByIdSql("e1")) { it.getString("episode_id") })
+        assertEquals("el id va como parámetro", emptyList<String>(), rows(StableSiteQuery.episodeByIdSql("e1' OR '1'='1")) { it.getString("episode_id") })
+    }
+
     @Test fun `route groups include episodes without a site, kept as stored`() {
         val sites = rows(StableSiteQuery.routeSitesSql("214-07-1-100-LTE", "214-07-1-999-LTE", 9_000)) { (it.getString("site_key") ?: "-") + ":" + it.getInt("episodes") }
         assertEquals(listOf("mature:1", "-:1"), sites)

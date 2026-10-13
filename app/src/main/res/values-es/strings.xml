@@ -560,6 +560,20 @@
     <string name="legacy_alert_description">Un aviso cuando el móvil empieza a usar 2G/3G; no se repite mientras siga en ella. Para un aviso nuevo tiene que volver antes al menos 1 minuto seguido a 4G/5G. Puede deberse a cobertura o a llamadas sin VoLTE. Si tu móvil ofrece el ajuste «Permitir 2G», desactivarlo evita 2G (no 3G). El modo avión es siempre decisión tuya.</string>
     <string name="channel_legacy_network_name">Red 2G/3G</string>
     <string name="channel_legacy_network_description">Avisos de uso o cambio a 2G/3G, uno por episodio. Que suenen depende del ajuste de la app y de este canal.</string>
+    <!-- 3.0 — Avisos silenciosos de Stable-Site -->
+    <string name="stable_site_notices_title">Avisos silenciosos de Stable-Site</string>
+    <string name="stable_site_notices_description">Disponibles cuando la referencia del lugar esté preparada. No activan alarmas.</string>
+    <string name="channel_stable_site_name">Avisos silenciosos de Stable-Site</string>
+    <string name="channel_stable_site_description">Un aviso silencioso por cada cambio de celda inusual en un lugar conocido. Sin sonido, sin vibración y sin alarmas.</string>
+    <string name="notif_stable_site_title">Cambio inusual en este lugar</string>
+    <string name="notif_stable_site_body">Con el teléfono quieto, ha pasado a una celda que este lugar no suele usar. Puede deberse a mantenimiento de la red o a cambios del operador. No confirma un ataque. Toca para ver el episodio.</string>
+    <string name="stable_site_notice_status_learning">Referencia en aprendizaje</string>
+    <string name="stable_site_notice_status_ready">Referencia preparada: avisos silenciosos disponibles</string>
+    <string name="stable_site_notice_status_disabled">Avisos desactivados por el usuario</string>
+    <string name="stable_site_episode_focus_title">EPISODIO DE STABLE-SITE</string>
+    <string name="stable_site_episode_focus_note">Este episodio generó un aviso silencioso. Es solo análisis: no activa alarmas.</string>
+    <string name="stable_site_episode_focus_missing">Este episodio ya no está guardado. Los episodios cerrados se borran 120 días después de la última vez que se vieron, y todos se borran al reiniciar el aprendizaje de Stable-Site o el historial.</string>
+    <string name="stable_site_episode_focus_open_sites">Ver Stable-Site</string>
     <string name="notif_legacy_previous_signal">Última señal anterior observada: %1$d dBm (solo contexto).</string>
     <string name="notif_legacy_previous_unknown">Señal previa desconocida.</string>
 </resources>

@@ -65,6 +65,10 @@ object StableSiteReadStore {
             cursorOf = { PageCursor(it.firstSeenMs, it.episodeId) }
         )
 
+    /** 3.0 — El episodio de un aviso silencioso; null si la retención o un reinicio ya lo borró. */
+    fun episodeById(db: SQLiteDatabase, episodeId: String): StableSiteEpisode? =
+        query(db, StableSiteQuery.episodeByIdSql(episodeId), ::episode).firstOrNull()
+
     /** Sitios con episodios de la ruta y su número (criterio de tiempo aplicado en SQL). */
     fun routeSites(db: SQLiteDatabase, fromIdentity: String, toIdentity: String, routeLastSeenMs: Long): List<RouteSiteGroup> =
         query(db, StableSiteQuery.routeSitesSql(fromIdentity, toIdentity, routeLastSeenMs)) { c ->

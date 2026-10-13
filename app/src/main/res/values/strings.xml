@@ -560,6 +560,20 @@
     <string name="legacy_alert_description">One alert when the phone starts using 2G/3G; no repeats while it stays there. A new alert needs at least 1 minute in a row back on 4G/5G first. It can be caused by coverage or calls without VoLTE. If your phone offers an «Allow 2G» setting, turning it off avoids 2G (not 3G). Airplane mode is always your own choice.</string>
     <string name="channel_legacy_network_name">2G/3G network</string>
     <string name="channel_legacy_network_description">2G/3G use or change alerts, one per episode. Whether they sound depends on the app setting and on this channel.</string>
+    <!-- 3.0 — Avisos silenciosos de Stable-Site -->
+    <string name="stable_site_notices_title">Stable-Site silent notices</string>
+    <string name="stable_site_notices_description">Available once the place reference is ready. They do not trigger alarms.</string>
+    <string name="channel_stable_site_name">Stable-Site silent notices</string>
+    <string name="channel_stable_site_description">One silent notice per unusual cell change at a known place. No sound, no vibration, no alarms.</string>
+    <string name="notif_stable_site_title">Unusual change at this place</string>
+    <string name="notif_stable_site_body">While the phone was still, it switched to a cell this place does not usually use. Network maintenance or operator changes can cause this. It does not confirm an attack. Tap to see the episode.</string>
+    <string name="stable_site_notice_status_learning">Reference still learning</string>
+    <string name="stable_site_notice_status_ready">Reference ready: silent notices available</string>
+    <string name="stable_site_notice_status_disabled">Notices turned off by the user</string>
+    <string name="stable_site_episode_focus_title">STABLE-SITE EPISODE</string>
+    <string name="stable_site_episode_focus_note">This episode produced a silent notice. Analysis only: it does not trigger alarms.</string>
+    <string name="stable_site_episode_focus_missing">This episode is no longer stored. Closed episodes are deleted 120 days after they were last seen, and all of them are deleted when Stable-Site learning or the history is reset.</string>
+    <string name="stable_site_episode_focus_open_sites">View Stable-Site</string>
     <string name="notif_legacy_previous_signal">Last earlier signal observed: %1$d dBm (context only).</string>
     <string name="notif_legacy_previous_unknown">Earlier signal unknown.</string>
 </resources>

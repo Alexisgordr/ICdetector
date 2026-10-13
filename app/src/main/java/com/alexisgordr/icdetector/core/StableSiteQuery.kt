@@ -175,6 +175,10 @@ object StableSiteQuery {
             "ORDER BY e.first_seen_ms DESC, e.episode_id DESC LIMIT ${limit + 1}" to args.toTypedArray()
     }
 
+    /** 3.0 — Un episodio por su id (el de un aviso silencioso). Sin fila: ya no está guardado. */
+    fun episodeByIdSql(episodeId: String): Pair<String, Array<String>> =
+        "SELECT $EPISODE_COLUMNS FROM site_shadow_triggers e WHERE e.episode_id=? LIMIT 1" to arrayOf(episodeId)
+
     const val EPISODE_COLUMNS = "e.episode_id, e.site_key, e.previous_identity, e.candidate_identity, e.first_seen_ms, " +
         "e.last_seen_ms, e.evaluated_ms, e.closed_ms, e.shadow_recorded, e.reason, e.motion_state, e.feature_state, " +
         "e.globally_known, e.known_at_site, e.seen_as_neighbour, e.serving_days, e.neighbour_days, e.corroborated"
