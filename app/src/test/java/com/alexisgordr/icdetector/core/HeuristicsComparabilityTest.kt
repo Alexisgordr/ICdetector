@@ -45,4 +45,24 @@ class HeuristicsComparabilityTest {
         assertEquals(HeuristicStatus.FAILED, result.heuristicReport.mncCount)
         assertEquals(85, result.securityScore)
     }
+
+    // ── H5 ──────────────────────────────────────────────────────────────────────────────────
+
+    @Test fun `H5 never compares an LTE TAC with a GSM or UMTS LAC or an NR TAC`() {
+        // Caso medido: servidora LTE con TAC 31601 y una sola vecina GSM con LAC 1234.
+        listOf(RadioTech.GSM, RadioTech.UMTS, RadioTech.NR).forEach { other ->
+            val result = analyze(serving(tac = "31601"), listOf(neighbour(radio = other, tac = "1234")))
+            assertEquals("$other", HeuristicStatus.NOT_EVALUATED, result.heuristicReport.tacDeviation)
+            assertEquals("$other", 100, result.securityScore)
+        }
+    }
+
+    @Test fun `H5 uses only same-technology neighbours`() {
+        val lteMatch = neighbour(tac = "31601"); val gsm = neighbour(radio = RadioTech.GSM, tac = "1234")
+        assertEquals(HeuristicStatus.PASSED, analyze(serving(tac = "31601"), listOf(gsm, lteMatch)).heuristicReport.tacDeviation)
+        assertEquals(HeuristicStatus.FAILED, analyze(serving(tac = "31601"), listOf(gsm, neighbour(tac = "31602"))).heuristicReport.tacDeviation)
+        // Servidora GSM: compara su LAC con LAC de vecinas GSM.
+        assertEquals(HeuristicStatus.PASSED,
+            analyze(serving(radio = RadioTech.GSM, tac = "1234"), listOf(gsm, neighbour(tac = "31601"))).heuristicReport.tacDeviation)
+    }
 }

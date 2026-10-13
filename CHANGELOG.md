@@ -11,6 +11,10 @@ GitHub pre-release of an earlier build was withdrawn.
 
 ### Audit fixes
 
+- **H5 only compares TACs of the same technology.** The neighbour list mixes technologies, so an LTE
+  serving TAC was compared with GSM/UMTS LACs and NR TACs, which are different identifier spaces and
+  never match "by design": one GSM neighbour with a known LAC made H5 fail (−20). H5 now uses only
+  neighbours of the serving cell's technology and is N/A when there are none.
 - **H4 never subtracts points while not evaluated.** With the serving MNC unknown and five
   neighbours with distinct known MNCs, H4 was reported N/A yet subtracted 15 points, stored
   "Multitud de MNCs" and fed the Bayesian score. The penalty now requires the rule to be evaluable,

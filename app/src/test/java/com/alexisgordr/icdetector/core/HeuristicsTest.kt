@@ -61,7 +61,7 @@ class HeuristicsTest {
         sinr = sinr
     )
 
-    private fun neighbor(dbm: Int, mnc: String = "01", tac: String = "100", mcc: String = "214") =
+    private fun neighbor(dbm: Int, mnc: String = "01", tac: String = "100", mcc: String = "214", radio: RadioTech = RadioTech.LTE) =
         CellData(
             isRegistered = false,
             networkType = "4G LTE",
@@ -69,7 +69,8 @@ class HeuristicsTest {
             mnc = mnc,
             tac = tac,
             dbm = dbm,
-            mcc = mcc
+            mcc = mcc,
+            radioTech = radio
         )
 
     private fun analyze(

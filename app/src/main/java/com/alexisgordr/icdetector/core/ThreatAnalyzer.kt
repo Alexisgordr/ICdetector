@@ -246,8 +246,14 @@ object ThreatAnalyzer {
         }
 
         // 5. TAC Deviation Audit
-        if (neighbors.isNotEmpty() && active.tac != "N/A") {
-            val neighborTacs = neighbors.map { it.tac }.filter { it != "N/A" }
+        //
+        // 3.0 — Solo vecinas de la MISMA tecnología: el TAC de LTE, el TAC de NR y el LAC de
+        // GSM/UMTS son espacios de identificadores distintos y nunca coinciden «por diseño». Antes
+        // una sola vecina GSM con su LAC hacía fallar H5 en una servidora LTE. Sin vecinas de la
+        // misma tecnología, N/A.
+        val sameTechTac = neighbors.filter { it.radioTech == active.radioTech }
+        if (sameTechTac.isNotEmpty() && active.tac != "N/A") {
+            val neighborTacs = sameTechTac.map { it.tac }.filter { it != "N/A" }
             eTac = neighborTacs.isNotEmpty()
             if (neighborTacs.isNotEmpty() && !neighborTacs.contains(active.tac)) {
                 hTac = false
