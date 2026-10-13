@@ -681,10 +681,16 @@ class MiniICService : Service() {
                     ) != 0
 
                     if (isAirplaneModeOn) {
-                        // 3.0 (#24) — Modo avión: invalida el ciclo que siga analizando.
-                        onSignalLost()
-                        _cellFlow.value = emptyList()
-                        updateNotificationText(getString(R.string.no_signal_airplane))
+                        // 3.0 (#24) — Modo avión: invalida el ciclo que siga analizando. En el hilo
+                        // principal, como la publicación de cada ciclo: así no puede intercalarse
+                        // con un ciclo que ya pasó mayPublish (o lo invalida antes, o vacía después
+                        // de que termine de publicar). Solo esto; la lectura del ajuste y el resto
+                        // del bucle siguen fuera del hilo principal.
+                        withContext(Dispatchers.Main) {
+                            onSignalLost()
+                            _cellFlow.value = emptyList()
+                            updateNotificationText(getString(R.string.no_signal_airplane))
+                        }
                         appendLog("[SYS]", "⚠️ Modo Avión activo. Suspendiendo escaneo.")
                         wasAirplaneModeOn = true
                     } else {

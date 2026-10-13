@@ -11,6 +11,11 @@ GitHub pre-release of an earlier build was withdrawn.
 
 ### Audit fixes
 
+- **Airplane mode on the main thread.** The periodic loop invalidated the running cycle and emptied
+  the cell list from a background thread, so it could slip between a cycle's `mayPublish` check and
+  its publication and leave old data on screen. The invalidation, the emptying and the notification
+  text now run on the main thread, like every publication. Reading the setting, scanning and the
+  recovery path are unchanged and stay off the main thread.
 - **Analysis health.** An internal error in an analysis cycle used to end in the generic coroutine
   handler while the screen and the notification kept showing the last result as if it were
   current. The cycle boundary now catches it (cancellation is rethrown): one terminal line when a
