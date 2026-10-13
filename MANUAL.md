@@ -963,6 +963,20 @@ The History screen loads the 2,000 most recent rows to keep memory bounded; **EX
 streams the complete retained database. Export important information before clearing app data or
 uninstalling.
 
+The **RF intelligence summary** is computed by the database over the whole history, without
+loading rows into memory. Its figures:
+
+| Label | Meaning |
+|---|---|
+| CELLS | distinct full cell identities (MCC-MNC-area-Cell ID-technology) |
+| OBSERVATIONS | history rows |
+| AVG SCORE | mean score of all observations |
+| REGISTERED / NOT FOUND | cells with at least one observation in that verification state |
+| SCORE < 70 | cells with at least one observation below the suspicious-score threshold — a low score in one cycle, **not** a confirmed alarm |
+| OBS. WITH GPS | observations (not cells) with a position |
+| WITH REASON | cells with a stored reason other than clean or sub-threshold, including alarms still being confirmed |
+| PERIOD / MOST SEEN / NETWORKS | oldest and newest observation date, most observed cell, top three network types |
+
 ---
 
 ## 10. Forensic capture

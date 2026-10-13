@@ -1948,6 +1948,29 @@ class CellDbHelper(
         return list
     }
 
+    /**
+     * 3.0 (UI1) — Estadísticas del panel con consultas agregadas (IntelStatsQuery), sin leer las
+     * filas. Null si no hay historial. Las excepciones se propagan: la pantalla muestra el error.
+     * [checkpoint] se llama entre consultas para respetar la cancelación.
+     */
+    fun getIntelStats(checkpoint: () -> Unit = {}): IntelStats? {
+        val db = readableDatabase
+        return IntelStatsQuery.load({ sql ->
+            db.rawQuery(sql, null).use { c ->
+                val out = mutableListOf<List<Any?>>()
+                while (c.moveToNext()) out += (0 until c.columnCount).map { i ->
+                    when (c.getType(i)) {
+                        Cursor.FIELD_TYPE_NULL -> null
+                        Cursor.FIELD_TYPE_INTEGER -> c.getLong(i)
+                        Cursor.FIELD_TYPE_FLOAT -> c.getDouble(i)
+                        else -> c.getString(i)
+                    }
+                }
+                out
+            }
+        }, checkpoint)
+    }
+
     fun getRecordCount(): Int = try {
         readableDatabase.rawQuery("SELECT COUNT(*) FROM $TABLE_HISTORY", null).use { cursor ->
             if (cursor.moveToFirst()) cursor.getInt(0) else 0

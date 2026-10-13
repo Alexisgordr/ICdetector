@@ -239,11 +239,11 @@
     <string name="forensic_window_note">Ventana automática: 60 s antes · episodio completo · 60 s después</string>
     <string name="intel_title">RESUMEN DE INTELIGENCIA RF</string>
     <string name="intel_cells">CELDAS</string>
-    <string name="intel_connections">CONEXIONES</string>
+    <string name="intel_connections">OBSERVACIONES</string>
     <string name="intel_avg_score">SCORE MEDIO</string>
-    <string name="intel_suspicious">SOSPECHOSAS</string>
-    <string name="intel_with_gps">CON GPS</string>
-    <string name="intel_anomalies">ANOMALÍAS</string>
+    <string name="intel_suspicious">SCORE &lt; %1$d</string>
+    <string name="intel_with_gps">OBS. CON GPS</string>
+    <string name="intel_anomalies">CON MOTIVO</string>
     <string name="export_geometry">EXPORTAR GEOMETRÍA</string>
     <string name="geometry_exporting">Exportando geometría…</string>
     <string name="geometry_exported">Geometría exportada correctamente</string>
@@ -582,4 +582,6 @@
     <string name="latency_tor_dialog_body">Activar latencia desactivará el proxy de OpenCellID; las consultas podrán salir directamente por tu conexión. OpenCellID verá tu IP. Nada cambia hasta que guardes.</string>
     <string name="latency_tor_dialog_confirm">Activar latencia</string>
     <string name="latency_tor_dialog_cancel">Cancelar</string>
+    <string name="intel_loading">Cargando estadísticas…</string>
+    <string name="intel_load_error">No se pudieron leer las estadísticas. El historial no se ha modificado.</string>
 </resources>

@@ -54,6 +54,7 @@ import com.alexisgordr.icdetector.utils.ExportUtils
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.delay
 import java.text.DateFormat
 import java.util.Date
@@ -1015,63 +1016,64 @@ private fun IncidentList(
     }
 }
 
+/** 3.0 (UI1) — Estado del panel de estadísticas. */
+private sealed interface IntelState {
+    data object Loading : IntelState
+    data object Empty : IntelState
+    data object Failed : IntelState
+    data class Ready(val stats: com.alexisgordr.icdetector.storage.IntelStats) : IntelState
+}
+
 @Composable
 fun IntelPanel(dbHelper: CellDbHelper) {
-    var items by remember { mutableStateOf<List<HistoryRecord>>(emptyList()) }
-
-    LaunchedEffect(Unit) {
-        withContext(Dispatchers.IO) {
-            items = dbHelper.getRecords()
+    // 3.0 (UI1) — Cifras agregadas en SQL, en IO. Antes se leía el historial entero y se agrupaba
+    // en Compose. Salir de la pantalla cancela la corrutina; la cancelación no es un error.
+    var state by remember { mutableStateOf<IntelState>(IntelState.Loading) }
+    LaunchedEffect(dbHelper) {
+        state = IntelState.Loading
+        state = try {
+            withContext(Dispatchers.IO) {
+                val stats = dbHelper.getIntelStats(checkpoint = { ensureActive() })
+                if (stats == null) IntelState.Empty else IntelState.Ready(stats)
+            }
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
+        } catch (_: Exception) {
+            IntelState.Failed
         }
     }
 
-    if (items.isEmpty()) {
+    val message = when (state) {
+        IntelState.Loading -> stringResource(R.string.intel_loading)
+        IntelState.Empty -> stringResource(R.string.no_data_yet)
+        IntelState.Failed -> stringResource(R.string.intel_load_error)
+        is IntelState.Ready -> null
+    }
+    if (message != null) {
         Box(modifier = Modifier.fillMaxWidth().padding(16.dp),
             contentAlignment = Alignment.Center) {
-            Text(stringResource(R.string.no_data_yet), color = Color(0xFF444444),
+            Text(message, color = if (state == IntelState.Failed) Color(0xFFCF6679) else Color(0xFF444444),
                 fontFamily = FontFamily.Monospace, fontSize = 11.sp)
         }
         return
     }
+    val stats = (state as IntelState.Ready).stats
 
-    val groupedItems = remember(items) {
-        val groups = mutableMapOf<String, MutableList<HistoryRecord>>()
-        val orderedIdentities = mutableListOf<String>()
-        items.forEach { record ->
-            val identity = record.identityKey
-            if (!groups.containsKey(identity)) {
-                orderedIdentities.add(identity)
-                groups[identity] = mutableListOf()
-            }
-            groups[identity]!!.add(record)
-        }
-        orderedIdentities.map { identity -> identity to groups[identity]!! }
-    }
-
-    // Calcular estadísticas
-    val totalCells = groupedItems.size
-    val totalConnections = items.size
-    val avgScore = items.asSequence().map { it.score }.average()
-    val suspiciousCells = groupedItems.count { (_, records) -> records.any { com.alexisgordr.icdetector.core.ScoreThreshold.isBelow(it.score) } }
-    val verifiedCells = groupedItems.count { (_, r) -> r.any { it.verified.name == "VERIFIED" } }
-    val notFoundCells = groupedItems.count { (_, r) -> r.any { it.verified.name == "NOT_FOUND" } }
-    val recordsWithGps = items.count { it.lat != null && it.lon != null }
-    val mostSeenCell = groupedItems.maxByOrNull { it.second.size }
-    // "Celdas anómalas" cuenta SOLO alarmas reales. Las observaciones sub-umbral que v2.1 empieza
-    // a registrar son material de análisis, no anomalías: incluirlas aquí inflaría el contador
-    // sin que hubiera pasado nada nuevo en la red.
-    val anomalousCells = groupedItems.count { (_, r) ->
-        r.any {
-            it.failedHeuristics.isNotBlank() &&
-                it.failedHeuristics != "OK" &&
-                !it.failedHeuristics.startsWith(SUBTHRESHOLD_PREFIX)
-        }
-    }
-    val networkTypes = items.groupBy { it.netType }
-        .mapValues { it.value.size }
-        .entries.sortedByDescending { it.value }
-    val dateFrom = items.lastOrNull()?.timestamp?.take(10) ?: "N/A"
-    val dateTo = items.firstOrNull()?.timestamp?.take(10) ?: "N/A"
+    val totalCells = stats.cells
+    val totalObservations = stats.observations
+    val avgScore = stats.averageScore
+    // Puntuación baja (< umbral) en alguna observación: NO es una alarma confirmada.
+    val lowScoreCells = stats.lowScoreCells
+    val verifiedCells = stats.verifiedCells
+    val notFoundCells = stats.notFoundCells
+    val recordsWithGps = stats.observationsWithGps
+    val mostSeenCell = stats.mostSeen
+    // Celdas con algún motivo guardado (no limpio, no sub-umbral). Incluye alarmas aún en
+    // confirmación: no son solo alarmas confirmadas, de ahí la etiqueta «CON MOTIVO».
+    val cellsWithReason = stats.cellsWithReason
+    val networkTypes = stats.networkTypes
+    val dateFrom = stats.dateFrom ?: "N/A"
+    val dateTo = stats.dateTo ?: "N/A"
 
     Column(
         modifier = Modifier.fillMaxWidth().padding(top = 12.dp),
@@ -1093,7 +1095,7 @@ fun IntelPanel(dbHelper: CellDbHelper) {
         // Grid 2x3 uniforme
         Row(modifier = Modifier.fillMaxWidth()) {
             IntelCell(Modifier.weight(1f), stringResource(R.string.intel_cells), totalCells.toString())
-            IntelCell(Modifier.weight(1f), stringResource(R.string.intel_connections), totalConnections.toString())
+            IntelCell(Modifier.weight(1f), stringResource(R.string.intel_connections), totalObservations.toString())
             IntelCell(Modifier.weight(1f), stringResource(R.string.intel_avg_score), String.format(java.util.Locale.ROOT, "%.1f%%", avgScore))
         }
 
@@ -1105,8 +1107,8 @@ fun IntelPanel(dbHelper: CellDbHelper) {
             IntelCell(Modifier.weight(1f), stringResource(R.string.intel_verified), verifiedCells.toString(), Color(0xFF4CAF50))
             IntelCell(Modifier.weight(1f), stringResource(R.string.intel_not_found), notFoundCells.toString(), Color(0xFFFFA000))
             IntelCell(
-                Modifier.weight(1f), stringResource(R.string.intel_suspicious), suspiciousCells.toString(),
-                if (suspiciousCells > 0) Color(0xFFCF6679) else Color(0xFF4CAF50)
+                Modifier.weight(1f), stringResource(R.string.intel_suspicious, com.alexisgordr.icdetector.core.ScoreThreshold.SUSPICIOUS_BELOW), lowScoreCells.toString(),
+                if (lowScoreCells > 0) Color(0xFFCF6679) else Color(0xFF4CAF50)
             )
         }
 
@@ -1117,8 +1119,8 @@ fun IntelPanel(dbHelper: CellDbHelper) {
         Row(modifier = Modifier.fillMaxWidth()) {
             IntelCell(Modifier.weight(1f), stringResource(R.string.intel_with_gps), recordsWithGps.toString())
             IntelCell(
-                Modifier.weight(1f), stringResource(R.string.intel_anomalies), anomalousCells.toString(),
-                if (anomalousCells > 0) Color(0xFFFFA000) else Color(0xFF4CAF50)
+                Modifier.weight(1f), stringResource(R.string.intel_anomalies), cellsWithReason.toString(),
+                if (cellsWithReason > 0) Color(0xFFFFA000) else Color(0xFF4CAF50)
             )
             // Período en 2 líneas para que no se corte
             Column(
@@ -1139,7 +1141,7 @@ fun IntelPanel(dbHelper: CellDbHelper) {
         Spacer(Modifier.height(6.dp))
 
         // MÁS VISTA — fila completa centrada
-        mostSeenCell?.let { (cid, records) ->
+        mostSeenCell?.let { (cid, seen) ->
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -1150,7 +1152,7 @@ fun IntelPanel(dbHelper: CellDbHelper) {
                 Text(cid, color = Color.White,
                     fontSize = 9.sp, fontFamily = FontFamily.Monospace,
                     fontWeight = FontWeight.Bold)
-                Text("${records.size}x", color = Color(0xFF4CAF50),
+                Text("${seen}x", color = Color(0xFF4CAF50),
                     fontSize = 9.sp, fontFamily = FontFamily.Monospace,
                     fontWeight = FontWeight.Bold)
             }
@@ -1168,10 +1170,10 @@ fun IntelPanel(dbHelper: CellDbHelper) {
             ) {
                 Text(stringResource(R.string.networks), color = Color(0xFF555555),
                     fontSize = 8.sp, fontFamily = FontFamily.Monospace)
-                networkTypes.take(3).forEach { (type, count) ->
+                networkTypes.forEach { (type, count) ->
                     Row(verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(2.dp)) {
-                        Text(type, color = Color(0xFF888888),
+                        Text(type ?: "?", color = Color(0xFF888888),
                             fontSize = 8.sp, fontFamily = FontFamily.Monospace)
                         Text(":$count", color = Color.White,
                             fontSize = 8.sp, fontFamily = FontFamily.Monospace,

@@ -239,11 +239,11 @@
     <string name="forensic_window_note">Automatic window: 60 s before · full episode · 60 s after</string>
     <string name="intel_title">RF INTELLIGENCE SUMMARY</string>
     <string name="intel_cells">CELLS</string>
-    <string name="intel_connections">CONNECTIONS</string>
+    <string name="intel_connections">OBSERVATIONS</string>
     <string name="intel_avg_score">AVG SCORE</string>
-    <string name="intel_suspicious">SUSPICIOUS</string>
-    <string name="intel_with_gps">WITH GPS</string>
-    <string name="intel_anomalies">ANOMALIES</string>
+    <string name="intel_suspicious">SCORE &lt; %1$d</string>
+    <string name="intel_with_gps">OBS. WITH GPS</string>
+    <string name="intel_anomalies">WITH REASON</string>
     <string name="export_geometry">EXPORT GEOMETRY</string>
     <string name="geometry_exporting">Exporting geometry…</string>
     <string name="geometry_exported">Geometry exported successfully</string>
@@ -582,4 +582,6 @@
     <string name="latency_tor_dialog_body">Enabling latency will turn off the OpenCellID proxy; queries may then go out directly over your connection. OpenCellID will see your IP address. Nothing changes until you save.</string>
     <string name="latency_tor_dialog_confirm">Enable latency</string>
     <string name="latency_tor_dialog_cancel">Cancel</string>
+    <string name="intel_loading">Loading statistics…</string>
+    <string name="intel_load_error">Statistics could not be read. The history was not modified.</string>
 </resources>

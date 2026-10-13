@@ -11,6 +11,15 @@ GitHub pre-release of an earlier build was withdrawn.
 
 ### Audit fixes
 
+- **Statistics without loading the whole history.** The RF intelligence summary read every history
+  row (`getRecords()` without a limit) and grouped them in Compose. It now runs aggregate SQL queries
+  in IO (`IntelStatsQuery`, no window functions for Android 10's SQLite) with loading, error and
+  empty states, and leaving the screen still cancels it. The figures are the same — checked against a
+  literal replica of the old calculation on randomised data with nulls, several technologies,
+  sub-threshold reasons and ties — except that a row with a NULL text field no longer silently drops
+  itself and every older row. Misleading labels are clarified without changing what they count:
+  CONNECTIONS → OBSERVATIONS, SUSPICIOUS → SCORE < 70 (a low score, not a confirmed alarm),
+  WITH GPS → OBS. WITH GPS, ANOMALIES → WITH REASON (it includes alarms still being confirmed).
 - **One shared suspicious-score threshold.** `ScoreThreshold.SUSPICIOUS_BELOW` (70, compared as
   `score < 70`) is now used by ThreatAnalyzer, the main screen colours and the statistics screen
   instead of separate literals. Same value, same comparison; other 70s (−70 dBm RSRP, LTE band 70)
