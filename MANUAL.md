@@ -272,7 +272,8 @@ The API key and the proxy choice are applied **together** when you save Settings
 uses one consistent copy of both from start to end. Changing the route (proxy on or off) cancels
 queries still in progress; any change discards the results of queries started with the earlier
 settings, so they never fill the caches or pauses of the new ones. A new query never starts with
-settings that are no longer current.
+settings that are no longer current. Saving waits for any reply that is being applied at that moment, so a reply
+from the earlier settings can never be applied after the save.
 
 ### Latency detection (experimental)
 

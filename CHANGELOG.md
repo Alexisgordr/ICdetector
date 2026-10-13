@@ -45,7 +45,10 @@ GitHub pre-release of an earlier build was withdrawn.
   load and on save; each query takes a snapshot at the start and uses it throughout. A route change
   cancels requests in flight, any change discards results of earlier queries (no caches or retry
   times are touched), and a request never starts with settings that are no longer current. With the
-  proxy selected the client uses it explicitly, with no direct fallback. No schema or backup change.
+  proxy selected the client uses it explicitly, with no direct fallback. No schema or backup change. Checking that a reply is still current and applying it (pauses, caches, database, screen) is
+  one step under the settings read lock, and saving takes the write lock, so a save cannot slip in
+  between; each PENDING belongs to its query, so discarding an old query never removes the PENDING of
+  a newer query for the same cell.
 - **Local profile: algorithm-version limit documented and tested, real write failures not hidden.**
   Evaluations are unique per history row (and per observation): after a future algorithm version
   the first-use learning could not store held-out evaluations for already evaluated observations, and

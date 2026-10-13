@@ -47,6 +47,14 @@ class VerificationConfigHolder(apiKey: String = "", proxyEnabled: Boolean = fals
     private val inFlight = java.util.concurrent.ConcurrentHashMap<Long, Pair<Long, () -> Unit>>()
     private val ids = java.util.concurrent.atomic.AtomicLong()
 
+    /**
+     * 3.0 (V4) — Comprobar la vigencia y aplicar los efectos de una respuesta debe ser indivisible
+     * frente a un cambio de ajustes: [applyIfCurrent] toma el candado de LECTURA (varias respuestas
+     * a la vez) y [update] el de ESCRITURA. Sin esto, cambiar los ajustes entre la comprobación y la
+     * escritura dejaba aplicar una respuesta antigua a cachés, pausas y base.
+     */
+    private val lock = java.util.concurrent.locks.ReentrantReadWriteLock()
+
     enum class Change { NONE, CREDENTIAL, ROUTE, CREDENTIAL_AND_ROUTE }
 
     fun current(): VerificationConfig = ref.get()
@@ -54,7 +62,31 @@ class VerificationConfigHolder(apiKey: String = "", proxyEnabled: Boolean = fals
     fun isCurrent(snapshot: VerificationConfig): Boolean = ref.get().generation == snapshot.generation
 
     /** Cambia clave y ruta a la vez. Devuelve qué cambió. */
-    fun update(apiKey: String, proxyEnabled: Boolean): Change {
+    fun update(apiKey: String, proxyEnabled: Boolean, onChanged: (Change) -> Unit = {}): Change {
+        val w = lock.writeLock()
+        w.lock()
+        try {
+            // [onChanged] corre con el candado de escritura: ninguna respuesta se aplica entre el
+            // cambio y la limpieza que haga el llamador (pausas, tiempos de reintento).
+            return updateLocked(apiKey, proxyEnabled).also { if (it != Change.NONE) onChanged(it) }
+        } finally { w.unlock() }
+    }
+
+    /**
+     * Ejecuta [block] solo si [snapshot] sigue vigente, y ningún [update] puede colarse mientras
+     * dura. Devuelve si se ejecutó. [block] no debe llamar a [update] (no hay subida de candado).
+     */
+    fun applyIfCurrent(snapshot: VerificationConfig, block: () -> Unit): Boolean {
+        val r = lock.readLock()
+        r.lock()
+        try {
+            if (!isCurrent(snapshot)) return false
+            block()
+            return true
+        } finally { r.unlock() }
+    }
+
+    private fun updateLocked(apiKey: String, proxyEnabled: Boolean): Change {
         val key = apiKey.trim()
         var change = Change.NONE
         ref.updateAndGet { old ->

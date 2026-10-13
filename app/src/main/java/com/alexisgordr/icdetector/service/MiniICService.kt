@@ -318,9 +318,11 @@ class MiniICService : Service() {
 
     /** 3.0 (V4) — Ajustes guardados: clave y ruta se publican juntas. */
     fun updateVerificationSettings(apiKey: String, proxyEnabled: Boolean) {
-        val change = verificationConfig.update(apiKey, proxyEnabled)
-        if (change != com.alexisgordr.icdetector.core.VerificationConfigHolder.Change.NONE) {
+        val change = verificationConfig.update(apiKey, proxyEnabled) {
+            // 3.0 (V4) — Dentro del candado de escritura de la configuración.
             if (::verificationController.isInitialized) verificationController.onConfigChanged()
+        }
+        if (change != com.alexisgordr.icdetector.core.VerificationConfigHolder.Change.NONE) {
             appendLog("[API]", "Configuración de OpenCellID actualizada; las consultas anteriores se descartan.")
         }
     }

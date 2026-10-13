@@ -327,8 +327,10 @@ class VerificationPauseTest {
         val gate = verifyNow.indexOf("pauseGate.blocking(")
         val net = verifyNow.indexOf("OpenCellIdClient.tryOpenCellIdSyncWithData(")
         assertTrue(local in 0 until gate && gate < net)
-        // El resultado solo abre una pausa después de comprobar que la configuración sigue vigente.
-        assertTrue(verifyNow.indexOf("!config.isCurrent(snapshot)") in 0 until verifyNow.indexOf("pauseGate.onResult("))
+        // El resultado solo abre una pausa dentro de applyIfCurrent (vigencia y efectos juntos).
+        assertTrue(verifyNow.contains("config.applyIfCurrent(snapshot) { applyResult("))
+        assertTrue(src.substringAfter("private fun applyResult(").contains("pauseGate.onResult("))
+        assertFalse(verifyNow.substringBefore("private fun applyResult(").contains("pauseGate.onResult("))
         assertFalse(src.contains("apiKey"))
         assertFalse(src.contains("credentialFingerprint}"))
         assertFalse("ya no se reintenta solo por el texto", verifyNow.contains("reason?.contains"))
