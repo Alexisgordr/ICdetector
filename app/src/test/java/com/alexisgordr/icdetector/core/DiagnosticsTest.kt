@@ -135,6 +135,36 @@ class DiagnosticsTest {
     }
 
     @Test
+    fun `cached deliveries without a token never advance the streak`() {
+        val temporal = TemporalConfidence(3)
+        val suspicious = cell().copy(isSuspicious = true, suspiciousReason = "test")
+
+        val results = (1..3).map {
+            temporal.apply(suspicious, observationToken = null, isFreshDelivery = false)
+        }
+
+        results.forEach { assertEquals(0, it.temporalProgress.phase) }
+        assertFalse(results.last().isSuspicious)
+    }
+
+    @Test
+    fun `cached repeats without a token do not complete a fresh streak`() {
+        val temporal = TemporalConfidence(3)
+        val suspicious = cell().copy(isSuspicious = true, suspiciousReason = "test")
+
+        temporal.apply(suspicious, observationToken = null)
+        temporal.apply(suspicious, observationToken = null, isFreshDelivery = false)
+        val cached = temporal.apply(suspicious, observationToken = null, isFreshDelivery = false)
+        assertEquals(1, cached.temporalProgress.phase)
+        assertFalse(cached.isSuspicious)
+
+        temporal.apply(suspicious, observationToken = null)
+        val third = temporal.apply(suspicious, observationToken = null)
+        assertEquals(3, third.temporalProgress.phase)
+        assertTrue(third.isSuspicious)
+    }
+
+    @Test
     fun `emergency acceptance never lowers the token watermark`() {
         var elapsed = 0L
         val temporal = TemporalConfidence(3, elapsedRealtimeMs = { elapsed })

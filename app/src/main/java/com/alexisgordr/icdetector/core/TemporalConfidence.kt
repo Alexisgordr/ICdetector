@@ -96,10 +96,18 @@ class TemporalConfidence(
         val stalledFreshDelivery = isFreshDelivery && lastAcceptedAtMs?.let {
             now - it >= maxObservationStallMs
         } == true
-        val isNewObservation = observationToken == null || previousToken == null ||
-            (observationToken > previousToken &&
-                (!cell.isSuspicious || observationToken - previousToken >= minObservationSpacingMs)) ||
-            stalledFreshDelivery
+        // Sin token (módem sin marcas de tiempo) no hay forma de distinguir una muestra nueva de
+        // la misma muestra repetida por el fallback cacheado de allCellInfo: solo cuenta una
+        // entrega fresca, igual que en ThreatEpisodeTracker. Antes, tres entregas cacheadas de la
+        // misma muestra confirmaban una alarma.
+        val isNewObservation = if (observationToken == null) {
+            isFreshDelivery
+        } else {
+            previousToken == null ||
+                (observationToken > previousToken &&
+                    (!cell.isSuspicious || observationToken - previousToken >= minObservationSpacingMs)) ||
+                stalledFreshDelivery
+        }
 
         if (!isNewObservation) {
             return decorate(cell, anomalyStreaks[streakKey] ?: 0)
