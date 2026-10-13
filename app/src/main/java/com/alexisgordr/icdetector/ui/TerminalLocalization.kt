@@ -436,6 +436,7 @@ private val replacements = linkedMapOf(
     "Estabilidad de potencia" to "Power stability",
     "N/A: no hay TAC válidos de vecinas para contrastar." to "N/A: no valid neighbour TACs to compare.",
     "N/A: no hay TAC válidos de vecinas de la misma tecnología para contrastar." to "N/A: no valid TACs from neighbours of the same technology to compare.",
+    "N/A: no hay TAC válidos de vecinas de la misma tecnología y el mismo operador para contrastar." to "N/A: no valid TACs from neighbours of the same technology and operator to compare.",
     "Proximidad por Timing Advance" to "Timing Advance proximity",
     "Espectro de vecinos" to "Neighbour spectrum",
     "N/A: no hay celdas vecinas disponibles para contrastar el espectro." to "N/A: no neighbour cells available to compare the spectrum.",

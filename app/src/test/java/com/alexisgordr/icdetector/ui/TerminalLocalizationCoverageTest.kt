@@ -88,6 +88,7 @@ class TerminalLocalizationCoverageTest {
         "Estabilidad de potencia",
         "N/A: no hay TAC válidos de vecinas para contrastar.",
         "N/A: no hay TAC válidos de vecinas de la misma tecnología para contrastar.",
+        "N/A: no hay TAC válidos de vecinas de la misma tecnología y el mismo operador para contrastar.",
         "Proximidad por Timing Advance",
         "Espectro de vecinos",
         "N/A: no hay celdas vecinas disponibles para contrastar el espectro.",
