@@ -1,6 +1,7 @@
 package com.alexisgordr.icdetector.service
 
 import android.media.ToneGenerator
+import android.os.SystemClock
 import android.util.Log
 import com.alexisgordr.icdetector.core.AlarmEpisodeGate
 import com.alexisgordr.icdetector.core.LegacyNetworkAlertMode
@@ -20,12 +21,16 @@ internal class SecurityAlertController(
     private val strongSignalEnabled: () -> Boolean,
     private val strongSignalThreshold: () -> Float,
     private val legacyAlertMode: () -> LegacyNetworkAlertMode,
-    private val nowMs: () -> Long = System::currentTimeMillis
+    /**
+     * Reloj monotónico para las dos duraciones de esta clase (enfriamiento del tono de señal fuerte
+     * y cierre de episodios 2G/3G). Un cambio de hora civil no debe alargarlas ni acortarlas.
+     */
+    private val nowMs: () -> Long = SystemClock::elapsedRealtime
 ) {
     // 3.0 — También los toca onServiceInterrupted() desde el hilo de lectura de celdas.
     @Volatile private var previousNetworkType: String? = null
     @Volatile private var previousDbm: Int? = null
-    private var lastStrongSignalAlarm = 0L
+    private var lastStrongSignalAlarm: Long? = null
     private val alarmEpisodes = AlarmEpisodeGate()
     private val legacyEpisodes = LegacyNetworkEpisodeGate()
     private var pingPongLogged = false
@@ -51,8 +56,8 @@ internal class SecurityAlertController(
         val network = cell.networkType
 
         if (strongSignalEnabled() && dbm != -999 && dbm >= strongSignalThreshold()) {
-            val now = System.currentTimeMillis()
-            if (now - lastStrongSignalAlarm > STRONG_SIGNAL_COOLDOWN_MS) {
+            val now = nowMs()
+            if (lastStrongSignalAlarm?.let { now - it <= STRONG_SIGNAL_COOLDOWN_MS } != true) {
                 lastStrongSignalAlarm = now
                 tone()?.startTone(ToneGenerator.TONE_CDMA_ALERT_CALL_GUARD, 150)
                 Log.w(TAG, "Warning: High power signal detected: $dbm dBm")

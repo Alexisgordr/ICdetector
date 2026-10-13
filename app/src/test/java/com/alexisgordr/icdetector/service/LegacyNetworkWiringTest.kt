@@ -107,4 +107,12 @@ class LegacyNetworkWiringTest {
             assertFalse(it, src(it).contains("previousSignalDbm"))
         }
     }
+
+    @Test fun `alert durations use the injected monotonic clock`() {
+        val alerts = src("SecurityAlertController.kt")
+        assertFalse("el tono de señal fuerte usaba el reloj civil", alerts.contains("System.currentTimeMillis"))
+        assertTrue(alerts.contains("nowMs: () -> Long = SystemClock::elapsedRealtime"))
+        val strong = alerts.substringAfter("strongSignalThreshold()) {").substringBefore("\n        }\n")
+        assertTrue(strong.contains("val now = nowMs()"))
+    }
 }
