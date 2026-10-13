@@ -58,3 +58,38 @@ class CoverageContinuity(private val maxGapMs: Long = MAX_GAP_MS) {
         const val MAX_GAP_MS = 120_000L
     }
 }
+
+/**
+ * 3.0 (G4) — Qué es un handover OBSERVADO, para H16/Topología y para los viajes de movilidad.
+ *
+ * Rompe la continuidad celular, y por tanto la siguiente celda es una referencia nueva y no un
+ * salto observado desde la anterior:
+ *  - una pérdida de servicio: lista sin celdas, modo avión o primaria declarada sin señal
+ *    utilizable ([CollectionGeneration.lose] con pérdida de señal);
+ *  - un hueco de más de [CoverageContinuity.MAX_GAP_MS] sin observaciones publicadas;
+ *  - un reinicio del proceso o del teléfono sin continuidad demostrable.
+ * NO la rompe una celda activa válida sin GPS, con movimiento desconocido o con Wi-Fi: el cambio de
+ * celda sí se observó; solo la geometría (H16, distancia) no se puede evaluar.
+ */
+object HandoverReference {
+    enum class Step {
+        /** Todavía no había referencia. */
+        FIRST,
+        /** La misma servidora: sin transición. */
+        SAME_CELL,
+        /** Cambio de servidora observado sin interrupción: transición A→B real. */
+        HANDOVER,
+        /** Tras una interrupción: esta celda es la nueva referencia; no hay arista desde la anterior. */
+        NEW_REFERENCE_AFTER_INTERRUPTION
+    }
+
+    fun step(previous: String?, current: String, continuous: Boolean): Step = when {
+        previous == null -> Step.FIRST
+        !continuous -> Step.NEW_REFERENCE_AFTER_INTERRUPTION
+        previous == current -> Step.SAME_CELL
+        else -> Step.HANDOVER
+    }
+
+    const val INTERRUPTION_EXPLANATION =
+        "N/A: hubo una interrupción del servicio celular; esta celda es la nueva referencia, no un handover observado."
+}

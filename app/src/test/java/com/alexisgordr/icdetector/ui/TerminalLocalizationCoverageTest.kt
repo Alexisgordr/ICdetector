@@ -99,6 +99,7 @@ class TerminalLocalizationCoverageTest {
         "N/A: todavía no se ha observado un handover evaluable.",
         "N/A: no hubo cambio de celda.",
         "N/A: el intervalo entre observaciones no permite atribuir el desplazamiento al handover.",
+        "N/A: hubo una interrupción del servicio celular; esta celda es la nueva referencia, no un handover observado.",
         "[H16] N/A: no hay fix GPS en la observación de la celda anterior.",
         "[H16] N/A: el fix GPS de la celda anterior tiene una marca de tiempo inválida o futura.",
         "[H16] N/A: el fix GPS de la celda anterior tiene más de 10 s; una posición reutilizada no demuestra que el móvil estuviera quieto.",

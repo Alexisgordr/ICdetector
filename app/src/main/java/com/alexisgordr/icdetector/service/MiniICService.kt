@@ -1263,7 +1263,8 @@ class MiniICService : Service() {
                 // Mobility is contextual metadata only. Its result is deliberately not passed to
                 // ThreatAnalyzer, LocalCellTrust, Stable-Site, alerts or forensics.
                 val mobility = if (activeRaw != null && activeRaw.cellId != "N/A") {
-                    mobilityFamiliarity.observe(activeRaw.identityKey, motionEvidence, mobilityClock())
+                    // 3.0 (G4) — Tras una pérdida de servicio o un hueco no hay arista desde la celda anterior.
+                    mobilityFamiliarity.observe(activeRaw.identityKey, motionEvidence, mobilityClock(), serviceContinuous = !continuityBroken)
                 } else com.alexisgordr.icdetector.core.MobilityObservation(
                     com.alexisgordr.icdetector.core.MobilityFamiliarity.UNKNOWN_ON_ROUTE
                 )
@@ -1302,7 +1303,7 @@ class MiniICService : Service() {
                 // servidora. El resultado se retiene 20 s para que los tres ciclos temporales
                 // puedan observar el mismo handover, sin convertirlo en un fallo permanente.
                 val transitionCoherence = if (activeRaw != null && activeRaw.cellId != "N/A") {
-                    transitionTracker.evaluate(activeRaw, currentLocation, neighbors)
+                    transitionTracker.evaluate(activeRaw, currentLocation, neighbors, serviceContinuous = !continuityBroken)
                 } else TransitionCoherenceResult()
 
                 val canQuery = activeRaw != null && activeRaw.cellId != "N/A" && currentLocation != null

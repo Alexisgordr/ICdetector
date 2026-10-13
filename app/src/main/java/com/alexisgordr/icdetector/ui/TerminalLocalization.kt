@@ -257,6 +257,9 @@ private val replacements = linkedMapOf(
     "familias independientes" to "independent families",
     "todavía no se ha observado un handover evaluable" to "no evaluable handover has been observed yet",
     "faltan dos posiciones GPS contemporáneas" to "two contemporaneous GPS positions are unavailable",
+    // 3.0 (G4) — HandoverReference.INTERRUPTION_EXPLANATION
+    "hubo una interrupción del servicio celular; esta celda es la nueva referencia, no un handover observado." to
+        "cellular service was interrupted; this cell is the new reference, not an observed handover.",
     // 3.0 — H16: validación del fix GPS de cada extremo (TransitionCoherence.gpsProblem).
     "no hay fix GPS en la observación de la celda anterior." to
         "there is no GPS fix in the observation of the previous cell.",

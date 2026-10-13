@@ -2,6 +2,7 @@ package com.alexisgordr.icdetector.service
 
 import android.location.Location
 import android.os.SystemClock
+import com.alexisgordr.icdetector.core.HandoverReference
 import com.alexisgordr.icdetector.core.TransitionCoherence
 import com.alexisgordr.icdetector.models.CellData
 import com.alexisgordr.icdetector.models.HeuristicStatus
@@ -34,20 +35,32 @@ internal class ServingTransitionTracker(
     private var activeIdentity: String? = null
     private var activeExpiresAt = 0L
 
-    fun evaluate(active: CellData, location: Location?, neighbors: List<CellData>): TransitionCoherenceResult {
+    /**
+     * [serviceContinuous] (G4): false si desde la observación anterior hubo una pérdida de servicio
+     * o un hueco (CoverageContinuity). Entonces la celda es la nueva referencia: no se evalúa ni se
+     * registra un handover desde la anterior (ver HandoverReference).
+     */
+    fun evaluate(active: CellData, location: Location?, neighbors: List<CellData>, serviceContinuous: Boolean = true): TransitionCoherenceResult {
         val now = SystemClock.elapsedRealtime()
         val current = Snapshot(active, location?.let(::Location), now, neighbors.map { it.identityKey }.toSet())
         val prior = synchronized(lock) {
             val previous = last
             last = current
-            if (previous == null) return TransitionCoherenceResult()
-            if (previous.cell.identityKey == active.identityKey) {
-                return if (activeIdentity == active.identityKey && now <= activeExpiresAt) activeResult
-                else TransitionCoherenceResult(explanation = "N/A: sin handover reciente; esperando el siguiente para comprobar la movilidad.")
+            when (HandoverReference.step(previous?.cell?.identityKey, active.identityKey, serviceContinuous)) {
+                HandoverReference.Step.FIRST -> return TransitionCoherenceResult()
+                HandoverReference.Step.NEW_REFERENCE_AFTER_INTERRUPTION -> {
+                    activeIdentity = null
+                    activeResult = TransitionCoherenceResult()
+                    return TransitionCoherenceResult(explanation = HandoverReference.INTERRUPTION_EXPLANATION)
+                }
+                HandoverReference.Step.SAME_CELL ->
+                    return if (activeIdentity == active.identityKey && now <= activeExpiresAt) activeResult
+                    else TransitionCoherenceResult(explanation = "N/A: sin handover reciente; esperando el siguiente para comprobar la movilidad.")
+                HandoverReference.Step.HANDOVER -> Unit
             }
             activeIdentity = null
             activeResult = TransitionCoherenceResult()
-            previous
+            previous!!
         }
         val previousLocation = prior.location
         val result = TransitionCoherence.evaluate(

@@ -173,17 +173,28 @@ class MobilityFamiliarityEngine(
     ) : this(store, config, enabled, InMemoryMobilityAnchorStore(), newTripId)
 
     private var recovered = false
+    /**
+     * 3.0 (G4) — Tras reanudar un viaje después de reiniciar el proceso: hora monotónica de la última
+     * observación guardada. La primera observación solo enlaza con la celda anterior si el hueco
+     * cabe en [CoverageContinuity.MAX_GAP_MS] (continuidad demostrable); si no, referencia nueva.
+     */
+    private var resumedFromElapsedMs: Long? = null
     private var anchor: MobilityTripAnchor? = null
     private var persistedAnchor: MobilityTripAnchor? = null
 
     /** Pruebas: relojes civil y monotónico que avanzan juntos en un solo arranque. */
-    internal fun observe(identity: String, motion: MotionEvidence, nowMs: Long): MobilityObservation =
-        observe(identity, motion, MobilityClock(nowMs, nowMs, SAME_BOOT))
+    internal fun observe(identity: String, motion: MotionEvidence, nowMs: Long, serviceContinuous: Boolean = true): MobilityObservation =
+        observe(identity, motion, MobilityClock(nowMs, nowMs, SAME_BOOT), serviceContinuous)
 
     internal fun recover(nowMs: Long): MobilityObservation = recover(MobilityClock(nowMs, nowMs, SAME_BOOT))
 
+    /**
+     * [serviceContinuous] (G4): false si desde la observación anterior hubo una pérdida de servicio
+     * o un hueco (CoverageContinuity). Entonces la celda es una referencia nueva del viaje y no se
+     * crea ninguna arista desde la anterior (ver [HandoverReference]).
+     */
     @Synchronized
-    fun observe(identity: String, motion: MotionEvidence, clock: MobilityClock): MobilityObservation {
+    fun observe(identity: String, motion: MotionEvidence, clock: MobilityClock, serviceContinuous: Boolean = true): MobilityObservation {
         if (!enabled || identity.isBlank()) return MobilityObservation(MobilityFamiliarity.UNKNOWN_ON_ROUTE)
         recoverIfNeeded(clock)
         var trip = store.openTrip()
@@ -214,13 +225,18 @@ class MobilityFamiliarityEngine(
         val a = anchor!!
 
         val priorServing = trip.lastServing
+        val afterRestart = resumedFromElapsedMs?.let { clock.elapsedMs - it in 0..CoverageContinuity.MAX_GAP_MS }
+        resumedFromElapsedMs = null
+        val step = HandoverReference.step(priorServing, identity, serviceContinuous && afterRestart != false)
         // 3.0 (G2) — Se evalúa ANTES de incorporar esta observación al viaje, y solo con viajes
         // anteriores confirmados: el viaje abierto no puede validarse a sí mismo.
         val historical = MobilityFamiliarityPolicy.assess(store.historicalEdgeCounts(identity).values, config)
-        val arrivalEdge = if (priorServing != null && priorServing != identity) MobilityEdge(priorServing, identity) else null
+        val arrivalEdge = if (step == HandoverReference.Step.HANDOVER) MobilityEdge(priorServing!!, identity) else null
         val arrivalPriorTrips = arrivalEdge?.let { store.priorTripCounts(setOf(it))[it] ?: 0 }
-        var event: String? = null
+        // La celda es la misma o no con o sin interrupción: el temporizador de «misma servidora» no cambia.
         val sameServing = priorServing == identity
+        var event: String? = if (step == HandoverReference.Step.NEW_REFERENCE_AFTER_INTERRUPTION && !sameServing)
+            "reference_reset after interruption" else null
         val sameServingSinceElapsed = if (sameServing) a.sameServingSinceElapsedMs else clock.elapsedMs
         val staticSinceElapsed = if (motion.state == MotionState.STATIC_CONFIRMED) a.staticSinceElapsedMs ?: clock.elapsedMs else null
         trip = trip.copy(
@@ -269,6 +285,7 @@ class MobilityFamiliarityEngine(
         val saved = anchors.load()?.takeIf { it.tripId == trip.id }
         if (saved != null && continuityAfterRestart(saved, clock)) {
             anchor = saved; persistedAnchor = saved
+            resumedFromElapsedMs = saved.lastSeenElapsedMs
             return MobilityObservation(MobilityFamiliarity.UNKNOWN_ON_ROUTE, trip.id, event = "trip_resumed")
         }
         val committed = close(trip, MobilityTripCloseReason.ABANDONED, trip.lastSeenMs)

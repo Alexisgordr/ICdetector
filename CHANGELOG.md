@@ -11,6 +11,16 @@ GitHub pre-release of an earlier build was withdrawn.
 
 ### Audit fixes
 
+- **No routes across service gaps (interpretation change for routes and H16).** After a loss of
+  service (no cell, Airplane mode, unusable declared primary), more than 2 minutes without readings
+  or a restart without demonstrable continuity, the first cell was linked to the last one before the
+  gap, as if A→C had been an observed handover: H16 evaluated it, Topology counted it and the trip got
+  an edge. The existing continuity check (`CoverageContinuity`) now feeds both: that cell is a new
+  reference (`HandoverReference`), H16 says `N/A` with that reason, nothing is recorded in Topology
+  and the trip gets no edge; after a process restart in the same boot the first trip edge needs at
+  most 2 minutes since the last observation. A valid serving cell without GPS keeps continuity (only
+  the geometry is `N/A`). H16's rules, thresholds and weights, scores, alarms and Stable-Site are
+  unchanged. Stored routes are kept and not reclassified or recalculated; no schema change.
 - **Trips survive clock changes.** Trip durations and resumption compared civil times: moving the
   clock back kept a trip open (negative durations) and moving it forward closed it by maximum
   duration, and a restart could resume a trip on a backward clock. Intervals now use the monotonic

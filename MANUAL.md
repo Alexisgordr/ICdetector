@@ -272,7 +272,11 @@ resumes only if continuity can be shown: same device boot, its monotonic referen
 minutes since it was last seen and no civil clock jump. Otherwise (reboot, restored backup, upgrade
 from an earlier build, longer gap) it closes as `ABANDONED` at its last observed time, without
 adding duration, and is committed only if already valid. Before this change (3.0 beta) these
-intervals used the civil clock; trips stored by earlier builds are not recalculated. Closed trip detail is kept for 90 days; pruning it does not reduce the aggregate
+intervals used the civil clock; trips stored by earlier builds are not recalculated. Within a trip, the same
+continuity rule as Topology applies: after a loss of service, a gap or a restart without
+continuity, the next cell is a new reference of the same trip and no edge links it to the previous
+one; after a restart in the same boot, the first edge needs at most two minutes since the last
+observation. Closed trip detail is kept for 90 days; pruning it does not reduce the aggregate
 `trip_count`. The experimental familiarity rule requires two incident edges that each appeared in at
 least three earlier trips.
 
@@ -661,6 +665,17 @@ criterion, not proof that either cell is legitimate. Each route keeps its full o
 destination identities, observation count, learned count, last H16 state, learned ratio and most
 recent timestamp. Filters separate all routes, learned routes and routes worth reviewing. The screen
 is read-only: it cannot change the score, H16 or the transition baseline.
+
+**What counts as an observed handover.** A route A→B is recorded only when the serving cell changes
+from A to B with cellular continuity. Continuity is broken by a loss of service (no cell, Airplane
+mode, or a declared primary cell without a usable signal), by more than two minutes without
+readings, and by a restart of the service or the phone that cannot show continuity. After a break,
+the first cell is a **new reference**: H16 says `N/A` (service interrupted, new reference) and
+neither Topology nor the mobility trips get a route from the cell before the break. A valid serving
+cell without GPS does not break continuity: the change of cell was observed and is counted; only
+its geometry cannot be checked (H16 `N/A` for GPS, never learned). Before this change (3.0 beta) the
+first cell after a break was linked to the last one before it; those stored routes are kept as they
+are, because the data cannot tell which of them crossed a break, and they are not recalculated.
 
 **EXPORT TOPOLOGY** creates a ZIP with `cells.csv`, `transitions.csv`, `topology.graphml`,
 `metadata.json` and `SHA256SUMS.txt`. GraphML opens in tools such as Gephi or Cytoscape. The export
