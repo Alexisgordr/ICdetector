@@ -236,7 +236,10 @@ object ThreatAnalyzer {
         // Umbral >4 (antes >3): es habitual ver 3-4 MNC de forma legítima
         // (MVNOs, estaciones de tren, roaming, zonas fronterizas). Subir el umbral
         // reduce falsos positivos sin necesidad de tocar la LR (que sigue baja a propósito).
-        if (uniqueMncs.size > 4) {
+        // 3.0 — Solo penaliza si es evaluable: antes, con la MNC de la servidora en «N/A», el
+        // informe decía N/A y aun así restaba 15 puntos, guardaba el motivo y alimentaba el
+        // bayesiano. En las demás reglas la condición de fallo ya implicaba la de evaluación.
+        if (eMncCount && uniqueMncs.size > 4) {
             hMncCount = false
             reasons.add("Multitud de MNCs")
             score -= 15

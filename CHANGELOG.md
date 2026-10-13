@@ -11,6 +11,10 @@ GitHub pre-release of an earlier build was withdrawn.
 
 ### Audit fixes
 
+- **H4 never subtracts points while not evaluated.** With the serving MNC unknown and five
+  neighbours with distinct known MNCs, H4 was reported N/A yet subtracted 15 points, stored
+  "Multitud de MNCs" and fed the Bayesian score. The penalty now requires the rule to be evaluable,
+  as in the other fifteen rules.
 - **Minor: unknown declared LTE band and AOSP timing-advance text.** With an EARFCN outside the table
   and a single declared band, that band was used as is even if the app does not know it (6, 23 or
   modem garbage), and history/CSV stored it; now only known bands are used, otherwise no band (H14
