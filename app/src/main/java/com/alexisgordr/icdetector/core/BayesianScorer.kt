@@ -152,6 +152,17 @@ object BayesianScorer {
         else              -> 1.0f   // poca confianza -> escrutinio completo
     }
 
+    /** 3.0 (fase 4) — Grupo de correlación del scorer; INDEPENDENT = actualiza por su cuenta. */
+    enum class Group { RF_DOMINANCE, MOBILITY, WEAK_IDENTITY, INDEPENDENT }
+
+    /** Grupo de una clave, para declararlo y comprobarlo en HeuristicCatalog. */
+    internal fun groupOf(key: String): Group = when (key) {
+        in RF_DOMINANCE_GROUP -> Group.RF_DOMINANCE
+        in MOBILITY_GROUP -> Group.MOBILITY
+        in WEAK_IDENTITY_GROUP -> Group.WEAK_IDENTITY
+        else -> Group.INDEPENDENT
+    }
+
     /** 3.0 (#7, O2) — Claves con peso, para comprobar que coinciden con HeuristicCatalog. */
     internal val weightedKeys: Set<String> get() = LIKELIHOOD_RATIOS.keys
 

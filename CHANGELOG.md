@@ -11,6 +11,11 @@ GitHub pre-release of an earlier build was withdrawn.
 
 ### Audit fixes
 
+- **Episode families and scorer groups are declared together.** `HeuristicCatalog` now states each
+  rule's Bayesian correlation group next to its episode family, and a test checks the declared group
+  against the scorer. They differ on purpose in three rules, each with its reason written down: H6
+  (RF dominance for the scorer, mobility for episodes), H14 (likewise) and H15 (one phenomenon with
+  H11 for the scorer, identity for episodes). Families are not changed: that would move alarms.
 - **H5 only compares TACs of the same operator.** A TAC is per network, so a neighbour of another
   network always has another TAC: at a border H3 and H5 failed together on the same foreign
   neighbour (score −50 and, in the Bayesian, 9.0 × 6.5 while mccMismatch is declared independent),

@@ -49,4 +49,30 @@ class HeuristicCatalogTest {
     @Test fun `every episode family has at least one rule`() {
         assertEquals(ThreatEpisodeTracker.Family.values().toSet(), HeuristicCatalog.values().map { it.episodeFamily }.toSet())
     }
+
+    // ── 3.0 (fase 4) — Familia de episodio frente a grupo del scorer ────────────────────────
+
+    @Test fun `the declared scorer group is the real one`() {
+        HeuristicCatalog.entries.forEach { assertEquals(it.id, BayesianScorer.groupOf(it.scorerKey), it.scorerGroup) }
+    }
+
+    /** Correspondencia esperada familia → grupos del scorer. */
+    private fun corresponds(f: ThreatEpisodeTracker.Family, g: BayesianScorer.Group) = when (f) {
+        ThreatEpisodeTracker.Family.RF_DOMINANCE -> g == BayesianScorer.Group.RF_DOMINANCE
+        ThreatEpisodeTracker.Family.MOBILITY -> g == BayesianScorer.Group.MOBILITY
+        ThreatEpisodeTracker.Family.IDENTITY -> g == BayesianScorer.Group.WEAK_IDENTITY || g == BayesianScorer.Group.INDEPENDENT
+        ThreatEpisodeTracker.Family.CROSS_LAYER -> g == BayesianScorer.Group.INDEPENDENT
+    }
+
+    @Test fun `family and scorer group differ only in the three documented rules`() {
+        val differing = HeuristicCatalog.entries.filter { !corresponds(it.episodeFamily, it.scorerGroup) }
+        assertEquals(listOf("H6", "H14", "H15"), differing.map { it.id })
+        differing.forEach { assertTrue("${it.id} debe explicar por qué", !it.familyDiffersFromScorer.isNullOrBlank()) }
+        HeuristicCatalog.entries.filter { corresponds(it.episodeFamily, it.scorerGroup) }
+            .forEach { assertEquals("${it.id} no tiene excepción que explicar", null, it.familyDiffersFromScorer) }
+    }
+
+    @Test fun `H6 shares the RF dominance group with H2 and H7`() {
+        listOf("taDistance", "powerJump", "ghostCells").forEach { assertEquals(BayesianScorer.Group.RF_DOMINANCE, BayesianScorer.groupOf(it)) }
+    }
 }
