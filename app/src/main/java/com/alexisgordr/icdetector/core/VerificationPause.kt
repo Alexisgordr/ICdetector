@@ -17,6 +17,8 @@ import java.time.format.DateTimeFormatter
  * | 6      | 503  | demasiadas peticiones           | [RATE_LIMITED]        |
  * | 7      | 429  | límite diario superado          | [DAILY_QUOTA]         |
  *
+ * Solo el code 7 indica la cuota diaria: un HTTP 429 sin él se trata como [RATE_LIMITED].
+ *
  * La página *Access and limits* da 1.000 créditos de API por usuario y día y recomienda no repetir
  * en el acto tras un límite o un error temporal; no documenta a qué hora se reinicia el día ni la
  * cabecera Retry-After. Fallos sin respuesta (red, Tor caído, TLS) y otros HTTP, [TRANSIENT].
@@ -41,7 +43,9 @@ object ExternalFailureClassifier {
             401 -> ExternalFailure.INVALID_CREDENTIAL
             403 -> ExternalFailure.ACCESS_RESTRICTED
             400 -> ExternalFailure.INVALID_INPUT
-            429 -> ExternalFailure.DAILY_QUOTA
+            // 429 sin code 7: la documentación identifica la cuota diaria por code 7, no por el HTTP.
+            // Sin ese código es una limitación temporal (Retry-After o espera creciente).
+            429 -> ExternalFailure.RATE_LIMITED
             503 -> ExternalFailure.RATE_LIMITED
             else -> ExternalFailure.TRANSIENT
         }

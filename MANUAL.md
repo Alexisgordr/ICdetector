@@ -236,8 +236,8 @@ documented by OpenCellID (wiki pages *API* and *Access and limits*), never the w
 |---|---|---|
 | HTTP 401 / code 2 | invalid API key | no more queries until you change the key |
 | HTTP 403 / code 4 | whitelisting required | no more queries until you change the settings |
-| HTTP 503 / code 6 | too many requests | pause: `Retry-After` if valid, otherwise 1, 2, 4… up to 30 min |
-| HTTP 429 / code 7 | daily limit | pause: `Retry-After` if valid, otherwise 24 h |
+| HTTP 503 / code 6, or HTTP 429 without code 7 | too many requests | pause: `Retry-After` if valid, otherwise 1, 2, 4… up to 30 min |
+| code 7 (usually HTTP 429) | daily limit | pause: `Retry-After` if valid, otherwise 24 h |
 | HTTP 400 / code 3 | invalid input | only that cell waits 1 h; no global pause |
 | HTTP 5xx / code 5, network, Tor down | temporary | pause 30 s, 1, 2… up to 15 min; any reply resets it |
 

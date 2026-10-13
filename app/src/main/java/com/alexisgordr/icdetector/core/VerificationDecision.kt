@@ -180,8 +180,11 @@ object VerificationDecision {
         // compatible.
         if (httpCode !in 200..299) {
             return when (httpCode) {
-                429 -> Verdict(VerificationStatus.ERROR,
+                // La cuota diaria se identifica por code 7; un 429 sin él es una limitación temporal.
+                429 -> if (errorCode == OCID_DAILY_LIMIT) Verdict(VerificationStatus.ERROR,
                     "OpenCellID: límite diario de consultas agotado. NO significa que la antena no exista; se reintentará. Respuesta: $crudo")
+                else Verdict(VerificationStatus.ERROR,
+                    "OpenCellID: demasiadas peticiones seguidas. Se reintentará.")
                 503 -> Verdict(VerificationStatus.ERROR,
                     "OpenCellID: demasiadas peticiones seguidas. Se reintentará.")
                 401 -> Verdict(VerificationStatus.ERROR,

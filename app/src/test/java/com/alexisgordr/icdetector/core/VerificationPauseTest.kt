@@ -52,7 +52,8 @@ class VerificationPauseTest {
         assertEquals(ExternalFailure.RATE_LIMITED, c.classify(503, 6))
         assertEquals(ExternalFailure.RATE_LIMITED, c.classify(503, -1))
         assertEquals(ExternalFailure.DAILY_QUOTA, c.classify(429, 7))
-        assertEquals(ExternalFailure.DAILY_QUOTA, c.classify(429, -1))
+        assertEquals("429 sin code 7: limitación temporal", ExternalFailure.RATE_LIMITED, c.classify(429, -1))
+        assertEquals(ExternalFailure.RATE_LIMITED, c.classify(429, 6))
         assertEquals(ExternalFailure.TRANSIENT, c.classify(404, -1))
         assertEquals(ExternalFailure.TRANSIENT, c.classify(502, -1))
         assertEquals("sin respuesta", ExternalFailure.TRANSIENT, c.classify(null, -1))
@@ -276,6 +277,17 @@ class VerificationPauseTest {
         val busy = ask(fake(503, """{"code":6}""", "Retry-After" to date))
         assertEquals(ExternalFailure.RATE_LIMITED, busy.externalFailure)
         assertTrue(busy.retryAfterMillis!! in 100_000L..121_000L)
+
+        // HTTP 429 sin code 7: limitación temporal que respeta Retry-After, no cuota diaria.
+        val plain429 = ask(fake(429, "Too Many Requests", "Retry-After" to "90"))
+        assertEquals(VerificationStatus.ERROR, plain429.status)
+        assertEquals(ExternalFailure.RATE_LIMITED, plain429.externalFailure)
+        assertEquals(90_000L, plain429.retryAfterMillis)
+        assertFalse(plain429.reason!!.contains("diario"))
+        val g = VerificationPauseGate()
+        val p429 = g.onResult(fpA, plain429.externalFailure, plain429.retryAfterMillis, clock())!!
+        assertEquals(90_000L, p429.untilElapsedMs!! - 10 * min)
+        assertEquals(ExternalFailure.RATE_LIMITED, ask(fake(429, "")).externalFailure)
 
         val bogus = ask(fake(503, "", "Retry-After" to "soon"))
         assertEquals(ExternalFailure.RATE_LIMITED, bogus.externalFailure)
