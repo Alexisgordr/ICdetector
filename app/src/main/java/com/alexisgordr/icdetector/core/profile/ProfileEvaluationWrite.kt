@@ -21,9 +21,21 @@ object ProfileEvaluationWrite {
         FAILED
     }
 
-    /** ¿Hay ya una evaluación de esta fila o de esta observación? Parámetros: history_id, observation_id. */
+    /**
+     * ¿Hay ya una evaluación de esta fila o de esta observación? Parámetros: history_id, observation_id.
+     * Solo para evaluaciones CON identidad de observación (L5): Android no admite argumentos null.
+     */
     const val EXISTS_SQL =
-        "SELECT 1 FROM profile_evaluations WHERE history_id = CAST(? AS INTEGER) OR (observation_id IS NOT NULL AND observation_id = ?) LIMIT 1"
+        "SELECT 1 FROM profile_evaluations WHERE history_id = CAST(? AS INTEGER) OR observation_id = ? LIMIT 1"
+
+    /** 3.0 (L5) — Sin identidad de observación (filas anteriores al esquema 24): solo por fila. Un parámetro. */
+    const val EXISTS_BY_HISTORY_SQL =
+        "SELECT 1 FROM profile_evaluations WHERE history_id = CAST(? AS INTEGER) LIMIT 1"
+
+    /** La consulta y sus argumentos, todos no nulos. */
+    fun existsQuery(historyId: Long, observationId: String?): Pair<String, Array<String>> =
+        if (observationId == null) EXISTS_BY_HISTORY_SQL to arrayOf(historyId.toString())
+        else EXISTS_SQL to arrayOf(historyId.toString(), observationId)
 
     fun outcome(insertedRowId: Long, alreadyStored: Boolean): Outcome = when {
         insertedRowId != -1L -> Outcome.INSERTED

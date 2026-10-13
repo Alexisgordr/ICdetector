@@ -44,8 +44,10 @@ class ProfileAlgorithmVersionConflictTest {
     /** Lo que hace LocalProfileStore.insertEvaluationChecked. */
     private fun checked(historyId: Long, version: Int, observationId: String?, level: String, contextKey: String? = "k"): Outcome {
         val inserted = insertOrIgnore(historyId, version, observationId, level, contextKey)
-        val exists = inserted == 0 && db.prepareStatement(ProfileEvaluationWrite.EXISTS_SQL).use { st ->
-            st.setString(1, historyId.toString()); st.setString(2, observationId); st.executeQuery().use { it.next() }
+        val (sql, args) = ProfileEvaluationWrite.existsQuery(historyId, observationId)
+        assertTrue("ningún argumento nulo", args.all { it != null })
+        val exists = inserted == 0 && db.prepareStatement(sql).use { st ->
+            args.forEachIndexed { i, a -> st.setString(i + 1, a) }; st.executeQuery().use { it.next() }
         }
         return ProfileEvaluationWrite.outcome(if (inserted == 1) 99L else -1L, exists)
     }
@@ -58,6 +60,15 @@ class ProfileAlgorithmVersionConflictTest {
         // Otra fila de la misma observación: mismo conflicto por la identidad de la observación.
         exec("INSERT INTO history (timestamp, cid, dbm, score, failed_heuristics, observed_at_ms, observation_id) VALUES ('2026-10-01 10:00:00', '1', -85, 100, 'H3', 5000, 'obs-1')")
         assertEquals(Outcome.ALREADY_EVALUATED, checked(historyId = 3, version = 3, observationId = "obs-1", level = "HIGH"))
+    }
+
+    @Test fun `an old row without observation id is a conflict, queried by row only`() {
+        exec("INSERT INTO profile_evaluations (history_id, evaluated_at_ms, algorithm_version, context_key, mode, deviation_level, " +
+            "metrics_evaluated, metrics_total) VALUES (2, 1, 2, 'k', 'SHADOW', 'LOW', 1, 2)")
+        assertEquals(ProfileEvaluationWrite.EXISTS_BY_HISTORY_SQL to listOf("2"),
+            ProfileEvaluationWrite.existsQuery(2, null).let { it.first to it.second.toList() })
+        assertEquals(Outcome.ALREADY_EVALUATED, checked(historyId = 2, version = 3, observationId = null, level = "HIGH"))
+        assertEquals("2|LOW", single("SELECT algorithm_version || '|' || deviation_level FROM profile_evaluations WHERE history_id = 2"))
     }
 
     @Test fun `a row without evaluation is stored normally`() {

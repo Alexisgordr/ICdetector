@@ -75,8 +75,9 @@ object LocalProfileStore {
      */
     fun insertEvaluationChecked(db: SQLiteDatabase, r: ProfileEvaluationRecord): com.alexisgordr.icdetector.core.profile.ProfileEvaluationWrite.Outcome {
         val id = insertEvaluation(db, r)
-        val stored = id == -1L && db.rawQuery(com.alexisgordr.icdetector.core.profile.ProfileEvaluationWrite.EXISTS_SQL,
-            arrayOf(r.historyId.toString(), r.observationId)).use { it.moveToFirst() }
+        // L5 — Sin observation_id se consulta solo por fila: Android rechaza argumentos null.
+        val (sql, args) = com.alexisgordr.icdetector.core.profile.ProfileEvaluationWrite.existsQuery(r.historyId, r.observationId)
+        val stored = id == -1L && db.rawQuery(sql, args).use { it.moveToFirst() }
         return com.alexisgordr.icdetector.core.profile.ProfileEvaluationWrite.outcome(id, stored)
     }
 
