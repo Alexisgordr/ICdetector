@@ -11,6 +11,11 @@ GitHub pre-release of an earlier build was withdrawn.
 
 ### Audit fixes
 
+- **H2 and H7 only compare power with neighbours of the same technology.** They mixed LTE/NR RSRP
+  with GSM RSSI and UMTS RSCP: an LTE serving cell at −70 dBm (RSRP) and a GSM neighbour at −106 dBm
+  (RSSI) gave "Salto potencia (>35dB)" from a units artefact, and H7's −110 dBm threshold means a
+  normal RSRP neighbour but a dead RSSI one. Both now use only same-technology neighbours and are N/A
+  without them; H1 still counts every neighbour. Diagnostic texts updated (EN/ES).
 - **H5 only compares TACs of the same technology.** The neighbour list mixes technologies, so an LTE
   serving TAC was compared with GSM/UMTS LACs and NR TACs, which are different identifier spaces and
   never match "by design": one GSM neighbour with a known LAC made H5 fail (−20). H5 now uses only

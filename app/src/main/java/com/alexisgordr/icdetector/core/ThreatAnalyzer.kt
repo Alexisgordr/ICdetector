@@ -212,7 +212,15 @@ object ThreatAnalyzer {
         }
 
         // 2. Signal Gap analysis
-        val nextStrongest = neighbors.maxOfOrNull { it.dbm }
+        //
+        // 3.0 — H2 y H7 comparan potencias, y la magnitud depende de la tecnología: RSRP en LTE/NR,
+        // RSSI en GSM y RSCP en UMTS no son comparables (un RSRP LTE suele ser 20-30 dB más bajo que
+        // un RSSI GSM con la misma cobertura). Antes una vecina GSM a -106 dBm frente a una servidora
+        // LTE a -70 dBm daba un «salto» de 36 dB que era un artefacto de unidades. Solo cuentan las
+        // vecinas de la misma tecnología; sin ellas, N/A. H1 sigue contando vecinas de cualquier
+        // tecnología: eso solo hace la regla más conservadora.
+        val samePowerScale = neighbors.filter { it.radioTech == active.radioTech }
+        val nextStrongest = samePowerScale.maxOfOrNull { it.dbm }
         ePowerJump = !isWifiActive && nextStrongest != null
         if (!isWifiActive && nextStrongest != null && active.dbm >= -75 && (active.dbm - nextStrongest > 35)) {
             hPowerJump = false
@@ -302,9 +310,11 @@ object ThreatAnalyzer {
         // 7. Ghost Cells Check
         // Umbral subido a -65dBm y vecinas a -110dBm para reducir
         // falsos positivos en zonas rurales con macroceldas
-        eGhost = !isWifiActive && neighbors.isNotEmpty()
-        if (!isWifiActive && active.dbm >= -65 && neighbors.isNotEmpty()
-            && neighbors.all { it.dbm <= -110 }) {
+        // 3.0 — Misma escala de potencia que la servidora (ver H2): un -110 de RSRP es una vecina
+        // normal; un -110 de RSSI, una vecina muerta.
+        eGhost = !isWifiActive && samePowerScale.isNotEmpty()
+        if (!isWifiActive && active.dbm >= -65 && samePowerScale.isNotEmpty()
+            && samePowerScale.all { it.dbm <= -110 }) {
             hGhost = false
             reasons.add("Vecinos fantasma")
             score -= 25

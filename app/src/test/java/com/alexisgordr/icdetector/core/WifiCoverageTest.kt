@@ -14,7 +14,7 @@ import java.io.File
 class WifiCoverageTest {
     private val active = CellData(isRegistered = true, networkType = "4G LTE", radioTech = RadioTech.LTE, cellId = "1000",
         mnc = "01", tac = "100", dbm = -60, mcc = "214", arfcn = 1300, rsrq = -18, sinr = -2)
-    private val neighbour = CellData(isRegistered = false, networkType = "4G LTE", cellId = "2000", mnc = "01", tac = "100", dbm = -115, mcc = "214")
+    private val neighbour = CellData(isRegistered = false, networkType = "4G LTE", radioTech = RadioTech.LTE, cellId = "2000", mnc = "01", tac = "100", dbm = -115, mcc = "214")
 
     private fun report(wifi: Boolean) = ThreatAnalyzer.analyzeThreats(
         active = active, neighbors = listOf(neighbour), isHardwareCipheringActive = true, cellChangeHistory = emptyList(),

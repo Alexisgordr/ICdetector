@@ -91,6 +91,8 @@ class TerminalLocalizationCoverageTest {
         "Proximidad por Timing Advance",
         "Espectro de vecinos",
         "N/A: no hay celdas vecinas disponibles para contrastar el espectro.",
+        "N/A: no hay celdas vecinas de la misma tecnología para contrastar el espectro.",
+        "N/A: hacen falta celdas vecinas de la misma tecnología con potencia para comparar.",
         "Cifrado hardware",
         "N/A: todavía no existe una secuencia temporal utilizable.",
         "N/A: aún no hay observaciones previas geolocalizadas de esta celda.",

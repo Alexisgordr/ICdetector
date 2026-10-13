@@ -436,6 +436,8 @@ private val replacements = linkedMapOf(
     "Proximidad por Timing Advance" to "Timing Advance proximity",
     "Espectro de vecinos" to "Neighbour spectrum",
     "N/A: no hay celdas vecinas disponibles para contrastar el espectro." to "N/A: no neighbour cells available to compare the spectrum.",
+    "N/A: no hay celdas vecinas de la misma tecnología para contrastar el espectro." to "N/A: no neighbour cells of the same technology to compare the spectrum.",
+    "N/A: hacen falta celdas vecinas de la misma tecnología con potencia para comparar." to "N/A: neighbour cells of the same technology with signal readings are required for comparison.",
     "Cifrado hardware" to "Hardware ciphering",
     "N/A: todavía no existe una secuencia temporal utilizable." to "N/A: no usable time sequence yet.",
     "N/A: aún no hay observaciones previas geolocalizadas de esta celda." to "N/A: no previous geolocated observations of this cell yet.",

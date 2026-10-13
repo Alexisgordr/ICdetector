@@ -865,6 +865,13 @@ can be suspicious, but rural coverage, indoor deployments, modem limitations and
 conditions look similar. H3 (MCC), H4 (MNC) and H5 (TAC) need neighbours that report their identity;
 many modems report only frequency, PCI and signal, so these rules can stay `N/A` permanently.
 
+**Comparable neighbours only (H2, H5, H7).** These rules compare the serving cell with neighbours of
+the **same technology** only. TAC (LTE), TAC (NR) and LAC (GSM/UMTS) are different identifier spaces,
+and signal is reported as RSRP (LTE/NR), RSSI (GSM) or RSCP (UMTS), which are not comparable: an LTE
+RSRP is typically 20–30 dB below a GSM RSSI for the same coverage. Without same-technology
+neighbours these rules are `N/A`. H1 still counts neighbours of any technology (that only makes it
+more conservative), and H3/H4 compare MCC/MNC, which are shared by all technologies.
+
 **Which entries count as neighbours.** A neighbour is an entry the modem reports as not registered
 and does **not** declare `SECONDARY_SERVING`. A secondary carrier (the NR leg of 5G NSA, or an LTE
 carrier-aggregation secondary published without "registered") serves this connection, so it is

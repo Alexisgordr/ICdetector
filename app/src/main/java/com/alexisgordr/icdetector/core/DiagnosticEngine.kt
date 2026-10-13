@@ -53,7 +53,7 @@ object DiagnosticEngine {
                     else -> "N/A: sin lectura celular válida."
                 })),
             HeuristicDiagnostic(2, "Estabilidad de potencia", r.powerJump,
-                explanation(r.powerJump, if (i.wifiActive) WIFI_NA else "N/A: hacen falta celdas vecinas con potencia para comparar.")),
+                explanation(r.powerJump, if (i.wifiActive) WIFI_NA else "N/A: hacen falta celdas vecinas de la misma tecnología con potencia para comparar.")),
             HeuristicDiagnostic(3, "Consistencia MCC", r.mccConsistency,
                 explanation(r.mccConsistency, "N/A: falta MCC válido en la celda activa o en sus vecinas.")),
             HeuristicDiagnostic(4, "Límite MNC", r.mncCount,
@@ -63,7 +63,7 @@ object DiagnosticEngine {
             HeuristicDiagnostic(6, "Proximidad por Timing Advance", r.taDistance,
                 explanation(r.taDistance, "N/A: el módem no entrega un Timing Advance convertible a metros.")),
             HeuristicDiagnostic(7, "Espectro de vecinos", r.ghostNeighbors,
-                explanation(r.ghostNeighbors, if (i.wifiActive) WIFI_NA else "N/A: no hay celdas vecinas disponibles para contrastar el espectro.")),
+                explanation(r.ghostNeighbors, if (i.wifiActive) WIFI_NA else "N/A: no hay celdas vecinas de la misma tecnología para contrastar el espectro.")),
             HeuristicDiagnostic(8, "Sanidad ARFCN", r.arfcnSanity,
                 explanation(r.arfcnSanity, "N/A: el módem no entrega ARFCN/EARFCN para esta tecnología.")),
             HeuristicDiagnostic(9, "Cifrado hardware", r.hardwareCiphering,
