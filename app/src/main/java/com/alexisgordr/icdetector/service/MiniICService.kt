@@ -1269,7 +1269,6 @@ class MiniICService : Service() {
                 }
                 val stableSiteDecision = if (activeRaw != null && activeRaw.cellId != "N/A") {
                     dbHelper.applyStableSiteDecision(stableSiteCandidate, activeRaw, siteKeys)
-                        .also { maybeNotifyStableSite(it) }
                 } else stableSiteCandidate
                 val siteKey = stableSiteDecision.siteKey
 
@@ -1559,6 +1558,9 @@ class MiniICService : Service() {
                                     "aplicación=${when { stableSiteDecision.enforced -> "SITE_UNVERIFIED"; stableSiteDecision.wouldTrigger -> "SOMBRA: aplicaría SITE_UNVERIFIED"; else -> "NO ACTIVA" }}"
                             )
                         }
+                        // 3.0 — Aviso silencioso de Stable-Site: solo desde un ciclo que se publica
+                        // (ya pasó mayPublish), nunca desde un análisis descartado.
+                        maybeNotifyStableSite(stableSiteDecision)
                         // Observe the trust result immediately after LocalCellTrustEngine. This is
                         // a one-way evidence signal and cannot alter the detector input below.
                         // Always feed the RF contradiction tracker. A real contradiction has
@@ -1748,7 +1750,10 @@ class MiniICService : Service() {
     }
 
     /**
-     * 3.0 — Aviso silencioso de Stable-Site (ver StableSiteNotices). Solo informa: no toca la puntuación, la confianza temporal ni las alarmas. El episodio ya
+     * 3.0 — Aviso silencioso de Stable-Site (ver StableSiteNotices). Se llama en el hilo principal,
+     * dentro del bloque de publicación y después de collectionGeneration.mayPublish: un análisis
+     * descartado nunca avisa y su pendiente se conserva para el siguiente ciclo válido.
+     * Solo informa: no toca la puntuación, la confianza temporal ni las alarmas. El episodio ya
      * está guardado; si la notificación falla o Android la bloquea, el análisis sigue igual.
      */
     private fun maybeNotifyStableSite(decision: com.alexisgordr.icdetector.core.StableSiteDecision) {

@@ -115,6 +115,17 @@ class StableSiteNoticesTest {
         assertEquals(listOf("e1"), p.posted)
     }
 
+    @Test fun `a discarded analysis never notifies, and the next valid cycle does once`() {
+        val p = Phone()
+        p.cycle(decide(evidence()), changed = true, published = false)
+        p.cycle(decide(evidence()), published = false)
+        assertEquals(emptyList<String>(), p.posted)
+        assertEquals("el pendiente se conserva", "e1", p.pending)
+        p.cycle(decide(evidence()))
+        p.cycle(decide(evidence()))
+        assertEquals(listOf("e1"), p.posted)
+    }
+
     @Test fun `with the preference off nothing is posted, and turning it on does not replay`() {
         val p = Phone().apply { enabled = false }
         p.cycle(decide(evidence()), changed = true)

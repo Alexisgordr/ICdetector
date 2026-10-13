@@ -34,6 +34,26 @@ class StableSiteNoticesWiringTest {
         assertFalse(service.contains("PREF_NOTIFY_SINCE_MS"))
     }
 
+    @Test fun `the notice is decided only after mayPublish, and a failure never breaks the analysis`() {
+        val service = src("service/MiniICService.kt")
+        val cycle = service.substringAfter("cellProcessingMutex.withLock {").substringBefore("private fun onAnalysisFailed(")
+        val publish = cycle.substringAfter("withContext(Dispatchers.Main) {")
+        val check = publish.indexOf("if (!collectionGeneration.mayPublish(cycleTicket)) return@withContext")
+        val call = publish.indexOf("maybeNotifyStableSite(stableSiteDecision)")
+        assertTrue(check >= 0 && call > check)
+        assertEquals("una sola llamada", 1, Regex("""maybeNotifyStableSite\(""").findAll(cycle.substringBefore("private fun recordStableSiteEpisodeStart(")).count())
+        val notify = service.substringAfter("private fun maybeNotifyStableSite(").substringBefore("private fun onAnalysisFailed(")
+        assertTrue(notify.contains("notices.decide(decision, enabled, pending)"))
+        assertTrue(notify.contains("prefs.getBoolean(notices.PREF_ENABLED, notices.DEFAULT_ENABLED)"))
+        val consume = notify.indexOf("prefs.edit().remove(notices.PREF_PENDING_EPISODE).commit()")
+        assertTrue("se consume antes de publicar", consume in 0 until notify.indexOf("showStableSiteNotice("))
+        assertTrue(notify.contains("} catch (e: CancellationException) {\n            throw e\n        } catch (e: Exception) {"))
+        listOf("securityAlerts", "checkAlerts", "ToneGenerator", "ALERT_CHANNEL_ID", "showConfirmedAlarm", "temporalConfidence",
+            "threatEpisodeTracker", "localCellTrust", "securityScore", "bayes", "dbHelper").forEach {
+            assertFalse("el aviso no toca $it", notify.contains(it, ignoreCase = true))
+        }
+    }
+
     @Test fun `scores, temporal confirmation, trust and alarms do not know about the notices`() {
         listOf("core/ThreatAnalyzer.kt", "core/BayesianScorer.kt", "core/LocalCellTrustEngine.kt", "core/TemporalConfidence.kt",
             "service/SecurityAlertController.kt").forEach { path ->

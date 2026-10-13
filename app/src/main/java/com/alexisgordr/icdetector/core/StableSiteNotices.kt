@@ -15,7 +15,8 @@ package com.alexisgordr.icdetector.core
  * pendiente y no avisa nunca, aunque el sitio madure mientras sigue abierto. Basta una preferencia
  * porque solo hay un episodio abierto a la vez: abrir uno cierra los demás.
  *
- * Cuándo se avisa ([decide]), todo a la vez:
+ * Cuándo se avisa ([decide]), en un ciclo que SÍ se publica (después de comprobar que su resultado
+ * sigue siendo actual), todo a la vez:
  *  - el episodio de la evaluación es el pendiente;
  *  - el lugar sigue maduro (ACTIVE según StableSiteMaturityPolicy, sin recalibrar);
  *  - el teléfono está quieto (STATIC_CONFIRMED). Ese estado ya exige fixes recientes y precisos:
@@ -28,7 +29,7 @@ package com.alexisgordr.icdetector.core
  * Como mucho un aviso por episodio: el pendiente se borra (de forma síncrona) ANTES de intentar
  * notificar, así que ni otra lectura, ni abrir la app, ni reiniciar el proceso lo repiten. Si la
  * preferencia está apagada se consume igual, sin publicar: encenderla después no reproduce
- * episodios.
+ * episodios. Si el ciclo se descarta, el pendiente se conserva para el siguiente ciclo válido.
  * Una restauración borra el pendiente: los episodios restaurados no avisan. La madurez nunca cambia
  * la preferencia, solo el estado mostrado. Sin migración: una preferencia interna, no copiada.
  */
@@ -76,6 +77,7 @@ object StableSiteNotices {
         NOTIFY
     }
 
+    /** Se llama solo desde un ciclo que se publica. */
     fun decide(decision: StableSiteDecision, enabled: Boolean, pendingEpisodeId: String?): Action {
         val evidence = decision.evidence ?: return Action.NONE
         val eligible = pendingEpisodeId != null && decision.episodeId == pendingEpisodeId &&
