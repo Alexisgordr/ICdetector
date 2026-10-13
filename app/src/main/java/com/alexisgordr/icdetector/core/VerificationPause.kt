@@ -17,7 +17,8 @@ import java.time.format.DateTimeFormatter
  * | 6      | 503  | demasiadas peticiones           | [RATE_LIMITED]        |
  * | 7      | 429  | límite diario superado          | [DAILY_QUOTA]         |
  *
- * Solo el code 7 indica la cuota diaria: un HTTP 429 sin él se trata como [RATE_LIMITED].
+ * Solo el code 7 indica la cuota diaria: un HTTP 429 sin él se trata como [RATE_LIMITED]. Y solo
+ * los codes 2 y 4 pausan hasta cambiar la configuración: un 401/403 sin ellos es [TRANSIENT].
  *
  * La página *Access and limits* da 1.000 créditos de API por usuario y día y recomienda no repetir
  * en el acto tras un límite o un error temporal; no documenta a qué hora se reinicia el día ni la
@@ -40,8 +41,10 @@ object ExternalFailureClassifier {
         }
         return when (httpCode) {
             in 200..299 -> if (apiCode > 0) ExternalFailure.TRANSIENT else ExternalFailure.NONE
-            401 -> ExternalFailure.INVALID_CREDENTIAL
-            403 -> ExternalFailure.ACCESS_RESTRICTED
+            // 3.0 (V5) — 401/403 SIN code 2 o 4 no prueban nada sobre la clave: pueden venir de un
+            // proxy, un portal cautivo, un CDN o un fallo intermedio. Pausa indefinida solo con el
+            // código documentado; sin él, fallo transitorio con espera creciente.
+            401, 403 -> ExternalFailure.TRANSIENT
             400 -> ExternalFailure.INVALID_INPUT
             // 429 sin code 7: la documentación identifica la cuota diaria por code 7, no por el HTTP.
             // Sin ese código es una limitación temporal (Retry-After o espera creciente).

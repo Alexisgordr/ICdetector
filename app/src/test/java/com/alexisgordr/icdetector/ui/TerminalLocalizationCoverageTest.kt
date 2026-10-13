@@ -108,6 +108,7 @@ class TerminalLocalizationCoverageTest {
         "[API] OpenCellID sin respuesta (red, proxy o servidor): se reintentará en 1 min.",
         "[API] OpenCellID: la API key no es válida. Revísala en Ajustes. Respuesta: {}",
         "[API] OpenCellID: la API key no tiene acceso (requiere lista blanca). Respuesta: {}",
+        "[API] OpenCellID: acceso denegado (HTTP 403) sin código de la API; puede venir de un proxy o un intermediario, no prueba que la clave falle. Se reintentará. Respuesta: <html>",
         "[API] OpenCellID: la API rechazó los datos de esta celda (código 3). No dice nada de la antena. Respuesta: {}",
         "[API] OpenCellID: error interno del servidor (código 5). Se reintentará. Respuesta: {}",
         "[API] OpenCellID: consulta descartada; la configuración cambió mientras se hacía.",

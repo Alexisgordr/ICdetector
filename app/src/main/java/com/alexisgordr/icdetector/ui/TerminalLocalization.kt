@@ -261,6 +261,9 @@ private val replacements = linkedMapOf(
     "registro encontrado sin contraste de distancia (no hay posición propia reciente y fiable). No confirma que la antena esté donde dice la base." to
         "record found without a distance check (no recent, reliable own position). It does not confirm that the cell is where the database says.",
     // 3.0 (V1) — Pausa global de OpenCellID y códigos documentados
+    "sin código de la API; puede venir de un proxy o un intermediario, no prueba que la clave falle. Se reintentará." to
+        "without an API code; it may come from a proxy or an intermediary and does not prove the key is wrong. Will retry.",
+    "acceso denegado" to "access denied",
     "OpenCellID en pausa: la API key no es válida. No se consultará hasta que la cambies en Ajustes." to
         "OpenCellID paused: the API key is invalid. No queries until you change it in Settings.",
     "OpenCellID en pausa: la API key no tiene acceso (código 4). No se consultará hasta que cambies la configuración." to

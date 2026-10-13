@@ -34,7 +34,7 @@ object VerificationDecision {
     const val OCID_INVALID_KEY = 2
     /** Datos de entrada inválidos (HTTP 400). */
     const val OCID_INVALID_INPUT = 3
-    /** Hace falta lista blanca (HTTP 403). */
+    /** Hace falta lista blanca (HTTP 403). Solo este código, no el 403 a secas, culpa al acceso. */
     const val OCID_WHITELIST_REQUIRED = 4
     /** Error interno del servidor (HTTP 500). */
     const val OCID_SERVER_ERROR = 5
@@ -187,10 +187,16 @@ object VerificationDecision {
                     "OpenCellID: demasiadas peticiones seguidas. Se reintentará.")
                 503 -> Verdict(VerificationStatus.ERROR,
                     "OpenCellID: demasiadas peticiones seguidas. Se reintentará.")
-                401 -> Verdict(VerificationStatus.ERROR,
-                    "OpenCellID: la API key no es válida. Revísala en Ajustes. Respuesta: $crudo")
-                403 -> Verdict(VerificationStatus.ERROR,
-                    "OpenCellID: la API key no tiene acceso (requiere lista blanca). Respuesta: $crudo")
+                // 3.0 (V5) — Solo los códigos documentados culpan a la clave. Un 401/403 sin ellos
+                // puede venir de un proxy o de un intermediario: se dice así y se reintenta.
+                401, 403 -> when (errorCode) {
+                    OCID_INVALID_KEY -> Verdict(VerificationStatus.ERROR,
+                        "OpenCellID: la API key no es válida. Revísala en Ajustes. Respuesta: $crudo")
+                    OCID_WHITELIST_REQUIRED -> Verdict(VerificationStatus.ERROR,
+                        "OpenCellID: la API key no tiene acceso (requiere lista blanca). Respuesta: $crudo")
+                    else -> Verdict(VerificationStatus.ERROR,
+                        "OpenCellID: acceso denegado (HTTP $httpCode) sin código de la API; puede venir de un proxy o un intermediario, no prueba que la clave falle. Se reintentará. Respuesta: $crudo")
+                }
                 // Un 404 es un endpoint que no responde donde se esperaba, no una antena
                 // inexistente. La forma documentada de decir "no la tengo" es HTTP 200 con code 1.
                 404 -> Verdict(VerificationStatus.ERROR,

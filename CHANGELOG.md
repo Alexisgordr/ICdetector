@@ -31,7 +31,9 @@ GitHub pre-release of an earlier build was withdrawn.
   per cell, even with an invalid key or the daily quota exhausted, and moving to another cell queried
   again. Failures are now classified by HTTP status and the documented API code (2 invalid key,
   3 invalid input, 4 whitelisting, 5 server, 6 too many requests, 7 daily limit), not by text. An
-  invalid key or missing whitelisting stops queries until the settings change; a rate limit honours a
+  invalid key or missing whitelisting (API code 2 or 4 only; an HTTP 401/403 without them may come
+  from a proxy or intermediary and is treated as temporary, without blaming the key) stops queries
+  until the settings change; a rate limit honours a
   valid `Retry-After` (seconds or HTTP date) or backs off from 1 to 30 min (an HTTP 429 without code 7
   counts as a rate limit: the documentation identifies the daily quota by code 7); the daily quota honours
   `Retry-After` or waits 24 h (the reset time is not documented, so midnight UTC is not assumed);

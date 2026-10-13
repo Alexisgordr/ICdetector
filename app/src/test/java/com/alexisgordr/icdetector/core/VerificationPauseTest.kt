@@ -45,7 +45,10 @@ class VerificationPauseTest {
         assertEquals(ExternalFailure.NONE, c.classify(200, 1))
         assertEquals(ExternalFailure.INVALID_CREDENTIAL, c.classify(401, 2))
         assertEquals(ExternalFailure.INVALID_CREDENTIAL, c.classify(200, 2))
-        assertEquals(ExternalFailure.INVALID_CREDENTIAL, c.classify(401, -1))
+        assertEquals("401 sin código: no culpa a la clave", ExternalFailure.TRANSIENT, c.classify(401, -1))
+        assertEquals("403 sin código: no culpa al acceso", ExternalFailure.TRANSIENT, c.classify(403, -1))
+        assertEquals(ExternalFailure.ACCESS_RESTRICTED, c.classify(401, 4))
+        assertEquals(ExternalFailure.INVALID_CREDENTIAL, c.classify(403, 2))
         assertEquals(ExternalFailure.INVALID_INPUT, c.classify(400, 3))
         assertEquals(ExternalFailure.ACCESS_RESTRICTED, c.classify(403, 4))
         assertEquals(ExternalFailure.TRANSIENT, c.classify(500, 5))
@@ -308,6 +311,37 @@ class VerificationPauseTest {
         val ok = ask(fake(200, """{"lat":42.8,"lon":-1.6,"mcc":214,"mnc":7,"lac":100,"cellid":1234,"radio":"LTE"}"""))
         assertEquals(VerificationStatus.VERIFIED, ok.status)
         assertEquals(ExternalFailure.NONE, ok.externalFailure)
+    }
+
+    @Test fun `401 and 403 pause indefinitely only with API code 2 or 4 (V5)`() {
+        val bodies = mapOf("json-sin-código" to """{"error":"Unauthorized"}""", "json-código-raro" to """{"code":99}""",
+            "html" to "<html><body><h1>403 Forbidden</h1>nginx</body></html>", "vacío" to "")
+        for (http in listOf(401, 403)) {
+            for ((name, body) in bodies) {
+                val r = ask(fake(http, body))
+                assertEquals("$http $name", VerificationStatus.ERROR, r.status)
+                assertEquals("$http $name", ExternalFailure.TRANSIENT, r.externalFailure)
+                assertFalse("$http $name: ${r.reason}", r.reason!!.contains("API key no es válida") || r.reason!!.contains("lista blanca") || r.reason!!.contains("código 4"))
+                assertTrue(r.reason!!, r.reason!!.contains("HTTP $http") && r.reason!!.contains("Se reintentará"))
+                // Ambiguo: espera creciente en memoria, y se vuelve a intentar al vencer.
+                val store = InMemoryVerificationPauseStore()
+                val gate = VerificationPauseGate(store)
+                val p = gate.onResult(fpA, r.externalFailure, r.retryAfterMillis, clock())!!
+                assertEquals(VerificationPauseGate.TRANSIENT_BASE_MS, p.untilElapsedMs!! - 10 * min)
+                assertNull("no se guarda", store.load())
+                assertNull("se reintenta al vencer", gate.blocking(fpA, clock(elapsed = p.untilElapsedMs!!)))
+                assertNull("un reinicio no la conserva", VerificationPauseGate(store).blocking(fpA, clock()))
+                // Cambiar solo Tor (misma clave) también la levanta.
+                gate.onResult(fpA, r.externalFailure, null, clock())
+                gate.onConfigChanged(fpA)
+                assertNull(gate.blocking(fpA, clock()))
+            }
+            // Con el código documentado sí: pausa hasta cambiar la configuración.
+            assertEquals(ExternalFailure.INVALID_CREDENTIAL, ask(fake(http, """{"code":2}""")).externalFailure)
+            assertEquals(ExternalFailure.ACCESS_RESTRICTED, ask(fake(http, """{"code":4}""")).externalFailure)
+        }
+        assertTrue(ask(fake(401, """{"code":2}""")).reason!!.contains("API key no es válida"))
+        assertTrue(ask(fake(403, """{"code":4}""")).reason!!.contains("lista blanca"))
     }
 
     @Test fun `a quota or limit answer is never NOT_FOUND`() {
