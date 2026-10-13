@@ -52,7 +52,8 @@ import kotlinx.coroutines.launch
  * y el panel de auditoría llegaban a conclusiones distintas sobre la misma celda.
  */
 private const val SCORE_SAFE = 90
-private const val SCORE_WATCH = 70
+/** Por debajo, color de sospecha: el mismo umbral que el motor (UI3). */
+private const val SCORE_WATCH = com.alexisgordr.icdetector.core.ScoreThreshold.SUSPICIOUS_BELOW
 
 /**
  * Color de un score de seguridad. **Único** criterio de color de toda la pantalla: si algo muestra

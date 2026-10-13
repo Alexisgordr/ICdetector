@@ -2,7 +2,7 @@ package com.alexisgordr.icdetector.models
 
 /**
  * Prefijo con el que se marcan en el historial las observaciones que SÍ fallaron alguna
- * heurística pero no llegaron al umbral de sospecha (score >= 70).
+ * heurística pero no llegaron al umbral de sospecha (score >= ScoreThreshold.SUSPICIOUS_BELOW, 70).
  *
  * v2.1: antes esas observaciones se guardaban con el score real pero con el motivo borrado
  * ("OK"), porque applyTemporalConfidence ponía suspiciousReason a null cuando la celda no era

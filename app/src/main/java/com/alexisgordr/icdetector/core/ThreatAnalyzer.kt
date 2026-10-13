@@ -654,7 +654,7 @@ object ThreatAnalyzer {
         // `Verified` del historial y en la cabecera, que lo dice con todas las letras.
 
         val finalScore = score.coerceIn(0, 100)
-        val isSuspicious = finalScore < 70
+        val isSuspicious = ScoreThreshold.isBelow(finalScore)
 
         fun status(evaluated: Boolean, passed: Boolean): HeuristicStatus = when {
             !evaluated -> HeuristicStatus.NOT_EVALUATED

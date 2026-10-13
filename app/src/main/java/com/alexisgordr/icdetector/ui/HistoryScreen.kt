@@ -1052,7 +1052,7 @@ fun IntelPanel(dbHelper: CellDbHelper) {
     val totalCells = groupedItems.size
     val totalConnections = items.size
     val avgScore = items.asSequence().map { it.score }.average()
-    val suspiciousCells = groupedItems.count { (_, records) -> records.any { it.score < 70 } }
+    val suspiciousCells = groupedItems.count { (_, records) -> records.any { com.alexisgordr.icdetector.core.ScoreThreshold.isBelow(it.score) } }
     val verifiedCells = groupedItems.count { (_, r) -> r.any { it.verified.name == "VERIFIED" } }
     val notFoundCells = groupedItems.count { (_, r) -> r.any { it.verified.name == "NOT_FOUND" } }
     val recordsWithGps = items.count { it.lat != null && it.lon != null }

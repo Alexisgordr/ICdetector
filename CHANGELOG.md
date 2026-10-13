@@ -11,6 +11,10 @@ GitHub pre-release of an earlier build was withdrawn.
 
 ### Audit fixes
 
+- **One shared suspicious-score threshold.** `ScoreThreshold.SUSPICIOUS_BELOW` (70, compared as
+  `score < 70`) is now used by ThreatAnalyzer, the main screen colours and the statistics screen
+  instead of separate literals. Same value, same comparison; other 70s (−70 dBm RSRP, LTE band 70)
+  are untouched.
 - **OpenCellID privacy, stated plainly.** Settings and the manual now say what each query sends (the
   API key and the cell identity: MCC, MNC, area code, Cell ID, technology), that Tor hides the IP but
   the same key lets queries be linked, and that with the proxy selected and Tor unavailable there is
