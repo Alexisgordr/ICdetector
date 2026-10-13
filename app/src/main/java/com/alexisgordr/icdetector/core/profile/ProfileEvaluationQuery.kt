@@ -167,8 +167,14 @@ enum class H13History {
     FAILED, NOT_EVALUATED, NO_FAILURE_RECORDED, UNKNOWN;
 
     companion object {
-        /** Textos con que ThreatAnalyzer anota un fallo de H13 (potencia y huella RF). */
-        val FAILURE_MARKERS = listOf("Potencia anómala vs historial", "Huella RF incoherente con el historial")
+        /**
+         * Textos con que ThreatAnalyzer anota un fallo de H13 (potencia y huella RF). 3.0 (L4) — Los
+         * mismos que escribe el motor (StoredReasons), con los textos históricos exactos.
+         */
+        val FAILURE_MARKERS = listOf(
+            com.alexisgordr.icdetector.models.StoredReasons.H13_POWER_PREFIX,
+            com.alexisgordr.icdetector.models.StoredReasons.H13_RF_PREFIX
+        )
 
         fun of(observation: HistoricalObservation?): H13History {
             if (observation == null) return UNKNOWN

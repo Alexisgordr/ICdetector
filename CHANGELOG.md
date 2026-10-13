@@ -11,6 +11,14 @@ GitHub pre-release of an earlier build was withdrawn.
 
 ### Audit fixes
 
+- **Local profile: clarifications, no change in method.** Profile days are UTC days (cap of 48 a day
+  and the three days for maturity), now documented. The texts that identify an H13 failure in the
+  stored reasons (`Potencia anómala vs historial`, `Huella RF incoherente con el historial`) are now
+  shared constants used by both the engine and the profile's H13 view, with exactly the historical
+  wording; stored reasons are never translated. The phone-model policy is described as it is: the
+  evaluation always abstains on another model, and learning replaces such a reference only once it
+  has expired (30 days after its last learned evidence), or at once after a reset; earlier text said
+  only a reset did.
 - **Local profile: one evaluation per observation (schema 24, interpretation change for profile
   statistics).** One reading saved as two rows (periodic or handover row and a confirmed alarm of the
   same cycle) was evaluated by the profile once per row: the second evaluation used a reference that

@@ -91,7 +91,10 @@ class LocalProfileLearner(private val config: Config = Config()) {
     fun learn(stored: MetricProfile?, sample: ProfileSample, nowMs: Long): LearnResult {
         if (!sample.context.isComplete) return LearnResult(stored, LearnOutcome.INCOMPLETE_CONTEXT)
         // Una referencia de otra versión del algoritmo no se mezcla con la actual: se reaprende
-        // desde cero, con una generación nueva. Otro teléfono, en cambio, exige reiniciar a mano.
+        // desde cero, con una generación nueva. Una de otro modelo de teléfono no se mezcla ni se
+        // sustituye mientras siga vigente (INCOMPATIBLE, abajo); al caducar (F05) se reaprende con
+        // una generación nueva del modelo actual, como cualquier referencia caducada. El reinicio
+        // manual lo hace en el acto.
         // F06 — Una referencia con fechas futuras (el reloj iba adelantado y luego se corrigió, o una
         // copia de otro reloj) bloquearía todo lo posterior como repetido: se rehace desde cero.
         val sameAlgorithm = stored?.takeIf { it.algorithmVersion == LocalProfile.ALGORITHM_VERSION }
@@ -200,6 +203,11 @@ class LocalProfileLearner(private val config: Config = Config()) {
     companion object {
         const val DAY_MS = 24L * 60L * 60L * 1000L
         const val CLOCK_TOLERANCE_MS = 5L * 60L * 1000L
+        /**
+         * Día de una muestra, en UTC (no en la hora local): el tope de [Config.maxPerDay] muestras y
+         * los [Config.matureDays] días distintos cuentan días UTC. En España el día cambia a la 1:00
+         * o a las 2:00 locales.
+         */
         fun dayOf(ms: Long): String = Instant.ofEpochMilli(ms).atZone(ZoneOffset.UTC).toLocalDate().toString()
     }
 }

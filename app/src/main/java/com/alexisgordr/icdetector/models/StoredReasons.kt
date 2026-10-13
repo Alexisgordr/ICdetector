@@ -20,6 +20,21 @@ object StoredReasons {
     /** Comienzo del motivo de H15 (estabilidad de identidad RF). */
     const val H15_PREFIX = "Identidad RF inestable:"
 
+    /**
+     * 3.0 (L4) — Comienzo del motivo de H13 por potencia. El motor añade el exceso medido, p. ej.
+     * `Potencia anómala vs historial (+20dB)`. Texto histórico: no se traduce en la base.
+     */
+    const val H13_POWER_PREFIX = "Potencia anómala vs historial"
+
+    /** 3.0 (L4) — Comienzo del motivo de H13 por huella RF (RSRQ/SINR). */
+    const val H13_RF_PREFIX = "Huella RF incoherente con el historial"
+
+    /** Motivo completo de H13 por huella RF, tal como se guarda desde siempre. */
+    const val H13_RF_REASON = "$H13_RF_PREFIX (RSRQ/SINR muy desviados)"
+
+    /** Motivo de H13 por potencia con su exceso en dB (formato histórico). */
+    fun h13PowerReason(excessDb: Int): String = "$H13_POWER_PREFIX (+${excessDb}dB)"
+
     /** Motivo completo que escribe H15. */
     const val H15_REASON = "$H15_PREFIX misma Cell ID alternando PCI en la misma portadora (posible clon)"
 

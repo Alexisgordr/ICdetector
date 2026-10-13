@@ -405,7 +405,7 @@ object ThreatAnalyzer {
             }
             if (!isWifiActive && significant && active.dbm >= -95) {
                 hSignalBaseline = false
-                reasons.add("Potencia anómala vs historial (+${excessDb.toInt()}dB)")
+                reasons.add(com.alexisgordr.icdetector.models.StoredReasons.h13PowerReason(excessDb.toInt()))
                 score -= when {
                     excessDb >= 30 -> 25
                     excessDb >= 24 -> 18
@@ -431,7 +431,7 @@ object ThreatAnalyzer {
                     val sinrAnom = sinrOff > maxOf(8.0, 4.0 * fp.sinrStd)
                     if (rsrqAnom && sinrAnom) {
                         hSignalBaseline = false
-                        reasons.add("Huella RF incoherente con el historial (RSRQ/SINR muy desviados)")
+                        reasons.add(com.alexisgordr.icdetector.models.StoredReasons.H13_RF_REASON)
                         score -= 15
                     }
                 }

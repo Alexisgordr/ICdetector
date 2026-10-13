@@ -130,9 +130,11 @@ data class MetricProfile(
 /**
  * Compatibilidad de un perfil con el teléfono, la tecnología y el algoritmo actuales.
  *
- *  - **Modelo de dispositivo**: cada módem mide y redondea distinto. Un perfil aprendido en otro
- *    modelo (por ejemplo, tras restaurar una copia en otro teléfono) queda inactivo hasta que se
- *    reinicie y se vuelva a aprender aquí.
+ *  - **Modelo de dispositivo**: cada módem mide y redondea distinto. Con un perfil aprendido en otro
+ *    modelo (por ejemplo, tras restaurar una copia en otro teléfono) el EVALUADOR siempre se abstiene
+ *    (INCOMPATIBLE_DEVICE) y el APRENDIZAJE no lo mezcla (INCOMPATIBLE) mientras siga vigente. Cuando
+ *    caduca (más de 30 días entre su última evidencia aprendida y una muestra nueva), esa muestra
+ *    empieza una generación nueva con el modelo actual. El reinicio manual lo hace en el acto.
  *  - **Tecnología de radio**: forma parte del contexto; LTE y NR de la misma celda son perfiles
  *    distintos. Una discrepancia se trata como incompatible.
  *  - **Datos disponibles**: una métrica que este teléfono no da (RSRQ en 2G/3G) no se evalúa; se

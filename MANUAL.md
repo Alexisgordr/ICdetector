@@ -434,7 +434,9 @@ learning.
 **How learning is protected.**
 
 - Missing, impossible, older than 30 days or future-dated readings are ignored, as are repeats.
-- At most 48 samples a day, so one long session weighs no more than a day.
+- At most 48 samples a day, so one long session weighs no more than a day. Profile days are **UTC
+  days** (in Spain they change at 01:00 or 02:00 local time), for this cap and for the three
+  distinct days that maturity needs.
 - A reading more than 4 spreads away from a formed reference is quarantined (counted, not learned).
 - The mean and the spread can shift by at most one noise floor (3 dB for `DBM`, 1.5 dB for `RSRQ`)
   per day.
@@ -498,9 +500,16 @@ independent confirmation. Nothing in this view raises alerts or changes any resu
 are kept, and learning starts again. Use it after restoring a backup from another phone model, or
 after a major change of surroundings.
 
+**Another phone model.** References are tied to the phone model that learned them. With a reference
+from another model, the evaluation always abstains (*another phone model*) and learning does not mix
+the two while that reference is still current. Once it has expired — more than 30 days between its
+last learned evidence and a new reading — that reading starts a new generation learned on this
+phone, as with any stale reference. A reset does the same at once.
+
 **Backups.** The option is not saved in backups, and restoring one always turns it off (logged as
-`OFF`). References learned on a different phone model stay inactive until you reset the profile;
-on the same model they keep working but are as old as the backup.
+`OFF`). References learned on a different phone model are not used for evaluation; they are
+relearned on this phone once they expire (30 days after their last learned evidence), or at once
+after a reset. On the same model they keep working but are as old as the backup.
 
 **Comparing results.** Schemas 22, 23 and 24 only add tables, columns and indexes, so existing data
 is kept. Schema 24 adds the observation identity to new history rows and evaluations; rows and
@@ -1131,7 +1140,8 @@ It is not a long-term archive. Restoring a backup kept for weeks or months can c
 - The longer the file is kept, the longer your location history sits outside the phone.
 
 Restoring turns the local profile's experimental option off, and references learned on a different
-phone model stay inactive until reset (see [Local profile](#local-profile-shadow-mode-experimental)).
+phone model are not used for evaluation until they expire and are relearned, or until a reset (see
+[Local profile](#local-profile-shadow-mode-experimental)).
 
 To keep data for a long time, use the **exports** (history CSV, forensic cases, topology,
 geometry, Stable-Site): they are read-only and meant for analysis and archiving.
