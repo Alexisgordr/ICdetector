@@ -11,6 +11,12 @@ GitHub pre-release of an earlier build was withdrawn.
 
 ### Audit fixes
 
+- **Local profile: sustained quarantine documented.** The manual explains that the profile is per
+  cell identity, not per place, so a legitimate permanent change can stay quarantined and keep
+  showing high deviations; that quarantined readings do not move the last learned evidence; and that
+  the reference goes stale 30 days after that last evidence (later if readings are still accepted),
+  then relearns as a new generation. No automatic reset and no threshold change; the manual reset
+  is the way out. Documentation only.
 - **No routes across service gaps (interpretation change for routes and H16).** After a loss of
   service (no cell, Airplane mode, unusable declared primary), more than 2 minutes without readings
   or a restart without demonstrable continuity, the first cell was linked to the last one before the

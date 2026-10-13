@@ -442,6 +442,22 @@ learning.
 A burst of unusual readings therefore cannot redefine normal in a day. A slow change sustained over
 many days is slowed, not prevented.
 
+**Sustained quarantine after a real change.** The reference belongs to a **cell identity** (MCC, MNC,
+TAC, Cell ID and technology), not to a place. If the signal of that cell changes for good for a
+legitimate reason — the operator re-tilts or re-powers the antenna, you move your desk to another
+room, a new building blocks the path — readings can fall more than 4 spreads away from a formed
+reference (one with at least 20 samples). Those readings are quarantined, every time: the profile
+keeps reporting high deviations for that cell, and the reference does not follow the change, because
+quarantined readings are counted but never learned. They also do **not** count as learned evidence:
+the time of the last learned evidence does not move. If no reading is accepted any more, the
+reference becomes *stale* 30 days after that **last learned evidence**, and the next reading starts
+a new generation that learns the new level from scratch (30 samples on 3 days again). The 30 days
+are therefore not counted from the start of the change: any reading that is still accepted (within 4
+spreads) is learned, moves the last evidence forward and postpones staleness, while also pulling the
+mean by at most one noise floor per day. The app does not reset a reference by itself because of
+many quarantined readings, and the thresholds are fixed. If you know the change is legitimate and do
+not want to wait, use **RESET LOCAL PROFILE** (below). None of this reaches the score or alerts.
+
 **Maturity.** A reference is used only after 30 samples on 3 different days. After 30 days without
 new evidence it becomes *stale* and starts learning again. **Maturity is not validation**: it means
 the phone has seen enough of that cell, not that the method has been shown to detect anything.
