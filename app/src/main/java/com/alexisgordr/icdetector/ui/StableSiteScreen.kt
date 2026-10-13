@@ -503,6 +503,9 @@ fun RouteDetailPanel(
                 Text(stringResource(R.string.stable_site_route_simple, route.observations), color = Color.White, fontFamily = FontFamily.Monospace,
                     fontWeight = FontWeight.Bold, fontSize = 11.sp)
                 InfoLine(stringResource(R.string.route_detail_last_seen, formatMs(route.lastSeenMs) ?: "-"), Dim)
+                // 3.0 (UI2) — Estado de la última observación y, aparte, último evaluado y fallos.
+                InfoLine(statusText, Dim)
+                routeStatusDetails(route).forEach { InfoLine(it, Dim) }
                 AnalysisOnly()
                 TextButton(onClick = { technical = !technical }) {
                     Text(stringResource(if (technical) R.string.stable_site_hide_technical else R.string.stable_site_show_technical),

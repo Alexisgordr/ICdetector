@@ -232,7 +232,6 @@
     <string name="topology_metric_handovers">HANDOVERS</string>
     <string name="topology_metric_trusted">APRENDIDAS</string>
     <string name="topology_empty">SIN RUTAS TODAVÍA\nLa topología aparecerá tras los primeros handovers</string>
-    <string name="topology_status_learning">APRENDIENDO</string>
     <string name="topology_route_counts_format">%1$d observaciones · %2$d aprendidos</string>
     <string name="forensic_exporting_format">Exportando %1$s…</string>
     <string name="forensic_exported">Caso exportado correctamente</string>
@@ -584,4 +583,12 @@
     <string name="latency_tor_dialog_cancel">Cancelar</string>
     <string name="intel_loading">Cargando estadísticas…</string>
     <string name="intel_load_error">No se pudieron leer las estadísticas. El historial no se ha modificado.</string>
+    <string name="route_not_evaluated">SIN EVALUAR</string>
+    <string name="route_no_handover">SIN HANDOVER OBSERVADO</string>
+    <string name="route_not_evaluated_reason">Sin evaluar: %1$s</string>
+    <string name="route_last_evaluated">Último resultado evaluado: %1$s (%2$s). No es la lectura actual.</string>
+    <string name="route_failures_complete">Fallos registrados: %1$d</string>
+    <string name="route_failures_at_least">Al menos %1$d fallo(s): uno o más antes de que se contaran, %2$d desde entonces.</string>
+    <string name="route_failures_unknown">Fallos desde que se cuentan: %1$d. Los anteriores se desconocen.</string>
+    <string name="route_review_note">REVISAR: rutas con al menos un FAILED registrado. Un N/A por sí solo no cuenta.</string>
 </resources>

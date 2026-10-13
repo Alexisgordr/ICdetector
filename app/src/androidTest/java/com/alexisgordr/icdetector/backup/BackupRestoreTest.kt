@@ -187,6 +187,46 @@ class BackupRestoreTest {
         assertEquals(3, helper(target).getRecords().size)
     }
 
+    // 3.0 (UI2) — Copias de esquema 24 (anteriores) y 25 (actuales) se restauran con esta APK.
+
+    private fun restore(backup: ByteArray): CellDbHelper {
+        val stager = RestoreStager(context, dir, target.name)
+        val staged = stager.stage(ByteArrayInputStream(backup))
+        assertTrue(staged.toString(), staged is RestoreStager.Result.Staged)
+        stager.engine.requestInstall()
+        assertEquals(RestoreEngine.RestoreOutcome.RESTORED, RestoreEngine(dir, target.name, AndroidDatabaseOps).recover().outcome)
+        return helper(target)
+    }
+
+    @Test fun schema24BackupIsRestoredAndMigrated() {
+        val src = helper(source)
+        addRows(src, "111", 2)
+        // Base de esquema 24: cell_transitions sin las columnas nuevas y con una ruta FAILED antigua.
+        val old = rewriteManifest(export(src, source), modifyDatabase = { db ->
+            db.execSQL("DROP TABLE cell_transitions")
+            db.execSQL(com.alexisgordr.icdetector.storage.SchemaV25UpgradeTest.V24_TRANSITIONS)
+            db.execSQL("INSERT INTO cell_transitions VALUES ('A','F',4,1,'FAILED',2000,0,NULL,NULL,NULL)")
+            db.version = 24
+        }) { it.copy(schemaVersion = 24) }
+        val restored = restore(old)
+        assertEquals(CellDbHelper.DATABASE_VERSION, restored.readableDatabase.version)
+        val route = restored.getAllCellTransitions().single()
+        assertEquals(4, route.observations)
+        assertEquals(com.alexisgordr.icdetector.models.RouteFailureHistory.LEGACY_FAILED, route.failureHistory)
+        assertEquals(2, restored.getRecordCount())
+    }
+
+    @Test fun schema25BackupKeepsRouteFailures() {
+        val src = helper(source)
+        addRows(src, "111", 1)
+        src.recordCellTransition(com.alexisgordr.icdetector.models.TransitionCoherenceResult(
+            com.alexisgordr.icdetector.models.HeuristicStatus.FAILED, "x", "A", "B"))
+        val restored = restore(export(src, source))
+        val route = restored.getAllCellTransitions().single()
+        assertEquals(1, route.failedCount)
+        assertEquals(com.alexisgordr.icdetector.models.HeuristicStatus.FAILED, route.lastEvaluatedStatus)
+    }
+
     private fun rewriteManifest(
         backup: ByteArray,
         damageDatabase: Boolean = false,

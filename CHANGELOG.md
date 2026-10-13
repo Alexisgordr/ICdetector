@@ -11,6 +11,17 @@ GitHub pre-release of an earlier build was withdrawn.
 
 ### Audit fixes
 
+- **Handover routes: last reading separate from the last evaluated result (schema 25).** Every
+  handover overwrote `last_status`, also with NOT_EVALUATED, so an earlier FAILED disappeared; `N/A`
+  was shown as LEARNING and the REVIEW filter included it. Schema 25 adds to `cell_transitions` the
+  last PASSED/FAILED and its date, the reason of an `N/A` reading, a failure count and what is known
+  about failures from before (additive migration; `observations`, `trusted_observations`,
+  `trip_count` and every route are kept). `N/A` now shows NOT EVALUATED (with its reason), the last
+  evaluated result is shown apart with its date, and REVIEW means at least one FAILED recorded. Old
+  rows do not invent the past: a stored FAILED means "at least one failure, count unknown"; a stored
+  PASSED or `N/A` means "earlier failures unknown". All writes (handovers and trip confirmation) were
+  reviewed and share tested SQL; H16, learning and alarms are unchanged. Backups keep their format;
+  schema 24 backups are migrated on restore, and older APKs refuse schema 25 backups as newer.
 - **Statistics without loading the whole history.** The RF intelligence summary read every history
   row (`getRecords()` without a limit) and grouped them in Compose. It now runs aggregate SQL queries
   in IO (`IntelStatsQuery`, no window functions for Android 10's SQLite) with loading, error and

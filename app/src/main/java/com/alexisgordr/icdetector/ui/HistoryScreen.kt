@@ -488,7 +488,7 @@ private fun AntennaDetailAccordions(
     if (open == AntennaSection.HANDOVERS) {
         routes.forEach { route ->
             val direction = if (route.fromIdentity == identity) "→ ${route.toIdentity}" else "← ${route.fromIdentity}"
-            DetailText("$direction\n${route.observations}× · ${stringResource(R.string.route_trust_label)} ${(route.trustRatio * 100).toInt()}% · ${routeStatusLabel(route.lastStatus)} · ${DateFormat.getDateTimeInstance(DateFormat.SHORT, DateFormat.SHORT).format(Date(route.lastSeenMs))}")
+            DetailText("$direction\n${route.observations}× · ${stringResource(R.string.route_trust_label)} ${(route.trustRatio * 100).toInt()}% · ${routeStatusLabel(route)} · ${DateFormat.getDateTimeInstance(DateFormat.SHORT, DateFormat.SHORT).format(Date(route.lastSeenMs))}")
         }
         if (routes.isEmpty()) DetailText(stringResource(R.string.antenna_no_handovers))
     }
@@ -584,14 +584,15 @@ private fun TopologyPanel(
     // 3.0 — Detalle de una ruta (datos de la ruta y sus episodios Stable-Site, paginados por sitio).
     var selectedRoute by remember { mutableStateOf<CellTransitionSummary?>(null) }
     selectedRoute?.let { route ->
-        RouteDetailPanel(dbHelper, route, routeStatusLabel(route.lastStatus), modifier) { selectedRoute = null }
+        RouteDetailPanel(dbHelper, route, routeStatusLabel(route), modifier) { selectedRoute = null }
         return
     }
     var filter by remember { mutableStateOf("ALL") }
     val visible = remember(transitions, filter) {
         when (filter) {
             "TRUSTED" -> transitions.filter { it.trustedObservations > 0 }
-            "REVIEW" -> transitions.filter { it.lastStatus != HeuristicStatus.PASSED }
+            // 3.0 (UI2) — REVISAR = algún FAILED registrado (ver RouteReview). N/A solo no cuenta.
+            "REVIEW" -> transitions.filter { com.alexisgordr.icdetector.core.RouteReview.needsReview(it) }
             else -> transitions
         }.sortedWith(compareByDescending<CellTransitionSummary> { it.observations }.thenByDescending { it.lastSeenMs })
     }
@@ -627,6 +628,9 @@ private fun TopologyPanel(
             FilterChip(filter == "ALL", { filter = "ALL" }, label = { Text(stringResource(R.string.filter_all)) })
             FilterChip(filter == "TRUSTED", { filter = "TRUSTED" }, label = { Text(stringResource(R.string.filter_learned)) })
             FilterChip(filter == "REVIEW", { filter = "REVIEW" }, label = { Text(stringResource(R.string.filter_review)) })
+        }
+        if (filter == "REVIEW") {
+            Text(stringResource(R.string.route_review_note), color = Color(0xFF666666), fontFamily = FontFamily.Monospace, fontSize = 8.sp)
         }
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
             TextButton(
@@ -695,12 +699,14 @@ private fun TopologyMetric(label: String, value: String, modifier: Modifier = Mo
 @Composable
 private fun TopologyRouteCard(route: CellTransitionSummary, onOpen: () -> Unit) {
     // 3.0 — Al pulsar la tarjeta se abre su detalle (RouteDetailPanel).
-    val statusText = routeStatusLabel(route.lastStatus)
-    val statusColor = when (route.lastStatus) {
-        HeuristicStatus.PASSED -> Color(0xFF4CAF50)
-        HeuristicStatus.FAILED -> Color(0xFFCF6679)
-        HeuristicStatus.NOT_EVALUATED -> Color(0xFFFFA000)
+    val statusText = routeStatusLabel(route)
+    val statusColor = when (com.alexisgordr.icdetector.core.RouteReview.current(route)) {
+        com.alexisgordr.icdetector.core.RouteReview.Current.COHERENT -> Color(0xFF4CAF50)
+        com.alexisgordr.icdetector.core.RouteReview.Current.FAILED -> Color(0xFFCF6679)
+        com.alexisgordr.icdetector.core.RouteReview.Current.NOT_EVALUATED,
+        com.alexisgordr.icdetector.core.RouteReview.Current.NO_HANDOVER_OBSERVED -> Color(0xFF888888)
     }
+    val details = routeStatusDetails(route)
     val lastSeen = remember(route.lastSeenMs) {
         java.text.SimpleDateFormat("yyyy-MM-dd HH:mm", java.util.Locale.getDefault())
             .format(java.util.Date(route.lastSeenMs))
@@ -735,6 +741,10 @@ private fun TopologyRouteCard(route: CellTransitionSummary, onOpen: () -> Unit) 
                 )
                 Text(lastSeen, color = Color(0xFF666666), fontFamily = FontFamily.Monospace, fontSize = 8.sp)
             }
+            // 3.0 (UI2) — Motivo del N/A, último evaluado (si no es la lectura actual) y fallos.
+            details.forEach { line ->
+                Text(line, color = Color(0xFF888888), fontFamily = FontFamily.Monospace, fontSize = 8.sp)
+            }
         }
     }
 }
@@ -755,15 +765,44 @@ private fun verificationStatusLabel(status: VerificationStatus): String = string
     }
 )
 
-/** Último veredicto de una ruta de handover (H16), igual que en la tarjeta de Topología. */
+/**
+ * 3.0 (UI2) — Estado de la ÚLTIMA OBSERVACIÓN de una ruta (H16), igual en tarjeta, detalle y
+ * antena. N/A se muestra SIN EVALUAR, nunca APRENDIENDO; sin ningún handover observado (ruta
+ * creada solo por viajes) no hay lectura que mostrar.
+ */
 @Composable
-private fun routeStatusLabel(status: HeuristicStatus): String = stringResource(
-    when (status) {
-        HeuristicStatus.PASSED -> R.string.coherent
-        HeuristicStatus.FAILED -> R.string.review
-        HeuristicStatus.NOT_EVALUATED -> R.string.topology_status_learning
+internal fun routeStatusLabel(route: CellTransitionSummary): String = stringResource(
+    when (com.alexisgordr.icdetector.core.RouteReview.current(route)) {
+        com.alexisgordr.icdetector.core.RouteReview.Current.COHERENT -> R.string.coherent
+        com.alexisgordr.icdetector.core.RouteReview.Current.FAILED -> R.string.review
+        com.alexisgordr.icdetector.core.RouteReview.Current.NOT_EVALUATED -> R.string.route_not_evaluated
+        com.alexisgordr.icdetector.core.RouteReview.Current.NO_HANDOVER_OBSERVED -> R.string.route_no_handover
     }
 )
+
+/**
+ * 3.0 (UI2) — Líneas de detalle de una ruta: motivo del N/A (si se guardó), el último resultado
+ * evaluado cuando NO es la lectura actual, con su fecha, y lo que se sabe de sus fallos.
+ */
+@Composable
+internal fun routeStatusDetails(route: CellTransitionSummary): List<String> {
+    val englishUi = LocalConfiguration.current.locales[0].language != "es"
+    val date = { ms: Long -> DateFormat.getDateTimeInstance(DateFormat.SHORT, DateFormat.SHORT).format(Date(ms)) }
+    val lines = mutableListOf<String>()
+    if (com.alexisgordr.icdetector.core.RouteReview.current(route) == com.alexisgordr.icdetector.core.RouteReview.Current.NOT_EVALUATED) {
+        route.lastExplanation?.let { lines += stringResource(R.string.route_not_evaluated_reason, if (englishUi) localizeTerminalLine(it) else it) }
+    }
+    com.alexisgordr.icdetector.core.RouteReview.previousEvaluated(route)?.let { (status, at) ->
+        val label = stringResource(if (status == HeuristicStatus.PASSED) R.string.coherent else R.string.review)
+        lines += stringResource(R.string.route_last_evaluated, label, date(at))
+    }
+    lines += when (val f = com.alexisgordr.icdetector.core.RouteReview.failures(route)) {
+        is com.alexisgordr.icdetector.core.RouteReview.Failures.Complete -> stringResource(R.string.route_failures_complete, f.count)
+        is com.alexisgordr.icdetector.core.RouteReview.Failures.AtLeast -> stringResource(R.string.route_failures_at_least, f.since + 1, f.since)
+        is com.alexisgordr.icdetector.core.RouteReview.Failures.UnknownBefore -> stringResource(R.string.route_failures_unknown, f.since)
+    }
+    return lines
+}
 
 /** Estado de un caso forense. */
 @Composable

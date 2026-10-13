@@ -556,8 +556,8 @@ phone, as with any stale reference. A reset does the same at once.
 relearned on this phone once they expire (30 days after their last learned evidence), or at once
 after a reset. On the same model they keep working but are as old as the backup.
 
-**Comparing results.** Schemas 22, 23 and 24 only add tables, columns and indexes, so existing data
-is kept. Schema 24 adds the observation identity to new history rows and evaluations; rows and
+**Comparing results.** Schemas 22, 23, 24 and 25 only add tables, columns and indexes, so existing
+data is kept (schema 25 adds the last evaluated result and failure count of each handover route). Schema 24 adds the observation identity to new history rows and evaluations; rows and
 evaluations stored before it have none and are **not** rewritten: before this change a reading saved
 as two rows could be evaluated twice (the second time against a reference that already contained
 it), so evaluation counts from earlier builds may include such duplicates.
@@ -760,6 +760,18 @@ criterion, not proof that either cell is legitimate. Each route keeps its full o
 destination identities, observation count, learned count, last H16 state, learned ratio and most
 recent timestamp. Filters separate all routes, learned routes and routes worth reviewing. The screen
 is read-only: it cannot change the score, H16 or the transition baseline.
+
+**Last reading versus last evaluated result.** The state shown is the one of the **last observed
+handover**: COHERENT, REVIEW (it failed H16) or **NOT EVALUATED** when H16 said `N/A` (with its
+reason when it was saved). A route created only by mobility trips, with no handover observed, shows
+**NO HANDOVER SEEN**. If the last reading is `N/A`, the last evaluated result (PASSED/FAILED) is
+shown apart with its date — it is not the result of the current reading.
+
+**REVIEW filter.** It lists routes with at least one FAILED recorded. `N/A` on its own never puts a
+route there. Failures are counted since schema 25. For routes stored before it the app does not
+invent the past: if the last stored reading was FAILED, it says there was at least one failure
+(how many is unknown); if it was PASSED or `N/A`, it says earlier failures are unknown — never that
+the route never failed.
 
 **What counts as an observed handover.** A route A→B is recorded only when the serving cell changes
 from A to B with cellular continuity. Continuity is broken by a loss of service (no cell, Airplane
@@ -1226,7 +1238,9 @@ geometry, Stable-Site): they are read-only and meant for analysis and archiving.
 
 1. Choose a backup. It is checked without touching anything: it must be an ICdetection backup in a
    known format, made by 3.0 or later (every 3.0 beta counts), with an intact database and a
-   database version not newer than the app. Backups from v2.10.x are refused even though they could
+   database version not newer than the app. Backups made with an older 3.0 version are migrated when
+   restored (for example schema 24 to 25); a backup made with this version (schema 25) cannot be
+   restored by an older APK, which refuses it as a newer database. Backups from v2.10.x are refused even though they could
    be migrated: 3.0 data is not mixed with the field-campaign data. A database that contains
    **triggers or views** is refused as damaged (no version of the app creates them, and a trigger
    would run while the backup is opened and migrated). This is checked with a read-only query

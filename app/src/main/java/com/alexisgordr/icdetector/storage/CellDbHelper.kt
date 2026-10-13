@@ -29,6 +29,7 @@ import com.alexisgordr.icdetector.models.identityKey
 import com.alexisgordr.icdetector.models.CellLocationSample
 import com.alexisgordr.icdetector.models.TransitionCoherenceResult
 import com.alexisgordr.icdetector.models.HeuristicStatus
+import com.alexisgordr.icdetector.models.RouteFailureHistory
 import com.alexisgordr.icdetector.models.CellTransitionSummary
 import com.alexisgordr.icdetector.models.LocalCellTrustEvidence
 import com.alexisgordr.icdetector.models.LocalRfReconfiguration
@@ -71,7 +72,7 @@ class CellDbHelper(
             }
 
         const val DATABASE_NAME = "icdetector_history.db"
-        const val DATABASE_VERSION = SchemaV24.VERSION
+        const val DATABASE_VERSION = SchemaV25.VERSION
         const val TABLE_HISTORY = "history"
         const val COLUMN_ID = "id"
         const val COLUMN_TIMESTAMP = "timestamp"
@@ -354,6 +355,7 @@ class CellDbHelper(
         applySchemaV22(db)
         applySchemaV23(db)
         applySchemaV24(db)
+        applySchemaV25(db)
     }
 
     override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {
@@ -445,6 +447,7 @@ class CellDbHelper(
         if (oldVersion < 22) applySchemaV22(db)
         if (oldVersion < 23) applySchemaV23(db)
         if (oldVersion < 24) applySchemaV24(db)
+        if (oldVersion < 25) applySchemaV25(db)
     }
 
     /**
@@ -495,6 +498,27 @@ class CellDbHelper(
                 if (e.message?.contains("duplicate column", ignoreCase = true) != true) throw e
             }
         }
+    }
+
+    /**
+     * 3.0 (UI2) — Esquema 25 (ver [SchemaV25]): último resultado evaluado y fallos de cada ruta.
+     * La tabla se asegura antes; una columna que ya existe se acepta y cualquier otro fallo se
+     * propaga. El relleno de filas anteriores solo se hace si la columna marcadora se acaba de crear
+     * (misma transacción que onUpgrade): nunca se aplica dos veces ni a rutas nuevas.
+     */
+    private fun applySchemaV25(db: SQLiteDatabase) {
+        applySchemaV24(db)
+        createTransitionTable(db)
+        var markerCreated = false
+        SchemaV25.COLUMNS.forEach { sql ->
+            try {
+                db.execSQL(sql)
+                if (sql.endsWith("ADD COLUMN ${SchemaV25.MARKER_COLUMN} TEXT")) markerCreated = true
+            } catch (e: android.database.sqlite.SQLiteException) {
+                if (e.message?.contains("duplicate column", ignoreCase = true) != true) throw e
+            }
+        }
+        if (markerCreated) SchemaV25.BACKFILL.forEach(db::execSQL)
     }
 
     /** 3.0 — Esquema 21 (ver [SchemaV21]); mismas reglas que [applySchemaV20]. */
@@ -822,7 +846,8 @@ class CellDbHelper(
         val out = mutableListOf<CellTransitionSummary>()
         readableDatabase.rawQuery(
             "SELECT from_identity,to_identity,observations,trusted_observations,last_status,last_seen_ms," +
-                "trip_count,last_trip_id,mobility_first_seen_ms,mobility_last_seen_ms " +
+                "trip_count,last_trip_id,mobility_first_seen_ms,mobility_last_seen_ms," +
+                "last_evaluated_status,last_evaluated_ms,last_explanation,failed_count,failure_history " +
                 "FROM $TABLE_CELL_TRANSITIONS ORDER BY last_seen_ms DESC" +
                 (if (limit != null) " LIMIT ?" else ""),
             limit?.let { arrayOf(it.toString()) }
@@ -838,7 +863,13 @@ class CellDbHelper(
                     lastSeenMs = cursor.getLong(5),
                     tripCount = cursor.getInt(6), lastTripId = if (cursor.isNull(7)) null else cursor.getString(7),
                     mobilityFirstSeenMs = if (cursor.isNull(8)) null else cursor.getLong(8),
-                    mobilityLastSeenMs = if (cursor.isNull(9)) null else cursor.getLong(9)
+                    mobilityLastSeenMs = if (cursor.isNull(9)) null else cursor.getLong(9),
+                    // 3.0 (UI2) — Solo PASSED/FAILED cuentan como último evaluado.
+                    lastEvaluatedStatus = com.alexisgordr.icdetector.core.RouteReview.evaluatedFrom(if (cursor.isNull(10)) null else cursor.getString(10)),
+                    lastEvaluatedMs = if (cursor.isNull(11)) null else cursor.getLong(11),
+                    lastExplanation = if (cursor.isNull(12)) null else cursor.getString(12),
+                    failedCount = cursor.getInt(13),
+                    failureHistory = RouteFailureHistory.fromStored(if (cursor.isNull(14)) null else cursor.getString(14))
                 )
             }
         }
@@ -872,41 +903,44 @@ class CellDbHelper(
         return MobilityGeometryProjection.build(transitions, trips, pending).copy(currentCell = currentCell)
     }
 
-    /** PASSED incrementa el baseline fiable; FAILED/N/A solo quedan auditados como observación. */
+    /**
+     * PASSED incrementa el baseline fiable; FAILED/N/A solo quedan auditados como observación.
+     * 3.0 (UI2) — Además guarda el último resultado evaluado (solo PASSED/FAILED), el motivo de un
+     * N/A y la cuenta de FAILED (ver [SchemaV25]). Lo que aprende H16 no cambia.
+     */
     fun recordCellTransition(result: TransitionCoherenceResult) {
         val from = result.fromIdentity ?: return
         val to = result.toIdentity ?: return
         val trustedIncrement = com.alexisgordr.icdetector.core.TransitionCoherence.trustedIncrement(result)
+        val observation = SchemaV25.observationArgs(trustedIncrement, result.status.name, System.currentTimeMillis(), result.explanation)
         val db = writableDatabase
         db.beginTransaction()
         try {
-            val changed = db.update(
-                TABLE_CELL_TRANSITIONS,
-                ContentValues().apply {
-                    // Los contadores se actualizan abajo mediante SQL para que el incremento sea
-                    // atómico. Aquí solo se refrescan los metadatos del último handover.
-                    put("last_status", result.status.name)
-                    put("last_seen_ms", System.currentTimeMillis())
-                },
-                "from_identity=? AND to_identity=?", arrayOf(from, to)
-            )
-            if (changed > 0) {
-                db.execSQL(
-                    "UPDATE $TABLE_CELL_TRANSITIONS SET observations=observations+1, " +
-                        "trusted_observations=trusted_observations+? " +
-                        "WHERE from_identity=? AND to_identity=?",
-                    arrayOf<Any>(trustedIncrement, from, to)
-                )
-            } else {
-                db.insertOrThrow(TABLE_CELL_TRANSITIONS, null, ContentValues().apply {
-                    put("from_identity", from); put("to_identity", to)
-                    put("observations", 1); put("trusted_observations", trustedIncrement)
-                    put("last_status", result.status.name); put("last_seen_ms", System.currentTimeMillis())
-                })
+            // Una sola sentencia: contadores y metadatos se actualizan juntos y de forma atómica.
+            val changed = db.compileStatement(SchemaV25.RECORD_UPDATE).use { st ->
+                bindAll(st, arrayOf<Any?>(*observation, from, to))
+                st.executeUpdateDelete()
+            }
+            if (changed == 0) {
+                db.compileStatement(SchemaV25.RECORD_INSERT).use { st ->
+                    bindAll(st, arrayOf<Any?>(from, to, *observation))
+                    st.executeInsert()
+                }
             }
             db.setTransactionSuccessful()
         } finally {
             db.endTransaction()
+        }
+    }
+
+    private fun bindAll(st: android.database.sqlite.SQLiteStatement, args: Array<Any?>) {
+        args.forEachIndexed { i, v ->
+            when (v) {
+                null -> st.bindNull(i + 1)
+                is Int -> st.bindLong(i + 1, v.toLong())
+                is Long -> st.bindLong(i + 1, v)
+                else -> st.bindString(i + 1, v.toString())
+            }
         }
     }
 
@@ -997,17 +1031,10 @@ class CellDbHelper(
             ).use { it.moveToFirst() }
             if (!isOpen) { db.setTransactionSuccessful(); return }
             tripEdges(tripId).forEach { edge ->
-                db.insertWithOnConflict(TABLE_CELL_TRANSITIONS, null, ContentValues().apply {
-                    put("from_identity", edge.from); put("to_identity", edge.to)
-                    put("observations", 0); put("trusted_observations", 0)
-                    put("last_status", HeuristicStatus.NOT_EVALUATED.name); put("last_seen_ms", closedAtMs)
-                }, SQLiteDatabase.CONFLICT_IGNORE)
-                db.execSQL(
-                    "UPDATE $TABLE_CELL_TRANSITIONS SET trip_count=trip_count+1,last_trip_id=?," +
-                        "mobility_first_seen_ms=COALESCE(mobility_first_seen_ms,?),mobility_last_seen_ms=? " +
-                        "WHERE from_identity=? AND to_identity=? AND (last_trip_id IS NULL OR last_trip_id<>?)",
-                    arrayOf<Any>(tripId, closedAtMs, closedAtMs, edge.from, edge.to, tripId)
-                )
+                // 3.0 (UI2) — Ver SchemaV25: crea la ruta si no existe y solo toca campos de movilidad;
+                // el último evaluado, el motivo y los fallos no cambian.
+                db.execSQL(SchemaV25.TRIP_INSERT_IF_ABSENT, arrayOf<Any>(edge.from, edge.to, closedAtMs))
+                db.execSQL(SchemaV25.TRIP_UPDATE, arrayOf<Any>(tripId, closedAtMs, closedAtMs, edge.from, edge.to, tripId))
             }
             closeTripRow(db, tripId, reason, closedAtMs)
             db.setTransactionSuccessful()

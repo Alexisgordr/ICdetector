@@ -64,7 +64,7 @@ class StableSiteScreenTest {
         listOf("currentLocation", "getCurrentLocation", "StableSiteReadStore.sites").forEach { assertFalse(detail.contains(it)) }
         val history = ui("HistoryScreen.kt")
         assertTrue(history.contains("TopologyRouteCard(route) { selectedRoute = route }"))
-        assertTrue(history.contains("RouteDetailPanel(dbHelper, route, routeStatusLabel(route.lastStatus), modifier) { selectedRoute = null }"))
+        assertTrue(history.contains("RouteDetailPanel(dbHelper, route, routeStatusLabel(route), modifier) { selectedRoute = null }"))
         assertTrue("se mantienen ambas exportaciones", history.contains("R.string.export_topology") && history.contains("R.string.export_stable_site"))
         assertTrue(history.contains("onClick = { showStableSite = true }"))
         assertTrue(history.contains("StableSitePanel(dbHelper, modifier) { showStableSite = false }"))
