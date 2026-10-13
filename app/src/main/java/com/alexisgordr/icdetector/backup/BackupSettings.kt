@@ -17,7 +17,9 @@ object BackupSettings {
         "proxy_enabled" to Type.BOOLEAN,
         "latency_detection_enabled" to Type.BOOLEAN,
         // 3.0 — Avisos de red 2G/3G (LegacyNetworkAlertMode).
-        "legacy_network_alert_mode" to Type.STRING
+        "legacy_network_alert_mode" to Type.STRING,
+        // 3.0 — Avisos silenciosos de Stable-Site (StableSiteNotices.PREF_ENABLED).
+        "stable_site_silent_notices" to Type.BOOLEAN
     )
 
     /**
@@ -26,7 +28,8 @@ object BackupSettings {
      * El formato de la copia no cambia: es una clave más del JSON de ajustes.
      */
     val DEFAULTS_FOR_MISSING: Map<String, Any> = mapOf(
-        "legacy_network_alert_mode" to "NOTIFY"
+        "legacy_network_alert_mode" to "NOTIFY",
+        "stable_site_silent_notices" to true
     )
 
     const val NEVER_EXPORTED = "opencellid_key"

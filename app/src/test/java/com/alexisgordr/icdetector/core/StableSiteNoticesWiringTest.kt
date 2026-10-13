@@ -97,6 +97,12 @@ class StableSiteNoticesWiringTest {
         assertTrue(settings.contains("prefs.getBoolean(StableSiteNotices.PREF_ENABLED, StableSiteNotices.DEFAULT_ENABLED)"))
     }
 
+    @Test fun `a restore moves the cutoff so restored episodes never notify`() {
+        val restore = src("backup/RestoreStartup.kt")
+        val apply = restore.substringAfter("private fun applySettings(").substringBefore("fun prefs(")
+        assertTrue(apply.indexOf("StableSiteNotices.PREF_NOTIFY_SINCE_MS") in 0 until apply.indexOf("editor.commit()"))
+    }
+
     @Test fun `the episode is recorded with an atomic conditional update`() {
         val helper = src("storage/CellDbHelper.kt")
         val update = helper.substringAfter("private fun updateStableSiteEpisode(").substringBefore("private fun findActiveStableSiteHold(")

@@ -54,10 +54,11 @@ class BackupArchiveTest {
         ))
         assertFalse(json.contains("secret"))
         assertFalse(json.contains("last_accepted_loc"))
-        // Sin la clave de avisos 2G/3G (copia anterior): se restaura su valor predeterminado.
-        assertEquals(mapOf("location_mode" to "ADAPTIVE", "proxy_enabled" to true, "legacy_network_alert_mode" to "NOTIFY"),
-            BackupSettings.fromJson(json))
-        assertEquals(mapOf("legacy_network_alert_mode" to "NOTIFY"), BackupSettings.fromJson("{\"opencellid_key\":\"x\"}"))
+        // Sin la clave de avisos 2G/3G ni la de Stable-Site (copia anterior): sus valores predeterminados.
+        assertEquals(mapOf("location_mode" to "ADAPTIVE", "proxy_enabled" to true, "legacy_network_alert_mode" to "NOTIFY",
+            "stable_site_silent_notices" to true), BackupSettings.fromJson(json))
+        assertEquals(mapOf("legacy_network_alert_mode" to "NOTIFY", "stable_site_silent_notices" to true),
+            BackupSettings.fromJson("{\"opencellid_key\":\"x\"}"))
         assertEquals(emptyMap<String, Any>(), BackupSettings.fromJson("broken"))
     }
 
@@ -74,5 +75,25 @@ class BackupArchiveTest {
         assertEquals(com.alexisgordr.icdetector.core.LegacyNetworkAlertMode.NOTIFY,
             com.alexisgordr.icdetector.core.LegacyNetworkAlertMode.fromStored(odd))
         assertEquals(com.alexisgordr.icdetector.core.LegacyNetworkAlertMode.PREF_KEY, "legacy_network_alert_mode")
+    }
+
+    @Test fun `Stable-Site silent notices travel in new backups and old backups restore the default`() {
+        val key = com.alexisgordr.icdetector.core.StableSiteNotices.PREF_ENABLED
+        assertEquals("stable_site_silent_notices", key)
+        // Copia nueva con los avisos apagados: se restauran apagados.
+        val off = BackupSettings.toJson(mapOf(key to false, "app_language" to "es"))
+        assertTrue(off.contains("\"stable_site_silent_notices\": false"))
+        assertEquals(false, BackupSettings.fromJson(off)[key])
+        assertEquals(true, BackupSettings.fromJson(BackupSettings.toJson(mapOf(key to true)))[key])
+        // Copia anterior a la clave: el valor predeterminado (activados), no el del teléfono actual.
+        assertEquals(com.alexisgordr.icdetector.core.StableSiteNotices.DEFAULT_ENABLED,
+            BackupSettings.fromJson("{\"app_language\":\"es\"}")[key])
+        // Un tipo incorrecto no se aplica (y el teléfono conserva lo que tuviera).
+        assertNull(BackupSettings.fromJson("{\"stable_site_silent_notices\":\"no\"}")[key])
+        // El corte de los avisos es estado interno: nunca viaja en la copia.
+        val notifySince = com.alexisgordr.icdetector.core.StableSiteNotices.PREF_NOTIFY_SINCE_MS
+        assertFalse(BackupSettings.KEYS.containsKey(notifySince))
+        assertFalse(BackupSettings.toJson(mapOf(notifySince to 1L, key to true)).contains(notifySince))
+        assertNull(BackupSettings.fromJson("{\"$notifySince\":1}")[notifySince])
     }
 }
