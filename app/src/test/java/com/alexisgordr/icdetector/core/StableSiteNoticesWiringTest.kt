@@ -48,10 +48,18 @@ class StableSiteNoticesWiringTest {
         val consume = notify.indexOf("prefs.edit().remove(notices.PREF_PENDING_EPISODE).commit()")
         assertTrue("se consume antes de publicar", consume in 0 until notify.indexOf("showStableSiteNotice("))
         assertTrue(notify.contains("} catch (e: CancellationException) {\n            throw e\n        } catch (e: Exception) {"))
+        // El terminal dice lo que pasó DESPUÉS de intentarlo: publicado, bloqueado o fallido.
+        val logPosted = notify.indexOf("notices.LOG_POSTED")
+        assertTrue(logPosted > notify.indexOf("showStableSiteNotice("))
+        listOf("true -> notices.LOG_POSTED", "false -> notices.LOG_BLOCKED", "null -> notices.LOG_FAILED", "notices.LOG_DISABLED")
+            .forEach { assertTrue(it, notify.contains(it)) }
         listOf("securityAlerts", "checkAlerts", "ToneGenerator", "ALERT_CHANNEL_ID", "showConfirmedAlarm", "temporalConfidence",
             "threatEpisodeTracker", "localCellTrust", "securityScore", "bayes", "dbHelper").forEach {
             assertFalse("el aviso no toca $it", notify.contains(it, ignoreCase = true))
         }
+        val show = src("service/ServiceNotificationController.kt").substringAfter("fun showStableSiteNotice(").substringBefore("    /**")
+        assertTrue(show.contains("if (!manager.areNotificationsEnabled() || channel?.importance == NotificationManager.IMPORTANCE_NONE) return false"))
+        assertTrue(show.indexOf("return true") > show.indexOf("manager.notify(id, notification)"))
     }
 
     @Test fun `scores, temporal confirmation, trust and alarms do not know about the notices`() {

@@ -153,8 +153,13 @@ internal class ServiceNotificationController(
      * 3.0 — Aviso silencioso de Stable-Site, uno por episodio (ver StableSiteNotices). Describe un
      * cambio inusual de celda en un lugar conocido, nunca un ataque. Al tocarlo se abre el episodio.
      * Cada episodio tiene su propio id de notificación y su propio PendingIntent.
+     * Devuelve false si Android no la mostraría (notificaciones de la app o el canal desactivados):
+     * así el terminal no dice «publicado» cuando no lo está.
      */
-    fun showStableSiteNotice(episodeId: String) {
+    fun showStableSiteNotice(episodeId: String): Boolean {
+        val manager = context.getSystemService(NotificationManager::class.java)
+        val channel = manager.getNotificationChannel(STABLE_SITE_CHANNEL_ID)
+        if (!manager.areNotificationsEnabled() || channel?.importance == NotificationManager.IMPORTANCE_NONE) return false
         val id = com.alexisgordr.icdetector.core.StableSiteNotices.notificationId(episodeId)
         val openEpisode = PendingIntent.getActivity(
             context,
@@ -177,7 +182,8 @@ internal class ServiceNotificationController(
             .setContentIntent(openEpisode)
             .setAutoCancel(true)
             .build()
-        context.getSystemService(NotificationManager::class.java).notify(id, notification)
+        manager.notify(id, notification)
+        return true
     }
 
     /**

@@ -1767,15 +1767,23 @@ class MiniICService : Service() {
         // Se consume ANTES de intentar publicar (commit síncrono): como mucho un aviso por episodio,
         // aunque el proceso muera justo después.
         prefs.edit().remove(notices.PREF_PENDING_EPISODE).commit()
-        if (action == com.alexisgordr.icdetector.core.StableSiteNotices.Action.CONSUME_SILENTLY) return
-        appendLog("[SITE]", notices.LOG_POSTED)
-        try {
+        if (action == com.alexisgordr.icdetector.core.StableSiteNotices.Action.CONSUME_SILENTLY) {
+            appendLog("[SITE]", notices.LOG_DISABLED)
+            return
+        }
+        val posted = try {
             notificationController.showStableSiteNotice(episodeId)
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
-            Log.w("MiniIC", "Stable-Site notice not shown (${e.javaClass.simpleName})")
+            Log.w("MiniIC", "Stable-Site notice failed (${e.javaClass.simpleName})")
+            null
         }
+        appendLog("[SITE]", when (posted) {
+            true -> notices.LOG_POSTED
+            false -> notices.LOG_BLOCKED
+            null -> notices.LOG_FAILED
+        })
     }
 
     private fun onAnalysisFailed(ticket: com.alexisgordr.icdetector.core.CollectionGeneration.Ticket, errorType: String) {

@@ -43,8 +43,11 @@ object StableSiteNotices {
     /** Extra del Intent de la notificación: el episodio que hay que abrir. */
     const val EXTRA_EPISODE_ID = "com.alexisgordr.icdetector.STABLE_SITE_EPISODE_ID"
 
-    /** Línea del terminal (en castellano, como las demás; se traduce al mostrarla). */
+    /** Líneas del terminal (en castellano, como las demás; se traducen al mostrarlas). */
     const val LOG_POSTED = "Aviso silencioso publicado: cambio inusual de celda en este lugar con el teléfono quieto. No confirma un ataque."
+    const val LOG_BLOCKED = "Aviso silencioso no mostrado: las notificaciones de la app o su canal están desactivadas. El episodio queda guardado."
+    const val LOG_FAILED = "Aviso silencioso no publicado por un fallo al notificar. El episodio queda guardado."
+    const val LOG_DISABLED = "Aviso silencioso omitido: desactivado en Ajustes. El episodio queda guardado."
 
     enum class Status { LEARNING, READY, DISABLED_BY_USER }
 
