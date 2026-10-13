@@ -39,7 +39,11 @@ class StoredReasonsSqlTest {
         "${StoredReasons.confirmingPrefix(2, 3)} $h15${sep}Episodio multiseñal (RF, IDENTIDAD)" to (false to false),
         "$SUBTHRESHOLD_PREFIX $LOCAL_TRUST_RECONFIGURATION_REASON (PCI)" to (false to false),
         "$SITE_UNVERIFIED_PREFIX Celda nueva" to (false to false),
-        "OK $sep Celda aislada" to (false to false)
+        "OK $sep Celda aislada" to (false to false),
+        // 3.0 — Reconfiguración local AÑADIDA a otros motivos (antes los sustituía), tal como la guarda
+        // TemporalConfidence: no es una fila limpia, no vale para H15 y no es una fila de cuarentena.
+        "$SUBTHRESHOLD_PREFIX ${StoredReasons.append("Celda aislada", "$LOCAL_TRUST_RECONFIGURATION_REASON (PCI)")}" to (false to false),
+        "$SUBTHRESHOLD_PREFIX ${StoredReasons.append(h15, "$LOCAL_TRUST_RECONFIGURATION_REASON (PCI+GEOMETRY)")}" to (false to false)
     )
 
     @Before fun open() {
@@ -73,8 +77,19 @@ class StoredReasonsSqlTest {
     }
 
     @Test fun `reconfiguration quarantine finds only its own marker`() {
+        // Solo la fila cuyo ÚNICO motivo es la reconfiguración: las que la llevan añadida a otro motivo
+        // no cuentan como evidencia limpia del nuevo par PCI/ARFCN (además suelen tener score < 100).
         assertEquals(listOf("$SUBTHRESHOLD_PREFIX $LOCAL_TRUST_RECONFIGURATION_REASON (PCI)"),
             select("failed_heuristics LIKE ?", LOCAL_TRUST_RECONFIGURATION_HISTORY_LIKE))
+    }
+
+    @Test fun `appended reconfiguration keeps every reason and the row stays out of trusted learning`() {
+        val merged = rows.keys.filterNotNull().filter { it.contains(sep) && it.contains(LOCAL_TRUST_RECONFIGURATION_REASON) }
+        assertEquals(2, merged.size)
+        assertEquals(emptyList<String>(), select("(${StoredReasons.cleanSql("failed_heuristics")}) AND failed_heuristics LIKE ?", "%$LOCAL_TRUST_RECONFIGURATION_REASON%"))
+        assertEquals("ni H15 la toma como fila de solo-H15", false,
+            select(StoredReasons.h15EligibleSql("score", "failed_heuristics"), "85", *StoredReasons.H15_ONLY_LIKE).any { it in merged })
+        assertEquals(true, merged[0].contains("Celda aislada") && merged[1].contains(h15))
     }
 
     @Test fun `the stored strings are exactly the historical ones`() {

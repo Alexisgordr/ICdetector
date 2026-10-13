@@ -96,8 +96,11 @@ object LocalCellTrustEngine {
             localCellTrust = trust,
             // TemporalConfidence marks this as sub-threshold before persistence. Keeping a reason
             // is what freezes CHANGED observations out of every trusted-learning query.
+            // 3.0 — Added to the reasons other rules already wrote, never replacing them (it used
+            // to overwrite them). Only a row whose SOLE reason is this marker matches
+            // LOCAL_TRUST_RECONFIGURATION_HISTORY_LIKE; see CellDbHelper's reconfiguration candidate.
             suspiciousReason = when {
-                contradictions.isNotEmpty() -> reason
+                contradictions.isNotEmpty() -> com.alexisgordr.icdetector.models.StoredReasons.append(cell.suspiciousReason, reason)
                 stableSite.enforced -> "${com.alexisgordr.icdetector.models.SITE_UNVERIFIED_PREFIX} ${stableSite.reason}"
                 else -> cell.suspiciousReason
             },
@@ -108,7 +111,7 @@ object LocalCellTrustEngine {
             localCellTrust = trust,
             isSuspicious = true,
             securityScore = minOf(cell.securityScore, 69),
-            suspiciousReason = listOfNotNull(cell.suspiciousReason, reason).joinToString(com.alexisgordr.icdetector.models.StoredReasons.SEPARATOR),
+            suspiciousReason = com.alexisgordr.icdetector.models.StoredReasons.append(cell.suspiciousReason, reason),
             stableSiteDecision = stableSite
         )
     }

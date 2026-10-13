@@ -11,6 +11,14 @@ GitHub pre-release of an earlier build was withdrawn.
 
 ### Audit fixes
 
+- **Local reconfiguration keeps other reasons (stored-text change).** When local cell confidence saw
+  a PCI/ARFCN change without an alarm, its marker *replaced* the reasons other rules had written for
+  that observation. It is now appended with ` | `, without blank or duplicate parts
+  (`StoredReasons.append`, also used by the alarm branch). Effect on filters, checked against real
+  SQLite: such a row stays out of trusted learning and of H15's history as before, and it no longer
+  counts as evidence for an accepted reconfiguration, which only takes rows whose **sole** reason is
+  the marker (`LOCAL_TRUST_RECONFIGURATION_HISTORY_LIKE`, score 100). Earlier rows are not rewritten;
+  rows from before this fix may show only the marker where other rules had also failed.
 - **Wi-Fi state per observation.** The rule explanations re-queried Wi-Fi when publishing, so a
   Wi-Fi change between analysis and publication could explain a result with another reason (for
   example "neighbours needed" for a rule that abstained because of Wi-Fi). They now use the value

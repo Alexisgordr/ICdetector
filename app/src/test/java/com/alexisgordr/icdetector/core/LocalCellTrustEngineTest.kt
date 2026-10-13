@@ -105,4 +105,45 @@ class LocalCellTrustEngineTest {
         assertEquals(setOf("PCI"), out.localCellTrust.contradictions)
         assertNotNull(out.suspiciousReason)
     }
+
+    // 3.0 — La reconfiguración local se AÑADE a los motivos de otras reglas; antes los sustituía.
+
+    @Test fun `a non-alarm reconfiguration keeps the reasons of other rules`() {
+        val report = HeuristicReport(powerJump = HeuristicStatus.FAILED)
+        val out = LocalCellTrustEngine.apply(
+            cell(pci = 311, report = report).copy(suspiciousReason = "Salto potencia (>35dB)"), mature())
+        assertFalse(out.localCellTrust.alarmCandidate)
+        assertEquals("Salto potencia (>35dB) | $LOCAL_TRUST_RECONFIGURATION_REASON (PCI)", out.suspiciousReason)
+    }
+
+    @Test fun `several earlier reasons are all kept, in order`() {
+        val earlier = "Celda aislada${StoredReasons.SEPARATOR}Desviación TAC"
+        val out = LocalCellTrustEngine.apply(cell(pci = 311).copy(suspiciousReason = earlier), mature())
+        assertEquals("Celda aislada | Desviación TAC | $LOCAL_TRUST_RECONFIGURATION_REASON (PCI)", out.suspiciousReason)
+    }
+
+    @Test fun `no previous reason, blank reason or duplicate gives one clean marker`() {
+        val marker = "$LOCAL_TRUST_RECONFIGURATION_REASON (PCI)"
+        assertEquals(marker, LocalCellTrustEngine.apply(cell(pci = 311), mature()).suspiciousReason)
+        assertEquals(marker, LocalCellTrustEngine.apply(cell(pci = 311).copy(suspiciousReason = "  "), mature()).suspiciousReason)
+        assertEquals("Celda aislada | $marker",
+            LocalCellTrustEngine.apply(cell(pci = 311).copy(suspiciousReason = "Celda aislada | $marker"), mature()).suspiciousReason)
+    }
+
+    @Test fun `the alarm branch keeps earlier reasons too`() {
+        val report = HeuristicReport(transitionCoherence = HeuristicStatus.FAILED)
+        val out = LocalCellTrustEngine.apply(
+            cell(pci = 311, report = report).copy(suspiciousReason = "Transición celular incoherente"), mature())
+        assertTrue(out.isSuspicious)
+        assertEquals("Transición celular incoherente | $LOCAL_TRUST_RECONFIGURATION_REASON (PCI+HANDOVER)", out.suspiciousReason)
+    }
+
+    @Test fun `append helper never empties or duplicates`() {
+        assertNull(StoredReasons.append(null, null))
+        assertNull(StoredReasons.append(" ", ""))
+        assertEquals("A", StoredReasons.append(null, "A"))
+        assertEquals("A", StoredReasons.append("A", "A"))
+        assertEquals("A | B", StoredReasons.append("A |  | ", "B"))
+        assertEquals("A | B", StoredReasons.append("A | B", " B "))
+    }
 }

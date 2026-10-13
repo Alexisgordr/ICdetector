@@ -23,6 +23,18 @@ object StoredReasons {
     /** Motivo completo que escribe H15. */
     const val H15_REASON = "$H15_PREFIX misma Cell ID alternando PCI en la misma portadora (posible clon)"
 
+    /**
+     * 3.0 — Añade [addition] a los motivos [existing] con [SEPARATOR], sin borrar ninguno: un motivo
+     * vacío no se añade y uno que ya está (comparado parte a parte) no se repite. Null si no queda
+     * ningún motivo.
+     */
+    fun append(existing: String?, addition: String?): String? {
+        val parts = existing?.split(SEPARATOR)?.map(String::trim)?.filter(String::isNotEmpty).orEmpty().toMutableList()
+        val extra = addition?.trim().orEmpty()
+        if (extra.isNotEmpty() && extra !in parts) parts += extra
+        return parts.takeIf { it.isNotEmpty() }?.joinToString(SEPARATOR)
+    }
+
     /** Prefijo de una alarma aún en confirmación temporal, p. ej. `[2/3 ciclos confirmando]`. */
     fun confirmingPrefix(streak: Int, required: Int): String = "[$streak/$required ciclos confirmando]"
 
