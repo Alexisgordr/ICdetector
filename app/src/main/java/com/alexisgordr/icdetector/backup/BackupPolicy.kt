@@ -31,10 +31,24 @@ object BackupPolicy {
         /** Copia de una versión más nueva que esta app. */
         FUTURE_SCHEMA,
         CHECKSUM_MISMATCH,
-        /** La base de datos no abre, no pasa `integrity_check` o no es de ICdetection. */
+        /**
+         * La base de datos no abre, no pasa `integrity_check`, no es de ICdetection o contiene
+         * objetos que la app nunca crea (triggers o vistas, ver [UNEXPECTED_OBJECTS_SQL]).
+         */
         CORRUPT_DATABASE,
         TOO_LARGE
     }
+
+    /**
+     * 3.0 — Consulta de SOLO LECTURA de los objetos que ninguna versión de la app crea: triggers y
+     * vistas. Auditado en todos los esquemas admitidos (20 a 23) y en todo el historial del código:
+     * la app solo crea tablas e índices. Los objetos internos de SQLite (`sqlite_sequence`,
+     * `sqlite_stat*`, `sqlite_autoindex_*`) y `android_metadata` de Android son tablas o índices, así
+     * que no aparecen aquí. Un trigger en una copia se ejecutaría al migrarla con el helper y seguiría
+     * activo en la base instalada; por eso la copia se rechaza entera, sin tocarla, en lugar de
+     * borrar esos objetos en silencio. No es una lista blanca de tablas e índices.
+     */
+    const val UNEXPECTED_OBJECTS_SQL = "SELECT type, name FROM sqlite_master WHERE type IN ('trigger', 'view')"
 
     fun check(manifest: BackupManifest?, currentSchema: Int): Rejection? = when {
         manifest == null -> Rejection.NOT_A_BACKUP

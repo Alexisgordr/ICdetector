@@ -1010,7 +1010,11 @@ geometry, Stable-Site): they are read-only and meant for analysis and archiving.
 1. Choose a backup. It is checked without touching anything: it must be an ICdetection backup in a
    known format, made by 3.0 or later (every 3.0 beta counts), with an intact database and a
    database version not newer than the app. Backups from v2.10.x are refused even though they could
-   be migrated: 3.0 data is not mixed with the field-campaign data.
+   be migrated: 3.0 data is not mixed with the field-campaign data. A database that contains
+   **triggers or views** is refused as damaged (no version of the app creates them, and a trigger
+   would run while the backup is opened and migrated). This is checked with a read-only query
+   before the app opens the backup to migrate it, and again after the migration, before installing
+   it; the backup is never edited to remove them.
 2. Confirm. Monitoring stops in two phases: first no new readings are analysed and the ones
    already accepted finish, together with everything they write (history, incidents, forensic
    samples); then every remaining write finishes. If that cannot finish, the restore does not
@@ -1023,6 +1027,12 @@ geometry, Stable-Site): they are read-only and meant for analysis and archiving.
    start. If the app cannot tell which state the files are in (for example, an unreadable restore
    journal), it touches nothing, keeps monitoring blocked and says the restore is pending. A
    message tells you how it ended and the name of the copy of your previous data.
+
+**What the checks do not prove.** The SHA-256 in the backup and SQLite's `integrity_check` detect
+accidental damage and a file that changed after the checksum was written. They do **not**
+authenticate the backup: anyone who can edit the file can also recompute its checksum, and nothing
+proves who made it or that it came from your phone. Restore only backups you made yourself and kept
+private.
 
 ---
 

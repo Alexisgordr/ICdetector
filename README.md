@@ -460,8 +460,10 @@ before recording anything. Restoring replaces the current data after you
 save a copy of it, and is safe against interruptions; backups from v2.10.x are refused to keep the
 campaign data separate. It is meant for moving data right away (a new phone, or before and
 after a reset), not as a long-term archive: restoring an old backup replaces everything recorded
-since and brings back outdated learning; use the exports to archive. See the
-[manual](MANUAL.md#backup-and-restore-30).
+since and brings back outdated learning; use the exports to archive. A backup whose database
+contains triggers or views is refused before it is opened for migration. Its checksum and
+integrity check detect damage, not tampering: whoever can edit the file can recompute them, so
+restore only backups you made yourself. See the [manual](MANUAL.md#backup-and-restore-30).
 
 **Complete local reset.** *Delete history* removes antenna history, incidents, forensic cases,
 transitions, service-state events, Stable-Site learning and route-familiarity trips in a single

@@ -11,6 +11,15 @@ GitHub pre-release of an earlier build was withdrawn.
 
 ### Audit fixes
 
+- **Restore refuses databases with triggers or views.** No version of the app creates them (audited
+  for every supported backup schema, 20–23, and the whole code history; SQLite's own objects and
+  `android_metadata` are tables or indexes). A trigger in a backup would have run when the app
+  opened the copy to migrate it and stayed in the installed database. The stager now rejects such a
+  backup as `CORRUPT_DATABASE` with a read-only `sqlite_master` query, before opening it with the
+  helper and again after migrating, before installing; nothing is removed silently. Legitimate
+  backups are unaffected; `.icdbackup` format and schema unchanged. MANUAL and README also state
+  that the SHA-256 and `integrity_check` detect damage, not tampering by someone who can recompute
+  them.
 - **Forensic `cells.csv`: `role=SECONDARY` (export format change).** An entry stored as
   `SECONDARY_SERVING` is now exported with `role=SECONDARY` instead of `NEIGHBOR`; `SERVING` and
   `NEIGHBOR` are unchanged. Based only on the stored `connection_state`; samples without it (before

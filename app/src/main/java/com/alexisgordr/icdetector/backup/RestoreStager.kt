@@ -12,9 +12,11 @@ import kotlin.random.Random
  *
  * Todo ocurre en el directorio de trabajo de [RestoreEngine]:
  *  1. Extraer la copia y comprobar su índice ([BackupPolicy]) y el SHA-256 de la base.
- *  2. Abrirla en solo lectura: `integrity_check`, tabla `history` y que su `user_version` coincida
- *     con el del índice (antes de que el helper pueda crear tablas en un fichero ajeno).
- *  3. Migrarla al esquema actual con el helper de la app, sobre la copia.
+ *  2. Abrirla en solo lectura: `integrity_check`, tabla `history`, que su `user_version` coincida
+ *     con el del índice y que no tenga triggers ni vistas (antes de que el helper pueda crear tablas
+ *     o disparar un trigger en un fichero ajeno).
+ *  3. Migrarla al esquema actual con el helper de la app, sobre la copia, y volver a comprobar que
+ *     sigue sin triggers ni vistas antes de instalarla.
  *  4. Escribir el identificador de restauración en su cabecera (`application_id`), consolidarla en
  *     un solo fichero y anotar su estado en el diario (fase VALIDATED).
  * Si algo falla, se borra todo lo preparado y la base de la app sigue igual.
@@ -56,6 +58,8 @@ class RestoreStager(
         do { restoreId = Random.nextInt() } while (restoreId == 0 || restoreId == current)
         try {
             SQLiteDatabase.openDatabase(database.path, null, SQLiteDatabase.OPEN_READWRITE).use { db ->
+                // 3.0 — Tras migrar, antes de escribir nada más ni instalarla.
+                if (AndroidDatabaseOps.hasUnexpectedObjects(db)) return reject(BackupPolicy.Rejection.CORRUPT_DATABASE)
                 db.execSQL("PRAGMA application_id = $restoreId")
                 if (AndroidDatabaseOps.pragmaInt(db, "user_version") != CellDbHelper.DATABASE_VERSION ||
                     !AndroidDatabaseOps.integrityOk(db)
@@ -81,7 +85,9 @@ class RestoreStager(
         SQLiteDatabase.openDatabase(file.path, null, SQLiteDatabase.OPEN_READONLY).use { db ->
             AndroidDatabaseOps.integrityOk(db) &&
                 AndroidDatabaseOps.hasHistoryTable(db) &&
-                AndroidDatabaseOps.pragmaInt(db, "user_version") == expectedSchema
+                AndroidDatabaseOps.pragmaInt(db, "user_version") == expectedSchema &&
+                // 3.0 — Antes de abrirla con el helper: un trigger se ejecutaría al migrar.
+                !AndroidDatabaseOps.hasUnexpectedObjects(db)
         }
     } catch (_: Exception) {
         false

@@ -50,6 +50,10 @@ object AndroidDatabaseOps : RestoreEngine.DatabaseOps {
     fun integrityOk(db: SQLiteDatabase): Boolean =
         db.rawQuery("PRAGMA integrity_check", null).use { c -> c.moveToFirst() && c.getString(0) == "ok" && c.count == 1 }
 
+    /** 3.0 — ¿Hay triggers o vistas? Solo lee `sqlite_master` (ver [BackupPolicy.UNEXPECTED_OBJECTS_SQL]). */
+    fun hasUnexpectedObjects(db: SQLiteDatabase): Boolean =
+        db.rawQuery(BackupPolicy.UNEXPECTED_OBJECTS_SQL, null).use { it.moveToFirst() }
+
     fun hasHistoryTable(db: SQLiteDatabase): Boolean = db.rawQuery(
         "SELECT 1 FROM sqlite_master WHERE type='table' AND name=?", arrayOf(CellDbHelper.TABLE_HISTORY)
     ).use { it.moveToFirst() }
