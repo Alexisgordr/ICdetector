@@ -51,7 +51,10 @@ GitHub pre-release of an earlier build was withdrawn.
   proxy selected the client uses it explicitly, with no direct fallback. No schema or backup change. Checking that a reply is still current and applying it (pauses, caches, database, screen) is
   one step under the settings read lock, and saving takes the write lock, so a save cannot slip in
   between; each PENDING belongs to its query, so discarding an old query never removes the PENDING of
-  a newer query for the same cell.
+  a newer query for the same cell. A failing query is handled while it still owns its PENDING (current settings and ownership
+  checked together): the current query goes from PENDING to ERROR and is retried, an old one changes
+  nothing; ownership is released in the outer `finally`, after the `catch`, and a cancelled query
+  never leaves an orphan PENDING.
 - **Local profile: algorithm-version limit documented and tested, real write failures not hidden.**
   Evaluations are unique per history row (and per observation): after a future algorithm version
   the first-use learning could not store held-out evaluations for already evaluated observations, and

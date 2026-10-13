@@ -6,7 +6,7 @@ import android.location.Location
 import com.alexisgordr.icdetector.core.ApiCoordinateCheck
 import com.alexisgordr.icdetector.core.ExternalFailure
 import com.alexisgordr.icdetector.core.MobilityClock
-import com.alexisgordr.icdetector.core.PendingQueries
+import com.alexisgordr.icdetector.core.VerificationAttempts
 import com.alexisgordr.icdetector.core.VerificationDecision
 import com.alexisgordr.icdetector.core.VerificationPauseGate
 import com.alexisgordr.icdetector.core.VerificationPauseState
@@ -87,27 +87,19 @@ internal class ExternalVerificationController(
                 cache[key] = VerificationStatus.PENDING
             }
             // 3.0 (V4) — Esta consulta es la dueña del pendiente de la celda.
-            pending.claim(key)
+            attempts.claim(key)
         }
 
         scope.launch(Dispatchers.IO) {
-            try {
-                verifyNow(cell, key, query, snapshot, generation)
-            } catch (e: kotlinx.coroutines.CancellationException) {
-                throw e
-            } catch (e: Exception) {
-                // Sin esto la antena se quedaba en PENDING en la caché y mayAttempt() no la
-                // volvía a intentar hasta reiniciar el servicio. Como ERROR se reintenta sola.
-                ifCurrent(generation) {
-                    synchronized(cache) {
-                        if (pending.release(key, query) && cache[key] == VerificationStatus.PENDING) {
-                            cache[key] = VerificationStatus.ERROR
-                            errorTimes[key] = now()
-                        }
-                    }
-                }
-                log("Error al verificar (${e.javaClass.simpleName}). Se reintentará más tarde.")
-            }
+            // 3.0 (V4) — El error se gestiona con la consulta aún dueña (configuración vigente y
+            // propiedad, juntas); la propiedad se libera en el finally exterior, después del catch.
+            attempts.run(key, query, snapshot, { block -> ifCurrent(generation, block) },
+                body = { verifyNow(cell, key, query, snapshot, generation) },
+                onFailure = { e, _ ->
+                    // Sin esto la antena se quedaba en PENDING y mayAttempt() no la volvía a intentar
+                    // hasta reiniciar el servicio. Como ERROR se reintenta sola.
+                    log("Error al verificar (${e.javaClass.simpleName}). Se reintentará más tarde.")
+                })
         }
     }
 
@@ -132,15 +124,6 @@ internal class ExternalVerificationController(
     }
 
     private fun verifyNow(cell: CellData, key: String, query: Long, snapshot: com.alexisgordr.icdetector.core.VerificationConfig, generation: Long) {
-        try {
-            verifyNowOwned(cell, key, query, snapshot, generation)
-        } finally {
-            // Termine como termine, esta consulta deja de ser dueña (si aún lo era).
-            pending.release(key, query)
-        }
-    }
-
-    private fun verifyNowOwned(cell: CellData, key: String, query: Long, snapshot: com.alexisgordr.icdetector.core.VerificationConfig, generation: Long) {
         val loc = currentLocation()
         val stored = db.getKnownStatus(
             cell.mnc, cell.tac, cell.cellId, cell.mcc,
@@ -163,7 +146,7 @@ internal class ExternalVerificationController(
             val applied = config.applyIfCurrent(snapshot) {
                 logPauseOnce(pause)
                 ifCurrent(generation) {
-                    if (pending.owns(key, query) && cache[key] == VerificationStatus.PENDING) {
+                    if (attempts.owns(key, query) && cache[key] == VerificationStatus.PENDING) {
                         // Sin consulta no hay veredicto: ERROR (no se sabe), que solo se reintenta en local
                         // mientras dure la pausa. Nunca NOT_FOUND: un límite no dice que la celda no exista.
                         cache[key] = VerificationStatus.ERROR
@@ -187,13 +170,9 @@ internal class ExternalVerificationController(
         if (!applied) discardStale(key, query, generation)
     }
 
-    /** Descarta una consulta de ajustes anteriores: solo libera el pendiente si sigue siendo suyo. */
+    /** Descarta una consulta de ajustes anteriores: solo quita el pendiente si sigue siendo suyo. */
     private fun discardStale(key: String, query: Long, generation: Long) {
-        ifCurrent(generation) {
-            synchronized(cache) {
-                if (pending.release(key, query) && cache[key] == VerificationStatus.PENDING) cache.remove(key)
-            }
-        }
+        attempts.discard(key, query) { block -> ifCurrent(generation, block) }
         log("OpenCellID: consulta descartada; la configuración cambió mientras se hacía.")
     }
 
@@ -345,8 +324,8 @@ internal class ExternalVerificationController(
         errorTimes.keys.forEach { errorTimes[it] = 0L }
     }
 
-    /** 3.0 (V4) — Dueña del pendiente de cada celda. */
-    private val pending = PendingQueries()
+    /** 3.0 (V4) — Propiedad del pendiente de cada celda y su ciclo (reclamar, fallar, liberar). */
+    private val attempts = VerificationAttempts(cache, errorTimes, config, ::now) { errorRetryMs.remove(it) }
 
     /** Última vez que se comprobó que una celda VERIFIED sigue siéndolo. */
     private val verifiedCheckedAt = ConcurrentHashMap<String, Long>()

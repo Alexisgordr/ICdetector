@@ -100,7 +100,8 @@ class VerificationConfigRaceTest {
         assertTrue(src.contains("config.applyIfCurrent(snapshot) { applyResult(cell, key, snapshot, result, generation) }"))
         assertTrue(src.contains("val applied = config.applyIfCurrent(snapshot) {\n                logPauseOnce(pause)"))
         val discard = src.substringAfter("private fun discardStale(").substringBefore("private fun applyResult(")
-        assertTrue(discard.contains("pending.release(key, query) && cache[key] == VerificationStatus.PENDING"))
+        assertTrue(discard.contains("attempts.discard(key, query)"))
+        // VerificationAttempts.discard solo quita un PENDING propio (VerificationAttemptsTest).
         assertFalse("ya no borra un PENDING ajeno", src.contains("if (cache[key] == VerificationStatus.PENDING) cache.remove(key)"))
         assertFalse(src.contains("!config.isCurrent(snapshot)"))
         val service = listOf("app/src/main/java/com/alexisgordr/icdetector/service/MiniICService.kt",
