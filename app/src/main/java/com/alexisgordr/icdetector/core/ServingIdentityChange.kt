@@ -16,8 +16,13 @@ import com.alexisgordr.icdetector.models.RadioTech
  *
  * Un campo que uno de los dos lados no conoce (`N/A`, vacío, tecnología desconocida) NO cuenta
  * como cambio: algunos módems dejan de rellenar el MCC/MNC durante una lectura, y contarlo como
- * handover inventaría cambios de celda (y fallos de H10) que no ocurrieron. El Cell ID se compara
- * siempre, como antes.
+ * handover inventaría cambios de celda (y fallos de H10) que no ocurrieron.
+ *
+ * 3.0 — El Cell ID sigue la misma regla. Antes se comparaba siempre: un CID «N/A» transitorio daba
+ * dos handovers falsos (X→N/A y N/A→X), dos entradas para H10, una ventana GPS nueva y, sobre todo,
+ * reiniciaba el episodio de alarma en curso. Ahora una lectura con el CID ilegible nunca abre un
+ * handover, y [step] completa los campos desconocidos de la identidad anterior con los que llegan
+ * después (sin eso, una primera lectura con CID «N/A» bloquearía la detección).
  */
 internal object ServingIdentityChange {
 
@@ -35,13 +40,33 @@ internal object ServingIdentityChange {
     fun of(cell: CellData) = Identity(cell.mcc, cell.mnc, cell.tac, cell.cellId, cell.radioTech)
 
     fun isHandover(previous: Identity?, current: Identity): Boolean {
+        if (!known(current.cellId)) return false
         if (previous == null) return true
-        if (previous.cellId != current.cellId) return true
-        return knownAndDifferent(previous.mcc, current.mcc) ||
+        return knownAndDifferent(previous.cellId, current.cellId) ||
+            knownAndDifferent(previous.mcc, current.mcc) ||
             knownAndDifferent(previous.mnc, current.mnc) ||
             knownAndDifferent(previous.tac, current.tac) ||
             (previous.radio != current.radio &&
                 previous.radio != RadioTech.UNKNOWN && current.radio != RadioTech.UNKNOWN)
+    }
+
+    /** Resultado de un ciclo: si hubo handover y la identidad que queda como «anterior». */
+    data class Step(val handover: Boolean, val next: Identity?)
+
+    /**
+     * Con handover, la actual pasa a ser la anterior. Sin él, la anterior se conserva y solo se
+     * rellenan sus campos desconocidos con los conocidos de la lectura actual; un valor «N/A»
+     * nunca sustituye a uno conocido.
+     */
+    fun step(previous: Identity?, current: Identity): Step {
+        if (isHandover(previous, current)) return Step(true, current)
+        if (previous == null) return Step(false, null)
+        fun pick(old: String, new: String) = if (known(old)) old else new
+        return Step(false, Identity(
+            mcc = pick(previous.mcc, current.mcc), mnc = pick(previous.mnc, current.mnc),
+            tac = pick(previous.tac, current.tac), cellId = pick(previous.cellId, current.cellId),
+            radio = if (previous.radio != RadioTech.UNKNOWN) previous.radio else current.radio
+        ))
     }
 
     private fun known(value: String) = value.isNotBlank() && value != "N/A"

@@ -11,6 +11,12 @@ GitHub pre-release of an earlier build was withdrawn.
 
 ### Audit fixes
 
+- **A transient "N/A" Cell ID is no longer two handovers.** The Cell ID was always compared, so a
+  reading where the modem left it empty gave X→N/A and N/A→X: two handover rows, two H10 entries, a
+  new GPS window and, worst, a reset of the alarm episode in progress. The Cell ID now follows the
+  same rule as MCC/MNC/TAC/technology (it only counts when both sides are known); an unreadable Cell
+  ID never opens a handover, and the previous identity only fills its unknown fields from later
+  readings, so a first reading with "N/A" does not block detection.
 - **Handover routes: last reading separate from the last evaluated result (schema 25).** Every
   handover overwrote `last_status`, also with NOT_EVALUATED, so an earlier FAILED disappeared; `N/A`
   was shown as LEARNING and the REVIEW filter included it. Schema 25 adds to `cell_transitions` the

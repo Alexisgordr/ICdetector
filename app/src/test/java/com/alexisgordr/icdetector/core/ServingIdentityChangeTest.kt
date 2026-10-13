@@ -36,7 +36,7 @@ class ServingIdentityChangeTest {
         assertFalse(ServingIdentityChange.isHandover(lte, lte.copy(radio = RadioTech.UNKNOWN)))
     }
 
-    @Test fun `a different cell id is always a handover`() {
+    @Test fun `a different known cell id is always a handover`() {
         assertTrue(ServingIdentityChange.isHandover(lte, lte.copy(cellId = "101")))
     }
 
@@ -46,8 +46,58 @@ class ServingIdentityChangeTest {
             File("src/main/java/com/alexisgordr/icdetector/service/MiniICService.kt"),
             File("app/src/main/java/com/alexisgordr/icdetector/service/MiniICService.kt")
         ).first { it.exists() }.readText()
-        assertTrue(service.contains("ServingIdentityChange.isHandover(prevServingIdentity, servingIdentity)"))
+        assertTrue(service.contains("ServingIdentityChange.step(prevServingIdentity, servingIdentity)"))
         assertTrue(service.contains("cellChangeHistory.add(Pair(servingIdentity.key, currentTime))"))
         assertFalse(service.contains("if (cid != prevCid)"))
+    }
+
+    // ── 3.0 — Cell ID «N/A» transitorio ──────────────────────────────────────────────────
+
+    /** Recorre las lecturas como el servicio: devuelve en qué lecturas hubo handover. */
+    private fun handovers(vararg readings: Identity): List<Int> {
+        var prev: Identity? = null
+        return readings.withIndex().filter { (_, cur) ->
+            val step = ServingIdentityChange.step(prev, cur)
+            prev = step.next
+            step.handover
+        }.map { it.index }
+    }
+
+    @Test fun `a transient N-A Cell ID gives no handover in either direction`() {
+        val na = lte.copy(cellId = "N/A")
+        assertFalse(ServingIdentityChange.isHandover(lte, na))
+        assertEquals("X, N/A, X: solo la primera lectura", listOf(0), handovers(lte, na, lte))
+        assertEquals(listOf(0), handovers(lte, na, na, lte.copy(cellId = ""), lte))
+    }
+
+    @Test fun `a real change after an N-A reading is still a handover`() {
+        val other = lte.copy(cellId = "999")
+        assertEquals(listOf(0, 2), handovers(lte, lte.copy(cellId = "N/A"), other))
+    }
+
+    @Test fun `a first reading with N-A does not block later detection`() {
+        val na = lte.copy(cellId = "N/A")
+        assertEquals("la primera lectura legible abre el primer handover", listOf(1, 2), handovers(na, lte, lte.copy(cellId = "999")))
+    }
+
+    @Test fun `unknown fields of the previous identity are filled, known ones never overwritten`() {
+        val partial = lte.copy(tac = "N/A", radio = RadioTech.UNKNOWN)
+        val step = ServingIdentityChange.step(partial, lte)
+        assertFalse(step.handover)
+        assertEquals(lte, step.next)
+        assertEquals(lte, ServingIdentityChange.step(lte, lte.copy(mcc = "N/A", cellId = "N/A")).next)
+        // Rellenada la TAC, un cambio real de TAC después sí cuenta.
+        assertEquals(listOf(0, 2), handovers(partial, lte, lte.copy(tac = "31602")))
+    }
+
+    @Test fun `the service follows step and does not reset the alarm episode without a handover`() {
+        val src = listOf("app/src/main/java/com/alexisgordr/icdetector/service/MiniICService.kt", "src/main/java/com/alexisgordr/icdetector/service/MiniICService.kt")
+            .map(::File).first { it.exists() }.readText()
+        val alerts = src.substringAfter("private fun checkAlerts(").substringBefore("private fun updateNotification(")
+        assertTrue(alerts.contains("ServingIdentityChange.step(prevServingIdentity, servingIdentity)"))
+        val handover = alerts.substringAfter("if (identityStep.handover) {").substringBefore("} else {")
+        assertTrue(handover.contains("securityAlerts.resetAlarmEpisode()"))
+        assertFalse(alerts.substringBefore("if (identityStep.handover) {").contains("resetAlarmEpisode"))
+        assertFalse(alerts.contains("isHandover("))
     }
 }

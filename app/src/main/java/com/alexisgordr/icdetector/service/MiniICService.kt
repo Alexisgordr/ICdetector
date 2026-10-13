@@ -2141,8 +2141,11 @@ class MiniICService : Service() {
 
         // 3.0 (#19) — Handover = cambia la identidad completa (MCC, MNC, TAC, CID o tecnología),
         // no solo el CID. Un campo desconocido en un lado no cuenta como cambio.
+        // 3.0 — Un CID ilegible («N/A») no abre handover ni reinicia el episodio de alarma; la
+        // identidad anterior solo completa sus campos desconocidos (ServingIdentityChange.step).
         val servingIdentity = com.alexisgordr.icdetector.core.ServingIdentityChange.of(cell)
-        if (com.alexisgordr.icdetector.core.ServingIdentityChange.isHandover(prevServingIdentity, servingIdentity)) {
+        val identityStep = com.alexisgordr.icdetector.core.ServingIdentityChange.step(prevServingIdentity, servingIdentity)
+        if (identityStep.handover) {
             telemetryHistory.onHandover()
             securityAlerts.resetAlarmEpisode()
             appendLog("[RADIO]", "Handover celular completado -> Nueva celda CID: $cid ($net)")
@@ -2180,8 +2183,11 @@ class MiniICService : Service() {
 
             observationPersistence.recordHandover(cell, context)
 
-            prevServingIdentity = servingIdentity
-        } else if (confirmed) {
+            prevServingIdentity = identityStep.next
+        } else {
+            prevServingIdentity = identityStep.next
+        }
+        if (!identityStep.handover && confirmed) {
             // Misma celda que en el ciclo anterior: muestreo periódico (ver más abajo). Solo en la
             // ruta del bucle principal (confirmed = true), nunca en la de re-análisis tras la API,
             // para no duplicar filas por el mismo instante.
