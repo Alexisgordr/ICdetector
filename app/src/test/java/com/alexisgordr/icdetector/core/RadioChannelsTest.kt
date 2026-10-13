@@ -61,6 +61,7 @@ class RadioChannelsTest {
             File("src/main/java/com/alexisgordr/icdetector/storage/RfStabilityAccumulator.kt"),
             File("app/src/main/java/com/alexisgordr/icdetector/storage/RfStabilityAccumulator.kt")
         ).first { it.exists() }.readText()
-        assertEquals(2, Regex("RadioChannels\\.channelOrNull\\(").findAll(helper + accumulator).count())
+        // 3.0 — Tres: aprendizaje del historial, H15 y el par actual del candidato de reconfiguración.
+        assertEquals(3, Regex("RadioChannels\\.channelOrNull\\(").findAll(helper + accumulator).count())
     }
 }

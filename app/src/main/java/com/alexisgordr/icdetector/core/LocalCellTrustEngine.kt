@@ -23,9 +23,10 @@ object LocalCellTrustEngine {
     const val MAX_CONFIDENCE = 98
     const val REQUIRED_DAYS = 14
     const val REQUIRED_CLEAN_OBSERVATIONS = 20
-    private fun acceptedReconfiguration(cell: CellData, evidence: LocalCellTrustEvidence): Boolean {
+    private fun acceptedReconfiguration(pci: Int?, arfcn: Int?, evidence: LocalCellTrustEvidence): Boolean {
         val candidate = evidence.reconfigurationCandidate ?: return false
-        return cell.pci == candidate.pci && cell.arfcn == candidate.arfcn &&
+        if (pci == null || arfcn == null) return false
+        return pci == candidate.pci && arfcn == candidate.arfcn &&
             candidate.distinctDays >= REQUIRED_DAYS &&
             candidate.cappedObservations >= REQUIRED_CLEAN_OBSERVATIONS &&
             candidate.locatedObservations >= 8 && candidate.ageHours >= 13L * 24L &&
@@ -46,20 +47,26 @@ object LocalCellTrustEngine {
             evidence.locatedObservations >= 8 && evidence.rfObservations >= 10 &&
             evidence.trustedTransitions >= 3 && rfIdentityReady
 
+        // 3.0 — The current PCI/ARFCN are validated per technology exactly like the learned
+        // references (RadioChannels) before any lookup or comparison: an absent value, a sentinel
+        // (Int.MAX_VALUE) or an out-of-range value is "unknown", never an RF contradiction by
+        // itself. CellData keeps the original values, so H8 still sees and fails them.
+        val pci = RadioChannels.physicalIdOrNull(cell.radioTech, cell.pci)
+        val arfcn = RadioChannels.channelOrNull(cell.radioTech, cell.arfcn)
         val contradictions = linkedSetOf<String>()
         if (eligible) {
             if (cell.radioTech == RadioTech.LTE || cell.radioTech == RadioTech.NR) {
-                val accepted = acceptedReconfiguration(cell, evidence)
-                val carrierPcis = cell.arfcn?.let(evidence.knownPcisByArfcn::get)
-                if (!accepted && cell.arfcn != null && carrierPcis == null) contradictions += "ARFCN"
-                if (!accepted && cell.pci != null && carrierPcis != null && cell.pci !in carrierPcis) {
+                val accepted = acceptedReconfiguration(pci, arfcn, evidence)
+                val carrierPcis = arfcn?.let(evidence.knownPcisByArfcn::get)
+                if (!accepted && arfcn != null && carrierPcis == null) contradictions += "ARFCN"
+                if (!accepted && pci != null && carrierPcis != null && pci !in carrierPcis) {
                     contradictions += "PCI"
                 }
             } else {
-                if (cell.pci != null && evidence.knownPcis.isNotEmpty() && cell.pci !in evidence.knownPcis) {
+                if (pci != null && evidence.knownPcis.isNotEmpty() && pci !in evidence.knownPcis) {
                     contradictions += "PCI"
                 }
-                if (cell.arfcn != null && evidence.knownArfcns.isNotEmpty() && cell.arfcn !in evidence.knownArfcns) {
+                if (arfcn != null && evidence.knownArfcns.isNotEmpty() && arfcn !in evidence.knownArfcns) {
                     contradictions += "ARFCN"
                 }
             }

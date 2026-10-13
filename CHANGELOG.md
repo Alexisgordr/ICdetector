@@ -11,6 +11,17 @@ GitHub pre-release of an earlier build was withdrawn.
 
 ### Audit fixes
 
+- **Local confidence validates the current PCI/ARFCN (dataset cut for local confidence).** The
+  learned references were already validated per technology (`RadioChannels`), but the current PCI and
+  ARFCN were compared raw: a sentinel (`Int.MAX_VALUE`) or an out-of-range value could appear as a new
+  carrier or PCI and mark the cell `CHANGED` with an RF contradiction. The current values are now
+  validated the same way before looking up references, comparing them, checking an accepted
+  reconfiguration or querying a reconfiguration candidate; an absent or invalid value is unknown and
+  never an RF contradiction by itself. Valid changes are detected as before. `CellData` keeps the
+  original values, so H8 still fails an out-of-range channel. For comparability: rows from earlier
+  builds may carry `CHANGED`, a `Cambio en identidad celular consolidada (PCI/ARFCN)` reason or a
+  quarantine caused only by an invalid reading; new rows do not. Use `AppVersion` to separate them;
+  nothing is rewritten and no profile needs to be reset.
 - **Local reconfiguration keeps other reasons (stored-text change).** When local cell confidence saw
   a PCI/ARFCN change without an alarm, its marker *replaced* the reasons other rules had written for
   that observation. It is now appended with ` | `, without blank or duplicate parts

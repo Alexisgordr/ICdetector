@@ -2514,12 +2514,17 @@ class CellDbHelper(
                 "WHERE (from_identity=? OR to_identity=?) AND trusted_observations>0",
             arrayOf(cell.identityKey, cell.identityKey)
         ).use { c -> while (c.moveToNext()) { trustedTransitions += c.getInt(0); trustedRoutes++ } }
-        val candidate = if (cell.pci != null && cell.arfcn != null &&
-            cell.pci !in knownPcisByArfcn[cell.arfcn].orEmpty()) {
+        // 3.0 — El par actual se valida igual que el histórico antes de buscar su candidato: un
+        // sentinel o un valor fuera de rango no es un par PCI/ARFCN nuevo. CellData no se toca (H8
+        // sigue viendo el valor original).
+        val currentPci = RadioChannels.physicalIdOrNull(cell.radioTech, cell.pci)
+        val currentArfcn = RadioChannels.channelOrNull(cell.radioTech, cell.arfcn)
+        val candidate = if (currentPci != null && currentArfcn != null &&
+            currentPci !in knownPcisByArfcn[currentArfcn].orEmpty()) {
             var candidateLocated = 0
             val candidateArgs = arrayOf(
                 cell.cellId, cell.mnc, cell.tac, cell.mcc, cell.radioTech.name,
-                cell.pci.toString(), cell.arfcn.toString(),
+                currentPci.toString(), currentArfcn.toString(),
                 LOCAL_TRUST_RECONFIGURATION_HISTORY_LIKE, *threshold
             )
             val candidateWhere = "$COLUMN_CID=? AND $COLUMN_MNC=? AND $COLUMN_TAC=? AND $COLUMN_MCC=? " +
@@ -2536,13 +2541,13 @@ class CellDbHelper(
                 }
             }
             LocalRfReconfiguration(
-                pci = cell.pci,
-                arfcn = cell.arfcn,
+                pci = currentPci,
+                arfcn = currentArfcn,
                 distinctDays = candidateTemporal.distinctDays,
                 cappedObservations = candidateTemporal.cappedObservations,
                 locatedObservations = candidateLocated,
                 ageHours = candidateTemporal.ageHours,
-                oldPairSeenRecently = recentCleanPcisByArfcn[cell.arfcn].orEmpty().any { it != cell.pci }
+                oldPairSeenRecently = recentCleanPcisByArfcn[currentArfcn].orEmpty().any { it != currentPci }
             )
         } else null
         return LocalCellTrustEvidence(
