@@ -55,6 +55,8 @@
     <string name="filter_review">REVISAR</string>
     <string name="export_topology">EXPORTAR TOPOLOGÍA</string>
     <string name="export_stable_site">EXPORTAR STABLE-SITE</string>
+    <string name="export_stable_site_title">Exportar Stable-Site</string>
+    <string name="stable_site_export_privacy_warning">Las claves de sitio no son anónimas: son hashes deterministas y sin sal de una cuadrícula de unos 500 m, así que cualquiera puede calcular las claves de una zona y asociarlas a una ubicación aproximada. Las identidades de celda, las horas y los recuentos también pueden revelar tus hábitos. No incluye coordenadas exactas ni credenciales. Revisa el ZIP antes de compartirlo.</string>
     <string name="no_routes_filter">SIN RUTAS PARA ESTE FILTRO</string>
     <string name="handover_route">RUTA DE HANDOVER</string>
     <string name="export_forensic_title">Exportar caso forense</string>

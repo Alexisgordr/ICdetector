@@ -561,6 +561,19 @@ private fun TopologyPanel(
         }) { Text(stringResource(R.string.export)) } },
         dismissButton = { TextButton(onClick = { confirmExport = false }) { Text(stringResource(R.string.cancel)) } }
     )
+    // 3.0 — Aviso de privacidad antes de exportar Stable-Site, como en topología y Geometry: las claves
+    // de sitio son hashes deterministas sin sal y pueden asociarse a una zona aproximada.
+    var confirmStableSiteExport by remember { mutableStateOf(false) }
+    if (confirmStableSiteExport) AlertDialog(
+        onDismissRequest = { confirmStableSiteExport = false },
+        title = { Text(stringResource(R.string.export_stable_site_title)) },
+        text = { Text(stringResource(R.string.stable_site_export_privacy_warning)) },
+        confirmButton = { TextButton(onClick = {
+            confirmStableSiteExport = false
+            stableSiteExportLauncher.launch("ICD-stable-site-${System.currentTimeMillis()}.zip")
+        }) { Text(stringResource(R.string.export)) } },
+        dismissButton = { TextButton(onClick = { confirmStableSiteExport = false }) { Text(stringResource(R.string.cancel)) } }
+    )
     // 3.0 — Consulta de Stable-Site integrada en Topología (StableSitePanel); la flecha vuelve aquí.
     var showStableSite by remember { mutableStateOf(false) }
     if (showStableSite) {
@@ -625,7 +638,7 @@ private fun TopologyPanel(
                 Text(stringResource(R.string.export_topology), fontFamily = FontFamily.Monospace, fontSize = 9.sp)
             }
             TextButton(
-                onClick = { stableSiteExportLauncher.launch("ICD-stable-site-${System.currentTimeMillis()}.zip") },
+                onClick = { confirmStableSiteExport = true },
                 colors = ButtonDefaults.textButtonColors(contentColor = Color(0xFF80CBC4))
             ) {
                 Icon(Icons.Default.Share, contentDescription = null, modifier = Modifier.size(14.dp))

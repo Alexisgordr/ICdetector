@@ -366,7 +366,10 @@ recomputed (see the [manual](MANUAL.md)).
 Stable-Site is a privacy-reduced local context model that learns whether the device repeatedly
 observes a coherent cellular environment while physically static. Sites are hashed, overlapping
 ~500 m grid buckets — no exact site coordinates are stored. Only fresh, accurate location evidence
-contributes static context.
+contributes static context. **The keys are not anonymous:** they are deterministic, unsalted hashes
+of a fixed grid, so anyone can compute the keys of an area and link an exported key to an
+approximate location; cell identities, times and counts can also reveal habits. The export asks for
+confirmation and includes a `PRIVACY.txt` note.
 
 Stable-Site is **shadow-only**: it does not change H1–H16, the security score, anomaly confidence,
 Local Cell Trust, temporal confidence, alerts or forensic decisions.

@@ -307,7 +307,15 @@ measured before any enforcement.
 `sites.csv`, `site_cells.csv`, `motion.csv` and `shadow_episodes.csv`: hashed site keys, serving and
 neighbour days and observations, motion bands and episode timing, but no exact site coordinates. The
 cell and episode files contain complete cellular identities; treat the ZIP as sensitive movement and
-context data. A transmitter present throughout the first days can influence the first baseline;
+context data. The app asks for confirmation before exporting, and the ZIP includes `PRIVACY.txt`.
+
+**Site keys are not anonymous.** A site key is a deterministic, **unsalted** SHA-256 hash (first
+10 bytes) of a cell of a fixed ~500 m grid. The same place gives the same key on every phone and in
+every export, and anyone can compute the keys of every grid cell in an area (a candidate search) and
+match them, so a key can be linked to an approximate location of about 500 m. Cell identities,
+first/last-seen times, days, observation counts and motion bands can also reveal habits such as where
+you spend nights or work hours. The hash avoids storing exact coordinates; it does not provide
+anonymity. A transmitter present throughout the first days can influence the first baseline;
 local history cannot establish external truth.
 
 **Viewing it in the app.** **History → Topology → VIEW STABLE-SITE** shows what Stable-Site has

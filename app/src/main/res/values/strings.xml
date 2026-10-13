@@ -55,6 +55,8 @@
     <string name="filter_review">REVIEW</string>
     <string name="export_topology">EXPORT TOPOLOGY</string>
     <string name="export_stable_site">EXPORT STABLE-SITE</string>
+    <string name="export_stable_site_title">Export Stable-Site</string>
+    <string name="stable_site_export_privacy_warning">Site keys are not anonymous: they are deterministic, unsalted hashes of a ~500 m grid, so anyone can compute the keys of an area and link them to an approximate location. Cell identities, times and counts can also reveal your habits. No exact coordinates or credentials are included. Review the ZIP before sharing it.</string>
     <string name="no_routes_filter">NO ROUTES FOR THIS FILTER</string>
     <string name="handover_route">HANDOVER ROUTE</string>
     <string name="export_forensic_title">Export forensic case</string>

@@ -11,6 +11,11 @@ GitHub pre-release of an earlier build was withdrawn.
 
 ### Audit fixes
 
+- **Stable-Site export privacy.** README, MANUAL and a new confirmation dialog before the export
+  (EN/ES) state that site keys are deterministic, unsalted hashes of a ~500 m grid that can be linked
+  to an approximate location by a candidate search, and that identities, times and counts can reveal
+  habits. The ZIP now starts with a readable `PRIVACY.txt`. The keys, the CSV files and their columns
+  are unchanged; no salt is added.
 - **CSV text that could look like a formula (export format change).** Every CSV export (history,
   service state, forensic case, topology, Geometry, Stable-Site) now uses one shared function. A text
   field that starts with `=`, `+`, `-`, `@` (or a full-width form), a control character or `'` gets
