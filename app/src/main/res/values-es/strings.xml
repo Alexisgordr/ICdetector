@@ -7,7 +7,7 @@
     <string name="settings_apis">APIS</string>
     <string name="tor_proxy">Proxy Tor (Orbot)</string>
     <string name="tor_unavailable_latency">No disponible con la sonda de latencia activa: Tor falsearía la medida.</string>
-    <string name="tor_description">Enruta las API por Tor (SOCKS5 9050)</string>
+    <string name="tor_description">Enruta las consultas a OpenCellID por Tor (SOCKS5 9050). Sin salida directa de reserva.</string>
     <string name="latency_detection">Detección de latencia (Experimental)</string>
     <string name="unavailable_wifi">No disponible con Wi-Fi activo.</string>
     <string name="unavailable_vpn">No disponible con VPN activa.</string>
@@ -577,4 +577,9 @@
     <string name="stable_site_episode_focus_open_sites">Ver Stable-Site</string>
     <string name="notif_legacy_previous_signal">Última señal anterior observada: %1$d dBm (solo contexto).</string>
     <string name="notif_legacy_previous_unknown">Señal previa desconocida.</string>
+    <string name="opencellid_privacy">Cada consulta envía a OpenCellID tu API key y la identidad de la celda (MCC, MNC, código de área, Cell ID y tecnología). Tor oculta tu IP, pero la misma clave permite a OpenCellID enlazar tus consultas. Con el proxy seleccionado y Tor no disponible, las consultas fallan: nunca salen por conexión directa.</string>
+    <string name="latency_tor_dialog_title">¿Desactivar el proxy de OpenCellID?</string>
+    <string name="latency_tor_dialog_body">Activar latencia desactivará el proxy de OpenCellID; las consultas podrán salir directamente por tu conexión. OpenCellID verá tu IP. Nada cambia hasta que guardes.</string>
+    <string name="latency_tor_dialog_confirm">Activar latencia</string>
+    <string name="latency_tor_dialog_cancel">Cancelar</string>
 </resources>

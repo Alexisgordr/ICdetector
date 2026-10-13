@@ -32,6 +32,7 @@ import com.alexisgordr.icdetector.util.LocaleController
 import com.alexisgordr.icdetector.core.LegacyNetworkAlertMode
 import com.alexisgordr.icdetector.core.StableSiteNotices
 import com.alexisgordr.icdetector.core.LocationMode
+import com.alexisgordr.icdetector.core.LatencyProxyChoice
 import kotlin.time.Duration.Companion.milliseconds
 
 @Composable
@@ -47,6 +48,7 @@ fun SettingsPanel(
     val prefs = remember { context.getSharedPreferences("miniic_prefs", Context.MODE_PRIVATE) }
     var token by remember { mutableStateOf(prefs.getString("opencellid_key", "") ?: "") }
     var proxyEnabled by remember { mutableStateOf(prefs.getBoolean("proxy_enabled", false)) }
+    var askLatencyOverTor by remember { mutableStateOf(false) }
     var latencyDetectionEnabled by remember {
         mutableStateOf(prefs.getBoolean("latency_detection_enabled", false))
     }
@@ -119,6 +121,9 @@ fun SettingsPanel(
                     cursorColor = Color.White
                 )
             )
+            // 3.0 (V2) — Qué sale en cada consulta y qué protege (y qué no) el proxy.
+            Text(stringResource(R.string.opencellid_privacy), color = Color(0xFF666666), fontSize = 10.sp,
+                fontFamily = FontFamily.Monospace, lineHeight = 13.sp)
             HorizontalDivider(color = Color(0xFF222222), modifier = Modifier.padding(vertical = 4.dp))
 
             // Leer estado WiFi de forma reactiva
@@ -229,11 +234,14 @@ fun SettingsPanel(
                     enabled = !latencyBlocked || latencyDetectionEnabled,
                     onCheckedChange = { requested ->
                         // Encender exige que no haya Wi-Fi/VPN. Apagar siempre se permite.
-                        if (!requested) {
-                            latencyDetectionEnabled = false
-                        } else if (!latencyBlocked) {
-                            latencyDetectionEnabled = true
-                            proxyEnabled = false
+                        // 3.0 (V2) — Con Tor seleccionado se pregunta antes de quitar el proxy.
+                        val form = LatencyProxyChoice.Form(latencyDetectionEnabled, proxyEnabled)
+                        when (LatencyProxyChoice.onLatencyToggle(form, requested, latencyBlocked)) {
+                            LatencyProxyChoice.Action.APPLY -> LatencyProxyChoice.apply(form, requested).let {
+                                latencyDetectionEnabled = it.latencyEnabled; proxyEnabled = it.proxyEnabled
+                            }
+                            LatencyProxyChoice.Action.ASK -> askLatencyOverTor = true
+                            LatencyProxyChoice.Action.IGNORE -> Unit
                         }
                     },
                     colors = SwitchDefaults.colors(
@@ -242,6 +250,27 @@ fun SettingsPanel(
                         disabledCheckedTrackColor = Color(0xFF444444),
                         disabledUncheckedTrackColor = Color(0xFF333333)
                     )
+                )
+            }
+
+            // 3.0 (V2) — Elección explícita: activar la latencia desactiva el proxy de OpenCellID.
+            // Cancelar deja el formulario como estaba; nada se aplica hasta «Guardar ajustes».
+            if (askLatencyOverTor) {
+                AlertDialog(
+                    onDismissRequest = { askLatencyOverTor = false },
+                    title = { Text(stringResource(R.string.latency_tor_dialog_title)) },
+                    text = { Text(stringResource(R.string.latency_tor_dialog_body)) },
+                    confirmButton = {
+                        TextButton(onClick = {
+                            LatencyProxyChoice.apply(LatencyProxyChoice.Form(latencyDetectionEnabled, proxyEnabled), true).let {
+                                latencyDetectionEnabled = it.latencyEnabled; proxyEnabled = it.proxyEnabled
+                            }
+                            askLatencyOverTor = false
+                        }) { Text(stringResource(R.string.latency_tor_dialog_confirm)) }
+                    },
+                    dismissButton = {
+                        TextButton(onClick = { askLatencyOverTor = false }) { Text(stringResource(R.string.latency_tor_dialog_cancel)) }
+                    }
                 )
             }
 

@@ -7,7 +7,7 @@
     <string name="settings_apis">APIS</string>
     <string name="tor_proxy">Tor proxy (Orbot)</string>
     <string name="tor_unavailable_latency">Unavailable while the latency probe is active: Tor would distort the measurement.</string>
-    <string name="tor_description">Route API traffic through Tor (SOCKS5 9050)</string>
+    <string name="tor_description">Route OpenCellID queries through Tor (SOCKS5 9050). No direct fallback.</string>
     <string name="latency_detection">Latency detection (Experimental)</string>
     <string name="unavailable_wifi">Unavailable while Wi-Fi is active.</string>
     <string name="unavailable_vpn">Unavailable while a VPN is active.</string>
@@ -577,4 +577,9 @@
     <string name="stable_site_episode_focus_open_sites">View Stable-Site</string>
     <string name="notif_legacy_previous_signal">Last earlier signal observed: %1$d dBm (context only).</string>
     <string name="notif_legacy_previous_unknown">Earlier signal unknown.</string>
+    <string name="opencellid_privacy">Each query sends your API key and the cell identity (MCC, MNC, area code, Cell ID and technology) to OpenCellID. Tor hides your IP address, but the same key lets OpenCellID link your queries. With the proxy selected and Tor unavailable, queries fail: they never fall back to a direct connection.</string>
+    <string name="latency_tor_dialog_title">Turn off the OpenCellID proxy?</string>
+    <string name="latency_tor_dialog_body">Enabling latency will turn off the OpenCellID proxy; queries may then go out directly over your connection. OpenCellID will see your IP address. Nothing changes until you save.</string>
+    <string name="latency_tor_dialog_confirm">Enable latency</string>
+    <string name="latency_tor_dialog_cancel">Cancel</string>
 </resources>

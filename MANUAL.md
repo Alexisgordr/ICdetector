@@ -256,6 +256,18 @@ never the key — and is not part of backups. Terminal lines never show the URL 
 If your threat model requires it, configure the SOCKS5 proxy and a compatible service such as Orbot,
 then check that verification requests still succeed.
 
+**What each query sends.** Your API key and the identity of the cell being checked: MCC, MNC, area
+code (LAC/TAC), Cell ID and technology. Nothing else — no position, no neighbour list. Tor hides your
+IP address from OpenCellID, but every query carries the same key, so OpenCellID can still link your
+queries to each other. With the proxy selected and Tor (Orbot) not running, queries fail and pause
+(see *Retries and pauses*): there is **no** fallback to a direct connection.
+
+**Latency and the proxy.** The latency probe and the proxy are incompatible (Tor would distort the
+measurement). If you enable latency while the proxy is selected, the app asks first: *"Enabling
+latency will turn off the OpenCellID proxy; queries may then go out directly over your
+connection."* Cancel keeps your previous choice. Without the proxy no question is asked. As with
+every setting on that screen, nothing changes until you tap **Save settings**.
+
 The API key and the proxy choice are applied **together** when you save Settings, and each query
 uses one consistent copy of both from start to end. Changing the route (proxy on or off) cancels
 queries still in progress; any change discards the results of queries started with the earlier

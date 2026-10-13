@@ -11,6 +11,12 @@ GitHub pre-release of an earlier build was withdrawn.
 
 ### Audit fixes
 
+- **OpenCellID privacy, stated plainly.** Settings and the manual now say what each query sends (the
+  API key and the cell identity: MCC, MNC, area code, Cell ID, technology), that Tor hides the IP but
+  the same key lets queries be linked, and that with the proxy selected and Tor unavailable there is
+  no direct fallback. Enabling latency with the proxy selected used to switch the proxy off silently;
+  it now asks first ("Enabling latency will turn off the OpenCellID proxy…"), Cancel keeps the
+  previous choice, no question is asked without the proxy, and nothing applies until Save (EN/ES).
 - **OpenCellID coordinates: monotonic reference age.** The 6-hour limit on the fallback position used
   civil time, so changing the phone clock could make an old position look recent or discard a fresh
   one. The age now comes from `Location.elapsedRealtimeNanos` against `SystemClock.elapsedRealtime`;
