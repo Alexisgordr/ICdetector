@@ -11,6 +11,20 @@ GitHub pre-release of an earlier build was withdrawn.
 
 ### Audit fixes
 
+- **OpenCellID: retries by failure class, with one global pause.** An ERROR was retried every minute
+  per cell, even with an invalid key or the daily quota exhausted, and moving to another cell queried
+  again. Failures are now classified by HTTP status and the documented API code (2 invalid key,
+  3 invalid input, 4 whitelisting, 5 server, 6 too many requests, 7 daily limit), not by text. An
+  invalid key or missing whitelisting stops queries until the settings change; a rate limit honours a
+  valid `Retry-After` (seconds or HTTP date) or backs off from 1 to 30 min; the daily quota honours
+  `Retry-After` or waits 24 h (the reset time is not documented, so midnight UTC is not assumed);
+  network, Tor or server failures back off from 30 s to 15 min; invalid input only delays that cell.
+  The pause is global (cell changes do not bypass it), checked after the local database lookup,
+  stored with a truncated key fingerprint outside backups, kept across restarts with monotonic time
+  within a boot and bounded civil time after a reboot, and tied to the key: a new key or a late
+  reply from old settings never inherits it. Logged once per pause, without URL or key. Coroutine
+  cancellation propagates. VERIFIED/NOT_FOUND/REJECTED/ERROR keep their meaning. No schema or backup
+  format change.
 - **OpenCellID: key and proxy as one consistent setting per query.** The service read the key and the
   proxy flag separately, so a query could mix a new key with an old route or the other way round.
   Both now live in one immutable `VerificationConfig`, published atomically and updated together on

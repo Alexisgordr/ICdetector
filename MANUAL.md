@@ -227,6 +227,30 @@ it, local and historical analysis still works, while database-dependent rules ma
 `PENDING`. A missing public-database record does not make a cell malicious: public datasets can be
 incomplete or outdated. Verification is a label and never changes the score.
 
+### Retries and pauses
+
+A failed query is retried according to **why** it failed, using the HTTP status and the error code
+documented by OpenCellID (wiki pages *API* and *Access and limits*), never the wording of the reply:
+
+| Reply | Documented meaning | What the app does |
+|---|---|---|
+| HTTP 401 / code 2 | invalid API key | no more queries until you change the key |
+| HTTP 403 / code 4 | whitelisting required | no more queries until you change the settings |
+| HTTP 503 / code 6 | too many requests | pause: `Retry-After` if valid, otherwise 1, 2, 4… up to 30 min |
+| HTTP 429 / code 7 | daily limit | pause: `Retry-After` if valid, otherwise 24 h |
+| HTTP 400 / code 3 | invalid input | only that cell waits 1 h; no global pause |
+| HTTP 5xx / code 5, network, Tor down | temporary | pause 30 s, 1, 2… up to 15 min; any reply resets it |
+
+The pause is **global**: changing cells does not skip it, and local checks of cells already in the
+database keep working. The documentation gives 1,000 request credits per day but does not say when
+the day resets, so without `Retry-After` the app waits a full 24 hours instead of assuming
+midnight UTC. Pauses for the key, the rate limit and the daily quota survive a restart (measured
+with the monotonic clock within one boot, and bounded by their maximum after a reboot or a clock
+change). They belong to the key in use: a new key never inherits them, and a reply to a query made
+with earlier settings never pauses the new ones. A paused query shows **ERROR**, never NOT FOUND:
+a limit says nothing about the cell. The pause is stored as a truncated fingerprint of the key —
+never the key — and is not part of backups. Terminal lines never show the URL or the key.
+
 ### Proxy
 
 If your threat model requires it, configure the SOCKS5 proxy and a compatible service such as Orbot,
@@ -645,7 +669,8 @@ or Android did not provide the field.
 - **PENDING:** verification has not finished or is waiting for required data.
 - **NOT FOUND:** no matching public record. Common for new, indoor, rural or unmapped cells.
 - **ERROR / REJECTED:** credentials, connectivity, proxy configuration or the external service
-  prevented verification.
+  prevented verification. A key, rate-limit or quota error pauses all queries (see *Retries and
+  pauses*); it never means the cell does not exist.
 
 ### Threat score
 

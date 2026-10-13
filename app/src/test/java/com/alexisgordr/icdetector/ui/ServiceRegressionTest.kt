@@ -104,7 +104,7 @@ class ServiceRegressionTest {
         val verification = source("service/ExternalVerificationController.kt")
         assertTrue(verification.contains("historyEpoch.ifCurrent(generation, block)"))
         assertTrue(Regex("ifCurrent\\(generation\\)").findAll(verification).count() >= 5)
-        assertEquals(5, Regex("publish\\(cell, [^)]*, generation\\)").findAll(verification).count())
+        assertEquals(6, Regex("publish\\(cell, [^)]*, generation\\)").findAll(verification).count())
         val service = source("service/MiniICService.kt")
         assertTrue(service.contains("historyEpoch = historyEpoch"))
         assertTrue(service.contains("historyEpoch.ifCurrent(generationAtStart)"))

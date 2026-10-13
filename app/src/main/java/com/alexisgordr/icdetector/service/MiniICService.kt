@@ -168,6 +168,19 @@ class MiniICService : Service() {
         }
     }
 
+    /**
+     * 3.0 (V1) — Pausa de OpenCellID: preferencia interna (no está en BackupSettings.KEYS, no viaja en
+     * la copia). Guarda la huella truncada de la credencial, nunca la clave.
+     */
+    private fun verificationPauseStore() = object : com.alexisgordr.icdetector.core.VerificationPauseStore {
+        private val prefs = getSharedPreferences(com.alexisgordr.icdetector.backup.BackupSettings.PREFS_FILE, MODE_PRIVATE)
+        private val k = com.alexisgordr.icdetector.core.VerificationPauseGate.PREF_KEY
+        override fun load() = com.alexisgordr.icdetector.core.VerificationPauseState.parse(prefs.getString(k, null))
+        override fun save(state: com.alexisgordr.icdetector.core.VerificationPauseState?) {
+            prefs.edit().apply { if (state == null) remove(k) else putString(k, state.serialize()) }.apply()
+        }
+    }
+
     private fun appendLog(type: String, message: String) {
         val timestamp = SimpleDateFormat("HH:mm:ss.SSS", Locale.getDefault()).format(Date())
         val newLog = "[$timestamp] $type $message"
@@ -307,6 +320,7 @@ class MiniICService : Service() {
     fun updateVerificationSettings(apiKey: String, proxyEnabled: Boolean) {
         val change = verificationConfig.update(apiKey, proxyEnabled)
         if (change != com.alexisgordr.icdetector.core.VerificationConfigHolder.Change.NONE) {
+            if (::verificationController.isInitialized) verificationController.onConfigChanged()
             appendLog("[API]", "Configuración de OpenCellID actualizada; las consultas anteriores se descartan.")
         }
     }
@@ -539,7 +553,9 @@ class MiniICService : Service() {
             cacheApiLocation = { key, lat, lon -> apiLocationCache[key] = lat to lon },
             onVerified = { auditController.logVerificationOutcome(it) },
             requestFreshCellInfo = ::requestFreshCellInfo,
-            historyEpoch = historyEpoch
+            historyEpoch = historyEpoch,
+            pauseGate = com.alexisgordr.icdetector.core.VerificationPauseGate(verificationPauseStore()),
+            clock = ::mobilityClock
         )
         // 3.0 — `versionName+commit`: separa en los datos las filas de compilaciones distintas.
         val appVersion = com.alexisgordr.icdetector.core.AppBuildId.current(

@@ -3,7 +3,11 @@ package com.alexisgordr.icdetector.service
 import com.alexisgordr.icdetector.core.HistoryEpoch
 
 import android.location.Location
+import com.alexisgordr.icdetector.core.ExternalFailure
+import com.alexisgordr.icdetector.core.MobilityClock
 import com.alexisgordr.icdetector.core.VerificationDecision
+import com.alexisgordr.icdetector.core.VerificationPauseGate
+import com.alexisgordr.icdetector.core.VerificationPauseState
 import com.alexisgordr.icdetector.models.CellData
 import com.alexisgordr.icdetector.models.VerificationStatus
 import com.alexisgordr.icdetector.models.identityKey
@@ -39,7 +43,10 @@ internal class ExternalVerificationController(
      * escribe ni publica nada al terminar: antes podía repoblar las cachés y actualizar filas nuevas
      * con el resultado de una verificación de antes del borrado.
      */
-    private val historyEpoch: HistoryEpoch = HistoryEpoch()
+    private val historyEpoch: HistoryEpoch = HistoryEpoch(),
+    /** 3.0 (V1) — Pausa global de consultas de red, por credencial (ver VerificationPauseGate). */
+    private val pauseGate: VerificationPauseGate = VerificationPauseGate(),
+    private val clock: () -> MobilityClock = { MobilityClock(System.currentTimeMillis(), System.nanoTime() / 1_000_000, null) }
 ) {
     /** Ejecuta [block] solo si el historial no se ha borrado desde que empezó la consulta. */
     private fun ifCurrent(generation: Long, block: () -> Unit): Boolean =
@@ -135,6 +142,23 @@ internal class ExternalVerificationController(
             return
         }
 
+        // 3.0 (V1) — Pausa global: después de la comprobación local (que nunca se bloquea) y antes de
+        // la red. Es de la credencial, no de la celda: cambiar de celda no la salta.
+        pauseGate.blocking(snapshot.credentialFingerprint, clock())?.let { pause ->
+            logPauseOnce(pause)
+            ifCurrent(generation) {
+                if (cache[key] == VerificationStatus.PENDING) {
+                    // Sin consulta no hay veredicto: ERROR (no se sabe), que solo se reintenta en local
+                    // mientras dure la pausa. Nunca NOT_FOUND: un límite no dice que la celda no exista.
+                    cache[key] = VerificationStatus.ERROR
+                    errorTimes[key] = now()
+                    errorRetryMs.remove(key)
+                    publish(cell, VerificationStatus.ERROR, generation)
+                }
+            }
+            return
+        }
+
         log("Verificando antena MCC ${cell.mcc} · MNC ${cell.mnc} · TAC ${cell.tac} · CID ${cell.cellId}")
         val result = OpenCellIdClient.tryOpenCellIdSyncWithData(cell, snapshot, client, config)
         // 3.0 (V4) — Si la configuración cambió durante la consulta, su resultado no se aplica: ni
@@ -146,6 +170,11 @@ internal class ExternalVerificationController(
         }
         log("OpenCellID → ${result.status.name}")
         result.reason?.let(log)
+        // 3.0 (V1) — Solo la configuración vigente (comprobado arriba) puede abrir o cerrar una pausa.
+        pauseGate.onResult(snapshot.credentialFingerprint, result.externalFailure, result.retryAfterMillis, clock())
+            ?.let(::logPauseOnce)
+        if (result.externalFailure == ExternalFailure.INVALID_INPUT) errorRetryMs[key] = VerificationPauseGate.INVALID_INPUT_RETRY_MS
+        else errorRetryMs.remove(key)
 
         var status = result.status
         val data = result.record
@@ -235,7 +264,7 @@ internal class ExternalVerificationController(
 
     private fun mayAttempt(key: String, status: VerificationStatus?): Boolean = when (status) {
         null -> true
-        VerificationStatus.ERROR -> now() - (errorTimes[key] ?: 0L) >= ERROR_RETRY_MS
+        VerificationStatus.ERROR -> now() - (errorTimes[key] ?: 0L) >= (errorRetryMs[key] ?: ERROR_RETRY_MS)
         VerificationStatus.NOT_FOUND -> now() - (notFoundTimes[key] ?: 0L) >= RECHECK_MS
         VerificationStatus.REJECTED -> now() - (rejectedTimes[key] ?: 0L) >= RECHECK_MS
         // v2.10.10 — Antes VERIFIED no caducaba nunca dentro de una sesión: con el servicio en
@@ -254,6 +283,30 @@ internal class ExternalVerificationController(
         }
 
     private fun now() = System.currentTimeMillis()
+
+    /** 3.0 (V1) — Espera propia de un ERROR de esa celda (entrada inválida); por defecto ERROR_RETRY_MS. */
+    private val errorRetryMs = ConcurrentHashMap<String, Long>()
+
+    /** 3.0 (V1) — La última pausa anunciada: una línea por pausa, no una por celda o intento. */
+    @Volatile private var loggedPause: VerificationPauseState? = null
+
+    private fun logPauseOnce(pause: VerificationPauseState) {
+        val same = loggedPause?.let { it.kind == pause.kind && it.fingerprint == pause.fingerprint && it.untilCivilMs == pause.untilCivilMs }
+        if (same == true) return
+        loggedPause = pause
+        log(VerificationPauseGate.describe(pause, clock()))
+    }
+
+    /**
+     * 3.0 (V1) — La configuración cambió (clave o ruta): la pausa de otra credencial y la transitoria
+     * dejan de aplicar, y las celdas en ERROR pueden volver a intentarlo ya con la nueva.
+     */
+    fun onConfigChanged() {
+        pauseGate.onConfigChanged(config.current().credentialFingerprint)
+        loggedPause = null
+        errorRetryMs.clear()
+        errorTimes.keys.forEach { errorTimes[it] = 0L }
+    }
 
     /** Última vez que se comprobó que una celda VERIFIED sigue siéndolo. */
     private val verifiedCheckedAt = ConcurrentHashMap<String, Long>()

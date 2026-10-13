@@ -257,6 +257,19 @@ private val replacements = linkedMapOf(
     "familias independientes" to "independent families",
     "todavía no se ha observado un handover evaluable" to "no evaluable handover has been observed yet",
     "faltan dos posiciones GPS contemporáneas" to "two contemporaneous GPS positions are unavailable",
+    // 3.0 (V1) — Pausa global de OpenCellID y códigos documentados
+    "OpenCellID en pausa: la API key no es válida. No se consultará hasta que la cambies en Ajustes." to
+        "OpenCellID paused: the API key is invalid. No queries until you change it in Settings.",
+    "OpenCellID en pausa: la API key no tiene acceso (código 4). No se consultará hasta que cambies la configuración." to
+        "OpenCellID paused: the API key has no access (code 4). No queries until you change the settings.",
+    "OpenCellID en pausa por demasiadas peticiones: se reanudará en" to "OpenCellID paused after too many requests: resuming in",
+    "OpenCellID en pausa: cupo diario agotado. Se reanudará en" to "OpenCellID paused: daily quota exhausted. Resuming in",
+    "OpenCellID sin respuesta (red, proxy o servidor): se reintentará en" to "No response from OpenCellID (network, proxy or server): retrying in",
+    "No dice nada de la antena." to "It says nothing about the cell.",
+    "la API key no es válida. Revísala en Ajustes." to "the API key is invalid. Review it in Settings.",
+    "la API key no tiene acceso (requiere lista blanca)." to "the API key has no access (whitelisting required).",
+    "la API rechazó los datos de esta celda (código 3)." to "the API rejected this cell's data (code 3).",
+    "error interno del servidor (código 5). Se reintentará." to "internal server error (code 5). Will retry.",
     // 3.0 (V4) — Configuración de OpenCellID
     "Configuración de OpenCellID actualizada; las consultas anteriores se descartan." to
         "OpenCellID settings updated; earlier queries are discarded.",
