@@ -197,14 +197,8 @@ object ExportUtils {
      * Escapa un campo para CSV según RFC 4180: si contiene coma, comillas dobles o saltos de
      * línea, lo envuelve entre comillas y duplica las comillas internas; si no, lo deja tal cual.
      * Así ningún valor raro (p.ej. una razón con comillas o una coma) puede descuadrar una fila,
-     * y los datos llegan íntegros al análisis posterior.
+     * y los datos llegan íntegros al análisis posterior. 3.0 — Antes protege el texto que una hoja
+     * de cálculo podría tomar por fórmula (nombre de red, CSG…); ver [CsvText].
      */
-    private fun csvEscape(value: Any?): String {
-        val s = value?.toString() ?: ""
-        return if (s.contains('"') || s.contains(',') || s.contains('\n') || s.contains('\r')) {
-            "\"" + s.replace("\"", "\"\"") + "\""
-        } else {
-            s
-        }
-    }
+    private fun csvEscape(value: Any?): String = CsvText.field(value)
 }

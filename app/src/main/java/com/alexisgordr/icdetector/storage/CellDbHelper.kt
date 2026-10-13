@@ -1169,7 +1169,8 @@ class CellDbHelper(
 
     /** Privacy-reduced field export: hashed sites, aggregate cells, motion bands and episodes. */
     fun getStableSiteExportFiles(): LinkedHashMap<String,String> {
-        fun csv(v:Any?):String { val s=v?.toString().orEmpty(); return if(s.any{it==','||it=='"'||it=='\n'||it=='\r'}) "\"${s.replace("\"","\"\"")}\"" else s }
+        // 3.0 — Escapado y protección de texto compartidos (ver CsvText): comillas solo cuando hacen falta, como antes.
+        fun csv(v:Any?):String = com.alexisgordr.icdetector.utils.CsvText.field(v)
         fun query(name:String, header:String, sql:String):Pair<String,String> = name to buildString {
             appendLine(header)
             readableDatabase.rawQuery(sql,null).use { c -> while(c.moveToNext()) appendLine((0 until c.columnCount).joinToString(","){csv(if(c.isNull(it)) null else c.getString(it))}) }

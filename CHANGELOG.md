@@ -11,6 +11,14 @@ GitHub pre-release of an earlier build was withdrawn.
 
 ### Audit fixes
 
+- **CSV text that could look like a formula (export format change).** Every CSV export (history,
+  service state, forensic case, topology, Geometry, Stable-Site) now uses one shared function. A text
+  field that starts with `=`, `+`, `-`, `@` (or a full-width form), a control character or `'` gets
+  one leading `'`; removing exactly one restores the original value. Plain numbers (dBm, RSRQ,
+  coordinates) are unchanged, quoting of quotes/commas/line breaks is unchanged, and the database and
+  JSON evidence are not modified. Checked by opening the exports in LibreOffice Calc (no formulas
+  created, values unchanged after saving and reopening); Excel not checked. A reduction of risk, not a
+  guarantee: spreadsheets differ in how they import CSV.
 - **Neighbour selection (dataset cut for H1–H5, H7, H11, H16, the Bayesian density factor and
   Stable-Site learning; commit `6e99267`).** A carrier the modem declares `SECONDARY_SERVING` but
   publishes without `isRegistered` — typically the NR leg of 5G NSA, sometimes an LTE secondary — used

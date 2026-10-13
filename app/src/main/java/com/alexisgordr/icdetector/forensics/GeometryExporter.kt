@@ -87,6 +87,7 @@ object GeometryExporter {
         }.toString(2).toByteArray()
         return LinkedHashMap(files)
     }
-    private fun csv(value:Any?)="\"${value?.toString().orEmpty().replace("\"","\"\"")}\""
+    // 3.0 — Escapado y protección de texto compartidos (ver CsvText). Siempre entre comillas, como antes.
+    private fun csv(value:Any?)=com.alexisgordr.icdetector.utils.CsvText.quoted(value)
     private fun xml(value:String)=value.replace("&","&amp;").replace("<","&lt;").replace(">","&gt;").replace("\"","&quot;").replace("'","&apos;")
 }

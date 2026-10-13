@@ -903,6 +903,25 @@ versions and the dataset cuts the file crosses. It warns when a file joins sever
 Exports can contain precise locations, network identifiers, device information and security
 observations. Redact sensitive information before sharing publicly.
 
+### Text that a spreadsheet could read as a formula (3.0)
+
+Some CSV fields come from the network or the modem, not from the app: the network name
+(`NetworkName`), the CSG name (`CsgName`), additional PLMNs, operator codes and cell identities. A
+spreadsheet may treat a text that starts with `=`, `+`, `-` or `@` as a formula. Every CSV the app
+writes (history, service state, forensic case, topology, Geometry and Stable-Site) therefore adds one
+apostrophe (`'`) in front of a text field that starts with `=`, `+`, `-`, `@` (or their full-width
+forms), with a control character such as a tab or a carriage return, or with an apostrophe.
+
+- Plain numbers are never changed: `-95`, `-12.5` or `-3.7038` stay as they are.
+- To recover the original value, remove exactly **one** leading apostrophe from a text field that
+  has one. Values that already started with `'` get a second one for that reason.
+- Quotes, commas and line breaks are still escaped as before; `;` inside a field is left as is.
+- The database and the JSON evidence (`case.json`, forensic samples) are not changed.
+
+This reduces the risk; it does not guarantee it. What a spreadsheet does depends on the program, its
+settings and how the file is opened (double-click, import wizard, columns imported as text). Treat a
+CSV from someone else with the same care as any other file.
+
 ---
 
 ## 13. Responding to a credible alert

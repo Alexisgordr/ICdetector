@@ -526,6 +526,10 @@ Key points for analysis:
   OpenCellID antenna position is in `ApiLat` / `ApiLon`.
 - **`[sub-umbral]`** entries in `FailedHeuristics` failed without reaching the alarm threshold; they
   are kept on purpose so false positives can be studied (shown as `[sub-threshold]` in English).
+- **Text that could look like a formula** (`=`, `+`, `-`, `@` at the start of a field from the
+  network, such as `NetworkName` or `CsgName`) gets one leading `'` in every CSV; numbers such as
+  dBm or coordinates are unchanged. It reduces the risk in spreadsheets; it is not a guarantee (see
+  the [manual](MANUAL.md)).
 - **`Verified` is a label, not a verdict:** `VERIFIED`, `NOT_FOUND`, `REJECTED`, `ERROR` or `PENDING`.
   None of them changes `SecurityScore`.
 

@@ -121,7 +121,8 @@ object ForensicExporter {
     }
 
     private fun nullable(o: JSONObject, key: String): Any = if (!o.has(key) || o.isNull(key)) "" else o.get(key)
-    private fun csv(value: Any?): String = "\"${value?.toString().orEmpty().replace("\"", "\"\"")}\""
+    // 3.0 — Escapado y protección de texto compartidos (ver CsvText). Siempre entre comillas, como antes.
+    private fun csv(value: Any?): String = com.alexisgordr.icdetector.utils.CsvText.quoted(value)
     private fun sha256(bytes: ByteArray): String = MessageDigest.getInstance("SHA-256")
         .digest(bytes).joinToString("") { "%02x".format(it) }
 }
