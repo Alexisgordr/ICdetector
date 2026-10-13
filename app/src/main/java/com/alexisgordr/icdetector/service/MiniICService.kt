@@ -54,6 +54,11 @@ class MiniICService : Service() {
     private val _cellFlow = MutableStateFlow<List<CellData>>(emptyList())
     val cellFlow: StateFlow<List<CellData>> = _cellFlow
 
+    // 3.0 — Salud del ciclo de análisis (ver AnalysisHealth). Solo se toca en el hilo principal.
+    private val analysisHealthTracker = com.alexisgordr.icdetector.core.AnalysisHealth()
+    private val _analysisHealth = MutableStateFlow(com.alexisgordr.icdetector.core.AnalysisHealth.State())
+    val analysisHealth: StateFlow<com.alexisgordr.icdetector.core.AnalysisHealth.State> = _analysisHealth
+
     private val _liveLogs = MutableStateFlow(listOf("[SYS] ICdetector Engine Iniciado...", "[SYS] Esperando hooks del módem..."))
     val liveLogs: StateFlow<List<String>> = _liveLogs
 
@@ -1181,6 +1186,12 @@ class MiniICService : Service() {
             writeGate.launchSource(scope, Dispatchers.IO) {
                 cellProcessingMutex.withLock {
                 if (!collectionGeneration.isLatest(cycleTicket)) return@withLock
+                // 3.0 — Límite del ciclo: un fallo interno no deja el último resultado como si fuera
+                // actual ni genera alarmas. Sin reintentos: lo que el ciclo ya hizo (ver la nota en
+                // onAnalysisFailed) queda hecho una sola vez. La cancelación se relanza.
+                com.alexisgordr.icdetector.core.AnalysisHealth.guard(onFailure = { errorType ->
+                    withContext(Dispatchers.Main) { onAnalysisFailed(cycleTicket, errorType) }
+                }) {
                 // 3.0 (#20) — Tras una pérdida de señal, el contexto de banda de antes del hueco no
                 // sirve para comparar: H14 queda N/A hasta tener una banda previa nueva.
                 val signalLosses = collectionGeneration.losses
@@ -1658,11 +1669,45 @@ class MiniICService : Service() {
                         _cellFlow.value = emptyList()
                         updateNotificationText(getString(R.string.searching_network))
                     }
+                    // 3.0 — Solo aquí, con el ciclo completo y publicado, cuenta como recuperación.
+                    onAnalysisPublished(cycleTicket)
+                }
                 }
                 }
             }
         } catch (e: Exception) {
             e.printStackTrace()
+        }
+    }
+
+    /**
+     * 3.0 — Fallo de un ciclo de análisis, en el hilo principal. Solo cambia la salud si el ciclo
+     * aún podía publicar (ver AnalysisHealth); un ciclo ya descartado no afecta a la generación nueva.
+     * No publica nada, no alerta y no reintenta.
+     *
+     * Límites (efectos parciales): lo que el ciclo hizo antes de fallar se queda, una sola vez. En
+     * segundo plano: trayecto de movilidad, episodio y decisión de Stable-Site, contexto de sitio por
+     * minuto, cachés de lecturas y racha de aislamiento de H1. Al publicar, si el fallo llega a mitad:
+     * episodio y confirmación temporal pueden haber avanzado, y la fila del historial, el incidente,
+     * la muestra forense o la alerta pueden haberse lanzado o no, según dónde falló. No es una
+     * transacción global; no se deshace ni se repite nada. La siguiente entrega es una observación
+     * nueva, no un reintento.
+     */
+    private fun onAnalysisFailed(ticket: com.alexisgordr.icdetector.core.CollectionGeneration.Ticket, errorType: String) {
+        val change = analysisHealthTracker.onCycleFailed(ticket.generation, collectionGeneration.mayPublish(ticket))
+        _analysisHealth.value = analysisHealthTracker.state
+        if (change == com.alexisgordr.icdetector.core.AnalysisHealth.Change.BECAME_UNAVAILABLE) {
+            appendLog("[SYS]", "${com.alexisgordr.icdetector.core.AnalysisHealth.FAILURE_LOG} [$errorType]")
+            updateNotificationText(getString(R.string.analysis_unavailable), force = true)
+        }
+    }
+
+    /** 3.0 — Un ciclo válido terminó de publicarse (hilo principal). */
+    private fun onAnalysisPublished(ticket: com.alexisgordr.icdetector.core.CollectionGeneration.Ticket) {
+        val change = analysisHealthTracker.onCyclePublished(ticket.generation, System.currentTimeMillis())
+        _analysisHealth.value = analysisHealthTracker.state
+        if (change == com.alexisgordr.icdetector.core.AnalysisHealth.Change.RECOVERED) {
+            appendLog("[SYS]", com.alexisgordr.icdetector.core.AnalysisHealth.RECOVERY_LOG)
         }
     }
 

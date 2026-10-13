@@ -59,6 +59,8 @@ class TerminalLocalizationCoverageTest {
         "[SYS] Poda de histórico: 12 registros de más de 120 días eliminados.",
         "[H15] Lectura del historial RF fallida: H15 no se evalúa hasta que vuelva a leerse.",
         "[H15] Lectura del historial RF restablecida.",
+        "[SYS] Análisis temporalmente no disponible por un fallo interno (no es falta de señal ni una anomalía de red): se mantiene el último resultado válido, no actualizado. [SQLiteException]",
+        "[SYS] Análisis restablecido: resultado actualizado.",
         "N/A: no se pudo leer el historial RF en este ciclo.",
         "Red 2G/3G en uso: cambio desde 4G/5G · última señal anterior observada: -72 dBm · aviso NOTIFY. Puede deberse a cobertura o a llamadas sin VoLTE; no es un ataque confirmado.",
         "Red 2G/3G en uso · señal previa desconocida · aviso OFF. Puede deberse a cobertura o a llamadas sin VoLTE; no es un ataque confirmado.",

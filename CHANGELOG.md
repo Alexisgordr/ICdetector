@@ -11,6 +11,15 @@ GitHub pre-release of an earlier build was withdrawn.
 
 ### Audit fixes
 
+- **Analysis health.** An internal error in an analysis cycle used to end in the generic coroutine
+  handler while the screen and the notification kept showing the last result as if it were
+  current. The cycle boundary now catches it (cancellation is rethrown): one terminal line when a
+  streak of failures starts and one when a valid cycle is published again, with the error type
+  only; «Analysis temporarily unavailable» on the main screen and in the monitoring notification;
+  the last valid result is shown as earlier, not updated. No alarm, no publication of an incomplete
+  cycle and no retry. Only a cycle that could still publish counts, so a discarded generation
+  cannot change the state of a newer one. What a cycle already did before failing stays done once;
+  it is not a global transaction (see `onAnalysisFailed`).
 - **Restore refuses databases with triggers or views.** No version of the app creates them (audited
   for every supported backup schema, 20–23, and the whole code history; SQLite's own objects and
   `android_metadata` are tables or indexes). A trigger in a backup would have run when the app

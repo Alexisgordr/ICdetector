@@ -142,6 +142,9 @@ private val replacements = linkedMapOf(
     "Lectura del historial RF fallida: H15 no se evalúa hasta que vuelva a leerse." to
         "RF history read failed: H15 is not evaluated until it can be read again.",
     "Lectura del historial RF restablecida." to "RF history read restored.",
+    "Análisis temporalmente no disponible por un fallo interno (no es falta de señal ni una anomalía de red): se mantiene el último resultado válido, no actualizado." to
+        "Analysis temporarily unavailable due to an internal error (not a missing signal or a network anomaly): the last valid result is kept, not updated.",
+    "Análisis restablecido: resultado actualizado." to "Analysis restored: result updated.",
     "N/A: no se pudo leer el historial RF en este ciclo." to "N/A: the RF history could not be read in this cycle.",
     "última señal anterior observada" to "last earlier signal observed",
     "señal previa desconocida" to "earlier signal unknown",

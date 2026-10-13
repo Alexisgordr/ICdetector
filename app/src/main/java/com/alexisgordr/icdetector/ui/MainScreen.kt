@@ -324,6 +324,8 @@ fun MainScreenContent(dbHelper: CellDbHelper, service: MiniICService?) {
 
                     // 3.0 (#35) — Si las alarmas están silenciadas, decirlo antes que nada.
                     AlarmMutedWarning()
+                    // 3.0 — Fallo interno del análisis: el resultado de abajo es el anterior.
+                    AnalysisUnavailableNotice(service)
 
                     // STICKY: Card de estado
                     Card(
@@ -928,6 +930,41 @@ private fun BaselineMaturityRow(
  * canal de alertas silenciado. La app no puede reactivar el sonido; abre los ajustes del canal. Se
  * vuelve a comprobar cada vez que la pantalla vuelve al primer plano.
  */
+/**
+ * 3.0 — Aviso mientras el ciclo de análisis falla (ver AnalysisHealth): el resultado visible es el
+ * último válido, no uno actualizado. No es una alarma ni dice nada de la red.
+ */
+@Composable
+private fun AnalysisUnavailableNotice(service: MiniICService?) {
+    val flow = remember(service) {
+        service?.analysisHealth ?: MutableStateFlow(com.alexisgordr.icdetector.core.AnalysisHealth.State())
+    }
+    val health by flow.collectAsStateWithLifecycle()
+    if (!health.unavailable) return
+    val color = Color(0xFFB0BEC5)
+    Card(
+        modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
+        colors = CardDefaults.cardColors(containerColor = color.copy(alpha = 0.08f)),
+        border = BorderStroke(1.dp, color.copy(alpha = 0.4f)),
+        shape = RoundedCornerShape(4.dp)
+    ) {
+        Column(modifier = Modifier.padding(12.dp)) {
+            Text(
+                stringResource(R.string.analysis_unavailable),
+                color = color, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Bold, fontSize = 12.sp
+            )
+            val last = health.lastValidAtMs
+            Text(
+                if (last != null) stringResource(
+                    R.string.analysis_previous_result_format,
+                    java.text.DateFormat.getTimeInstance(java.text.DateFormat.MEDIUM).format(java.util.Date(last))
+                ) else stringResource(R.string.analysis_no_previous_result),
+                color = Color(0xFFBBBBBB), fontFamily = FontFamily.Monospace, fontSize = 11.sp
+            )
+        }
+    }
+}
+
 @Composable
 private fun AlarmMutedWarning() {
     val context = LocalContext.current
