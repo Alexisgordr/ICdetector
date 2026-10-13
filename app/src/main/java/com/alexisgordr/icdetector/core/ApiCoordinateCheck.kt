@@ -61,3 +61,37 @@ object ApiCoordinateCheck {
     const val LOG_NO_DISTANCE_CHECK =
         "OpenCellID: registro encontrado sin contraste de distancia (no hay posición propia reciente y fiable). No confirma que la antena esté donde dice la base."
 }
+
+/**
+ * 3.0 (V3) — La última posición aceptada, guardada para sobrevivir a un reinicio del servicio.
+ * Formato `lat,lon,horaCivil,elapsedMs,arranque` (el antiguo, `lat,lon,horaCivil`, se sigue leyendo).
+ *
+ * Al recuperarla:
+ *  - Mismo arranque y marca monotónica válida: la edad se decide con el reloj MONOTÓNICO. Corregir
+ *    la hora del móvil ya no descarta una referencia válida ni da por reciente una vieja. Una marca
+ *    del futuro (imposible en el mismo arranque) se descarta.
+ *  - Formato antiguo u otro arranque: conservador. Solo se conserva si la hora civil dice que tiene
+ *    ≤ 6 h, y SIN tiempo monotónico: sirve para la continuidad del GPS, pero ApiCoordinateCheck no la
+ *    usa para validar coordenadas (no puede demostrar su edad).
+ */
+object StoredReference {
+    data class Restored(val latitude: Double, val longitude: Double, val civilTimeMs: Long, val elapsedMs: Long?)
+
+    fun serialize(lat: Double, lon: Double, civilTimeMs: Long, elapsedMs: Long, bootId: String?) =
+        "$lat,$lon,$civilTimeMs,$elapsedMs,${bootId.orEmpty()}"
+
+    fun restore(text: String?, nowCivilMs: Long, nowElapsedMs: Long, bootId: String?): Restored? {
+        val parts = text?.split(",") ?: return null
+        if (parts.size != 3 && parts.size != 5) return null
+        val lat = parts[0].toDoubleOrNull() ?: return null
+        val lon = parts[1].toDoubleOrNull() ?: return null
+        val civil = parts[2].toLongOrNull() ?: return null
+        val elapsed = parts.getOrNull(3)?.toLongOrNull()
+        val boot = parts.getOrNull(4)
+        if (elapsed != null && elapsed > 0 && !boot.isNullOrEmpty() && boot == bootId) {
+            val age = ApiCoordinateCheck.monotonicAgeMs(elapsed, nowElapsedMs) ?: return null
+            return if (age <= ApiCoordinateCheck.REFERENCE_MAX_AGE_MS) Restored(lat, lon, civil, elapsed) else null
+        }
+        return if (nowCivilMs - civil in 0..ApiCoordinateCheck.REFERENCE_MAX_AGE_MS) Restored(lat, lon, civil, null) else null
+    }
+}

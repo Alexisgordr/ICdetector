@@ -15,6 +15,7 @@ import com.alexisgordr.icdetector.core.GpsFixContinuity
 import com.alexisgordr.icdetector.core.GpsPowerPolicy
 import com.alexisgordr.icdetector.core.LocationMode
 import com.alexisgordr.icdetector.core.PreciseFixBackoff
+import com.alexisgordr.icdetector.core.StoredReference
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -336,9 +337,9 @@ internal class LocationCollectionController(
             lastPersistedLocationTime = candidate.time
             // 3.0 (V3) — Con su tiempo monotónico y el número de arranque: tras reiniciar el
             // servicio en el mismo arranque la edad sigue siendo demostrable; tras otro, no.
-            prefs.edit().putString(KEY_LAST_LOCATION,
-                "${candidate.latitude},${candidate.longitude},${candidate.time}," +
-                    "${candidate.elapsedRealtimeNanos / 1_000_000L},${bootCount().orEmpty()}").apply()
+            prefs.edit().putString(KEY_LAST_LOCATION, StoredReference.serialize(
+                candidate.latitude, candidate.longitude, candidate.time,
+                candidate.elapsedRealtimeNanos / 1_000_000L, bootCount())).apply()
         }
         true
     }
@@ -350,24 +351,19 @@ internal class LocationCollectionController(
 
     private fun restoreReference() {
         try {
-            val parts = prefs.getString(KEY_LAST_LOCATION, null)?.split(",") ?: return
-            if (parts.size != 3 && parts.size != 5) return
-            val lat = parts[0].toDoubleOrNull() ?: return
-            val lon = parts[1].toDoubleOrNull() ?: return
-            val time = parts[2].toLongOrNull() ?: return
-            if (System.currentTimeMillis() - time !in 0..REFERENCE_MAX_AGE_MS) return
-            // 3.0 (V3) — El tiempo monotónico guardado solo vale en el MISMO arranque; si no consta
-            // (formato anterior) o es de otro, la referencia queda sin él y no sirve para validar
-            // coordenadas de OpenCellID (ApiCoordinateCheck se abstiene).
-            val elapsed = parts.getOrNull(3)?.toLongOrNull()
-                ?.takeIf { it > 0 && it <= SystemClock.elapsedRealtime() && parts[4].isNotEmpty() && parts[4] == bootCount() }
+            // 3.0 (V3) — Mismo arranque: edad monotónica. Otro arranque o formato antiguo: reloj
+            // civil y sin tiempo monotónico (no sirve para validar coordenadas). Ver StoredReference.
+            val r = StoredReference.restore(
+                prefs.getString(KEY_LAST_LOCATION, null),
+                System.currentTimeMillis(), SystemClock.elapsedRealtime(), bootCount()
+            ) ?: return
             lastAcceptedLocation = Location(LocationManager.GPS_PROVIDER).apply {
-                latitude = lat
-                longitude = lon
-                this.time = time
-                if (elapsed != null) elapsedRealtimeNanos = elapsed * 1_000_000L
+                latitude = r.latitude
+                longitude = r.longitude
+                time = r.civilTimeMs
+                r.elapsedMs?.let { elapsedRealtimeNanos = it * 1_000_000L }
             }
-            lastPersistedLocationTime = time
+            lastPersistedLocationTime = r.civilTimeMs
         } catch (_: Exception) {}
     }
 

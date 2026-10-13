@@ -74,6 +74,43 @@ class ApiCoordinateCheckTest {
         assertEquals(Result.REJECTED, check(paris.first, paris.second, shared = null, recent = ref(now - hour)).result)
     }
 
+    // ── Recuperación de la referencia guardada ────────────────────────────────────────────
+
+    private val civilNow = 1_760_000_000_000L
+    private fun stored(civilAge: Long, elapsedAge: Long?, boot: String? = "5") =
+        StoredReference.serialize(42.8, -1.6, civilNow - civilAge, elapsedAge?.let { now - it } ?: 0L, boot)
+
+    @Test fun `same boot - the monotonic clock decides, whatever the civil clock says`() {
+        // Hora corregida: el reloj civil dice 3 días (o −2 h), el monotónico 1 h. Se conserva.
+        listOf(3 * 24 * hour, -2 * hour).forEach { civilAge ->
+            val r = StoredReference.restore(stored(civilAge, hour), civilNow, now, "5")!!
+            assertEquals(now - hour, r.elapsedMs)
+            assertTrue(ApiCoordinateCheck.isUsableFallback(ref(r.elapsedMs), now))
+        }
+        // El civil dice 1 h, pero el monotónico 7 h: se descarta.
+        assertNull(StoredReference.restore(stored(hour, 7 * hour), civilNow, now, "5"))
+        // Marca del futuro en el mismo arranque: imposible, se descarta.
+        assertNull(StoredReference.restore(StoredReference.serialize(42.8, -1.6, civilNow, now + 1, "5"), civilNow, now, "5"))
+    }
+
+    @Test fun `another boot or the old format is kept conservatively and never validates coordinates`() {
+        listOf(stored(hour, hour, boot = "4"), "42.8,-1.6,${civilNow - hour}", stored(hour, hour, boot = null)).forEach { text ->
+            val r = StoredReference.restore(text, civilNow, now, "5")!!
+            assertNull(text, r.elapsedMs)
+            assertFalse(ApiCoordinateCheck.isUsableFallback(ref(r.elapsedMs), now))
+        }
+        // Y con el reloj civil, más de 6 h o en el futuro: fuera.
+        assertNull(StoredReference.restore("42.8,-1.6,${civilNow - 7 * hour}", civilNow, now, "5"))
+        assertNull(StoredReference.restore("42.8,-1.6,${civilNow + hour}", civilNow, now, "5"))
+        assertNull("sin número de arranque actual no se reutiliza", StoredReference.restore(stored(hour, hour), civilNow, now, null)?.elapsedMs)
+    }
+
+    @Test fun `malformed stored references are ignored`() {
+        listOf(null, "", "1,2", "a,b,c", "1,2,3,4", "1,2,x,4,5", "1,2,3,4,5,6").forEach {
+            assertNull("$it", StoredReference.restore(it, civilNow, now, "5"))
+        }
+    }
+
     @Test fun `the service measures monotonic age and logs the missing contrast`() {
         fun src(p: String) = listOf("app/src/main/java/com/alexisgordr/icdetector/$p", "src/main/java/com/alexisgordr/icdetector/$p").map(::File).first { it.exists() }.readText()
         val validator = src("service/ApiCoordinateValidator.kt")
@@ -84,8 +121,8 @@ class ApiCoordinateCheckTest {
         val controller = src("service/ExternalVerificationController.kt")
         assertTrue(controller.contains("log(ApiCoordinateCheck.LOG_NO_DISTANCE_CHECK)"))
         // La referencia guardada solo recupera su tiempo monotónico en el mismo arranque.
-        val location = src("service/LocationCollectionController.kt").substringAfter("private fun restoreReference()")
-        assertTrue(location.contains("parts[4] == bootCount()"))
-        assertTrue(location.contains("it <= SystemClock.elapsedRealtime()"))
+        val location = src("service/LocationCollectionController.kt").substringAfter("private fun restoreReference()").substringBefore("companion object")
+        assertTrue(location.contains("StoredReference.restore("))
+        assertFalse("la decisión no la toma el reloj civil del servicio", location.contains("currentTimeMillis() -"))
     }
 }

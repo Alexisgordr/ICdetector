@@ -20,8 +20,10 @@ GitHub pre-release of an earlier build was withdrawn.
 - **OpenCellID coordinates: monotonic reference age.** The 6-hour limit on the fallback position used
   civil time, so changing the phone clock could make an old position look recent or discard a fresh
   one. The age now comes from `Location.elapsedRealtimeNanos` against `SystemClock.elapsedRealtime`;
-  a saved reference keeps its monotonic time only when the boot count matches (otherwise, or with a
-  missing, zero or future time, it is not used). Range, (0,0), the three-area sentinel and the
+  a saved reference whose boot count matches is restored by its monotonic age alone (a clock
+  correction no longer drops a valid reference or revives an old one); from another boot or in the
+  old format it is kept only if civil time says ≤ 6 h, and without monotonic time, so it is never
+  used to check coordinates (nor with a missing, zero or future time). Range, (0,0), the three-area sentinel and the
   50 km / 500 km limits are unchanged. Without a usable reference the record is not auto-rejected,
   but the outcome is now "found without distance check" and the terminal says so; it does not claim
   legitimacy and the status stays VERIFIED. Pure decision in `ApiCoordinateCheck` with tests.
