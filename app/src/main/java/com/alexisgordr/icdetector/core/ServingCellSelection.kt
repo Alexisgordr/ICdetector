@@ -16,8 +16,10 @@ import com.alexisgordr.icdetector.models.SecondaryCarrier
  *
  * Regla nueva, una sola y en un solo sitio:
  *  1. Si alguna entrada registrada declara `PRIMARY_SERVING`, esa es la servidora.
- *  2. Si ninguna lo declara (módems que no rellenan el campo), la primera registrada, que es el
- *     comportamiento anterior para el caso de una sola entrada.
+ *  2. Si ninguna lo declara (módems que no rellenan el campo), la primera registrada que NO se
+ *     declare `SECONDARY_SERVING`. Un módem que solo rellena el estado en la pata NR la marcaría
+ *     como secundaria; elegirla sería justo lo que esta regla evita. Si todas se declaran
+ *     secundarias, el ciclo se abstiene.
  *
  * Nunca se elige por potencia: la portadora con más señal no es necesariamente la que lleva el
  * control de la conexión.
@@ -48,7 +50,9 @@ object ServingCellSelection {
         if (declaredPrimary >= 0) {
             return declaredPrimary.takeIf { cells[it].hasUsableSignal() } ?: -1
         }
-        return cells.indexOfFirst { it.isRegistered && it.hasUsableSignal() }
+        return cells.indexOfFirst {
+            it.isRegistered && it.connectionState != CellConnectionState.SECONDARY_SERVING && it.hasUsableSignal()
+        }
     }
 
     private fun CellData.hasUsableSignal(): Boolean = dbm != Int.MAX_VALUE && dbm < 100
@@ -58,6 +62,11 @@ object ServingCellSelection {
      * celda que el módem declare `SECONDARY_SERVING` (la pata NR de NSA suele venir sin
      * `isRegistered`). Una entrada duplicada de la MISMA portadora que la primaria (mismo radio,
      * ARFCN y PCI) no es una portadora distinta y no se lista.
+     *
+     * 3.0 — «Misma portadora» exige que ARFCN y PCI sean válidos para su tecnología en los dos lados
+     * (RadioChannels), como en `rfDifference`: desconocido no es coincidencia. Antes dos entradas
+     * con ARFCN y PCI sin informar se daban por la misma (null == null) y la segunda desaparecía.
+     * Lo mismo al quitar repetidas entre las secundarias.
      */
     fun secondaryCarriers(cells: List<CellData>, primaryIndex: Int): List<SecondaryCarrier> {
         val primary = cells.getOrNull(primaryIndex)
@@ -67,10 +76,7 @@ object ServingCellSelection {
                     (cell.isRegistered || cell.connectionState == CellConnectionState.SECONDARY_SERVING)
             }
             .map { it.value }
-            .filterNot { cell ->
-                primary != null && cell.radioTech == primary.radioTech &&
-                    cell.arfcn == primary.arfcn && cell.pci == primary.pci
-            }
+            .filterNot { cell -> primary != null && sameKnownCarrier(cell, primary) }
             .map { cell ->
                 SecondaryCarrier(
                     radio = cell.radioTech,
@@ -80,7 +86,23 @@ object ServingCellSelection {
                     connectionState = cell.connectionState
                 )
             }
-            .distinct()
+            .let(::distinctKnown)
+    }
+
+    private fun sameKnownCarrier(a: CellData, b: CellData): Boolean {
+        if (a.radioTech != b.radioTech) return false
+        val ca = RadioChannels.channelOrNull(a.radioTech, a.arfcn) ?: return false
+        val pa = RadioChannels.physicalIdOrNull(a.radioTech, a.pci) ?: return false
+        return ca == RadioChannels.channelOrNull(b.radioTech, b.arfcn) && pa == RadioChannels.physicalIdOrNull(b.radioTech, b.pci)
+    }
+
+    /** Quita repetidas solo si su ARFCN y PCI son válidos; las desconocidas se conservan todas. */
+    private fun distinctKnown(carriers: List<SecondaryCarrier>): List<SecondaryCarrier> {
+        val seen = HashSet<SecondaryCarrier>()
+        return carriers.filter { c ->
+            val known = RadioChannels.channelOrNull(c.radio, c.arfcn) != null && RadioChannels.physicalIdOrNull(c.radio, c.pci) != null
+            !known || seen.add(c)
+        }
     }
 
     /**

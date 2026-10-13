@@ -11,6 +11,13 @@ GitHub pre-release of an earlier build was withdrawn.
 
 ### Audit fixes
 
+- **Serving-cell selection: no secondary as fallback, no "unknown = same" duplicates.** When no entry
+  declares PRIMARY_SERVING, the fallback took the first registered entry with signal even if it
+  declared SECONDARY_SERVING (a modem that only fills the state on the NR leg would make that leg
+  the serving cell). Declared secondaries are now skipped, and the cycle abstains if only
+  secondaries remain. A secondary entry is dropped as a duplicate of the primary (and repeated
+  secondaries are merged) only when ARFCN and PCI are valid for their technology on both sides:
+  unknown is not a match, as in `rfDifference`.
 - **A transient "N/A" Cell ID is no longer two handovers.** The Cell ID was always compared, so a
   reading where the modem left it empty gave X→N/A and N/A→X: two handover rows, two H10 entries, a
   new GPS window and, worst, a reset of the alarm episode in progress. The Cell ID now follows the
