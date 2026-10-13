@@ -11,6 +11,15 @@ GitHub pre-release of an earlier build was withdrawn.
 
 ### Audit fixes
 
+- **Local profile: algorithm-version limit documented and tested, real write failures not hidden.**
+  Evaluations are unique per history row (and per observation): after a future algorithm version
+  the first-use learning could not store held-out evaluations for already evaluated observations, and
+  `INSERT OR IGNORE` dropped them without checking. A test reproduces it; such a conflict is now
+  recognised as expected (the earlier evaluation is kept, never replaced), while an evaluation that
+  is neither stored nor already present is a real failure: the first-use learning rolls back and is
+  not marked as done. `ProfileAlgorithm` stays 2. The manual says what must be decided before raising
+  it, and that the held-out part is the last 20 % of observations cut at an instant, not a number of
+  days.
 - **Local profile: clarifications, no change in method.** Profile days are UTC days (cap of 48 a day
   and the three days for maturity), now documented. The texts that identify an H13 failure in the
   stored reasons (`Potencia anómala vs historial`, `Huella RF incoherente con el historial`) are now

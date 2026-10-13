@@ -59,8 +59,15 @@ internal class LocalProfileController(
 
     /**
      * Una vez por versión del algoritmo: aprende del historial reciente con instante exacto y evalúa
-     * con el perfil resultante la parte final reservada. Nunca con un historial restaurado de una
-     * copia: puede venir de otro teléfono y sus filas no tienen el modelo de dispositivo.
+     * con el perfil resultante la parte final reservada (el 20 % final de las observaciones, cortado
+     * por instante; no un número fijo de días). Nunca con un historial restaurado de una copia: puede
+     * venir de otro teléfono y sus filas no tienen el modelo de dispositivo. Se marca como hecho solo
+     * si la transacción termina bien.
+     *
+     * 3.0 (L3) — Límite conocido: la evaluación es única por fila (y por observación). Si se sube
+     * [LocalProfile.ALGORITHM_VERSION], las reservadas de observaciones que ya tienen evaluación de la
+     * versión anterior no se guardan (conflicto esperado, ver ProfileEvaluationWrite). Antes de subirla
+     * hay que decidir la política (ver MANUAL, *Changing the algorithm version*).
      */
     fun bootstrapIfNeeded() {
         val key = PREF_BOOTSTRAP_DONE_PREFIX + LocalProfile.ALGORITHM_VERSION
@@ -82,7 +89,11 @@ internal class LocalProfileController(
                 profiles.values.flatMap { it.values }.forEach { LocalProfileStore.upsert(db, it) }
                 plan.holdout.forEach { r ->
                     val step = shadow.process(of(r.context), observation(r), ProfileMode.SHADOW, now, holdout = true)
-                    LocalProfileStore.insertEvaluation(db, step.record)
+                    // 3.0 (L3) — Un conflicto (la fila u observación ya tiene evaluación, quizá de otra
+                    // versión) es esperado: la anterior se conserva. Un fallo real lanza, deshace la
+                    // transacción y el arranque NO se marca como hecho: se reintenta la próxima vez.
+                    val written = LocalProfileStore.insertEvaluationChecked(db, step.record)
+                    check(written != com.alexisgordr.icdetector.core.profile.ProfileEvaluationWrite.Outcome.FAILED) { "bootstrap evaluation not written" }
                 }
             }
             // Primera activación de esta versión del algoritmo, con el modo en que empieza.

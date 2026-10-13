@@ -471,7 +471,8 @@ identity, and the profile evaluates, learns and counts that observation **once**
 first row saved. The other rows stay in the history and are shown with that evaluation. The check
 uses what is stored, so it also holds after a restart or a restore. About 1 observation in 10 is kept for evaluation only, so held-out results stay honest.
 On first use, the profile also learns from the last 30 days of history (never from a restored
-backup), holding out the most recent 20%. Nothing reaches the score, confirmation, alerts, trust or
+backup), holding out the most recent 20 % of those observations: the split is a cut at an instant,
+so the held-out part covers however much time those observations span, not a fixed number of days. Nothing reaches the score, confirmation, alerts, trust or
 forensic cases; if the profile fails, the row is saved unchanged and, with the option on, Settings
 shows the error.
 
@@ -520,6 +521,16 @@ Older rows have empty profile columns. Each reference carries a *generation* (ne
 staleness or algorithm change), so evaluations of different references are never confused. Compare
 evaluations only within the same `ProfileAlgorithm`; references from algorithm 1 are relearned
 automatically.
+
+**Changing the algorithm version (known limitation).** An evaluation is unique per history row (and,
+since schema 24, per observation), whatever its algorithm version. If a future version raises
+`ProfileAlgorithm`, its first-use learning runs again, but its held-out evaluations of observations
+that already have one from the previous version cannot be stored: they are skipped as an expected
+conflict and the earlier evaluation is kept, never replaced. A real storage failure is different: the
+first-use learning is rolled back and not marked as done, so it is retried. Before raising the
+version, decide whether the new version needs its own evaluations of the same observations (that
+needs a schema change with migration and tests) or whether its held-out set may cover only
+observations not yet evaluated, and document it. This version does not change it.
 
 **Before widening its role.** Extra alerts would need evidence the app cannot produce on its own:
 held-out deviations across several phones, models and places; a false-positive rate per level in

@@ -69,6 +69,17 @@ object LocalProfileStore {
         return db.insertWithOnConflict(E, null, v, SQLiteDatabase.CONFLICT_IGNORE)
     }
 
+    /**
+     * 3.0 (L3) — Guarda una evaluación y distingue un conflicto esperado (ya había una de esa fila u
+     * observación, quizá de otra versión del algoritmo: se conserva) de un fallo real de escritura.
+     */
+    fun insertEvaluationChecked(db: SQLiteDatabase, r: ProfileEvaluationRecord): com.alexisgordr.icdetector.core.profile.ProfileEvaluationWrite.Outcome {
+        val id = insertEvaluation(db, r)
+        val stored = id == -1L && db.rawQuery(com.alexisgordr.icdetector.core.profile.ProfileEvaluationWrite.EXISTS_SQL,
+            arrayOf(r.historyId.toString(), r.observationId)).use { it.moveToFirst() }
+        return com.alexisgordr.icdetector.core.profile.ProfileEvaluationWrite.outcome(id, stored)
+    }
+
     /** 3.0 (L2) — ¿Ya hay una evaluación guardada de esta observación? Lo guardado, no la memoria. */
     fun hasEvaluation(db: SQLiteDatabase, observationId: String): Boolean =
         db.rawQuery("SELECT 1 FROM $E WHERE observation_id=? LIMIT 1", arrayOf(observationId)).use { it.moveToFirst() }

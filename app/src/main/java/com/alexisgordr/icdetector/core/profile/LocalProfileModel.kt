@@ -18,6 +18,14 @@ object LocalProfile {
      *
      * 2 — Revisión técnica 637761d: dispersión acotada (F02), revalidación tras caducar (F05),
      * muestras futuras rechazadas (F06) y cuarentena sin repeticiones (F09).
+     *
+     * 3.0 (L3) — ANTES DE SUBIRLA: `profile_evaluations` guarda una evaluación por fila
+     * (`history_id` único) y por observación (`observation_id` único), sin la versión en la clave. El
+     * arranque de una versión nueva no podría guardar sus evaluaciones reservadas de observaciones ya
+     * evaluadas: se descartan como conflicto esperado y se conservan las antiguas (nunca se
+     * reemplazan). Si la versión nueva necesita sus propias evaluaciones de esas observaciones, hace
+     * falta antes un cambio de esquema (clave que incluya la versión) con migración y pruebas; si no,
+     * documentar que su reserva solo cubre observaciones sin evaluar. Ver MANUAL.
      */
     const val ALGORITHM_VERSION = 2
 
