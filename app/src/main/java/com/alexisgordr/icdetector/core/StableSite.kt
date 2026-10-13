@@ -254,16 +254,15 @@ data class StableSiteDecision(
     val wouldTrigger: Boolean = false, val enforced: Boolean = false,
     val siteKey: String? = null, val reason: String = "NO_SITE_DATA",
     val evidence: StableSiteEvidence? = null,
-    /** 3.0 — The serving-change episode this evaluation was saved to, if any (see StableSiteNotices). */
-    val episodeRecord: StableSiteEpisodeRecord? = null
+    /** 3.0 — The open serving-change episode this evaluation was saved to, if any (see StableSiteNotices). */
+    val episodeId: String? = null
 )
 
 /**
- * 3.0 — What the evaluation did to its episode. [newlyRecorded] is true only for the evaluation that
- * set the persisted `shadow_recorded` flag from 0 to 1. The flag never goes back to 0, so this
- * happens at most once per episode, across readings, process restarts and app restarts.
+ * 3.0 — Result of observing the serving cell for episodes. [created] is true only in the cycle that
+ * opened the episode, i.e. the cycle that saw the serving change happen.
  */
-data class StableSiteEpisodeRecord(val episodeId: String, val firstSeenMs: Long, val newlyRecorded: Boolean)
+data class StableSiteEpisodeObservation(val episodeId: String?, val created: Boolean)
 
 object StableSiteEvaluator {
     fun evaluate(e: StableSiteEvidence, enforcementEnabled: Boolean = STABLE_SITE_ENFORCEMENT_ENABLED): StableSiteDecision {

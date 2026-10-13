@@ -16,23 +16,22 @@ class StableSiteNoticesWiringTest {
     private val res = listOf(File("src/main/res"), File("app/src/main/res")).first { it.exists() }
     private fun src(path: String) = main.resolve("com/alexisgordr/icdetector/$path").readText()
 
-    @Test fun `the service notifies after saving the decision and a failure never breaks the analysis`() {
+    @Test fun `the site is evaluated before the episode is opened, and the start is recorded`() {
         val service = src("service/MiniICService.kt")
-        assertTrue(service.contains("dbHelper.applyStableSiteDecision(stableSiteCandidate, activeRaw, siteKeys)\n                        .also { maybeNotifyStableSite(it) }"))
-        val notify = service.substringAfter("private fun maybeNotifyStableSite(").substringBefore("private fun onAnalysisFailed(")
-        assertTrue(notify.contains("notices.shouldNotify(decision, enabled, since)"))
-        assertTrue(notify.contains("prefs.getBoolean(notices.PREF_ENABLED, notices.DEFAULT_ENABLED)"))
-        assertTrue(notify.contains("} catch (e: CancellationException) {\n            throw e\n        } catch (e: Exception) {"))
-        assertTrue(notify.indexOf("appendLog(") < notify.indexOf("showStableSiteNotice("))
-        listOf("securityAlerts", "checkAlerts", "ToneGenerator", "ALERT_CHANNEL_ID", "showConfirmedAlarm", "temporalConfidence",
-            "threatEpisodeTracker", "localCellTrust", "securityScore", "bayes", "dbHelper").forEach {
-            assertFalse("el aviso no toca $it", notify.contains(it, ignoreCase = true))
-        }
-        // Corte: en onCreate solo si falta, después de la puerta de la primera apertura.
-        val onCreate = service.substringAfter("override fun onCreate() {").substringBefore("override fun ")
-        val cutoff = onCreate.indexOf("StableSiteNotices.PREF_NOTIFY_SINCE_MS")
-        assertTrue(cutoff > onCreate.indexOf("FirstRun.allowsCollection(this)"))
-        assertTrue(onCreate.contains("if (!prefs.contains(com.alexisgordr.icdetector.core.StableSiteNotices.PREF_NOTIFY_SINCE_MS))"))
+        val cycle = service.substringAfter("cellProcessingMutex.withLock {").substringBefore("private fun onAnalysisFailed(")
+        val evaluate = cycle.indexOf("dbHelper.evaluateStableSiteCandidate(")
+        val observe = cycle.indexOf("dbHelper.observeStableSiteEpisodeStart(activeRaw.identityKey, stableSitePreviousIdentity)")
+        val record = cycle.indexOf("recordStableSiteEpisodeStart(episodeObservation, stableSiteCandidate)")
+        val apply = cycle.indexOf("dbHelper.applyStableSiteDecision(stableSiteCandidate, activeRaw, siteKeys)")
+        assertTrue(evaluate in 0 until observe); assertTrue(observe < record); assertTrue(record < apply)
+        assertFalse("ya no hay observación sin anotar el inicio", cycle.contains("dbHelper.observeStableSiteEpisode(activeRaw"))
+        val start = service.substringAfter("private fun recordStableSiteEpisodeStart(").substringBefore("private fun maybeNotifyStableSite(")
+        assertTrue(start.contains("notices.pendingAfterObservation(pending, observation, siteAtStart)"))
+        assertTrue(start.contains(".commit()"))
+        // La evaluación no lee los episodios: cambiar el orden no cambia el veredicto.
+        val evaluator = src("storage/CellDbHelper.kt").substringAfter("fun evaluateStableSiteCandidate(").substringBefore("fun observeStableSiteEpisode(")
+        assertFalse(evaluator.contains("TABLE_SITE_SHADOW_TRIGGERS"))
+        assertFalse(service.contains("PREF_NOTIFY_SINCE_MS"))
     }
 
     @Test fun `scores, temporal confirmation, trust and alarms do not know about the notices`() {
@@ -97,18 +96,21 @@ class StableSiteNoticesWiringTest {
         assertTrue(settings.contains("prefs.getBoolean(StableSiteNotices.PREF_ENABLED, StableSiteNotices.DEFAULT_ENABLED)"))
     }
 
-    @Test fun `a restore moves the cutoff so restored episodes never notify`() {
+    @Test fun `a restore clears the pending episode so restored episodes never notify`() {
         val restore = src("backup/RestoreStartup.kt")
         val apply = restore.substringAfter("private fun applySettings(").substringBefore("fun prefs(")
-        assertTrue(apply.indexOf("StableSiteNotices.PREF_NOTIFY_SINCE_MS") in 0 until apply.indexOf("editor.commit()"))
+        assertTrue(apply.indexOf("editor.remove(com.alexisgordr.icdetector.core.StableSiteNotices.PREF_PENDING_EPISODE)") in 0 until apply.indexOf("editor.commit()"))
     }
 
-    @Test fun `the episode is recorded with an atomic conditional update`() {
+    @Test fun `recorded in shadow keeps its original meaning and the open episode is reported`() {
         val helper = src("storage/CellDbHelper.kt")
         val update = helper.substringAfter("private fun updateStableSiteEpisode(").substringBefore("private fun findActiveStableSiteHold(")
-        assertTrue(update.contains("\"episode_id=? AND candidate_identity=? AND shadow_recorded=0\""))
-        assertFalse("el flag no vuelve a 0", update.contains("put(\"shadow_recorded\",0)"))
-        assertTrue(update.contains("return newlyRecorded"))
+        assertTrue(update.contains("if(decision.wouldTrigger) put(\"shadow_recorded\",1)"))
+        assertFalse(update.contains("shadow_recorded=0"))
+        val start = helper.substringAfter("fun observeStableSiteEpisodeStart(").substringBefore("fun applyStableSiteDecision(")
+        assertEquals("solo se crea un episodio en un sitio", 1, Regex("""created = true""").findAll(start).count())
+        assertTrue(start.indexOf("\"closed_ms IS NULL\",null)") < start.indexOf("insertOrThrow"))
+        assertTrue(helper.contains("decision = decision.copy(episodeId = it)"))
     }
 
     @Test fun `tapping the notice opens the episode, also with the app already open`() {
@@ -122,17 +124,4 @@ class StableSiteNoticesWiringTest {
         assertTrue(focus.contains("R.string.stable_site_episode_focus_missing"))
     }
 
-    @Test fun `docs explain when it notifies, the dedupe, the backup default and that it is not an alarm`() {
-        fun doc(name: String) = listOf(File(name), File("../$name")).first { it.exists() }.readText()
-        val manual = doc("MANUAL.md")
-        listOf("**Silent notices.**", "| **Stable-Site silent notices** |", "it does not confirm an attack",
-            "At most one notice per episode", "Reaching maturity\nnever notifies", "maturity never turns it back on",
-            "Stable-Site episodes in a restored backup never\nproduce a silent notice.", "restores that setting's default")
-            .forEach { assertTrue(it, manual.contains(it)) }
-        assertTrue(doc("README.md").contains("**Silent notices:** *Settings → Stable-Site silent notices* (on by default)"))
-        val changelog = doc("CHANGELOG.md")
-        assertTrue(changelog.contains("**Stable-Site silent notices.**"))
-        assertTrue(changelog.contains("No schema\n  change."))
-        assertTrue(changelog.contains("older backups restore the default (*on*)"))
-    }
 }

@@ -90,10 +90,10 @@ class BackupArchiveTest {
             BackupSettings.fromJson("{\"app_language\":\"es\"}")[key])
         // Un tipo incorrecto no se aplica (y el teléfono conserva lo que tuviera).
         assertNull(BackupSettings.fromJson("{\"stable_site_silent_notices\":\"no\"}")[key])
-        // El corte de los avisos es estado interno: nunca viaja en la copia.
-        val notifySince = com.alexisgordr.icdetector.core.StableSiteNotices.PREF_NOTIFY_SINCE_MS
-        assertFalse(BackupSettings.KEYS.containsKey(notifySince))
-        assertFalse(BackupSettings.toJson(mapOf(notifySince to 1L, key to true)).contains(notifySince))
-        assertNull(BackupSettings.fromJson("{\"$notifySince\":1}")[notifySince])
+        // El episodio pendiente de aviso es estado interno: nunca viaja en la copia.
+        val pending = com.alexisgordr.icdetector.core.StableSiteNotices.PREF_PENDING_EPISODE
+        assertFalse(BackupSettings.KEYS.containsKey(pending))
+        assertFalse(BackupSettings.toJson(mapOf(pending to "e1", key to true)).contains(pending))
+        assertNull(BackupSettings.fromJson("{\"$pending\":\"e1\"}")[pending])
     }
 }

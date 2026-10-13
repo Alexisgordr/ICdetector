@@ -61,9 +61,9 @@ object RestoreStartup {
                 is Boolean -> editor.putBoolean(key, value)
             }
         }
-        // 3.0 — Los episodios de Stable-Site restaurados nunca avisan: el corte de los avisos
-        // silenciosos pasa a «ahora» (ver StableSiteNotices). El corte no viaja en la copia.
-        editor.putLong(com.alexisgordr.icdetector.core.StableSiteNotices.PREF_NOTIFY_SINCE_MS, System.currentTimeMillis())
+        // 3.0 — Los episodios de Stable-Site restaurados nunca avisan: se borra el episodio pendiente
+        // de aviso (ver StableSiteNotices). Ese dato es interno y no viaja en la copia.
+        editor.remove(com.alexisgordr.icdetector.core.StableSiteNotices.PREF_PENDING_EPISODE)
         editor.commit()
     }
 

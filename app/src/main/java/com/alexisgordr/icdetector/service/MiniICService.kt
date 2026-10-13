@@ -437,13 +437,6 @@ class MiniICService : Service() {
             }
         }
         notificationController = ServiceNotificationController(this, MiniICService::class.java) { locationMode }
-        // 3.0 — Corte de los avisos de Stable-Site: los episodios anteriores al primer arranque con
-        // esta versión no avisan nunca. Solo se fija si falta (la restauración lo pone a «ahora»).
-        getSharedPreferences(com.alexisgordr.icdetector.backup.BackupSettings.PREFS_FILE, MODE_PRIVATE).let { prefs ->
-            if (!prefs.contains(com.alexisgordr.icdetector.core.StableSiteNotices.PREF_NOTIFY_SINCE_MS)) {
-                prefs.edit().putLong(com.alexisgordr.icdetector.core.StableSiteNotices.PREF_NOTIFY_SINCE_MS, System.currentTimeMillis()).apply()
-            }
-        }
         databaseMaintenance = DatabaseMaintenance(dbHelper) { appendLog("[SYS]", it) }
         latencyMonitor = NetworkLatencyMonitor(
             client = latencyClient,
@@ -1262,14 +1255,18 @@ class MiniICService : Service() {
                 val siteKeys = currentLocation?.takeIf { it.accuracy <= 50f }?.let {
                     com.alexisgordr.icdetector.core.StableSiteKey.candidates(it.latitude, it.longitude)
                 }.orEmpty()
-                if (activeRaw != null && activeRaw.cellId != "N/A") {
-                    dbHelper.observeStableSiteEpisode(activeRaw.identityKey, stableSitePreviousIdentity)
-                }
+                // 3.0 — El sitio se evalúa ANTES de registrar el cambio de servidora, para saber si el
+                // episodio que se abre en este ciclo empieza con el sitio ya maduro (avisos
+                // silenciosos). La evaluación no lee los episodios, así que el orden no la cambia.
                 val stableSiteCandidate = if (activeRaw != null && activeRaw.cellId != "N/A" && siteKeys.isNotEmpty()) {
                     com.alexisgordr.icdetector.core.StableSiteCandidateSelector.select(
                         siteKeys.map { key -> dbHelper.evaluateStableSiteCandidate(key, activeRaw, stableSitePreviousIdentity, motionEvidence) }
                     )!!
                 } else com.alexisgordr.icdetector.core.StableSiteDecision(reason = "NO_SERVING_CELL")
+                if (activeRaw != null && activeRaw.cellId != "N/A") {
+                    val episodeObservation = dbHelper.observeStableSiteEpisodeStart(activeRaw.identityKey, stableSitePreviousIdentity)
+                    recordStableSiteEpisodeStart(episodeObservation, stableSiteCandidate)
+                }
                 val stableSiteDecision = if (activeRaw != null && activeRaw.cellId != "N/A") {
                     dbHelper.applyStableSiteDecision(stableSiteCandidate, activeRaw, siteKeys)
                         .also { maybeNotifyStableSite(it) }
@@ -1734,18 +1731,39 @@ class MiniICService : Service() {
      * nueva, no un reintento.
      */
     /**
-     * 3.0 — Aviso silencioso de Stable-Site (ver StableSiteNotices). Solo informa: no toca la
-     * puntuación, la confianza temporal ni las alarmas. El episodio ya está guardado; si la
-     * notificación falla (permiso denegado, canal bloqueado), el análisis sigue igual.
+     * 3.0 — Ciclo de análisis (IO, bajo cellProcessingMutex): si este ciclo abrió un episodio,
+     * anota si empezó con el sitio maduro (ver StableSiteNotices.pendingAfterObservation). commit():
+     * el pendiente debe estar en disco antes de que el ciclo pueda avisar.
+     */
+    private fun recordStableSiteEpisodeStart(
+        observation: com.alexisgordr.icdetector.core.StableSiteEpisodeObservation,
+        siteAtStart: com.alexisgordr.icdetector.core.StableSiteDecision
+    ) {
+        val notices = com.alexisgordr.icdetector.core.StableSiteNotices
+        val prefs = getSharedPreferences(com.alexisgordr.icdetector.backup.BackupSettings.PREFS_FILE, MODE_PRIVATE)
+        val pending = prefs.getString(notices.PREF_PENDING_EPISODE, null)
+        val next = notices.pendingAfterObservation(pending, observation, siteAtStart)
+        if (next == pending) return
+        prefs.edit().apply { if (next == null) remove(notices.PREF_PENDING_EPISODE) else putString(notices.PREF_PENDING_EPISODE, next) }.commit()
+    }
+
+    /**
+     * 3.0 — Aviso silencioso de Stable-Site (ver StableSiteNotices). Solo informa: no toca la puntuación, la confianza temporal ni las alarmas. El episodio ya
+     * está guardado; si la notificación falla o Android la bloquea, el análisis sigue igual.
      */
     private fun maybeNotifyStableSite(decision: com.alexisgordr.icdetector.core.StableSiteDecision) {
         val notices = com.alexisgordr.icdetector.core.StableSiteNotices
         val prefs = getSharedPreferences(com.alexisgordr.icdetector.backup.BackupSettings.PREFS_FILE, MODE_PRIVATE)
         val enabled = prefs.getBoolean(notices.PREF_ENABLED, notices.DEFAULT_ENABLED)
-        val since = if (prefs.contains(notices.PREF_NOTIFY_SINCE_MS)) prefs.getLong(notices.PREF_NOTIFY_SINCE_MS, 0L) else null
-        if (!notices.shouldNotify(decision, enabled, since)) return
-        val episodeId = decision.episodeRecord?.episodeId ?: return
-        appendLog("[SITE]", notices.NOTICE_LOG)
+        val pending = prefs.getString(notices.PREF_PENDING_EPISODE, null)
+        val action = notices.decide(decision, enabled, pending)
+        if (action == com.alexisgordr.icdetector.core.StableSiteNotices.Action.NONE) return
+        val episodeId = decision.episodeId ?: return
+        // Se consume ANTES de intentar publicar (commit síncrono): como mucho un aviso por episodio,
+        // aunque el proceso muera justo después.
+        prefs.edit().remove(notices.PREF_PENDING_EPISODE).commit()
+        if (action == com.alexisgordr.icdetector.core.StableSiteNotices.Action.CONSUME_SILENTLY) return
+        appendLog("[SITE]", notices.LOG_POSTED)
         try {
             notificationController.showStableSiteNotice(episodeId)
         } catch (e: CancellationException) {
