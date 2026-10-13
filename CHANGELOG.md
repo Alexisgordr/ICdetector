@@ -11,6 +11,12 @@ GitHub pre-release of an earlier build was withdrawn.
 
 ### Audit fixes
 
+- **Stable-Site diagnostic and `motion.csv`.** A window long enough but with positions spread beyond
+  the static envelope was reported as `INSUFFICIENT_DURATION`; it is now `POSITIONS_DISPERSED`, and a
+  slow walking speed is `MOVEMENT` (terminal only; same conditions, same states). `duration_s` in
+  `motion.csv` is documented as the length of the classifier's window at the last saved evaluation of
+  that day and state (at most about 3 minutes), not time spent static; the column is unchanged. The
+  GSM comment now says Android exposes BSIC, which this app does not use as a PCI.
 - **Stable-Site motion uses monotonic time.** The motion classifier ordered fixes and measured
   durations with `Location.time` and checked freshness against the civil clock, so a date/time
   change or a late fix could shift them. It now uses `Location.elapsedRealtimeNanos` and

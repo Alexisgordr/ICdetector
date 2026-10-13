@@ -3,7 +3,12 @@ package com.alexisgordr.icdetector.core
 import kotlin.math.*
 
 enum class MotionState { UNKNOWN, STATIC_CONFIRMED, MOVING }
-enum class MotionReason { FIRST_FIX, INSUFFICIENT_DURATION, ACCURACY_POOR, NO_RECENT_FIX, STATIC, MOVEMENT }
+/**
+ * Why the classifier reached its state. 3.0 — POSITIONS_DISPERSED: the window already lasts the
+ * required two minutes, but the fixes are spread beyond the static envelope; before, this was
+ * reported as INSUFFICIENT_DURATION. Only the terminal log shows it; it is not stored.
+ */
+enum class MotionReason { FIRST_FIX, INSUFFICIENT_DURATION, ACCURACY_POOR, NO_RECENT_FIX, STATIC, MOVEMENT, POSITIONS_DISPERSED }
 enum class StableSiteFeatureState { UNAVAILABLE, BOOTSTRAP, LEARNING, SHADOW_READY, ACTIVE }
 enum class StableSiteNovelty { KNOWN_AT_SITE, SITE_NOVEL, GLOBALLY_NOVEL }
 enum class NeighbourEvidenceCapability { FULL_NEIGHBOUR_IDENTITY, RF_NEIGHBOUR_ONLY, NO_NEIGHBOUR_DATA }
@@ -30,8 +35,9 @@ data class NeighbourDiagnostic(
 }
 
 object StableSiteNeighbourEvidence {
-    // 3.0 (#22) — Mismos rangos que el resto de la app (RadioChannels). GSM tiene ARFCN pero no
-    // identificador físico en la API, así que no puede formar una huella RF.
+    // 3.0 (#22) — Mismos rangos que el resto de la app (RadioChannels). Android sí expone para GSM un
+    // identificador físico, el BSIC (CellIdentityGsm.getBsic), pero esta app no lo lee ni lo usa
+    // como PCI; sin él, una celda GSM no puede formar una huella RF.
     fun isValidArfcn(radio: com.alexisgordr.icdetector.models.RadioTech, value: Int): Boolean =
         radio != com.alexisgordr.icdetector.models.RadioTech.GSM && RadioChannels.isValidChannel(radio, value)
 
@@ -112,6 +118,11 @@ const val STABLE_SITE_ENFORCEMENT_ENABLED = false
 data class MotionFix(val latitude: Double, val longitude: Double, val elapsedRealtimeMs: Long, val accuracyM: Float, val speedMps: Float?)
 data class MotionEvidence(
     val state: MotionState,
+    /**
+     * Length in seconds of the classifier's CURRENT window of fixes (first to latest kept fix),
+     * capped by the window size (about 3 minutes). It is not time spent static: motion.csv stores
+     * the value of the last evaluation saved for that day and state (`duration_s`).
+     */
     val durationSeconds: Long = 0,
     val accuracyM: Float? = null,
     val displacementM: Float? = null,
@@ -165,11 +176,21 @@ class MotionClassifier(
         }
         val envelope = max(25f, fixes.maxOf { it.accuracyM } * 1.5f)
         val maxDistance = fixes.maxOf { distanceMeters(first.latitude, first.longitude, it.latitude, it.longitude) }
-        val static = duration * 1_000L >= requiredStaticMs && maxDistance <= envelope && fixes.none { (it.speedMps ?: 0f) > 1.5f }
+        val longEnough = duration * 1_000L >= requiredStaticMs
+        val compact = maxDistance <= envelope
+        val slowMovement = fixes.any { (it.speedMps ?: 0f) > 1.5f }
+        val static = longEnough && compact && !slowMovement
+        // 3.0 — The reason names the real cause (same conditions as before, only the label changes).
+        val reason = when {
+            static -> MotionReason.STATIC
+            fixes.size == 1 -> MotionReason.FIRST_FIX
+            !compact -> MotionReason.POSITIONS_DISPERSED
+            slowMovement -> MotionReason.MOVEMENT
+            else -> MotionReason.INSUFFICIENT_DURATION
+        }
         latest = MotionEvidence(
             if (static) MotionState.STATIC_CONFIRMED else MotionState.UNKNOWN,
-            duration, fix.accuracyM, maxDistance,
-            if (static) MotionReason.STATIC else if (fixes.size == 1) MotionReason.FIRST_FIX else MotionReason.INSUFFICIENT_DURATION
+            duration, fix.accuracyM, maxDistance, reason
         )
         return latest
     }

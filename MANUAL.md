@@ -312,6 +312,14 @@ neighbour days and observations, motion bands and episode timing, but no exact s
 cell and episode files contain complete cellular identities; treat the ZIP as sensitive movement and
 context data. The app asks for confirmation before exporting, and the ZIP includes `PRIVACY.txt`.
 
+**`motion.csv`.** One row per site, day and motion state (`STATIC_CONFIRMED` or `MOVING`), overwritten
+by each saved evaluation of that day. `duration_s` is the length of the motion classifier's window at
+the **last** saved evaluation (at most about 3 minutes): it shows how long the latest run of fixes
+lasted, not how long the phone was static that day. `accuracy_band_m` and `displacement_band_m` are
+rounded down to 10 m and belong to the same evaluation. The terminal also tells a window that is long
+enough but whose positions are too spread out (`POSITIONS_DISPERSED`) from one that has not lasted two
+minutes yet (`INSUFFICIENT_DURATION`).
+
 **Site keys are not anonymous.** A site key is a deterministic, **unsalted** SHA-256 hash (first
 10 bytes) of a cell of a fixed ~500 m grid. The same place gives the same key on every phone and in
 every export, and anyone can compute the keys of every grid cell in an area (a candidate search) and
