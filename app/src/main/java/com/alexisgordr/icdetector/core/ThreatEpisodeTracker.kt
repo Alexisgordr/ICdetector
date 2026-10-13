@@ -16,7 +16,10 @@ import com.alexisgordr.icdetector.models.identityKey
  *  - Once started, the promotion is HELD for up to [promotionHoldMs] (30 s) even if the current
  *    observation has no failures at all; a handover to another identity ends it at once.
  *  - A promoted cell is only marked suspicious here. It still goes through [TemporalConfidence]
- *    (consecutive phases) before any alert.
+ *    (consecutive phases) before any alert. A held cycle without new evidence
+ *    ([Evaluation.heldWithoutEvidence]) neither advances nor breaks that streak: the hold bridges
+ *    normal gaps, it does not supply the phases. An episode alarm needs three promoted
+ *    observations that each carry fresh evidence (of any family).
  *
  * Different families are not guaranteed to be independent evidence: they are a grouping of rules,
  * and two of them can share inputs and causes (the GPS fix, the cell's stored history, one PCI or
@@ -40,7 +43,12 @@ class ThreatEpisodeTracker(
         val watching: Boolean,
         val startedWatching: Boolean,
         val promoted: Boolean,
-        val families: Set<Family>
+        val families: Set<Family>,
+        /**
+         * Promoted only by the hold: this observation added no fresh evidence. [TemporalConfidence]
+         * keeps the streak as it is (neither +1 nor reset).
+         */
+        val heldWithoutEvidence: Boolean = false
     )
 
     private data class Evidence(
@@ -101,10 +109,11 @@ class ThreatEpisodeTracker(
         }
 
         // Once new evidence from two families has opened (or renewed) an episode, bridge short
-        // normal gaps so that the existing consecutive-cycle confirmation can observe the episode
-        // as a continuous state: for up to 30 s the cell stays promoted even when the current
-        // observation has no failures. The bridge is deliberately much shorter than the 90 s
-        // correlation window, and TemporalConfidence still decides whether it is confirmed.
+        // normal gaps: for up to 30 s the cell stays promoted even when the current observation
+        // has no failures, so a clean cycle does not break the confirmation streak. Those held
+        // cycles are marked [Evaluation.heldWithoutEvidence] and do not advance it either: before,
+        // two sub-threshold failures followed by two clean cycles confirmed an alarm in 15 s. The
+        // bridge is deliberately much shorter than the 90 s correlation window.
         val promote = !cell.isSuspicious && promotedIdentity == cell.identityKey &&
             now <= promotedUntilMs
         val promotedCell = if (promote) {
@@ -119,7 +128,10 @@ class ThreatEpisodeTracker(
             )
         } else cell
 
-        return Evaluation(promotedCell, watching, started, promote, accumulatedFamilies)
+        return Evaluation(
+            promotedCell, watching, started, promote, accumulatedFamilies,
+            heldWithoutEvidence = promote && !acceptedEvidence
+        )
     }
 
     /**

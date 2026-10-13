@@ -74,4 +74,12 @@ class ThreatEpisodeClockTest {
         assertTrue(tracker.contains("private val windowMs: Long = 90_000L"))
         assertTrue(tracker.contains("private val promotionHoldMs: Long = 30_000L"))
     }
+
+    @Test fun `the service passes the held-without-evidence flag to the confirmation`() {
+        val main = listOf(File("src/main/java"), File("app/src/main/java")).first { it.exists() }
+        val service = main.resolve("com/alexisgordr/icdetector/service/MiniICService.kt").readText()
+        val call = service.substringAfter("val temporalActive = temporalConfidence.apply(").substringBefore("\n                        )")
+        assertTrue(call.contains("episode.cell"))
+        assertTrue(call.contains("heldWithoutEvidence = episode.heldWithoutEvidence"))
+    }
 }

@@ -1691,7 +1691,8 @@ class MiniICService : Service() {
                         val temporalActive = temporalConfidence.apply(
                             episode.cell,
                             observationToken,
-                            isFreshDelivery = isFreshDelivery
+                            isFreshDelivery = isFreshDelivery,
+                            heldWithoutEvidence = episode.heldWithoutEvidence
                         )
                         updateIntensiveMonitoring(
                             watching = episode.watching || stableSiteDecision.enforced,

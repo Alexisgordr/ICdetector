@@ -4,6 +4,7 @@ import com.alexisgordr.icdetector.models.CellData
 import com.alexisgordr.icdetector.models.HeuristicReport
 import com.alexisgordr.icdetector.models.HeuristicStatus
 import com.alexisgordr.icdetector.models.RadioTech
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -87,20 +88,88 @@ class ThreatEpisodeTrackerTest {
         assertTrue(confirmation.apply(t.apply(identity, 4L, true).cell, 4L).isSuspicious)
     }
 
-    @Test fun `promotion bridges normal screen-off cycles long enough to confirm`() {
+    /** La cadena del servicio: tracker → TemporalConfidence, con la marca de retención neutra. */
+    private fun chain(t: ThreatEpisodeTracker, confirmation: TemporalConfidence) =
+        { c: CellData, token: Long ->
+            val e = t.apply(c, token, true)
+            confirmation.apply(e.cell, token, true, heldWithoutEvidence = e.heldWithoutEvidence)
+        }
+
+    @Test fun `two sub-threshold failures and clean held cycles never confirm`() {
         val t = tracker()
-        val confirmation = TemporalConfidence(elapsedRealtimeMs = { now })
+        val step = chain(t, TemporalConfidence(elapsedRealtimeMs = { now }))
         val rf = cell(HeuristicReport(powerJump = HeuristicStatus.FAILED))
         val identity = cell(HeuristicReport(tacDeviation = HeuristicStatus.FAILED))
         val normal = cell(HeuristicReport()).copy(securityScore = 100, suspiciousReason = null)
 
-        assertFalse(confirmation.apply(t.apply(rf, 10_000L, true).cell, 10_000L).isSuspicious)
+        assertFalse(step(rf, 0L).isSuspicious)
+        now += 5_000
+        val promoted = step(identity, 5_000L)
+        assertEquals(1, promoted.temporalProgress.phase)
+        now += 5_000
+        val held1 = step(normal, 10_000L)
+        now += 5_000
+        val held2 = step(normal, 15_000L)
+        assertEquals("la retención sin evidencia no avanza la racha", 1, held2.temporalProgress.phase)
+        assertFalse(held1.isSuspicious)
+        assertFalse("antes: alarma a los 15 s con dos ciclos limpios", held2.isSuspicious)
+        // Pasada la retención, la racha cae.
+        now += 30_000
+        assertEquals(0, step(normal, 45_000L).temporalProgress.phase)
+    }
+
+    @Test fun `held clean cycles bridge an episode without breaking the streak`() {
+        val t = tracker()
+        val step = chain(t, TemporalConfidence(elapsedRealtimeMs = { now }))
+        val rf = cell(HeuristicReport(powerJump = HeuristicStatus.FAILED))
+        val identity = cell(HeuristicReport(tacDeviation = HeuristicStatus.FAILED))
+        val normal = cell(HeuristicReport()).copy(securityScore = 100, suspiciousReason = null)
+
+        step(rf, 10_000L)
         now += 10_000
-        assertFalse(confirmation.apply(t.apply(identity, 20_000L, true).cell, 20_000L).isSuspicious)
+        assertEquals(1, step(identity, 20_000L).temporalProgress.phase)
         now += 10_000
-        assertFalse(confirmation.apply(t.apply(normal, 30_000L, true).cell, 30_000L).isSuspicious)
+        assertEquals("el hueco limpio no rompe", 1, step(normal, 30_000L).temporalProgress.phase)
         now += 10_000
-        assertTrue(confirmation.apply(t.apply(normal, 40_000L, true).cell, 40_000L).isSuspicious)
+        assertEquals(2, step(rf, 40_000L).temporalProgress.phase)
+        now += 10_000
+        assertEquals(2, step(normal, 50_000L).temporalProgress.phase)
+        now += 10_000
+        val third = step(identity, 60_000L)
+        assertEquals(3, third.temporalProgress.phase)
+        assertTrue("tres observaciones promovidas con evidencia confirman", third.isSuspicious)
+    }
+
+    @Test fun `a held promotion is flagged only when the observation adds no evidence`() {
+        val t = tracker()
+        t.apply(cell(HeuristicReport(powerJump = HeuristicStatus.FAILED)), 1L, true)
+        now += 5_000
+        val opening = t.apply(cell(HeuristicReport(tacDeviation = HeuristicStatus.FAILED)), 2L, true)
+        assertTrue(opening.promoted)
+        assertFalse(opening.heldWithoutEvidence)
+        now += 5_000
+        val clean = cell(HeuristicReport()).copy(securityScore = 100, suspiciousReason = null)
+        val held = t.apply(clean, 3L, true)
+        assertTrue(held.promoted)
+        assertTrue(held.heldWithoutEvidence)
+        now += 5_000
+        val repeated = t.apply(cell(HeuristicReport(tacDeviation = HeuristicStatus.FAILED)), 3L, true)
+        assertTrue("un token repetido no es evidencia nueva", repeated.heldWithoutEvidence)
+        now += 5_000
+        val cached = t.apply(cell(HeuristicReport(tacDeviation = HeuristicStatus.FAILED)), 4L, false)
+        assertTrue("una entrega cacheada no es evidencia nueva", cached.heldWithoutEvidence)
+    }
+
+    @Test fun `a cell suspicious on its own is never marked as held`() {
+        val t = tracker()
+        t.apply(cell(HeuristicReport(powerJump = HeuristicStatus.FAILED)), 1L, true)
+        now += 5_000
+        t.apply(cell(HeuristicReport(tacDeviation = HeuristicStatus.FAILED)), 2L, true)
+        now += 5_000
+        val own = cell(HeuristicReport()).copy(isSuspicious = true, securityScore = 40)
+        val e = t.apply(own, 3L, true)
+        assertFalse(e.promoted)
+        assertFalse(e.heldWithoutEvidence)
     }
 
     @Test fun `promotion bridge expires instead of lasting for the correlation window`() {

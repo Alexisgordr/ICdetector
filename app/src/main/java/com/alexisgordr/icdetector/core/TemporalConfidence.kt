@@ -71,7 +71,13 @@ class TemporalConfidence(
     fun apply(
         cell: CellData,
         observationToken: Long? = null,
-        isFreshDelivery: Boolean = true
+        isFreshDelivery: Boolean = true,
+        /**
+         * La celda llega sospechosa solo porque [ThreatEpisodeTracker] retiene la promoción, sin
+         * evidencia nueva en esta observación. El ciclo cuenta para la continuidad, pero la racha
+         * no avanza ni se rompe.
+         */
+        heldWithoutEvidence: Boolean = false
     ): CellData {
         val streakKey = keyOf(cell)
 
@@ -121,13 +127,19 @@ class TemporalConfidence(
         if (lastAcceptedAtMs?.let { now - it > maxContinuityGapMs } == true) anomalyStreaks.clear()
         lastAcceptedAtMs = now
 
-        val currentStreak = if (cell.isSuspicious) {
-            val newStreak = (anomalyStreaks[streakKey] ?: 0) + 1
-            anomalyStreaks[streakKey] = newStreak
-            newStreak
-        } else {
-            anomalyStreaks.remove(streakKey)
-            0
+        val currentStreak = when {
+            // Retención del episodio sin evidencia nueva: neutra. Antes avanzaba la racha, y dos
+            // fallos sub-umbral seguidos de dos ciclos limpios confirmaban una alarma.
+            cell.isSuspicious && heldWithoutEvidence -> anomalyStreaks[streakKey] ?: 0
+            cell.isSuspicious -> {
+                val newStreak = (anomalyStreaks[streakKey] ?: 0) + 1
+                anomalyStreaks[streakKey] = newStreak
+                newStreak
+            }
+            else -> {
+                anomalyStreaks.remove(streakKey)
+                0
+            }
         }
 
         return decorate(cell, currentStreak)

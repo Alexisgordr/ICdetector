@@ -840,8 +840,10 @@ afterwards is notified again.
 mobility, cross-layer), seen in at least two fresh observations of the same cell within 90 s, can mark
 the cell suspicious even when each one alone is below the threshold. New failing evidence is needed
 to start or renew this; after that the mark is held for up to 30 s even if the current observation
-has no failures, and a handover ends it. It still has to persist through the temporal phases before
-any alert. Different families are not proof of independent evidence: they can share inputs and
+has no failures, and a handover ends it. A held observation without new failing evidence neither
+advances nor breaks the temporal phases: the hold only bridges normal gaps. An episode alarm needs
+three promoted observations that each bring fresh failing evidence (of any family), so the two
+failures that open it are not enough on their own. Different families are not proof of independent evidence: they can share inputs and
 causes (see *Shared evidence*).
 
 If the condition returns to normal before `3/3`, the episode stays in incident history but is not

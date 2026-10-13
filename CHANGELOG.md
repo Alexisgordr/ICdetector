@@ -11,6 +11,13 @@ GitHub pre-release of an earlier build was withdrawn.
 
 ### Audit fixes
 
+- **A held multi-signal episode no longer supplies its own confirmation phases.** After two
+  sub-threshold failures of different families opened an episode, the 30 s hold kept the cell
+  suspicious, and each clean observation inside it advanced the temporal streak: two weak failures
+  followed by two clean cycles confirmed an alarm 15 s later. A held observation without fresh
+  failing evidence now neither advances nor breaks the streak (`ThreatEpisodeTracker` marks it,
+  `TemporalConfidence` keeps the phase). **Effect on alarms:** an episode alarm needs three promoted
+  observations with fresh evidence; a cell suspicious on its own is unchanged.
 - **Episode families and scorer groups are declared together.** `HeuristicCatalog` now states each
   rule's Bayesian correlation group next to its episode family, and a test checks the declared group
   against the scorer. They differ on purpose in three rules, each with its reason written down: H6
