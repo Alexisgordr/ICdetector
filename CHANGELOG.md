@@ -11,21 +11,25 @@ GitHub pre-release of an earlier build was withdrawn.
 
 ### Audit fixes
 
-- **Stable-Site silent notices.** New setting *Stable-Site silent notices*, on by default. At a place
-  whose reference is prepared (`ACTIVE`, maturity unchanged), an evaluation that meets the existing
-  shadow criteria with the phone confirmed still, a known place and a known previous cell posts one
-  notice, *Unusual change at this place*, on its own channel (`miniic_stable_site_notices`, low
-  importance, no sound, no vibration; no tone, never the alarm channel). It says that it does not
-  confirm an attack and opens the episode (or explains that it was deleted by retention or a reset).
-  Otherwise it abstains and the episode is stored as before. One notice per episode at most: it is
-  posted only by the evaluation that sets the stored *recorded in shadow* mark (now a conditional
-  update), so readings, reopening the app and restarts never repeat it; an episode that started while
-  moving notifies once when later evaluated still. Reaching maturity never notifies or replays
-  episodes. A cutoff kept in the app's settings (set on the first service start with this version and
-  moved to "now" after a restore, never backed up) keeps older and restored episodes silent. Turning
-  the setting off keeps every episode; maturity never turns it back on. A failed or blocked
-  notification never fails the analysis. `STABLE_SITE_ENFORCEMENT_ENABLED` stays `false`; score,
-  Bayesian factor, Local Cell Trust, temporal confirmation and alarms are unchanged. No schema
+- **Stable-Site silent notices.** New setting *Stable-Site silent notices*, on by default. Only an
+  episode that **started** at a place whose reference was already prepared (`ACTIVE`, maturity
+  unchanged) can notify: the place is now evaluated before the serving change is recorded, and the
+  episode opened in that cycle is kept as pending a notice only if the place was mature then (an
+  app preference; there is never more than one open episode). A pending episode posts one notice,
+  *Unusual change at this place*, from a cycle whose result is published (after the existing
+  `mayPublish` check), with the phone confirmed still, a known place and previous cell, and the
+  existing shadow criteria met. Its own channel (`miniic_stable_site_notices`, low importance, no
+  sound, no vibration; no tone, never the alarm channel). It says that it does not confirm an attack
+  and opens the episode (or explains that it was deleted by retention or a reset). Otherwise it
+  abstains and the episode is stored as before; a discarded analysis keeps it pending. One notice
+  per episode at most: the pending mark is cleared on disk before the notice is attempted, so
+  readings, reopening the app and restarts never repeat it. Episodes that started before maturity
+  or before this version never notify, and a restore clears the pending mark. Turning the setting
+  off uses a pending episode up without a notice; maturity never turns it back on. The terminal
+  tells a posted notice from one blocked by Android, a failed one and one skipped by the setting; a
+  failed or blocked notification never fails the analysis. *Recorded in shadow* keeps its meaning.
+  `STABLE_SITE_ENFORCEMENT_ENABLED` stays `false`; score, Bayesian factor, Local Cell Trust,
+  temporal confirmation and alarms are unchanged. No schema
   change. The setting travels in backups (same format); older backups restore the default (*on*).
 - **Stable-Site diagnostic and `motion.csv`.** A window long enough but with positions spread beyond
   the static envelope was reported as `INSUFFICIENT_DURATION`; it is now `POSITIONS_DISPERSED`, and a

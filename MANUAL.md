@@ -308,36 +308,43 @@ repeated triggers. This lets the false-positive rate, including legitimate sibli
 measured before any enforcement.
 
 **Silent notices.** **Settings → Stable-Site silent notices** is on by default (*Available once the
-place reference is ready. They do not trigger alarms.*). It only does something at a place whose
-reference is prepared (`ACTIVE`, the maturity above, unchanged). There, one notice — *Unusual change
-at this place* — is posted when **all** of these hold for an evaluation:
+place reference is ready. They do not trigger alarms.*). Only an episode that **started** at a place
+whose reference was already prepared (`ACTIVE`, the maturity above, unchanged) can notify: in the
+cycle that sees the serving cell change, the app evaluates the place and keeps that episode as
+*pending a notice* only if the place was mature then. An episode that started while the place was
+still learning, without a reliable location, or before this version never notifies, even if the
+place matures while it is still open. A pending episode posts one notice — *Unusual change at this
+place* — in a cycle whose result is published when **all** of these hold:
 
 - the phone is confirmed still (`STATIC_CONFIRMED`). That already needs recent, accurate fixes: the
   motion classifier ignores fixes older than 60 s (monotonic clock) and inaccurate ones, and a site
   key needs a location with accuracy ≤ 50 m;
-- there is something to compare: the place and the previous serving cell are known;
+- the place is still mature and there is something to compare: the place and the previous serving
+  cell are known;
 - the existing shadow criteria are met (the serving cell is new at this place and the previous one
-  was habitual: the same conditions that mark *Novelty recorded in shadow*);
-- this evaluation is the one that first marks the episode *recorded in shadow*.
+  was habitual: the same conditions that mark *Novelty recorded in shadow*).
 
-Otherwise it abstains and the episode is stored as before. The notice uses its own channel (low
-importance, no sound, no vibration; never *Security alerts* and never a tone), says the change can
-come from network maintenance or the operator and that **it does not confirm an attack**, and opens
-that episode when tapped. If the episode is no longer stored (closed episodes are deleted 120 days
-after they were last seen; all are deleted when Stable-Site learning or the history is reset), the
-app says so. Score, rules, anomaly confidence, Local Cell Trust, temporal confirmation and alarms
-are unchanged, and Stable-Site stays in shadow mode.
+Otherwise it abstains and the episode is stored as before. An analysis discarded because the cell
+changed or collection was interrupted never notifies; the episode stays pending for the next valid
+cycle. An episode that started while moving at a mature place notifies once when later evaluated
+still. The notice uses its own channel (low importance, no sound, no vibration; never *Security
+alerts* and never a tone), says the change can come from network maintenance or the operator and
+that **it does not confirm an attack**, and opens that episode when tapped. If the episode is no
+longer stored (closed episodes are deleted 120 days after they were last seen; all are deleted when
+Stable-Site learning or the history is reset), the app says so. Score, rules, anomaly confidence,
+Local Cell Trust, temporal confirmation and alarms are unchanged, and Stable-Site stays in shadow
+mode.
 
-At most one notice per episode: the *recorded in shadow* mark is set once, in the database, by the
-same evaluation that may notify, so readings, reopening the app or a restart never repeat it. An
-episode that started while moving and is later evaluated still notifies then, once. Reaching maturity
-never notifies by itself and never replays earlier episodes (an episode recorded before maturity is
-already marked). Episodes that started before the first start of the service with this version, and
-episodes in a restored backup, never notify. If you turn the setting off nothing is posted, the
-episodes are kept, and maturity never turns it back on; turning it on later does not replay them. If
-Android blocks the app's notifications, the episode is still stored and the analysis continues. The
-place view shows *Reference still learning*, *Reference ready: silent notices available* or
-*Notices turned off by the user*.
+At most one notice per episode: the pending mark is cleared, and written to disk, before the notice
+is attempted, so readings, reopening the app or a restart never repeat it. Reaching maturity
+never notifies by itself and never replays earlier episodes. Episodes in a restored backup never
+notify: a restore clears the pending mark. If you turn the setting off, a pending episode is used up
+without a notice, the episodes are kept, and maturity never turns it back on; turning it on later
+does not replay them. The terminal says whether the notice was posted, not shown because Android
+notifications or the channel are off, not posted because notifying failed, or skipped by the
+setting; in every case the episode is kept and the analysis continues. The place view shows
+*Reference still learning*, *Reference ready: silent notices available* or *Notices turned off by
+the user*.
 
 **Export.** Use **History → Topology → Export Stable-Site** after collection. The ZIP contains
 `sites.csv`, `site_cells.csv`, `motion.csv` and `shadow_episodes.csv`: hashed site keys, serving and

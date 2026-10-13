@@ -384,12 +384,13 @@ Local Cell Trust, temporal confidence, alerts or forensic decisions.
   is still missing and its cell changes; keys, codes, counters, cells and RF fingerprints sit under
   *View technical details*. Tapping a route shows the Stable-Site episodes with the same stored A→B
   change. A prepared reference (`ACTIVE`) is not an applied protection.
-- **Silent notices:** *Settings → Stable-Site silent notices* (on by default). At a place whose
-  reference is prepared, a cell change that meets the existing shadow criteria while the phone is
-  confirmed still posts one low-importance notice, *Unusual change at this place*, with no sound or
-  vibration, on its own channel. It says it does not confirm an attack and opens the episode. At most
-  one per episode; never for episodes recorded before maturity, before this version or in a restored
-  backup. Score, rules, temporal confirmation and alarms are unchanged.
+- **Silent notices:** *Settings → Stable-Site silent notices* (on by default). Only a cell change
+  that starts at a place whose reference is already prepared can notify: when the phone is
+  confirmed still and the existing shadow criteria are met, one low-importance notice, *Unusual
+  change at this place*, with no sound or vibration, on its own channel, only from a published
+  analysis. It says it does not confirm an attack and opens the episode. At most one per episode;
+  never for episodes that started before maturity or before this version, or that come from a
+  restored backup. Score, rules, temporal confirmation and alarms are unchanged.
 - **Historical limits:** *recorded in shadow* is a cumulative mark of the episode; its reason and
   movement are those of its last saved evaluation; routes are aggregates, not a timeline.
 

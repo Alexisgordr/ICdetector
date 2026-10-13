@@ -152,4 +152,21 @@ class StableSiteNoticesWiringTest {
         assertTrue(focus.contains("R.string.stable_site_episode_focus_missing"))
     }
 
+    @Test fun `docs explain when it notifies, the dedupe, the backup default and that it is not an alarm`() {
+        fun doc(name: String) = listOf(File(name), File("../$name")).first { it.exists() }.readText()
+        val manual = doc("MANUAL.md")
+        listOf("**Silent notices.**", "| **Stable-Site silent notices** |", "it does not confirm an attack",
+            "At most one notice per episode", "Reaching maturity\nnever notifies", "maturity never turns it back on",
+            "Stable-Site episodes in a restored backup never\nproduce a silent notice.", "restores that setting's default",
+            "Only an episode that **started** at a place", "An analysis discarded because the cell\nchanged or collection was interrupted never notifies",
+            "The terminal says whether the notice was posted, not shown")
+            .forEach { assertTrue(it, manual.contains(it)) }
+        assertTrue(doc("README.md").contains("**Silent notices:** *Settings → Stable-Site silent notices* (on by default)"))
+        val changelog = doc("CHANGELOG.md")
+        assertTrue(changelog.contains("**Stable-Site silent notices.**"))
+        assertTrue(changelog.contains("No schema\n  change."))
+        assertTrue(changelog.contains("older backups restore the default (*on*)"))
+        assertTrue(changelog.contains("after the existing\n  `mayPublish` check"))
+        assertFalse("ya no se describe el corte", changelog.contains("cutoff kept in the app's settings"))
+    }
 }
