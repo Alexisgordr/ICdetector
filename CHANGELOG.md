@@ -11,6 +11,22 @@ GitHub pre-release of an earlier build was withdrawn.
 
 ### Audit fixes
 
+- **Stable-Site silent notices.** New setting *Stable-Site silent notices*, on by default. At a place
+  whose reference is prepared (`ACTIVE`, maturity unchanged), an evaluation that meets the existing
+  shadow criteria with the phone confirmed still, a known place and a known previous cell posts one
+  notice, *Unusual change at this place*, on its own channel (`miniic_stable_site_notices`, low
+  importance, no sound, no vibration; no tone, never the alarm channel). It says that it does not
+  confirm an attack and opens the episode (or explains that it was deleted by retention or a reset).
+  Otherwise it abstains and the episode is stored as before. One notice per episode at most: it is
+  posted only by the evaluation that sets the stored *recorded in shadow* mark (now a conditional
+  update), so readings, reopening the app and restarts never repeat it; an episode that started while
+  moving notifies once when later evaluated still. Reaching maturity never notifies or replays
+  episodes. A cutoff kept in the app's settings (set on the first service start with this version and
+  moved to "now" after a restore, never backed up) keeps older and restored episodes silent. Turning
+  the setting off keeps every episode; maturity never turns it back on. A failed or blocked
+  notification never fails the analysis. `STABLE_SITE_ENFORCEMENT_ENABLED` stays `false`; score,
+  Bayesian factor, Local Cell Trust, temporal confirmation and alarms are unchanged. No schema
+  change. The setting travels in backups (same format); older backups restore the default (*on*).
 - **Stable-Site diagnostic and `motion.csv`.** A window long enough but with positions spread beyond
   the static envelope was reported as `INSUFFICIENT_DURATION`; it is now `POSITIONS_DISPERSED`, and a
   slow walking speed is `MOVEMENT` (terminal only; same conditions, same states). `duration_s` in

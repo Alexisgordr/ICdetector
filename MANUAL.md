@@ -177,7 +177,7 @@ app does not request the privileged battery-optimization exemption itself.
 
 ### Notifications and sound
 
-ICdetection uses three notification channels, which you can configure separately in
+ICdetection uses four notification channels, which you can configure separately in
 **Settings → Apps → ICdetection → Notifications**:
 
 | Channel | What it shows | Sound |
@@ -185,12 +185,13 @@ ICdetection uses three notification channels, which you can configure separately
 | **Monitoring** | The persistent notification (cell, signal, verification), updated every few seconds | Always silent, whatever the channel setting |
 | **Security alerts** | A confirmed network anomaly, once per episode | Keep it alerting so you hear an alarm |
 | **2G/3G network** | Use of or change to 2G/3G, once per episode (see below) | Silent unless you choose *Notification and sound*; then as this channel and Android allow |
+| **Stable-Site silent notices** | An unusual cell change at a known place, once per episode (see *Stable-Site*) | Never: low importance, no sound, no vibration |
 
 A confirmed alarm sounds only through its *Security alerts* notification, once per episode; there is
 no extra tone repeating while the alarm lasts. If notifications are off, or *Security alerts* is
 silenced or has its sound set to *None*, the main screen shows **ALARMS ARE MUTED** with a button that
-opens that channel's settings. The *2G/3G network* channel is independent: silencing one does not
-silence the other, and the warning only looks at *Security alerts*.
+opens that channel's settings. The *2G/3G network* and *Stable-Site silent notices* channels are
+independent: silencing one does not silence another, and the warning only looks at *Security alerts*.
 
 Two other cues are short tones at notification volume (they respect silent, vibrate and Do Not
 Disturb): the very-strong-signal warning (at most once a minute) and, if latency detection is
@@ -305,6 +306,38 @@ the hold — while trust learning, forensics and alarms remain unchanged. Novelt
 episode, so GPS loss, unknown motion and service restarts do not turn one serving period into
 repeated triggers. This lets the false-positive rate, including legitimate sibling sectors, be
 measured before any enforcement.
+
+**Silent notices.** **Settings → Stable-Site silent notices** is on by default (*Available once the
+place reference is ready. They do not trigger alarms.*). It only does something at a place whose
+reference is prepared (`ACTIVE`, the maturity above, unchanged). There, one notice — *Unusual change
+at this place* — is posted when **all** of these hold for an evaluation:
+
+- the phone is confirmed still (`STATIC_CONFIRMED`). That already needs recent, accurate fixes: the
+  motion classifier ignores fixes older than 60 s (monotonic clock) and inaccurate ones, and a site
+  key needs a location with accuracy ≤ 50 m;
+- there is something to compare: the place and the previous serving cell are known;
+- the existing shadow criteria are met (the serving cell is new at this place and the previous one
+  was habitual: the same conditions that mark *Novelty recorded in shadow*);
+- this evaluation is the one that first marks the episode *recorded in shadow*.
+
+Otherwise it abstains and the episode is stored as before. The notice uses its own channel (low
+importance, no sound, no vibration; never *Security alerts* and never a tone), says the change can
+come from network maintenance or the operator and that **it does not confirm an attack**, and opens
+that episode when tapped. If the episode is no longer stored (closed episodes are deleted 120 days
+after they were last seen; all are deleted when Stable-Site learning or the history is reset), the
+app says so. Score, rules, anomaly confidence, Local Cell Trust, temporal confirmation and alarms
+are unchanged, and Stable-Site stays in shadow mode.
+
+At most one notice per episode: the *recorded in shadow* mark is set once, in the database, by the
+same evaluation that may notify, so readings, reopening the app or a restart never repeat it. An
+episode that started while moving and is later evaluated still notifies then, once. Reaching maturity
+never notifies by itself and never replays earlier episodes (an episode recorded before maturity is
+already marked). Episodes that started before the first start of the service with this version, and
+episodes in a restored backup, never notify. If you turn the setting off nothing is posted, the
+episodes are kept, and maturity never turns it back on; turning it on later does not replay them. If
+Android blocks the app's notifications, the episode is still stored and the analysis continues. The
+place view shows *Reference still learning*, *Reference ready: silent notices available* or
+*Notices turned off by the user*.
 
 **Export.** Use **History → Topology → Export Stable-Site** after collection. The ZIP contains
 `sites.csv`, `site_cells.csv`, `motion.csv` and `shadow_episodes.csv`: hashed site keys, serving and
@@ -1002,9 +1035,11 @@ not satisfy legal requirements by itself.
 
 **Settings → Backup** saves all ICdetection data in one `.icdbackup` file: history, antennas and
 their learned trust, incidents, forensic cases, Stable-Site, trips, and the language, location mode,
-proxy and latency settings. The OpenCelliD key is never included. The file is **not encrypted** and
-contains your location history: keep it private. The backup is consistent even while monitoring
-is running.
+proxy, latency, 2G/3G alert and Stable-Site silent notice settings. A backup made before a setting
+existed restores that setting's default (*Notification only* and *on*). The OpenCelliD key is never
+included. The file is **not encrypted** and contains your location history: keep it private. The
+backup is consistent even while monitoring is running. Stable-Site episodes in a restored backup never
+produce a silent notice.
 
 **When to use it.** A backup is meant to **move the data right away**: to a new phone, or to put
 it back on the same phone after a reset or reinstall. Make it just before, restore it just after.
