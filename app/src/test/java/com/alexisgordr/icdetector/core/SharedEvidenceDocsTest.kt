@@ -33,7 +33,7 @@ class SharedEvidenceDocsTest {
         assertTrue(analyzer.contains("val rf = RadioChannels.rfDifference(active.radioTech, active.pci, active.arfcn, record.radio, record.pci, record.arfcn)"))
         val trust = src("core/LocalCellTrustEngine.kt")
         assertTrue(trust.contains("contradictions += \"PCI\""))
-        assertTrue(trust.contains("val alarmCandidate = eligible && rfChanged && independentContradiction"))
+        assertTrue(trust.contains("val alarmCandidate = eligible && rfChanged && positionOrHandoverContradiction"))
         assertTrue(doc("MANUAL.md").contains("| H11, H15 and local cell confidence |"))
     }
 

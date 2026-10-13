@@ -8,7 +8,17 @@ import com.alexisgordr.icdetector.models.LocalCellTrustState
 import com.alexisgordr.icdetector.models.LOCAL_TRUST_RECONFIGURATION_REASON
 import com.alexisgordr.icdetector.models.RadioTech
 
-/** Builds a slow, revocable local confidence profile with a deliberate 98% epistemic ceiling. */
+/**
+ * Builds a slow, revocable local confidence profile with a deliberate 98% epistemic ceiling.
+ *
+ * Once a cell is eligible, any contradiction (PCI/ARFCN not learned, H11 or H16 failed) marks it
+ * CHANGED and freezes it out of learning. It becomes an alarm candidate only with an RF change
+ * (PCI or ARFCN) PLUS a failed H11 (geography) or H16 (handover). That is two different signals,
+ * not two independent ones: they can share data and causes. H11 also reads the cell's PCI/ARFCN
+ * history, H11 and H16 read the same GPS fix and stored positions, and a legitimate re-planning or
+ * a wrong GPS fix can produce both. The candidate is then only marked suspicious here; it still
+ * passes through the episode tracker and [TemporalConfidence] before any alert.
+ */
 object LocalCellTrustEngine {
     const val MAX_CONFIDENCE = 98
     const val REQUIRED_DAYS = 14
@@ -58,8 +68,9 @@ object LocalCellTrustEngine {
         }
 
         val rfChanged = "PCI" in contradictions || "ARFCN" in contradictions
-        val independentContradiction = "GEOMETRY" in contradictions || "HANDOVER" in contradictions
-        val alarmCandidate = eligible && rfChanged && independentContradiction
+        // A second, different signal (H11 or H16), not an independent one: see the class comment.
+        val positionOrHandoverContradiction = "GEOMETRY" in contradictions || "HANDOVER" in contradictions
+        val alarmCandidate = eligible && rfChanged && positionOrHandoverContradiction
         val hasFailures = cell.heuristicReport.failedCount > 0
         val state = when {
             contradictions.isNotEmpty() -> LocalCellTrustState.CHANGED

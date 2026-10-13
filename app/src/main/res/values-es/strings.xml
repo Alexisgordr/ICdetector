@@ -124,7 +124,7 @@
     <string name="heuristic_index">ÍNDICE HEURÍSTICO · SOLO DATOS EVALUADOS</string><string name="evaluation_summary_format">%1$d/%2$d evaluadas · %3$d fallos · %4$d sin datos</string><string name="evaluation_short_format">%1$d/%2$d EVALUADAS · %3$d FALLOS</string><string name="anomaly_confidence_format">Confianza de anomalía (no calibrada): %1$s%%</string>
     <string name="baseline_signal">Potencia RSRP</string><string name="baseline_fingerprint">Huella RSRQ/SINR</string><string name="baseline_pci">Identidad PCI</string><string name="baseline_reputation">Reputación local</string>
     <string name="episode_watch_started">Evidencia inicial: vigilancia intensiva temporal activada.</string>
-    <string name="episode_promoted_format">Episodio multiseñal: familias independientes %1$s.</string>
+    <string name="episode_promoted_format">Episodio multiseñal: familias distintas %1$s.</string>
     <string name="local_trust_title">CONFIANZA LOCAL DE LA CELDA</string>
     <string name="local_trust_format">%1$s · %2$d%%</string>
     <string name="local_trust_progress">%1$d/%2$d días · %3$d/%4$d muestras limpias · %5$d h observadas</string>

@@ -243,6 +243,8 @@ private val replacements = linkedMapOf(
     "Transición celular incoherente" to "Incoherent cellular transition",
     "Episodio multiseñal" to "Multi-signal episode",
     "Cambio en identidad celular consolidada" to "Established local cell identity changed",
+    "familias distintas" to "different families",
+    // Texto anterior a 3.0: se conserva para traducir registros y casos ya guardados.
     "familias independientes" to "independent families",
     "todavía no se ha observado un handover evaluable" to "no evaluable handover has been observed yet",
     "faltan dos posiciones GPS contemporáneas" to "two contemporaneous GPS positions are unavailable",

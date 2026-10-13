@@ -124,7 +124,7 @@
     <string name="heuristic_index">HEURISTIC INDEX · EVALUATED DATA ONLY</string><string name="evaluation_summary_format">%1$d/%2$d evaluated · %3$d failures · %4$d unavailable</string><string name="evaluation_short_format">%1$d/%2$d EVALUATED · %3$d FAILURES</string><string name="anomaly_confidence_format">Anomaly confidence (uncalibrated): %1$s%%</string>
     <string name="baseline_signal">RSRP power</string><string name="baseline_fingerprint">RSRQ/SINR fingerprint</string><string name="baseline_pci">PCI identity</string><string name="baseline_reputation">Local reputation</string>
     <string name="episode_watch_started">Initial evidence: temporary intensive monitoring enabled.</string>
-    <string name="episode_promoted_format">Multi-signal episode: independent families %1$s.</string>
+    <string name="episode_promoted_format">Multi-signal episode: different families %1$s.</string>
     <string name="local_trust_title">LOCAL CELL CONFIDENCE</string>
     <string name="local_trust_format">%1$s · %2$d%%</string>
     <string name="local_trust_progress">%1$d/%2$d days · %3$d/%4$d clean samples · %5$d h observed</string>

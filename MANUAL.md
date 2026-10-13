@@ -47,8 +47,8 @@ While monitoring, it can:
 - Evaluate sixteen anomaly heuristics (H1–H16) in every analysis cycle.
 - Learn the historical behaviour of repeatedly observed cells.
 - Cross-reference cells with OpenCellID when configured.
-- Require suspicious behaviour to persist through three analysis phases, or two when two independent
-  high-value historical or physical checks fail together.
+- Require suspicious behaviour to persist through three analysis phases, or two when two
+  high-value historical or physical checks fail together (they can share data; see *Shared evidence*).
 - Explain which checks passed, failed or could not run.
 - Preserve incidents separately from routine antenna history.
 - Capture and export a forensic package around qualifying incidents.
@@ -467,8 +467,10 @@ eligibility. OpenCellID is shown separately and never increases local confidence
 
 The maximum is 98%. `ESTABLISHED` is not proof that a transmitter is genuine; it means the current
 observation matches a repeatedly observed local pattern. A changed parameter is shown immediately and
-excluded from further learning, but an alarm requires an RF contradiction plus independent geographic
-or handover evidence, and still passes through temporal confirmation. Failed observations are
+excluded from further learning, but an alarm requires an RF contradiction (PCI or channel) plus a failed
+geographic (H11) or handover (H16) check, and still passes through temporal confirmation. These are
+two different signals, not necessarily independent ones: H11 also reads the cell's PCI/channel
+history, H11 and H16 use the same GPS fix, and a legitimate re-planning or a wrong fix can cause both. Failed observations are
 quarantined from learning.
 
 PCI values are learned inside their ARFCN carrier, so legitimate carrier aggregation does not look
@@ -632,6 +634,14 @@ the same modem sample never counts as another phase, and a continuity break (sec
 again from zero. An alarm episode closes after 60 s without alarm; a new alarm in the same cell
 afterwards is notified again.
 
+**Multi-signal episodes.** Weak failures from at least two different rule families (RF dominance, identity,
+mobility, cross-layer), seen in at least two fresh observations of the same cell within 90 s, can mark
+the cell suspicious even when each one alone is below the threshold. New failing evidence is needed
+to start or renew this; after that the mark is held for up to 30 s even if the current observation
+has no failures, and a handover ends it. It still has to persist through the temporal phases before
+any alert. Different families are not proof of independent evidence: they can share inputs and
+causes (see *Shared evidence*).
+
 If the condition returns to normal before `3/3`, the episode stays in incident history but is not
 presented as a confirmed threat.
 
@@ -730,7 +740,7 @@ score or rule.
 | H13 and the local profile | The serving level (and RSRQ) of the same cell, compared with references learned from the same clean history rows. | None on the engine: the profile is shadow or display only. In *History → Local profile* the H13 line says agreement is not a confirmation. |
 | H13 power and H13 RSRQ/SINR fingerprint | One cell's signal history. | Already guarded: they share one flag, and the fingerprint only counts when the power check did not fail. |
 | H11 and H16 | The current GPS fix and the positions stored for the cell(s) in history. A wrong fix, or a learned zone that is off, can fail both. | **Possible double counting.** Both are in the list of strong failures that shortens temporal confirmation from three phases to two, while the episode tracker already puts both in the same *mobility* family. |
-| H11, H15 and local cell confidence | PCI/ARFCN values of the same cell: H11 adds severity when PCI/ARFCN differ far away, H15 looks for PCI alternation, local confidence lists PCI/ARFCN as contradictions. | **Possible double counting** of one PCI change across three outputs. Local confidence still requires a separate geographic or handover contradiction (H11 or H16) to raise its case. |
+| H11, H15 and local cell confidence | PCI/ARFCN values of the same cell: H11 adds severity when PCI/ARFCN differ far away, H15 looks for PCI alternation, local confidence lists PCI/ARFCN as contradictions. | **Possible double counting** of one PCI change across three outputs. Local confidence also requires a failed H11 or H16 to raise its case, but that is a different signal, not an independent one. |
 | H13 and H15 | Same history pool of the cell (they learn only once the cell is established). | Different measurements (power versus PCI); a shared blind spot if the pool was learned in a contaminated period. |
 | Stable-Site and local cell confidence | Stable-Site site state. | None while Stable-Site stays in shadow mode (the `SITE_UNVERIFIED` path is disabled). |
 

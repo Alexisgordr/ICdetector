@@ -7,11 +7,21 @@ import com.alexisgordr.icdetector.models.identityKey
 /**
  * Correlates weak evidence across fresh observations without changing any individual heuristic.
  *
- * A single RF oddity remains sub-threshold. Promotion requires evidence from at least two
- * independent physical families, seen in at least two fresh modem deliveries inside a short
- * window, and the current observation must still contain evidence. This closes the gap between
- * isolated per-sample scoring and a short-lived attack sequence while preserving the existing
- * temporal confirmation performed by [TemporalConfidence].
+ * A single RF oddity remains sub-threshold. What the implementation does:
+ *  - Evidence is the set of rule families that FAILED in a fresh modem delivery (a repeated token
+ *    is not new evidence). It is kept for [windowMs] (90 s) and only for the same serving identity.
+ *  - A promotion STARTS or is RENEWED only when the current observation adds new evidence and,
+ *    together with the window, there are at least two different families in at least two
+ *    distinct observations.
+ *  - Once started, the promotion is HELD for up to [promotionHoldMs] (30 s) even if the current
+ *    observation has no failures at all; a handover to another identity ends it at once.
+ *  - A promoted cell is only marked suspicious here. It still goes through [TemporalConfidence]
+ *    (consecutive phases) before any alert.
+ *
+ * Different families are not guaranteed to be independent evidence: they are a grouping of rules,
+ * and two of them can share inputs and causes (the GPS fix, the cell's stored history, one PCI or
+ * channel change). Two families mean two different rules failed, not two independent facts. See
+ * MANUAL, *Shared evidence*.
  */
 class ThreatEpisodeTracker(
     private val windowMs: Long = 90_000L,
@@ -85,9 +95,11 @@ class ThreatEpisodeTracker(
             promotedUntilMs = 0L
         }
 
-        // Once independent evidence has opened an episode, bridge short normal gaps so that the
-        // existing consecutive-cycle confirmation can observe the episode as a continuous state.
-        // The bridge is deliberately much shorter than the 90 s correlation window.
+        // Once new evidence from two families has opened (or renewed) an episode, bridge short
+        // normal gaps so that the existing consecutive-cycle confirmation can observe the episode
+        // as a continuous state: for up to 30 s the cell stays promoted even when the current
+        // observation has no failures. The bridge is deliberately much shorter than the 90 s
+        // correlation window, and TemporalConfidence still decides whether it is confirmed.
         val promote = !cell.isSuspicious && promotedIdentity == cell.identityKey &&
             now <= promotedUntilMs
         val promotedCell = if (promote) {
