@@ -138,6 +138,29 @@ class LocalCellTrustEngineTest {
         assertEquals("Transición celular incoherente | $LOCAL_TRUST_RECONFIGURATION_REASON (PCI+HANDOVER)", out.suspiciousReason)
     }
 
+    // 3.0 — El marcador de sitio sin verificar también se AÑADE; antes pisaba el motivo de H2.
+
+    private val unverifiedSite = StableSiteDecision(enforced = true, reason = "NEW_CELL_AT_KNOWN_SITE")
+
+    @Test fun `an unverified site keeps the reasons of other rules`() {
+        val report = HeuristicReport(powerJump = HeuristicStatus.FAILED)
+        val out = LocalCellTrustEngine.apply(
+            cell(report = report).copy(suspiciousReason = "Salto potencia (>35dB)"),
+            LocalCellTrustEvidence(),
+            unverifiedSite
+        )
+        assertEquals(LocalCellTrustState.QUARANTINED, out.localCellTrust.state)
+        assertEquals("Salto potencia (>35dB) | $SITE_UNVERIFIED_PREFIX NEW_CELL_AT_KNOWN_SITE", out.suspiciousReason)
+    }
+
+    @Test fun `an unverified site without other reasons stores only its marker`() {
+        val out = LocalCellTrustEngine.apply(cell(), LocalCellTrustEvidence(), unverifiedSite)
+        assertEquals(LocalCellTrustState.SITE_UNVERIFIED, out.localCellTrust.state)
+        assertEquals("$SITE_UNVERIFIED_PREFIX NEW_CELL_AT_KNOWN_SITE", out.suspiciousReason)
+        val again = LocalCellTrustEngine.apply(out, LocalCellTrustEvidence(), unverifiedSite)
+        assertEquals("sin duplicar", out.suspiciousReason, again.suspiciousReason)
+    }
+
     @Test fun `append helper never empties or duplicates`() {
         assertNull(StoredReasons.append(null, null))
         assertNull(StoredReasons.append(" ", ""))

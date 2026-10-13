@@ -11,6 +11,10 @@ GitHub pre-release of an earlier build was withdrawn.
 
 ### Audit fixes
 
+- **An unverified Stable-Site marker no longer replaces the reasons of other rules.** With the site
+  protection enforced, the stored reason became `[sitio-sin-verificar] …` alone, so a power jump (H2)
+  seen in the same cycle lost its reason in the history. The marker is now added after the existing
+  reasons, as the local reconfiguration marker already was.
 - **Documented: H3 or H15 alone stay on the alarm boundary.** Each subtracts exactly 30, so alone
   the score is 70 and the cycle is not suspicious (`score < 70`). The manual now says so and states
   that this is a design decision pending validation with field data. No number changes.

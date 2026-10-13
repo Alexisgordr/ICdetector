@@ -108,7 +108,12 @@ object LocalCellTrustEngine {
             // LOCAL_TRUST_RECONFIGURATION_HISTORY_LIKE; see CellDbHelper's reconfiguration candidate.
             suspiciousReason = when {
                 contradictions.isNotEmpty() -> com.alexisgordr.icdetector.models.StoredReasons.append(cell.suspiciousReason, reason)
-                stableSite.enforced -> "${com.alexisgordr.icdetector.models.SITE_UNVERIFIED_PREFIX} ${stableSite.reason}"
+                // 3.0 — Also added, never replacing: it used to overwrite the reasons of other rules
+                // (a power jump with an unverified site was stored with the site marker only).
+                stableSite.enforced -> com.alexisgordr.icdetector.models.StoredReasons.append(
+                    cell.suspiciousReason,
+                    "${com.alexisgordr.icdetector.models.SITE_UNVERIFIED_PREFIX} ${stableSite.reason}"
+                )
                 else -> cell.suspiciousReason
             },
             stableSiteDecision = stableSite
