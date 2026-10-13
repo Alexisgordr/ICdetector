@@ -608,10 +608,20 @@ announcement or a trusted route does not override a mature, contradictory geogra
 Without enough samples at both ends, H16 abstains; it never treats a cell as suspicious merely for
 being new.
 
+The travelled distance is only measured from **two GPS fixes of their own**: each end of the
+handover needs a fix taken less than 10 s before its observation (the same freshness as live fixes),
+with a valid timestamp, and the two must be different fixes. A position reused from before (an
+accepted position can be up to 120 s old) would read as "0 m" without showing that the phone was
+still, so H16 says `N/A` with the concrete reason (no fix, fix older than 10 s, invalid or future
+timestamp, the same fix at both ends). This check comes before the geometry and before the
+visible-neighbour and learned-route shortcuts, and an `N/A` transition never counts towards learned
+routes. Two different recent fixes at the same coordinates are a real measurement of rest and are
+evaluated.
+
 - `COHERENT` — the available movement evidence explains the handover.
 - `INCOHERENT` — mature local evidence describes a physically implausible jump. H16 has low weight
   and cannot confirm an alert on its own.
-- `N/A` — no handover yet, insufficient GPS, or a local zone still learning.
+- `N/A` — no handover yet, insufficient or stale GPS, or a local zone still learning.
 
 There is deliberately no universal one-kilometre rule: rural macrocells, urban small cells, terrain,
 load balancing and operator policy make fixed tower-spacing thresholds unreliable.

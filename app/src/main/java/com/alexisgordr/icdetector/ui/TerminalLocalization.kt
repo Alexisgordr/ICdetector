@@ -257,6 +257,23 @@ private val replacements = linkedMapOf(
     "familias independientes" to "independent families",
     "todavía no se ha observado un handover evaluable" to "no evaluable handover has been observed yet",
     "faltan dos posiciones GPS contemporáneas" to "two contemporaneous GPS positions are unavailable",
+    // 3.0 — H16: validación del fix GPS de cada extremo (TransitionCoherence.gpsProblem).
+    "no hay fix GPS en la observación de la celda anterior." to
+        "there is no GPS fix in the observation of the previous cell.",
+    "el fix GPS de la celda anterior tiene una marca de tiempo inválida o futura." to
+        "the GPS fix of the previous cell has an invalid or future timestamp.",
+    "el fix GPS de la celda anterior tiene más de 10 s; una posición reutilizada no demuestra que el móvil estuviera quieto." to
+        "the GPS fix of the previous cell is more than 10 s old; a reused position does not show that the phone was still.",
+    "no hay fix GPS en la observación de la celda nueva." to
+        "there is no GPS fix in the observation of the new cell.",
+    "el fix GPS de la celda nueva tiene una marca de tiempo inválida o futura." to
+        "the GPS fix of the new cell has an invalid or future timestamp.",
+    "el fix GPS de la celda nueva tiene más de 10 s; una posición reutilizada no demuestra que el móvil estuviera quieto." to
+        "the GPS fix of the new cell is more than 10 s old; a reused position does not show that the phone was still.",
+    "las dos observaciones usan el mismo fix GPS; no miden ningún desplazamiento." to
+        "both observations use the same GPS fix; they measure no movement.",
+    "el fix GPS de la celda nueva es anterior al de la celda anterior." to
+        "the GPS fix of the new cell is older than that of the previous cell.",
     "la precisión GPS es insuficiente" to "GPS accuracy is insufficient",
     "se exige" to "required",
     "Transición aprendida previamente" to "Previously learned transition",

@@ -11,6 +11,19 @@ GitHub pre-release of an earlier build was withdrawn.
 
 ### Audit fixes
 
+- **H16 needs a recent GPS fix at each end (behaviour cut for H16).** The transition snapshots kept the
+  accepted position, which can be up to 120 s old or the same fix at both ends, so a cached position
+  could read as "0 m travelled" and, with distant learned zones, give `FAILED` (or let a shortcut
+  pass) without any measured movement. Each snapshot now records the fix's monotonic time
+  (`Location.elapsedRealtimeNanos`), and H16 measures the distance only when both ends have their own
+  fix, less than 10 s old relative to their snapshot (the live-fix freshness, now a shared constant;
+  the 120 s limit for other uses is unchanged), with a valid timestamp and different fixes. Otherwise
+  it returns `N/A` with the reason, before the geometry and the visible-neighbour and learned-route
+  shortcuts, and the transition never counts towards learned routes. Two different recent fixes at
+  the same coordinates are still evaluated. Geometric thresholds, the 20 s result hold, weights and
+  alarm wiring are unchanged; H11, Stable-Site, scores and likelihood ratios are not touched. Rows
+  from earlier builds are not recalculated; new rows may show H16 `N/A` where it was evaluated before
+  with insufficient GPS. No schema, migration or backup format change.
 - **Stable-Site silent notices.** New setting *Stable-Site silent notices*, on by default. Only an
   episode that **started** at a place whose reference was already prepared (`ACTIVE`, maturity
   unchanged) can notify: the place is now evaluated before the serving change is recorded, and the

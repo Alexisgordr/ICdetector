@@ -362,7 +362,7 @@ internal class LocationCollectionController(
         const val KEY_LAST_LOCATION = "last_accepted_loc"
         const val STREAM_INTERVAL_MS = 15_000L
         const val MAX_FIX_AGE_MS = 120_000L
-        const val LIVE_FIX_MAX_AGE_MS = 10_000L
+        const val LIVE_FIX_MAX_AGE_MS = GpsFixAge.LIVE_MAX_AGE_MS
         const val MAX_ACCURACY_METERS = 100f
         const val FORCED_FIX_DEBOUNCE_MS = 30_000L
         const val WARM_FIX_TIMEOUT_MS = 20_000L

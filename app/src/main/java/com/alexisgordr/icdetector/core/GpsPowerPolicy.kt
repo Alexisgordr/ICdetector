@@ -170,6 +170,13 @@ class GpsPowerPolicy {
 
 /** Wall-clock changes must not make an old fix appear fresh, or invalidate a recent one. */
 object GpsFixAge {
+    /**
+     * Edad máxima de un fix «en vivo» (10 s): el criterio con que la ubicación acepta un fix recién
+     * obtenido y con que H16 exige un fix propio en cada extremo de un handover. No sustituye a la
+     * edad máxima de una posición aceptada (120 s), que sigue sirviendo para otros usos.
+     */
+    const val LIVE_MAX_AGE_MS = 10_000L
+
     fun isRecent(nowElapsedMs: Long, fixElapsedMs: Long, maxAgeMs: Long): Boolean =
         nowElapsedMs - fixElapsedMs in 0 until maxAgeMs
 }

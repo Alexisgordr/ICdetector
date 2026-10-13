@@ -46,10 +46,20 @@ object TransitionCoherence {
     private const val MIN_REMOTE_CENTERS_M = 10_000.0
     private const val MIN_UNEXPLAINED_GAP_M = 5_000.0
 
+    /**
+     * 3.0 — Un extremo del handover: el instante monotónico de su instantánea
+     * (SystemClock.elapsedRealtime) y el del fix GPS que llevaba (Location.elapsedRealtimeNanos), o
+     * null si no tenía ninguno. Los dos relojes son el mismo, así que la edad del fix es comparable.
+     */
+    data class Endpoint(val snapshotElapsedMs: Long, val fixElapsedRealtimeNanos: Long?)
+
     data class Input(
         val fromIdentity: String,
         val toIdentity: String,
         val elapsedSeconds: Long,
+        /** 3.0 — Extremos con su fix: se validan antes de usar [deviceDistanceMeters]. */
+        val previous: Endpoint,
+        val current: Endpoint,
         val deviceDistanceMeters: Double?,
         val previousAccuracyMeters: Float?,
         val currentAccuracyMeters: Float?,
@@ -78,6 +88,12 @@ object TransitionCoherence {
         if (input.fromIdentity == input.toIdentity) return unavailable("no hubo cambio de celda.")
         if (input.elapsedSeconds !in 0..MAX_TRANSITION_SECONDS) {
             return unavailable("el intervalo entre observaciones no permite atribuir el desplazamiento al handover.")
+        }
+        // 3.0 — Antes de la distancia, la geometría y los atajos (vecina visible, ruta aprendida):
+        // sin un fix propio y reciente en cada extremo no hay desplazamiento medido. Una posición
+        // reutilizada daría «0 m» sin demostrar que el móvil estuviera quieto.
+        gpsProblem(input.previous, input.current)?.let { reason ->
+            return unavailable(reason).copy(deviceDistanceMeters = null)
         }
         val moved = input.deviceDistanceMeters
             ?: return unavailable("faltan dos posiciones GPS contemporáneas.")
@@ -137,6 +153,41 @@ object TransitionCoherence {
             )
         }
     }
+
+    /**
+     * 3.0 — ¿Tiene cada extremo su propio fix GPS, reciente respecto a su instantánea? Devuelve el
+     * motivo concreto para abstenerse, o null si el desplazamiento se puede medir. Edad máxima:
+     * [GpsFixAge.LIVE_MAX_AGE_MS], el mismo criterio de los fixes en vivo. Dos fixes distintos con
+     * las mismas coordenadas son válidos (puede ser reposo real); el mismo fix dos veces no.
+     */
+    fun gpsProblem(previous: Endpoint, current: Endpoint): String? {
+        fun check(end: Endpoint, side: String): String? {
+            val nanos = end.fixElapsedRealtimeNanos ?: return "no hay fix GPS en la observación de $side."
+            val fixMs = nanos / 1_000_000L
+            if (nanos <= 0L || fixMs > end.snapshotElapsedMs) return "el fix GPS de $side tiene una marca de tiempo inválida o futura."
+            if (!GpsFixAge.isRecent(end.snapshotElapsedMs, fixMs, GpsFixAge.LIVE_MAX_AGE_MS)) {
+                return "el fix GPS de $side tiene más de ${GpsFixAge.LIVE_MAX_AGE_MS / 1_000} s; una posición reutilizada no demuestra que el móvil estuviera quieto."
+            }
+            return null
+        }
+        check(previous, SIDE_PREVIOUS)?.let { return it }
+        check(current, SIDE_CURRENT)?.let { return it }
+        val before = previous.fixElapsedRealtimeNanos!!
+        val after = current.fixElapsedRealtimeNanos!!
+        if (after == before) return "las dos observaciones usan el mismo fix GPS; no miden ningún desplazamiento."
+        if (after < before) return "el fix GPS de la celda nueva es anterior al de la celda anterior."
+        return null
+    }
+
+    private const val SIDE_PREVIOUS = "la celda anterior"
+    private const val SIDE_CURRENT = "la celda nueva"
+
+    /**
+     * Cuánto suma una transición al aprendizaje de rutas fiables: solo un PASSED apto para aprender.
+     * Un N/A (incluido el de GPS insuficiente) nunca suma.
+     */
+    fun trustedIncrement(result: TransitionCoherenceResult): Int =
+        if (result.status == HeuristicStatus.PASSED && result.eligibleForLearning) 1 else 0
 
     /**
      * Contraste entre las zonas aprendidas de ambos extremos y el desplazamiento real medido.

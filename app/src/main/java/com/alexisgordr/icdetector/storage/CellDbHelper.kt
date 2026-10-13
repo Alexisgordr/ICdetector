@@ -853,7 +853,7 @@ class CellDbHelper(
     fun recordCellTransition(result: TransitionCoherenceResult) {
         val from = result.fromIdentity ?: return
         val to = result.toIdentity ?: return
-        val trustedIncrement = if (result.status == HeuristicStatus.PASSED && result.eligibleForLearning) 1 else 0
+        val trustedIncrement = com.alexisgordr.icdetector.core.TransitionCoherence.trustedIncrement(result)
         val db = writableDatabase
         db.beginTransaction()
         try {

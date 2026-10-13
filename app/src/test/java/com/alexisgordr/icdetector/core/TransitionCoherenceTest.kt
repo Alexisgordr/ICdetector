@@ -27,7 +27,11 @@ class TransitionCoherenceTest {
         accuracy: Float = 10f
     ) = TransitionCoherence.Input(
         fromIdentity = "214-01-1-A-LTE", toIdentity = "214-01-1-B-LTE",
-        elapsedSeconds = 5, deviceDistanceMeters = moved,
+        elapsedSeconds = 5,
+        // 3.0 — Dos fixes propios, distintos y recientes (ver TransitionGpsFreshnessTest).
+        previous = TransitionCoherence.Endpoint(100_000L, 98_000L * 1_000_000L),
+        current = TransitionCoherence.Endpoint(105_000L, 104_000L * 1_000_000L),
+        deviceDistanceMeters = moved,
         previousAccuracyMeters = accuracy, currentAccuracyMeters = accuracy,
         fromSamples = from, toSamples = to, priorTrustedTransitions = prior,
         destinationWasNeighbor = neighbor

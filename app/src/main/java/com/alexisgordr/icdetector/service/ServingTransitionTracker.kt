@@ -14,12 +14,19 @@ internal class ServingTransitionTracker(
     private val db: CellDbHelper,
     private val log: (String) -> Unit
 ) {
+    /**
+     * [elapsedMs]: SystemClock.elapsedRealtime de la instantánea. [location] es la posición aceptada
+     * que había (puede tener hasta 120 s o repetirse entre instantáneas); su propio instante
+     * monotónico (Location.elapsedRealtimeNanos) se valida en TransitionCoherence.gpsProblem.
+     */
     private data class Snapshot(
         val cell: CellData,
         val location: Location?,
         val elapsedMs: Long,
         val neighbors: Set<String>
-    )
+    ) {
+        val endpoint get() = TransitionCoherence.Endpoint(elapsedMs, location?.elapsedRealtimeNanos)
+    }
 
     private val lock = Any()
     private var last: Snapshot? = null
@@ -48,6 +55,8 @@ internal class ServingTransitionTracker(
                 fromIdentity = prior.cell.identityKey,
                 toIdentity = active.identityKey,
                 elapsedSeconds = ((now - prior.elapsedMs) / 1_000L).coerceAtLeast(0L),
+                previous = prior.endpoint,
+                current = current.endpoint,
                 deviceDistanceMeters = if (previousLocation != null && location != null) previousLocation.distanceTo(location).toDouble() else null,
                 previousAccuracyMeters = previousLocation?.accuracy,
                 currentAccuracyMeters = location?.accuracy,
