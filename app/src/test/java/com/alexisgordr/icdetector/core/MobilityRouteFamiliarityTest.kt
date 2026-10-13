@@ -66,6 +66,26 @@ class MobilityRouteFamiliarityTest {
         assertEquals(2, config.goodEdgesRequired)
     }
 
+    @Test fun `a trip that starts at a historically known cell reports it from the first observation`() {
+        val s = Store()
+        s.counts[MobilityEdge("A", "B")] = 3; s.counts[MobilityEdge("B", "C")] = 4
+        val e = engine(s)
+        val start = e.observe("B", moving, 0)
+        assertEquals("trip_started", start.event)
+        assertEquals("trip", start.tripId)
+        assertEquals(MobilityFamiliarity.KNOWN_ON_ROUTE, start.familiarity)
+        assertEquals(2, start.goodEdges)
+        assertNull("todavía no hubo llegada observada", start.arrivalPriorTrips)
+        // Lo mismo que muestra Geometry para la celda actual del viaje abierto.
+        val screen = MobilityGeometryProjection.build(s.transitions(), emptyList(), s.edges).cells.single { it.identity == "B" }
+        assertEquals(screen.familiarity, start.familiarity)
+        assertEquals(screen.goodEdges, start.goodEdges)
+        // Con evidencia parcial u ausente, lo que corresponde, también al empezar.
+        val partial = Store().apply { counts[MobilityEdge("A", "B")] = 3; counts[MobilityEdge("B", "C")] = 1 }
+        assertEquals(MobilityFamiliarity.OBSERVED_ON_ROUTE, engine(partial).observe("B", moving, 0).familiarity)
+        assertEquals(MobilityFamiliarity.UNKNOWN_ON_ROUTE, engine(Store()).observe("B", moving, 0).familiarity)
+    }
+
     @Test fun `a known cell reached by a new connection keeps both facts apart`() {
         val s = Store()
         s.counts[MobilityEdge("A", "B")] = 4; s.counts[MobilityEdge("B", "C")] = 5

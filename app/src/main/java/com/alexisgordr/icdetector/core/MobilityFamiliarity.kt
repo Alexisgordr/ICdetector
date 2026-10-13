@@ -220,7 +220,10 @@ class MobilityFamiliarityEngine(
             trip = MobilityTrip(newTripId(), clock.civilMs, clock.civilMs, true, identity, clock.civilMs, null)
             store.createTrip(trip, identity)
             setAnchor(MobilityTripAnchor(trip.id, clock.bootId, clock.elapsedMs, clock.elapsedMs, clock.civilMs, clock.elapsedMs, null), force = true)
-            return MobilityObservation(MobilityFamiliarity.UNKNOWN_ON_ROUTE, trip.id, event = clockEvent ?: "trip_started")
+            // 3.0 (G2) — La primera celda del viaje también tiene historia: la misma política que en
+            // Geometry. Sin llegada observada todavía (arrivalPriorTrips = null).
+            val first = MobilityFamiliarityPolicy.assess(store.historicalEdgeCounts(identity).values, config)
+            return MobilityObservation(first.familiarity, trip.id, first.goodEdges, event = clockEvent ?: "trip_started", arrivalPriorTrips = null)
         }
         val a = anchor!!
 
