@@ -819,6 +819,13 @@ reconfigure their networks.
 
 ## 7. Temporal phases: `1/3`, `2/3` and `3/3`
 
+A cycle is suspicious when its score is below 70 (`score < 70`). Two rules subtract exactly 30:
+MCC mismatch (H3) and RF identity instability (H15). Alone, each leaves the score at 70, on the
+boundary, so neither starts the phases by itself; they count only together with another failure or
+through a multi-signal episode. This is a design decision that has not been validated yet, not a
+property shown to be desirable: whether H3 or H15 alone should be enough will be reviewed with field
+data.
+
 ICdetection does not confirm a threat from one suspicious cycle:
 
 1. **`1/3` — observation begins.** An incident opens and forensic capture starts, including the

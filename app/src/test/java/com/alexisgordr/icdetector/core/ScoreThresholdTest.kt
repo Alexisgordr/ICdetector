@@ -27,4 +27,16 @@ class ScoreThresholdTest {
         assertTrue(src("ui/Visualizers.kt").contains("val umbral = -70"))
         assertTrue(src("core/BandPlan.kt").contains("LteBand(70,"))
     }
+
+    @Test fun `H3 and H15 alone stay on the boundary and the manual says it is unvalidated`() {
+        val analyzer = src("core/ThreatAnalyzer.kt")
+        val h3 = analyzer.substringAfter("reasons.add(\"Inconsistencia MCC\")").substringBefore("}")
+        val h15 = analyzer.substringAfter("StoredReasons.H15_REASON)").substringBefore("}")
+        assertTrue(h3.contains("score -= 30"))
+        assertTrue(h15.contains("score -= 30"))
+        assertFalse("100 - 30 queda en la frontera, no por debajo", ScoreThreshold.isBelow(100 - 30))
+        val manual = listOf(File("MANUAL.md"), File("../MANUAL.md")).first { it.exists() }.readText()
+        assertTrue(manual.contains("This is a design decision that has not been validated yet"))
+        assertTrue(manual.contains("will be reviewed with field\ndata"))
+    }
 }

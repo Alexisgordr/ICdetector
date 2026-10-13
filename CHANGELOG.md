@@ -11,6 +11,15 @@ GitHub pre-release of an earlier build was withdrawn.
 
 ### Audit fixes
 
+- **Documented: H3 or H15 alone stay on the alarm boundary.** Each subtracts exactly 30, so alone
+  the score is 70 and the cycle is not suspicious (`score < 70`). The manual now says so and states
+  that this is a design decision pending validation with field data. No number changes.
+- **The strong-signal tone cooldown uses a monotonic clock.** `SecurityAlertController` read the civil
+  clock for it although it has an injected clock; that clock now defaults to `elapsedRealtime` for both
+  of its durations (this cooldown and the 2G/3G episode close).
+- **Without a modem timestamp, a cached delivery is not a new observation.** With a null observation
+  token every delivery counted as a new temporal phase, so three cached deliveries of the same sample
+  could confirm an alarm. Only a fresh delivery counts then, as in the episode tracker.
 - **A transmitter alternating identities can be confirmed.** Temporal confirmation counted phases per
   serving identity and every identity change restarted it, so an emitter switching between two of its
   own identities every few seconds never reached `3/3`, even with every cycle suspicious, while H10
