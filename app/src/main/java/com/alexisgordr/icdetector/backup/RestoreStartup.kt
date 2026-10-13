@@ -64,6 +64,9 @@ object RestoreStartup {
         // 3.0 — Los episodios de Stable-Site restaurados nunca avisan: se borra el episodio pendiente
         // de aviso (ver StableSiteNotices). Ese dato es interno y no viaja en la copia.
         editor.remove(com.alexisgordr.icdetector.core.StableSiteNotices.PREF_PENDING_EPISODE)
+        // 3.0 (G3) — Un viaje restaurado no tiene continuidad demostrable con este arranque: sin su
+        // ancla monotónica, el servicio lo cierra en su última hora observada.
+        editor.remove(com.alexisgordr.icdetector.core.MobilityTripAnchor.PREF_KEY)
         editor.commit()
     }
 

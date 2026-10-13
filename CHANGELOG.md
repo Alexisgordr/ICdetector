@@ -11,6 +11,16 @@ GitHub pre-release of an earlier build was withdrawn.
 
 ### Audit fixes
 
+- **Trips survive clock changes.** Trip durations and resumption compared civil times: moving the
+  clock back kept a trip open (negative durations) and moving it forward closed it by maximum
+  duration, and a restart could resume a trip on a backward clock. Intervals now use the monotonic
+  clock within one boot (`SystemClock.elapsedRealtime`, boot number from `Settings.Global.BOOT_COUNT`);
+  civil time only dates stored rows. A civil jump of more than 2 minutes closes the trip as
+  `CLOCK_CHANGED` at its last observed civil time. After a restart a trip resumes only with
+  continuity shown (same boot, its monotonic reference kept in an internal preference, at most 15
+  minutes since last seen); otherwise it closes as `ABANDONED` at its last observed time instead of
+  the restart time. A restore clears that reference. Limits unchanged; no schema or backup format
+  change; trips stored by earlier builds are not recalculated.
 - **Route familiarity: one rule for the service and Geometry.** The service judged a cell only by the
   edges of the current trip that touched it, so on arrival it had a single edge and could almost
   never reach `KNOWN_ON_ROUTE`; Geometry judged the same cell by all its stored edges. Both now use

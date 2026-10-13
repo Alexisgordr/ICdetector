@@ -262,9 +262,17 @@ A trip opens only after confirmed `MOVING`. Its cells and directed edges are per
 across service or process restarts, and the current trip is evaluated only against aggregate counts
 from earlier committed trips. Pending edges are committed once, after the trip has movement and at
 least three distinct serving identities. A trip closes after three minutes of sustained static state,
-ten minutes on the same serving cell without conclusive motion, or six hours at most. An open trip
-can be resumed for fifteen minutes; older open trips close as `ABANDONED` and are committed only if
-already valid. Closed trip detail is kept for 90 days; pruning it does not reduce the aggregate
+ten minutes on the same serving cell without conclusive motion, or six hours at most. These
+durations are measured with the phone's monotonic clock (it keeps counting in deep sleep and ignores
+date or time changes); the civil clock only dates what is stored. If the civil clock moves more than
+two minutes away from the monotonic one during a trip (manual change, time zone, network time), the
+trip closes as `CLOCK_CHANGED` at its last observed civil time, so its stored times are never
+inverted or stretched, and a new trip can start. After a service or process restart, an open trip
+resumes only if continuity can be shown: same device boot, its monotonic reference, at most fifteen
+minutes since it was last seen and no civil clock jump. Otherwise (reboot, restored backup, upgrade
+from an earlier build, longer gap) it closes as `ABANDONED` at its last observed time, without
+adding duration, and is committed only if already valid. Before this change (3.0 beta) these
+intervals used the civil clock; trips stored by earlier builds are not recalculated. Closed trip detail is kept for 90 days; pruning it does not reduce the aggregate
 `trip_count`. The experimental familiarity rule requires two incident edges that each appeared in at
 least three earlier trips.
 

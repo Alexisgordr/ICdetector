@@ -24,9 +24,11 @@ class MobilityFamiliarityTest {
     }
 
     @Test fun restartDoesNotCreateSecondTrip() {
-        val s=FakeStore(); val first=engine(s, ids=mutableListOf("one"))
+        // 3.0 (G3) — Mismo arranque y ancla compartida: continuidad demostrable, se reanuda.
+        val s=FakeStore(); val anchors=InMemoryMobilityAnchorStore()
+        val first=MobilityFamiliarityEngine(s,cfg,true,anchors){"one"}
         first.observe("A",moving,0); first.observe("B",moving,1)
-        val second=engine(s, ids=mutableListOf("two"))
+        val second=MobilityFamiliarityEngine(s,cfg,true,anchors){"two"}
         assertEquals("one",second.recover(2).tripId)
         second.observe("C",moving,3)
         assertEquals("one",s.openTrip()!!.id)

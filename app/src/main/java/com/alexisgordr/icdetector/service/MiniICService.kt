@@ -145,6 +145,29 @@ class MiniICService : Service() {
         appendLog("[RADIO]", "Primaria declarada sin señal utilizable: ciclo en abstención.")
     }
 
+    /**
+     * 3.0 (G3) — Reloj de los viajes: civil para fechas, monotónico para intervalos y el número de
+     * arranque, para no comparar nunca tiempos monotónicos de arranques distintos.
+     */
+    private fun mobilityClock() = com.alexisgordr.icdetector.core.MobilityClock(
+        civilMs = System.currentTimeMillis(),
+        elapsedMs = SystemClock.elapsedRealtime(),
+        bootId = bootCount
+    )
+
+    private val bootCount: String? by lazy {
+        Settings.Global.getInt(contentResolver, Settings.Global.BOOT_COUNT, -1).takeIf { it >= 0 }?.toString()
+    }
+
+    /** 3.0 (G3) — Ancla monotónica del viaje abierto: preferencia interna, no viaja en la copia. */
+    private fun mobilityAnchorStore() = object : com.alexisgordr.icdetector.core.MobilityAnchorStore {
+        private val prefs = getSharedPreferences(com.alexisgordr.icdetector.backup.BackupSettings.PREFS_FILE, MODE_PRIVATE)
+        override fun load() = com.alexisgordr.icdetector.core.MobilityTripAnchor.parse(prefs.getString(com.alexisgordr.icdetector.core.MobilityTripAnchor.PREF_KEY, null))
+        override fun save(anchor: com.alexisgordr.icdetector.core.MobilityTripAnchor?) {
+            prefs.edit().apply { if (anchor == null) remove(com.alexisgordr.icdetector.core.MobilityTripAnchor.PREF_KEY) else putString(com.alexisgordr.icdetector.core.MobilityTripAnchor.PREF_KEY, anchor.serialize()) }.apply()
+        }
+    }
+
     private fun appendLog(type: String, message: String) {
         val timestamp = SimpleDateFormat("HH:mm:ss.SSS", Locale.getDefault()).format(Date())
         val newLog = "[$timestamp] $type $message"
@@ -421,9 +444,11 @@ class MiniICService : Service() {
         getSharedPreferences(LocaleController.PREFS, MODE_PRIVATE)
             .registerOnSharedPreferenceChangeListener(languageListener)
         dbHelper = CellDbHelper.getInstance(this)
-        mobilityFamiliarity = com.alexisgordr.icdetector.core.MobilityFamiliarityEngine(dbHelper)
+        mobilityFamiliarity = com.alexisgordr.icdetector.core.MobilityFamiliarityEngine(
+            dbHelper, anchors = mobilityAnchorStore()
+        )
         writeGate.launch(scope, Dispatchers.IO) {
-            val recovery = mobilityFamiliarity.recover(System.currentTimeMillis())
+            val recovery = mobilityFamiliarity.recover(mobilityClock())
             recovery.event?.let { appendLog("[MOBILITY]", "$it id=${recovery.tripId}") }
         }
         // v2.8.0 — La escritura forense avisa cuando se rompe. Tres inserts fallidos seguidos
@@ -1238,7 +1263,7 @@ class MiniICService : Service() {
                 // Mobility is contextual metadata only. Its result is deliberately not passed to
                 // ThreatAnalyzer, LocalCellTrust, Stable-Site, alerts or forensics.
                 val mobility = if (activeRaw != null && activeRaw.cellId != "N/A") {
-                    mobilityFamiliarity.observe(activeRaw.identityKey, motionEvidence, System.currentTimeMillis())
+                    mobilityFamiliarity.observe(activeRaw.identityKey, motionEvidence, mobilityClock())
                 } else com.alexisgordr.icdetector.core.MobilityObservation(
                     com.alexisgordr.icdetector.core.MobilityFamiliarity.UNKNOWN_ON_ROUTE
                 )
@@ -2235,5 +2260,6 @@ class MiniICService : Service() {
         private const val UI_VISIBLE_SCAN_INTERVAL_MS = 1_000L
         private const val SCREEN_ON_SCAN_INTERVAL_MS = 3_000L
         private const val SCREEN_OFF_SCAN_INTERVAL_MS = 10_000L
+
     }
 }
