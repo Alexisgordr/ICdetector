@@ -43,6 +43,15 @@ object ThreatAnalyzer {
      * Calcula el umbral dinámico según el contexto de densidad de celdas (vecinos)
      * Optimizamos para reducir falsos positivos en zonas rurales.
      */
+    /** 3.0 — MCC y MNC de la vecina iguales a los de la servidora (como números), o sin informar. */
+    internal fun sameOperatorOrUnknown(active: CellData, neighbour: CellData): Boolean {
+        fun known(v: String) = v.isNotBlank() && v != "N/A"
+        fun same(a: String, b: String) = a.trim().toIntOrNull()?.let { it == b.trim().toIntOrNull() } ?: (a.trim() == b.trim())
+        val mccOk = !known(neighbour.mcc) || !known(active.mcc) || same(neighbour.mcc, active.mcc)
+        val mncOk = !known(neighbour.mnc) || (known(active.mnc) && same(neighbour.mnc, active.mnc))
+        return mccOk && mncOk
+    }
+
     internal fun getDynamicLocationThreshold(
         neighbors: List<CellData>,
         radioTech: RadioTech
@@ -265,7 +274,13 @@ object ThreatAnalyzer {
         // GSM/UMTS son espacios de identificadores distintos y nunca coinciden «por diseño». Antes
         // una sola vecina GSM con su LAC hacía fallar H5 en una servidora LTE. Sin vecinas de la
         // misma tecnología, N/A.
-        val sameTechTac = neighbors.filter { it.radioTech == active.radioTech }
+        //
+        // 3.0 (fase 4) — Y solo vecinas del MISMO operador (o con MCC/MNC sin informar, hoy casi
+        // todas). El TAC es un identificador por operador: una vecina de otra red siempre tiene otro
+        // TAC. Antes, en una frontera, H3 y H5 fallaban juntas por la misma vecina extranjera (el
+        // bayesiano declara mccMismatch independiente), y en un país multioperador H5 fallaba sola
+        // si las únicas vecinas con TAC eran de otro MNC.
+        val sameTechTac = neighbors.filter { it.radioTech == active.radioTech && sameOperatorOrUnknown(active, it) }
         if (sameTechTac.isNotEmpty() && active.tac != "N/A") {
             val neighborTacs = sameTechTac.map { it.tac }.filter { it != "N/A" }
             eTac = neighborTacs.isNotEmpty()

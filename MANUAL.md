@@ -870,7 +870,10 @@ the **same technology** only. TAC (LTE), TAC (NR) and LAC (GSM/UMTS) are differe
 and signal is reported as RSRP (LTE/NR), RSSI (GSM) or RSCP (UMTS), which are not comparable: an LTE
 RSRP is typically 20–30 dB below a GSM RSSI for the same coverage. Without same-technology
 neighbours these rules are `N/A`. H1 still counts neighbours of any technology (that only makes it
-more conservative), and H3/H4 compare MCC/MNC, which are shared by all technologies.
+more conservative), and H3/H4 compare MCC/MNC, which are shared by all technologies. H5 also uses
+only neighbours of the **same operator** (same MCC and MNC, or not reported): a TAC belongs to one
+network, so a neighbour of another network always has another TAC. A foreign neighbour therefore
+makes H3 fail, not H3 and H5 together.
 
 **Which entries count as neighbours.** A neighbour is an entry the modem reports as not registered
 and does **not** declare `SECONDARY_SERVING`. A secondary carrier (the NR leg of 5G NSA, or an LTE

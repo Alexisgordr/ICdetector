@@ -98,4 +98,29 @@ class HeuristicsComparabilityTest {
         val result = analyze(serving(dbm = -70), listOf(neighbour(radio = RadioTech.GSM, dbm = -90)))
         assertEquals(HeuristicStatus.PASSED, result.heuristicReport.isolatedCell)
     }
+
+    // ── H5 y el operador (fase 4) ───────────────────────────────────────────────────────────
+
+    private fun foreign(mcc: String = "214", mnc: String = "01", tac: String = "9999") = neighbour(mnc = mnc, tac = tac).copy(mcc = mcc)
+
+    @Test fun `H5 ignores neighbours of another operator, so it does not fail together with H3`() {
+        // Frontera: la única vecina es de otro país (y otra red). H3 falla; H5 ya no por la misma vecina.
+        val border = analyze(serving(tac = "31601"), listOf(foreign(mcc = "208", mnc = "10")))
+        assertEquals(HeuristicStatus.FAILED, border.heuristicReport.mccConsistency)
+        assertEquals(HeuristicStatus.NOT_EVALUATED, border.heuristicReport.tacDeviation)
+        // País multioperador: solo hay vecinas de otro MNC con TAC: H5 N/A, sin restar.
+        val multi = analyze(serving(tac = "31601"), listOf(foreign(mnc = "01"), foreign(mnc = "04")))
+        assertEquals(HeuristicStatus.NOT_EVALUATED, multi.heuristicReport.tacDeviation)
+        assertEquals(100, multi.securityScore)
+    }
+
+    @Test fun `H5 still compares with the same operator or unknown MNC`() {
+        val r = analyze(serving(tac = "31601"), listOf(foreign(mnc = "01"), neighbour(mnc = "7", tac = "31602")))
+        assertEquals("MNC 07 y 7 son el mismo", HeuristicStatus.FAILED, r.heuristicReport.tacDeviation)
+        val unknown = analyze(serving(tac = "31601"), listOf(neighbour(mnc = "N/A", tac = "31601")))
+        assertEquals(HeuristicStatus.PASSED, unknown.heuristicReport.tacDeviation)
+        assertTrue(ThreatAnalyzer.sameOperatorOrUnknown(serving(), neighbour(mnc = "N/A").copy(mcc = "N/A")))
+        assertFalse("servidora sin MNC: no se puede saber que una vecina con MNC es de la misma red",
+            ThreatAnalyzer.sameOperatorOrUnknown(serving(mnc = "N/A"), neighbour(mnc = "07")))
+    }
 }

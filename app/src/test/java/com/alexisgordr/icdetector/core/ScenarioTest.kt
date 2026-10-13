@@ -264,8 +264,21 @@ class ScenarioTest {
         }
     }
 
-    /** Red incoherente: vecinas de otro MCC y TAC que no encaja con ninguna. */
+    /**
+     * Red incoherente: una vecina de otro MCC y un TAC que no encaja con el de las vecinas LEGÍTIMAS
+     * de su propio operador. 3.0 (fase 4) — H5 solo compara con vecinas del mismo operador: antes
+     * este escenario tenía una sola vecina extranjera y alarmaba porque H3 y H5 contaban la misma
+     * vecina dos veces. Ahora el TAC se contrasta con una vecina real de la red suplantada.
+     */
     private fun inconsistentNetwork() = (1..5).map {
+        Cycle(
+            active = cell(dbm = -80, tac = "99999", verified = VerificationStatus.PENDING),
+            neighbors = listOf(neighbor(-95, mcc = "208", tac = "31601"), neighbor(-97, cid = "2001", tac = "31601"))
+        )
+    }
+
+    /** Una sola vecina extranjera: solo H3 (−30), score 70, sin alarma. Antes H3 + H5 por la misma vecina. */
+    private fun foreignNeighbourOnly() = (1..5).map {
         Cycle(
             active = cell(dbm = -80, tac = "99999", verified = VerificationStatus.PENDING),
             neighbors = listOf(neighbor(-95, mcc = "208", tac = "31601"))
@@ -293,6 +306,7 @@ class ScenarioTest {
     @Test fun `escenario benigno - zona de frontera con varios MNC`() { expectNoAlarm("BORDER_AREA", borderArea()) }
     @Test fun `escenario benigno - TA de unidad desconocida`() { expectNoAlarm("TA_SCRAPED", scrapedTimingAdvance()) }
     @Test fun `escenario benigno - sospecha intermitente sin 3 ciclos seguidos`() { expectNoAlarm("INTERMITTENT", intermittentSuspicion()) }
+    @Test fun `una sola vecina extranjera ya no cuenta dos veces (H3 sin H5)`() { expectNoAlarm("FOREIGN_NEIGHBOUR_ONLY", foreignNeighbourOnly()) }
 
     @Test fun `escenario adversario - transmisor dominante`() { expectAlarm("DOMINANT_TX", dominantTransmitter()) }
     @Test fun `escenario adversario - clon con PCI alternante en la misma portadora`() { expectAlarm("CLONE_SAME_CARRIER", clonedIdentitySameCarrier()) }

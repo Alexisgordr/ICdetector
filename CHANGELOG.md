@@ -11,6 +11,14 @@ GitHub pre-release of an earlier build was withdrawn.
 
 ### Audit fixes
 
+- **H5 only compares TACs of the same operator.** A TAC is per network, so a neighbour of another
+  network always has another TAC: at a border H3 and H5 failed together on the same foreign
+  neighbour (score −50 and, in the Bayesian, 9.0 × 6.5 while mccMismatch is declared independent),
+  and in a multi-operator country H5 failed alone when the only neighbours with a TAC belonged to
+  another MNC. H5 now uses neighbours with the same MCC and MNC as the serving cell (compared as
+  numbers) or with them unreported. **Effect on alarms:** a serving cell whose only neighbour is
+  foreign now scores 70 (H3 alone) and does not alarm; the adversarial test scenario "inconsistent
+  network" now includes a legitimate same-operator neighbour with another TAC and still alarms.
 - **Bayesian: H6 grouped with RF dominance and damped by reputation.** H6 (TA ≤ 100 m with signal ≥
   −60 dBm) was in the mobility group, but its condition is the same dominant signal that makes H2 and
   H7 fail, so one nearby transmitter multiplied: H6 alone 12.5 %, H6 + H2 (living under a rooftop
