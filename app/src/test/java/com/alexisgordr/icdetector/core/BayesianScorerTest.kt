@@ -190,4 +190,31 @@ class BayesianScorerTest {
         // La latencia no va en la lista: entra por su propio parámetro, y también debe pesar.
         assertTrue(BayesianScorer.calculate(emptyList(), "PENDING", true) > prior)
     }
+
+    // ── 3.0 (fase 4) — H6 en dominancia RF, amortiguada por reputación ──────────────────────
+
+    @Test
+    fun `H6 and H2 are the same nearby transmitter and do not multiply`() {
+        val h6 = BayesianScorer.calculate(listOf("taDistance"), "PENDING", false)
+        assertEquals(12.5f, h6, DELTA)
+        // Antes, en grupos distintos: 44 %. Ahora cuenta solo la mayor (7,0).
+        assertEquals(h6, BayesianScorer.calculate(listOf("taDistance", "powerJump"), "PENDING", false), 0.001f)
+        assertEquals(h6, BayesianScorer.calculate(listOf("taDistance", "ghostCells"), "PENDING", false), 0.001f)
+    }
+
+    @Test
+    fun `H6 is damped by reputation but not by neighbour density`() {
+        assertEquals(8.6f, BayesianScorer.calculate(listOf("taDistance"), "PENDING", false, trustScore = 85), DELTA)
+        val dense = BayesianScorer.calculate(listOf("taDistance"), "PENDING", false, neighborCount = 6)
+        assertEquals(dense, BayesianScorer.calculate(listOf("taDistance"), "PENDING", false, neighborCount = 0), 0.001f)
+        // Amortiguar nunca invierte la evidencia.
+        assertTrue(BayesianScorer.calculate(listOf("taDistance"), "PENDING", false, neighborCount = 0, trustScore = 100) > 2.0f)
+    }
+
+    @Test
+    fun `H6 no longer stacks on the mobility group`() {
+        val h11 = BayesianScorer.calculate(listOf("h11"), "PENDING", false)
+        val both = BayesianScorer.calculate(listOf("h11", "taDistance"), "PENDING", false)
+        assertTrue("grupos distintos: H11 y H6 suman (fenómenos distintos)", both > h11)
+    }
 }

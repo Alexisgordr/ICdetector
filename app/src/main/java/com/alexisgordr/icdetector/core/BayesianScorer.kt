@@ -41,6 +41,8 @@ object BayesianScorer {
         "powerJump"   to 5.5f,  // LTEInspector — power dominance fiable en urbano
         "ghostCells"  to 4.5f,  // Ambiente RF artificialmente controlado
         "signalBaseline" to 3.5f, // Potencia anómala vs historial propio (mismo fenómeno de dominancia)
+        "taDistance"  to 7.0f,  // H6: proximidad anómala por TA (≤ 100 m con señal ≥ -60 dBm): un emisor muy cerca
+        "bandDowngrade" to 2.5f, // H14: celda nueva fuerte en banda baja; absorbida por powerJump si coinciden
 
         // Grupo Identidad — parámetros de red anómalos
         // Expert-derived LR estimate — not directly reported by source paper
@@ -52,7 +54,6 @@ object BayesianScorer {
         // Expert-derived LR estimate — not directly reported by source paper
         "pingPong"    to 3.0f,  // Baja especificidad standalone
         "h11"         to 6.0f,  // Compromiso móvil vs fijo
-        "taDistance"  to 7.0f,  // H6: proximidad anómala por TA (≤ 100 m con señal ≥ -60 dBm)
         "rfStability" to 6.0f,  // Misma Cell ID con PCI/ARFCN mutados — clon reconfigurándose
         "transitionCoherence" to 1.8f, // H16 nace conservadora; necesita calibración de campo
 
@@ -60,8 +61,7 @@ object BayesianScorer {
         // Expert-derived LR estimate — not directly reported by source paper
         "arfcn"       to 8.0f,  // ARFCN fuera 3GPP spec — imposible legítimo
         "ciphering"   to 12.0f, // H9: el sistema indica cifrado no activo (la app no ve el algoritmo)
-        "latency"     to 1.8f,  // Experimental — demasiadas variables confundentes
-        "bandDowngrade" to 2.5f  // Downgrade forzado a banda baja
+        "latency"     to 1.8f   // Experimental — demasiadas variables confundentes
     )
 
     /**
@@ -92,13 +92,19 @@ object BayesianScorer {
     // signalBaseline (potencia anómala vs historial) es el mismo fenómeno de
     // dominancia visto contra el propio histórico, así que se agrupa aquí para
     // que solo cuente la LR más alta y no infle el posterior junto a powerJump.
-    private val RF_DOMINANCE_GROUP = listOf("powerJump", "ghostCells", "isolated", "signalBaseline", "bandDowngrade")
+    //
+    // 3.0 — taDistance (H6) va aquí, no en movilidad: solo falla con TA ≤ 100 m Y señal ≥ -60 dBm,
+    // que es la misma señal dominante que hace fallar H2 (≥ -75 y salto > 35 dB) y H7 (≥ -65). En
+    // grupos distintos, un solo transmisor cercano se multiplicaba: H6 sola 12,5 %, H6 + H2 (vivir
+    // bajo una macro de azotea) 44 %. Aquí cuenta solo la mayor, y con 7,0 sigue siendo la que manda.
+    // bandDowngrade (H14) exige una celda nueva fuerte: si coincide con powerJump es el mismo hecho.
+    private val RF_DOMINANCE_GROUP = listOf("powerJump", "ghostCells", "isolated", "signalBaseline", "bandDowngrade", "taDistance")
 
     // Movilidad — correlación moderada, comportamiento temporal.
     // rfStability (PCI/ARFCN mutados de una misma Cell ID) se agrupa aquí porque comparte
     // con h11 el mismo fenómeno de identidad RF inconsistente; juntas no deben inflar el
     // posterior, así que solo cuenta la LR más alta del grupo.
-    private val MOBILITY_GROUP = listOf("pingPong", "h11", "taDistance", "rfStability", "transitionCoherence")
+    private val MOBILITY_GROUP = listOf("pingPong", "h11", "rfStability", "transitionCoherence")
 
     // mncCount y tacDev — correlación débil entre sí
     // pueden aparecer juntos en estaciones mal configuradas
@@ -118,6 +124,12 @@ object BayesianScorer {
     // H13/signalBaseline, H14/bandDowngrade, H15): esas valen igual en ciudad o campo.
     private val ENV_SENSITIVE = setOf("isolated", "powerJump", "ghostCells")
 
+    // 3.0 — H6 la amortigua la REPUTACIÓN pero no la densidad: la proximidad no depende de cuántas
+    // vecinas haya, pero quien vive al lado de una antena con semanas de historial limpio no debe
+    // llevarse cada día la LR entera (con confianza ≥ 80: 7,0 → 4,6, posterior 8,6 %). Si en campo
+    // sigue saltando a diario en celdas de confianza, bajar la LR a 5,0.
+    private val TRUST_ONLY_SENSITIVE = setOf("taDistance")
+
     // Factor [0..1] que escala la FUERZA de la evidencia (LR) de las heurísticas sensibles.
     // 1.0 = sin cambios (urbano/denso o densidad desconocida). <1.0 = evidencia suavizada
     // (disperso/rural). Nunca invierte la evidencia: el LR efectivo se acerca a 1.0 (neutro),
@@ -132,7 +144,7 @@ object BayesianScorer {
     // Factor de reputación: una celda con historial limpio probado durante semanas merece
     // menos sensibilidad en las heurísticas DÉBILES (ya ha demostrado ser legítima). Solo
     // amortigua (<=1.0), nunca amplifica. trustScore < 0 (desconocida) o bajo -> sin cambios.
-    // No afecta a las heurísticas físicas (mismo conjunto ENV_SENSITIVE que densityFactor).
+    // Se aplica a ENV_SENSITIVE (junto con la densidad) y a TRUST_ONLY_SENSITIVE (H6, solo esto).
     private fun trustFactor(trustScore: Int): Float = when {
         trustScore < 0    -> 1.0f   // desconocida -> sin cambios
         trustScore >= 80  -> 0.6f   // celda muy probada -> suaviza ruido débil
@@ -163,7 +175,13 @@ object BayesianScorer {
         // Las heurísticas DÉBILES (sensibles al entorno) se amortiguan por densidad Y por
         // reputación: ambos factores son <=1.0 y se multiplican (un entorno disperso y/o una
         // celda muy probada reducen el ruido de las señales débiles). Nunca por debajo de neutro.
-        val df = densityFactor(neighborCount) * trustFactor(trustScore)
+        val trust = trustFactor(trustScore)
+        val df = densityFactor(neighborCount) * trust
+        fun damped(h: String, base: Float): Float = when (h) {
+            in ENV_SENSITIVE -> 1.0f + (base - 1.0f) * df
+            in TRUST_ONLY_SENSITIVE -> 1.0f + (base - 1.0f) * trust
+            else -> base
+        }
 
         // Para cada grupo — aplicar solo la LR más potente.
         // Las heurísticas sensibles al entorno ven su LR suavizada hacia 1.0 (neutro) según
@@ -171,10 +189,7 @@ object BayesianScorer {
         ALL_GROUPS.forEach { group ->
             val maxLr = failedHeuristics
                 .filter { it in group }
-                .maxOfOrNull { h ->
-                    val base = LIKELIHOOD_RATIOS[h] ?: 1.0f
-                    if (h in ENV_SENSITIVE) 1.0f + (base - 1.0f) * df else base
-                } ?: 1.0f
+                .maxOfOrNull { h -> damped(h, LIKELIHOOD_RATIOS[h] ?: 1.0f) } ?: 1.0f
 
             if (maxLr > 1.0f) {
                 posterior = bayesUpdate(posterior, maxLr)

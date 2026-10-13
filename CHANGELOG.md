@@ -11,6 +11,13 @@ GitHub pre-release of an earlier build was withdrawn.
 
 ### Audit fixes
 
+- **Bayesian: H6 grouped with RF dominance and damped by reputation.** H6 (TA ≤ 100 m with signal ≥
+  −60 dBm) was in the mobility group, but its condition is the same dominant signal that makes H2 and
+  H7 fail, so one nearby transmitter multiplied: H6 alone 12.5 %, H6 + H2 (living under a rooftop
+  macro) 44 %. H6 is now in RF_DOMINANCE (only the largest LR counts; 7.0 still leads), and local
+  reputation damps it (trust ≥ 80: 7.0 → 4.6, 8.6 %); neighbour density does not, since proximity does
+  not depend on it. The LR stays 7.0 (lower it to 5.0 if field data shows daily hits on trusted
+  cells). The score penalty (−15) is unchanged. `anomalyConfidence` is displayed and exported only.
 - **H1 freshness token: unknown is not "repeated".** The service passed 0 when the modem gave no
   reading timestamp, while `IsolatedCellConfidence` treats null as a fresh delivery; with a modem
   whose `timestampMillis` is 0 the first delivery counted and every later one was taken as a repeat,
