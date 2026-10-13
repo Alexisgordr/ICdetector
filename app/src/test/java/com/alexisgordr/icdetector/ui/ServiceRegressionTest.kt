@@ -31,11 +31,11 @@ class ServiceRegressionTest {
         // La lógica se prueba ejecutándola en NetworkLatencyMonitorTest; aquí, solo el cableado
         // del servicio, que depende de Android.
         val service = source("service/MiniICService.kt")
-        assertTrue(service.contains("?.identityKey ?: return"))
-        // El reset compara la identidad completa, no solo el CID.
-        assertTrue(service.contains("val identity = cell.identityKey"))
+        // El reset compara la identidad completa (no solo el CID), con la regla de los handovers:
+        // un CID «N/A» transitorio no lo reinicia (ServingIdentityChangeTest).
+        assertTrue(service.contains("val activeCellKey = latencyServingIdentity?.key ?: return"))
         // 3.0 (#26) — Celda nueva: "no medida", nunca un OK sin medir.
-        assertTrue(service.contains("latencyMonitor.onCellChanged(identity, NetworkLatencyMonitor.STATE_NOT_MEASURED)"))
+        assertTrue(service.contains("latencyMonitor.onCellChanged(step.next!!.key, NetworkLatencyMonitor.STATE_NOT_MEASURED)"))
         assertFalse(service.contains("activeRaw.cellId != prevCid) {\n                latencyMonitor.reset"))
         assertTrue(service.contains("latencyMonitor.check(activeCellKey)"))
     }

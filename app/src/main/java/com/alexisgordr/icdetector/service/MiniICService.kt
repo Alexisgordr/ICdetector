@@ -905,7 +905,11 @@ class MiniICService : Service() {
     }
 
     /** Identidad completa de la celda para la que vale el estado de latencia publicado. */
-    private var latencyCellIdentity: String? = null
+    /**
+     * 3.0 — Identidad de la celda cuya latencia se mide. Sigue la misma regla que los handovers
+     * (ServingIdentityChange.step): un CID «N/A» transitorio no reinicia el estado de latencia.
+     */
+    private var latencyServingIdentity: com.alexisgordr.icdetector.core.ServingIdentityChange.Identity? = null
 
     /**
      * v2.10.9 — El reset comparaba solo el CID: si cambiaba MCC, MNC, TAC o la tecnología con el
@@ -915,11 +919,12 @@ class MiniICService : Service() {
      */
     @Synchronized
     private fun resetLatencyIfCellChanged(cell: CellData) {
-        val identity = cell.identityKey
-        if (identity == latencyCellIdentity) return
-        latencyCellIdentity = identity
+        val step = com.alexisgordr.icdetector.core.ServingIdentityChange.step(
+            latencyServingIdentity, com.alexisgordr.icdetector.core.ServingIdentityChange.of(cell))
+        latencyServingIdentity = step.next
+        if (!step.handover) return
         // 3.0 (#26) — Celda nueva: todavía no medida. Antes se mostraba "OK" sin medir nada.
-        latencyMonitor.onCellChanged(identity, NetworkLatencyMonitor.STATE_NOT_MEASURED)
+        latencyMonitor.onCellChanged(step.next!!.key, NetworkLatencyMonitor.STATE_NOT_MEASURED)
     }
 
     private fun checkLatencyAnomaly() {
@@ -932,7 +937,12 @@ class MiniICService : Service() {
         latencyMonitor.expireIfStale()
         // v2.10.9 — Identidad completa: dos celdas con el mismo CID en otra red o tecnología no
         // comparten la media de latencia.
-        val activeCellKey = _cellFlow.value.firstOrNull { it.isRegistered }?.identityKey ?: return
+        // 3.0 — La medición se atribuye a la identidad estable (la de resetLatencyIfCellChanged), y
+        // solo si la lectura actual trae un CID legible: con «N/A» no se sabe de qué celda es.
+        val active = _cellFlow.value.firstOrNull { it.isRegistered } ?: return
+        if (!com.alexisgordr.icdetector.core.ServingIdentityChange.hasReadableCellId(
+                com.alexisgordr.icdetector.core.ServingIdentityChange.of(active))) return
+        val activeCellKey = latencyServingIdentity?.key ?: return
         if (!latencyMonitor.isDue()) return
         scope.launch(Dispatchers.IO) { latencyMonitor.check(activeCellKey) }
     }

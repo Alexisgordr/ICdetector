@@ -100,4 +100,24 @@ class ServingIdentityChangeTest {
         assertFalse(alerts.substringBefore("if (identityStep.handover) {").contains("resetAlarmEpisode"))
         assertFalse(alerts.contains("isHandover("))
     }
+
+    @Test fun `a reading with an unreadable Cell ID fills nothing`() {
+        val partial = lte.copy(tac = "N/A")
+        val step = ServingIdentityChange.step(partial, lte.copy(cellId = "N/A", tac = "99999"))
+        assertFalse(step.handover)
+        assertEquals("el TAC de una lectura sin CID no se adopta", partial, step.next)
+        // Así, la lectura legible siguiente con otro TAC no cuenta como handover inventado.
+        assertEquals(listOf(0), handovers(partial, lte.copy(cellId = "N/A", tac = "99999"), lte))
+    }
+
+    @Test fun `latency follows the same identity rule`() {
+        val src = listOf("app/src/main/java/com/alexisgordr/icdetector/service/MiniICService.kt", "src/main/java/com/alexisgordr/icdetector/service/MiniICService.kt")
+            .map(::File).first { it.exists() }.readText()
+        val reset = src.substringAfter("private fun resetLatencyIfCellChanged(").substringBefore("private fun checkLatencyAnomaly(")
+        assertTrue(reset.contains("ServingIdentityChange.step("))
+        assertTrue(reset.contains("if (!step.handover) return"))
+        assertFalse("ya no compara la clave completa con el CID", reset.contains("cell.identityKey"))
+        val check = src.substringAfter("private fun checkLatencyAnomaly(").substringBefore("private fun showLatencyAlert(")
+        assertTrue(check.contains("hasReadableCellId(") && check.contains("latencyServingIdentity?.key ?: return"))
+    }
 }

@@ -56,11 +56,12 @@ internal object ServingIdentityChange {
     /**
      * Con handover, la actual pasa a ser la anterior. Sin él, la anterior se conserva y solo se
      * rellenan sus campos desconocidos con los conocidos de la lectura actual; un valor «N/A»
-     * nunca sustituye a uno conocido.
+     * nunca sustituye a uno conocido. Una lectura con el CID ilegible no rellena nada: no se sabe
+     * si es la misma celda, y adoptar su TAC podría convertir la siguiente lectura en un handover.
      */
     fun step(previous: Identity?, current: Identity): Step {
         if (isHandover(previous, current)) return Step(true, current)
-        if (previous == null) return Step(false, null)
+        if (previous == null || !hasReadableCellId(current)) return Step(false, previous)
         fun pick(old: String, new: String) = if (known(old)) old else new
         return Step(false, Identity(
             mcc = pick(previous.mcc, current.mcc), mnc = pick(previous.mnc, current.mnc),
@@ -68,6 +69,9 @@ internal object ServingIdentityChange {
             radio = if (previous.radio != RadioTech.UNKNOWN) previous.radio else current.radio
         ))
     }
+
+    /** ¿La lectura trae un Cell ID utilizable? Sin él no se le atribuye nada a ninguna celda. */
+    fun hasReadableCellId(identity: Identity): Boolean = known(identity.cellId)
 
     private fun known(value: String) = value.isNotBlank() && value != "N/A"
 

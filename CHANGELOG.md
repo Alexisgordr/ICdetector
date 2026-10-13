@@ -33,7 +33,10 @@ GitHub pre-release of an earlier build was withdrawn.
   new GPS window and, worst, a reset of the alarm episode in progress. The Cell ID now follows the
   same rule as MCC/MNC/TAC/technology (it only counts when both sides are known); an unreadable Cell
   ID never opens a handover, and the previous identity only fills its unknown fields from later
-  readings, so a first reading with "N/A" does not block detection.
+  readings, so a first reading with "N/A" does not block detection. A reading with an unreadable
+  Cell ID fills nothing (it may not be the same cell). The latency state follows the same rule: a
+  transient "N/A" no longer resets it twice (H12 back to "not measured"), and a measurement is only
+  attributed to the cell when the reading's Cell ID is readable.
 - **Handover routes: last reading separate from the last evaluated result (schema 25).** Every
   handover overwrote `last_status`, also with NOT_EVALUATED, so an earlier FAILED disappeared; `N/A`
   was shown as LEARNING and the REVIEW filter included it. Schema 25 adds to `cell_transitions` the
