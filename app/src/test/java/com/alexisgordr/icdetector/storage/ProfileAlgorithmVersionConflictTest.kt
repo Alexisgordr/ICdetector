@@ -45,7 +45,8 @@ class ProfileAlgorithmVersionConflictTest {
     private fun checked(historyId: Long, version: Int, observationId: String?, level: String, contextKey: String? = "k"): Outcome {
         val inserted = insertOrIgnore(historyId, version, observationId, level, contextKey)
         val (sql, args) = ProfileEvaluationWrite.existsQuery(historyId, observationId)
-        assertTrue("ningún argumento nulo", args.all { it != null })
+        // Array<String>: el tipo ya impide argumentos nulos. Lo que puede fallar es el número.
+        assertEquals("un argumento por marcador", sql.count { it == '?' }, args.size)
         val exists = inserted == 0 && db.prepareStatement(sql).use { st ->
             args.forEachIndexed { i, a -> st.setString(i + 1, a) }; st.executeQuery().use { it.next() }
         }
