@@ -1740,56 +1740,27 @@ class MiniICService : Service() {
                             ),
                             baselineMaturity = com.alexisgordr.icdetector.core.DiagnosticEngine.maturity(diagnosticInputs)
                         )
-                        // Caja negra: se actualiza fuera del hilo de UI. Registra desde 1/3 y
-                        // cierra el episodio al recuperarse o al cambiar de identidad.
-                        val previousIncidentIdentity = lastIncidentIdentity
-                        lastIncidentIdentity = if (confirmedActive.temporalProgress.active) cacheKey else null
-                        writeGate.launch(scope, forensicDispatcher) {
-                            if (previousIncidentIdentity != null && previousIncidentIdentity != cacheKey) {
-                                dbHelper.closeOpenIncidents(previousIncidentIdentity, interrupted = true)
-                            }
-                            if (confirmedActive.temporalProgress.active) {
-                                dbHelper.recordIncidentPhase(confirmedActive)
-                            } else {
-                                dbHelper.closeOpenIncidents(cacheKey, interrupted = false)
-                            }
+                        // 3.0 — Orden de la publicación: primero lo que hace el ciclo visible y válido
+                        // (verificación lanzada, contexto del próximo ciclo, pantalla y salud) y
+                        // después sus efectos (incidentes, caja negra, historial y alertas). Antes las
+                        // alertas y escrituras iban delante: un fallo en la cola dejaba una alarma
+                        // enviada con la pantalla vieja y «análisis no disponible».
+
+                        // 1. Verificación externa: dispara trabajo aparte y no forma parte de los
+                        // invariantes del ciclo; un fallo suyo no puede tirar la publicación. Va antes
+                        // de leer finalStatus porque marca la celda como pendiente al instante.
+                        try {
+                            verificationController.verify(active)
+                        } catch (e: CancellationException) {
+                            throw e
+                        } catch (e: Exception) {
+                            Log.w("MiniIC", "No se pudo lanzar la verificación externa (${e.javaClass.simpleName}).")
                         }
 
-                        // Captura forense pasiva. Recibe una copia del ciclo ya resuelto, jamás
-                        // devuelve datos al detector y por tanto no puede alterar su veredicto.
-                        //
-                        // v2.8.0 — Va por [forensicDispatcher], igual que los incidentes. Con
-                        // Dispatchers.IO (64 hilos) dos ciclos seguidos podían entrar a la vez: el
-                        // mutex interno del grabador los ordena, pero no garantiza EN QUÉ orden, y
-                        // un caso cuyo prebúfer se vuelca detrás de la muestra que lo disparó deja
-                        // de ser una línea de tiempo. Un solo hilo serializa la escritura de verdad.
-                        writeGate.launch(scope, forensicDispatcher) {
-                            forensicRecorder.observe(
-                                active = confirmedActive.copy(verified = knownStatus),
-                                neighbors = nonServingContext,
-                                location = currentLocation,
-                                latencyState = networkLatencyState.value,
-                                logs = liveLogs.value,
-                                trustContradictionTransition = trustContradictionTransition
-                            )
-                        }
-
-                        // 2. Lanzar alertas y registro con el estado actual
-                        checkAlerts(
-                            confirmedActive.copy(verified = knownStatus),
-                            confirmed = true,
-                            context = observationContext,
-                            episodeKey = confirmationKey
-                        )
-
-                        // 3. Iniciar proceso de verificación (solo si es necesario)
-                        verificationController.verify(active)
-                        
                         val finalStatus = verificationCache[cacheKey] ?: knownStatus
 
-                        // Actualizar estado de banda para la heurística 14 (tras el análisis,
-                        // de modo que el PRÓXIMO ciclo compare contra estos valores). 3.0 — Antes
-                        // de publicar: con esto el ciclo queda completo.
+                        // 2. Contexto de banda para la heurística 14 (tras el análisis, de modo que el
+                        // PRÓXIMO ciclo compare contra estos valores).
                         val isLteActive = active.radioTech == RadioTech.LTE
                         prevBand = if (isLteActive) {
                             active.band ?: active.arfcn?.let { com.alexisgordr.icdetector.core.BandPlan.earfcnToBandLte(it) }
@@ -1802,9 +1773,9 @@ class MiniICService : Service() {
                             while (recentRegisteredDbmTrend.size > 6) recentRegisteredDbmTrend.removeAt(0)
                         }
 
-                        // 3.0 — El resultado visible y su fecha de validez se publican juntos, sin
-                        // nada entre medias que pueda fallar: la pantalla nunca enseña un resultado
-                        // nuevo con la salud del anterior.
+                        // 3. El resultado visible y su fecha de validez se publican juntos, sin nada
+                        // entre medias que pueda fallar: la pantalla nunca enseña un resultado nuevo
+                        // con la salud del anterior.
                         _cellFlow.value = sorted.mapIndexed { index, cell ->
                             if (index == 0) confirmedActive.copy(verified = finalStatus) else cell
                         }
@@ -1812,6 +1783,53 @@ class MiniICService : Service() {
                         // La notificación es presentación: si falla, no es un fallo del análisis.
                         // Al recuperarse se fuerza, para que el aviso no quede por el límite de 2 s.
                         publishNotification { updateNotification(confirmedActive.copy(verified = finalStatus), force = recovered) }
+
+                        // 4. Efectos del ciclo ya publicado. Si fallan, el resultado en pantalla sigue
+                        // siendo válido: no se marca «no disponible»; una línea [SYS] por racha dice
+                        // que puede faltar esa parte (ver publicationTail).
+                        publicationTail {
+                            // Caja negra: se actualiza fuera del hilo de UI. Registra desde 1/3 y
+                            // cierra el episodio al recuperarse o al cambiar de identidad.
+                            val previousIncidentIdentity = lastIncidentIdentity
+                            lastIncidentIdentity = if (confirmedActive.temporalProgress.active) cacheKey else null
+                            writeGate.launch(scope, forensicDispatcher) {
+                                if (previousIncidentIdentity != null && previousIncidentIdentity != cacheKey) {
+                                    dbHelper.closeOpenIncidents(previousIncidentIdentity, interrupted = true)
+                                }
+                                if (confirmedActive.temporalProgress.active) {
+                                    dbHelper.recordIncidentPhase(confirmedActive)
+                                } else {
+                                    dbHelper.closeOpenIncidents(cacheKey, interrupted = false)
+                                }
+                            }
+
+                            // Captura forense pasiva. Recibe una copia del ciclo ya resuelto, jamás
+                            // devuelve datos al detector y por tanto no puede alterar su veredicto.
+                            //
+                            // v2.8.0 — Va por [forensicDispatcher], igual que los incidentes. Con
+                            // Dispatchers.IO (64 hilos) dos ciclos seguidos podían entrar a la vez: el
+                            // mutex interno del grabador los ordena, pero no garantiza EN QUÉ orden, y
+                            // un caso cuyo prebúfer se vuelca detrás de la muestra que lo disparó deja
+                            // de ser una línea de tiempo. Un solo hilo serializa la escritura de verdad.
+                            writeGate.launch(scope, forensicDispatcher) {
+                                forensicRecorder.observe(
+                                    active = confirmedActive.copy(verified = knownStatus),
+                                    neighbors = nonServingContext,
+                                    location = currentLocation,
+                                    latencyState = networkLatencyState.value,
+                                    logs = liveLogs.value,
+                                    trustContradictionTransition = trustContradictionTransition
+                                )
+                            }
+
+                            // Alertas y registro (fila de historial) con el estado de esta entrega.
+                            checkAlerts(
+                                confirmedActive.copy(verified = knownStatus),
+                                confirmed = true,
+                                context = observationContext,
+                                episodeKey = confirmationKey
+                            )
+                        }
                     } else {
                         stableSiteIntensiveActive = false
                         _cellFlow.value = emptyList()
@@ -1857,11 +1875,12 @@ class MiniICService : Service() {
      *
      * Límites (efectos parciales): lo que el ciclo hizo antes de fallar se queda, una sola vez. En
      * segundo plano: trayecto de movilidad, episodio y decisión de Stable-Site, contexto de sitio por
-     * minuto, cachés de lecturas y racha de aislamiento de H1. Al publicar, si el fallo llega a mitad:
-     * episodio y confirmación temporal pueden haber avanzado, y la fila del historial, el incidente,
-     * la muestra forense o la alerta pueden haberse lanzado o no, según dónde falló. No es una
-     * transacción global; no se deshace ni se repite nada. La siguiente entrega es una observación
-     * nueva, no un reintento.
+     * minuto, cachés de lecturas, racha de aislamiento de H1 y la transición de H16 (cell_transitions).
+     * Al publicar, si el fallo llega antes de la pantalla: episodio y confirmación temporal pueden
+     * haber avanzado, pero aún no se ha escrito la fila del historial, el incidente ni la muestra
+     * forense, ni se ha lanzado ninguna alerta: todo eso va después de publicar (publicationTail).
+     * No es una transacción global; no se deshace ni se repite nada. La siguiente entrega es una
+     * observación nueva, no un reintento.
      */
     /**
      * 3.0 — Ciclo de análisis (IO, bajo cellProcessingMutex): si este ciclo abrió un episodio,
@@ -1939,6 +1958,28 @@ class MiniICService : Service() {
             return true
         }
         return false
+    }
+
+    private var publicationTailFailing = false
+
+    /**
+     * 3.0 — Efectos de un ciclo YA publicado (incidentes, caja negra, historial, alertas). Un fallo
+     * aquí no es un fallo del análisis: el resultado en pantalla es válido y no se marca «no
+     * disponible». Una línea [SYS] al empezar una racha, con el tipo de error, nunca el mensaje; lo
+     * que llegó a hacerse antes del fallo se queda, sin repetirlo.
+     */
+    private inline fun publicationTail(block: () -> Unit) {
+        try {
+            block()
+            publicationTailFailing = false
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Throwable) {
+            if (!publicationTailFailing) {
+                publicationTailFailing = true
+                appendLog("[SYS]", "${com.alexisgordr.icdetector.core.AnalysisHealth.TAIL_FAILURE_LOG} [${e.javaClass.simpleName}]")
+            }
+        }
     }
 
     /**

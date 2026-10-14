@@ -11,7 +11,10 @@ import kotlinx.coroutines.CancellationException
  *  - una línea en el terminal al EMPEZAR una racha de fallos y otra al recuperarse, no una por ciclo;
  *  - «Análisis temporalmente no disponible» en la pantalla y en la notificación de monitorización;
  *  - el último resultado válido se presenta como anterior, no actualizado.
- * Un fallo interno nunca genera alarmas de seguridad ni publica un ciclo incompleto.
+ * Un fallo interno ANTES de publicar nunca genera alarmas de seguridad ni publica un ciclo
+ * incompleto: el servicio publica primero la pantalla y la salud, y después los efectos del ciclo
+ * (historial, incidentes, caja negra, alertas). Si falla ese último tramo, el resultado ya publicado
+ * es válido: la salud no cambia y una línea [TAIL_FAILURE_LOG] avisa de que puede faltar esa parte.
  *
  * Generaciones ([CollectionGeneration]): solo cuenta el fallo de un ciclo que todavía podía
  * publicar, y nunca el de un ciclo más antiguo que el último que ya informó (éxito o fallo). Así un
@@ -72,6 +75,7 @@ class AnalysisHealth {
     companion object {
         const val FAILURE_LOG = "Análisis temporalmente no disponible por un fallo interno (no es falta de señal ni una anomalía de red): se mantiene el último resultado válido, no actualizado."
         const val RECOVERY_LOG = "Análisis restablecido: resultado actualizado."
+        const val TAIL_FAILURE_LOG = "Resultado publicado, pero falló el registro o el aviso de este ciclo (historial, incidentes, caja negra o alerta): puede faltar esa parte."
 
         /**
          * El límite del ciclo: ejecuta [block] UNA vez, sin reintentos. Una cancelación se relanza y

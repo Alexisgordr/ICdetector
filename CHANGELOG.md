@@ -11,6 +11,15 @@ GitHub pre-release of an earlier build was withdrawn.
 
 ### Audit fixes
 
+- **A cycle is shown before its alerts and writes.** Publication ran incidents, black box,
+  `checkAlerts` (history row, alert and notification) and the external verification before updating
+  the screen and the health. A failure late in that sequence left an alarm sent and a row written
+  with the old screen and "analysis unavailable", contradicting `AnalysisHealth` ("never raises
+  alarms or publishes an incomplete cycle"). Now the verification is launched in its own `try`, then
+  the band context, then the screen, health and monitoring notification, and only then incidents,
+  black box, history and alerts. If that last part fails, the published result stays valid: health is
+  unchanged and one `[SYS]` line per streak says that part may be missing. The `AnalysisHealth`
+  comment now states exactly this guarantee.
 - **A failure while receiving a reading is no longer swallowed.** Everything between the modem
   delivery and the start of the analysis (parsing, serving-cell selection, Timing Advance handling)
   sat in a `catch` that only printed the stack trace: the reading was lost with no terminal line or

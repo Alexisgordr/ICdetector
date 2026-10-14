@@ -160,6 +160,28 @@ class AnalysisHealthTest {
         listOf("checkAlerts", "securityAlerts", "dbHelper", "_cellFlow").forEach { assertFalse(it, delivery.contains(it)) }
     }
 
+    @Test fun `the screen and health are published before the cycle's alerts and writes`() {
+        val main = listOf(File("src/main/java"), File("app/src/main/java")).first { it.exists() }
+        val service = main.resolve("com/alexisgordr/icdetector/service/MiniICService.kt").readText()
+        val publish = service.substringAfter("if (!collectionGeneration.mayPublish(cycleTicket)) return@withContext")
+            .substringBefore("} else {\n                        stableSiteIntensiveActive = false")
+        fun at(s: String) = publish.indexOf(s).also { assertTrue("falta: $s", it >= 0) }
+        val verify = at("verificationController.verify(active)")
+        val screen = at("_cellFlow.value = sorted.mapIndexed")
+        val health = at("onAnalysisPublished(cycleTicket)")
+        val tail = at("publicationTail {")
+        assertTrue(verify < screen && screen < health && health < tail)
+        listOf("dbHelper.recordIncidentPhase(", "forensicRecorder.observe(", "checkAlerts(").forEach {
+            assertTrue("$it va después de publicar", at(it) > tail)
+        }
+        assertTrue("la verificación no puede tirar la publicación",
+            publish.substring(0, verify).trimEnd().endsWith("try {"))
+        val tailFn = service.substringAfter("private inline fun publicationTail(").substringBefore("\n    }\n")
+        assertTrue(tailFn.contains("catch (e: CancellationException)"))
+        assertTrue(tailFn.contains("AnalysisHealth.TAIL_FAILURE_LOG"))
+        assertFalse("un fallo de la cola no marca «no disponible»", tailFn.contains("analysisHealthTracker"))
+    }
+
     @Test fun `the service wires the boundary, recovery and presentation`() {
         val main = listOf(File("src/main/java"), File("app/src/main/java")).first { it.exists() }
         val res = listOf(File("src/main/res"), File("app/src/main/res")).first { it.exists() }

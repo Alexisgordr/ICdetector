@@ -131,7 +131,7 @@ class ObservationContextPersistenceTest {
         assertTrue(service.indexOf("telephonyController.pollServiceState()") < capture)
         // El análisis usa la misma posición que la fila.
         assertTrue(service.contains("val currentLocation = deliveryLocation"))
-        assertTrue(service.contains("confirmed = true,\n                            context = observationContext,"))
+        assertTrue(Regex("""confirmed = true,\s+context = observationContext,""").containsMatchIn(service))
         listOf("recordHandover(cell, context)", "recordPeriodicIfDue(cell, isScreenOn, context)",
             "securityAlerts.evaluate(cell, confirmed, context, episodeKey)").forEach { assertTrue(it, service.contains(it)) }
     }
