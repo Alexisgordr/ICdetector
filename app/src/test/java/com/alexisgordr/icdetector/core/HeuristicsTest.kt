@@ -518,12 +518,17 @@ class HeuristicsTest {
         assertEquals(HeuristicStatus.FAILED, invalid.heuristicReport.arfcnSanity)
         assertEquals("sin puntos", valid.securityScore, invalid.securityScore)
         assertEquals("sin LR", valid.anomalyConfidence, invalid.anomalyConfidence, 0f)
-        assertTrue("motivo guardado en la fila", invalid.suspiciousReason!!.contains(ThreatAnalyzer.H8_LTE_REASON))
+        assertNull("no se muestra como sospecha", invalid.suspiciousReason)
+        assertEquals("pero sí va a la fila", ThreatAnalyzer.H8_LTE_REASON, invalid.dataQualityReason)
+        assertEquals(ThreatAnalyzer.H8_LTE_REASON,
+            com.alexisgordr.icdetector.models.StoredReasons.forRow(invalid.suspiciousReason, invalid.dataQualityReason))
+        assertNull(valid.dataQualityReason)
         val nr = ThreatAnalyzer.analyzeThreats(
             active = active().copy(radioTech = RadioTech.NR, arfcn = 3_279_166), neighbors = emptyList(),
             cellChangeHistory = emptyList(), currentLocation = null
         )
-        assertTrue(nr.suspiciousReason!!.contains(ThreatAnalyzer.H8_NR_REASON))
+        assertNull(nr.suspiciousReason)
+        assertEquals(ThreatAnalyzer.H8_NR_REASON, nr.dataQualityReason)
     }
     @Test fun `H8 alone never opens a multi-signal episode family`() {
         val report = HeuristicReport(arfcnSanity = HeuristicStatus.FAILED, tacDeviation = HeuristicStatus.FAILED)

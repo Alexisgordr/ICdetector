@@ -82,7 +82,9 @@ internal class ObservationPersistenceController(
     }
 
     fun recordConfirmedAlarm(cell: CellData, context: ObservationContext) =
-        record(cell, context, cell.suspiciousReason ?: "ALARMA CONFIRMADA")
+        record(cell, context, com.alexisgordr.icdetector.models.StoredReasons.forRow(
+            cell.suspiciousReason ?: "ALARMA CONFIRMADA", cell.dataQualityReason
+        ))
 
     fun recordPeriodicIfDue(cell: CellData, screenOn: Boolean, context: ObservationContext) {
         if (!isRecordable(cell)) return
@@ -91,7 +93,7 @@ internal class ObservationPersistenceController(
         if (now - lastPeriodicWrite < interval) return
         lastPeriodicWrite = now
 
-        val pending = pending(cell, cell.suspiciousReason ?: com.alexisgordr.icdetector.models.StoredReasons.CLEAN, context)
+        val pending = pending(cell, com.alexisgordr.icdetector.models.StoredReasons.forRow(cell.suspiciousReason, cell.dataQualityReason), context)
         writeGate.launch(scope, writeDispatcher) {
             val rowId = write(pending) ?: return@launch
             onWrite(rowId)
@@ -100,7 +102,12 @@ internal class ObservationPersistenceController(
         }
     }
 
-    private fun record(cell: CellData, context: ObservationContext, reason: String = cell.suspiciousReason ?: com.alexisgordr.icdetector.models.StoredReasons.CLEAN) {
+    private fun record(
+        cell: CellData,
+        context: ObservationContext,
+        // 3.0.0-beta5 — El aviso de calidad de dato (H8) no se muestra, pero sí se guarda.
+        reason: String = com.alexisgordr.icdetector.models.StoredReasons.forRow(cell.suspiciousReason, cell.dataQualityReason)
+    ) {
         if (!isRecordable(cell)) return
         val pending = pending(cell, reason, context)
         writeGate.launch(scope, writeDispatcher) {

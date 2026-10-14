@@ -80,7 +80,13 @@ data class CellData(
     /** Grupo cerrado de abonados (femtocelda), si la celda lo declara (LTE/WCDMA, API 30). */
     val csg: CsgInfo? = null,
     /** Solo en la celda analizada: portadoras secundarias y entradas registradas extra. */
-    val secondaryCarriers: List<SecondaryCarrier> = emptyList()
+    val secondaryCarriers: List<SecondaryCarrier> = emptyList(),
+    /**
+     * 3.0.0-beta5 — Aviso de calidad de dato de esta observación (H8), o null. No es un motivo de
+     * sospecha: no va en [suspiciousReason] (pantalla, notificaciones, incidentes), pero sí se
+     * guarda en la fila del historial ([com.alexisgordr.icdetector.models.StoredReasons.forRow]).
+     */
+    val dataQualityReason: String? = null
 )
 
 /**

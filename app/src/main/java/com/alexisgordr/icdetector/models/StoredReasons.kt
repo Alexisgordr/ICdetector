@@ -50,6 +50,14 @@ object StoredReasons {
         return parts.takeIf { it.isNotEmpty() }?.joinToString(SEPARATOR)
     }
 
+    /**
+     * 3.0.0-beta5 — Motivo que se guarda en la fila del historial: el de sospecha que se muestra
+     * ([displayed], ya con sus prefijos de sub-umbral o confirmación) más el aviso de calidad de
+     * dato (H8), que no se muestra pero sí se guarda. [CLEAN] si no queda ninguno: una fila con un
+     * aviso de calidad de dato no es limpia y no alimenta el aprendizaje.
+     */
+    fun forRow(displayed: String?, dataQuality: String?): String = append(displayed, dataQuality) ?: CLEAN
+
     /** Prefijo de una alarma aún en confirmación temporal, p. ej. `[2/3 ciclos confirmando]`. */
     fun confirmingPrefix(streak: Int, required: Int): String = "[$streak/$required ciclos confirmando]"
 

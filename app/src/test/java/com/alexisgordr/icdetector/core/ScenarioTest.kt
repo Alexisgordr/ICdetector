@@ -456,6 +456,22 @@ class ScenarioTest {
         val first = analyzeFirst(invalidChannelAtBorder())
         assertEquals("H8 se evalúa y falla", HeuristicStatus.FAILED, first.heuristicReport.arfcnSanity)
         assertEquals("sin H8 en los puntos, y H3 pasa con la SIM", 100, first.securityScore)
+        // H8 no se muestra (ni en pantalla ni en alertas), pero la fila guardada lo lleva y no es limpia.
+        val published = TemporalConfidence().apply(first)
+        assertEquals(null, published.suspiciousReason)
+        val row = com.alexisgordr.icdetector.models.StoredReasons.forRow(published.suspiciousReason, published.dataQualityReason)
+        assertEquals(ThreatAnalyzer.H8_LTE_REASON, row)
+        assertTrue(!com.alexisgordr.icdetector.models.StoredReasons.isClean(row))
+        // Con una sospecha sub-umbral, el aviso va detrás de ella, sin prefijo propio.
+        val withH3 = TemporalConfidence().apply(analyzeFirst(invalidChannelAtBorder().map {
+            it.copy(active = it.active.copy(mcc = "208"), neighbors = it.neighbors.filter { n -> n.mcc != "208" },
+                service = homeService(network = "20801"))
+        }))
+        assertEquals(
+            "[sub-umbral] Inconsistencia MCC: servidora 208 ≠ SIM 214, sin roaming ni vecinas con ese MCC | " +
+                ThreatAnalyzer.H8_LTE_REASON,
+            com.alexisgordr.icdetector.models.StoredReasons.forRow(withH3.suspiciousReason, withH3.dataQualityReason)
+        )
     }
     @Test fun `escenario benigno - ping-pong de frontera en parado`() {
         expectNoAlarm("BORDER_PINGPONG", borderPingPong())

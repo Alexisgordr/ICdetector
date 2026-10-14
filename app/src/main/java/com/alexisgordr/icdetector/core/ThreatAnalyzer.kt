@@ -381,18 +381,22 @@ object ThreatAnalyzer {
         // tabla 3GPP describe un módem que informa mal, no un ataque. Se sigue evaluando, publicando
         // (informe, terminal, caja negra) y guardando en la fila con su motivo, pero no resta puntos,
         // no entra en el bayesiano ni cuenta para los episodios. Corte de dataset para H8.
+        // Su motivo tampoco va a `reasons` (que acaba en pantalla y en las alertas): un motivo sin
+        // penalización no es una observación sobre la antena (igual que la verificación externa,
+        // más abajo). Va aparte, en `dataQualityReason`, y solo se añade a la fila guardada.
+        var dataQualityReason: String? = null
         active.arfcn?.takeUnless { it == ARFCN_UNAVAILABLE }?.let { arfcn ->
             if (active.radioTech == RadioTech.NR) {
                 eArfcn = true
                 if (!RadioChannels.isValidChannel(RadioTech.NR, arfcn)) {
                     hArfcn = false
-                    reasons.add(H8_NR_REASON)
+                    dataQualityReason = H8_NR_REASON
                 }
             } else if (active.radioTech == RadioTech.LTE) {
                 eArfcn = true
                 if (!RadioChannels.isValidChannel(RadioTech.LTE, arfcn)) {  // EARFCN 0 es válido (Banda 1, 2110 MHz)
                     hArfcn = false
-                    reasons.add(H8_LTE_REASON)
+                    dataQualityReason = H8_LTE_REASON
                 }
             }
         }
@@ -748,7 +752,8 @@ object ThreatAnalyzer {
             heuristicReport = report,
             securityScore = finalScore,
             anomalyConfidence = anomalyConfidence,
-            transitionCoherence = transitionCoherence
+            transitionCoherence = transitionCoherence,
+            dataQualityReason = dataQualityReason
         )
     }
 }
