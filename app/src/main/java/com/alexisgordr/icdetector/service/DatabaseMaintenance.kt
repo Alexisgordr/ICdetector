@@ -9,15 +9,10 @@ internal class DatabaseMaintenance(
     private val db: CellDbHelper,
     private val log: (String) -> Unit
 ) {
-    private var lastRunElapsedMs = 0L
+    // 3.0 (corte de campaña) — La primera petición del servicio ejecuta ya (ver MaintenanceSchedule).
+    private val schedule = com.alexisgordr.icdetector.core.MaintenanceSchedule { SystemClock.elapsedRealtime() }
 
-    @Synchronized
-    fun claimRun(force: Boolean = false): Boolean {
-        val now = SystemClock.elapsedRealtime()
-        if (!force && now - lastRunElapsedMs < INTERVAL_MS) return false
-        lastRunElapsedMs = now
-        return true
-    }
+    fun claimRun(force: Boolean = false): Boolean = schedule.claim(force)
 
     fun run() {
         // 3.0 — La poda tiene su propio resultado: si falla (la transacción ya se revirtió), se dice
@@ -50,9 +45,5 @@ internal class DatabaseMaintenance(
         } catch (e: Exception) {
             log("⚠️ Mantenimiento de base de datos fallido (${e.javaClass.simpleName}).")
         }
-    }
-
-    private companion object {
-        const val INTERVAL_MS = 24L * 60 * 60 * 1000
     }
 }
