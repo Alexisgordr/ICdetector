@@ -6,7 +6,7 @@ import sys
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from check_export import (
-    LTE_EARFCN_RANGES, bands_outside_table, calendar_period_stats, dataset_cut_summary, evaluation_coverage, gps_accuracy_issues, abstention_reasons,
+    LTE_EARFCN_RANGES, bands_outside_table, calendar_period_stats, dataset_cut_summary, evaluation_coverage, gps_accuracy_issues, abstention_reasons, failure_rates, failed_rules, RULE_REASON_PREFIXES,
     instant_issues, location_mode_summary, profile_summary, profile_row_issue, EXPECTED_COLUMNS_V30_PROFILE, PROFILE_ABSTAIN_REASONS, radio_context_summary, row_instant, version_key,
     ta_consistency_issues, ta_unit_diagnostic
 )
@@ -150,6 +150,51 @@ class EvaluationCoverageTest(unittest.TestCase):
             "H1": {"csg": 1}, "H2": {"csg": 1}, "H3": {"roaming": 1, "frontera": 1},
             "H5": {"csg": 1}, "H6": {"csg": 1}, "H7": {"csg": 1},
         }, abstention_reasons(rows))
+
+    def test_failure_rate_counts_failed_over_evaluated(self):
+        rows = [
+            {"NotEvaluatedHeuristics": "H9", "FailedHeuristics": "[sub-umbral] Inconsistencia MCC: servidora 208 ≠ SIM 214, sin roaming ni vecinas con ese MCC"},
+            {"NotEvaluatedHeuristics": "H3(roaming);H9", "FailedHeuristics": "OK"},
+            {"NotEvaluatedHeuristics": "H9", "FailedHeuristics": "[2/3 ciclos confirmando] Salto potencia (>35dB) | Vecinos fantasma | Calidad de dato: EARFCN 4G fuera de la tabla 3GPP"},
+            {"NotEvaluatedHeuristics": "", "FailedHeuristics": "Celda aislada"},  # anterior a 3.0: no cuenta
+        ]
+        rates = failure_rates(rows)
+        self.assertEqual((1, 2), rates["H3"])
+        self.assertEqual((1, 3), rates["H2"])
+        self.assertEqual((1, 3), rates["H7"])
+        self.assertEqual((1, 3), rates["H8"])
+        self.assertEqual((0, 3), rates["H1"])
+        self.assertEqual((0, 0), rates["H9"])
+
+    def test_reasons_that_are_not_rules_match_none(self):
+        self.assertEqual(set(), failed_rules("OK"))
+        self.assertEqual(set(), failed_rules(""))
+        self.assertEqual({"H11", "H15"}, failed_rules(
+            "Inconsistencia RF (PCI/ARFCN) detectada a gran distancia | Identidad RF inestable: misma Cell ID alternando PCI en la misma portadora (posible clon)"))
+        self.assertEqual({"H13"}, failed_rules("Potencia anómala vs historial (+20dB)"))
+
+    def test_every_reason_the_analyzer_writes_maps_to_one_rule(self):
+        root = Path(__file__).resolve().parent.parent / "app/src/main/java/com/alexisgordr/icdetector"
+        analyzer = (root / "core/ThreatAnalyzer.kt").read_text(encoding="utf-8")
+        literals = re.findall(r'reasons\.add\((?:hMobileReason \?: )?"([^"$]+)', analyzer)
+        constants = [
+            re.search(r'const val %s = "([^"]+)"' % name, text).group(1)
+            for name, text in [
+                ("H8_LTE_REASON", analyzer), ("H8_NR_REASON", analyzer),
+                ("REASON_PREFIX", (root / "core/MccConsistencyRule.kt").read_text(encoding="utf-8")),
+                ("H13_POWER_PREFIX", (root / "models/StoredReasons.kt").read_text(encoding="utf-8")),
+                ("H13_RF_PREFIX", (root / "models/StoredReasons.kt").read_text(encoding="utf-8")),
+                ("H15_PREFIX", (root / "models/StoredReasons.kt").read_text(encoding="utf-8")),
+            ]
+        ]
+        detail = re.findall(r'"(Inconsistencia RF[^"]*|Celda detectada a distancia anómala)', analyzer)
+        texts = literals + constants + detail
+        self.assertGreaterEqual(len(literals), 12)
+        for text in texts:
+            self.assertEqual(1, len(failed_rules(text)), text)
+        # Cada regla con motivo tiene al menos uno de esos textos (H9 no escribe ninguno).
+        covered = set().union(*(failed_rules(t) for t in texts))
+        self.assertEqual(set(RULE_REASON_PREFIXES), covered)
 
     def test_no_rows_with_the_column_means_unknown_not_evaluated(self):
         coverage = evaluation_coverage([{"NotEvaluatedHeuristics": ""}, {}])

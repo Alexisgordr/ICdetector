@@ -21,6 +21,7 @@ app dice que deben cumplirse siempre. Si una falla, hay un bug, no un falso posi
 
 import csv
 import math
+import re
 import sys
 from collections import Counter, defaultdict
 from datetime import datetime
@@ -65,6 +66,29 @@ DATASET_CUTS = [
     ("3.0.0", "instante UTC y cobertura por fila (metodología)"),
 ]
 HEURISTIC_IDS = [f"H{i}" for i in range(1, 17)]
+# 3.0 (corte de campaña) — Comienzo de cada motivo que ThreatAnalyzer guarda en FailedHeuristics,
+# por regla (un test lo compara con ThreatAnalyzer.kt). H8 lleva también el texto anterior al
+# corte; H9 nunca ha escrito un motivo. Prefijos como `[sub-umbral]` o `[2/3 ciclos confirmando]`
+# se quitan antes de comparar; motivos que no son de una regla (confianza local, episodios,
+# Stable-Site) no cuentan para ninguna.
+RULE_REASON_PREFIXES = {
+    "H1": ("Celda aislada",),
+    "H2": ("Salto potencia",),
+    "H3": ("Inconsistencia MCC",),
+    "H4": ("Multitud de MNCs",),
+    "H5": ("Desviación TAC",),
+    "H6": ("Proximidad anómala (TA)",),
+    "H7": ("Vecinos fantasma",),
+    "H8": ("Calidad de dato:", "Frecuencia (ARFCN) 5G sospechosa", "Frecuencia (EARFCN) 4G sospechosa"),
+    "H10": ("Efecto Ping-Pong",),
+    "H11": ("Consistencia geográfica fallida", "Inconsistencia RF (PCI/ARFCN) detectada a gran distancia",
+            "Celda detectada a distancia anómala"),
+    "H12": ("RF anómalo + latencia",),
+    "H13": ("Potencia anómala vs historial", "Huella RF incoherente con el historial"),
+    "H14": ("Downgrade de banda forzado",),
+    "H15": ("Identidad RF inestable:",),
+    "H16": ("Transición celular incoherente",),
+}
 # 3.0 (#32) — Rangos EARFCN de bajada por banda, iguales que BandPlan.kt (lo comprueba un test).
 LTE_EARFCN_RANGES = {
     1: (0, 599),
@@ -277,6 +301,33 @@ def evaluation_coverage(rows):
             if h not in skipped:
                 evaluated[h] += 1
     return {h: (evaluated[h], known) for h in HEURISTIC_IDS}
+
+
+def failed_rules(failed_heuristics):
+    """Reglas cuyo motivo aparece en un valor de FailedHeuristics (`OK` o vacío: ninguna)."""
+    found = set()
+    for part in (failed_heuristics or "").split(" | "):
+        text = re.sub(r"^(\[[^\]]*\]\s*)+", "", part.strip())
+        for rule, prefixes in RULE_REASON_PREFIXES.items():
+            if text.startswith(prefixes):
+                found.add(rule)
+    return found
+
+
+def failure_rates(rows):
+    """
+    3.0 (corte de campaña) — Por regla: (filas en que falló, filas en que se evaluó), sobre las
+    mismas filas que evaluation_coverage. Con datos de campo casi todos benignos, fallos/evaluadas
+    estima P(fallo | sin ataque): el denominador de la razón de verosimilitud de cada regla.
+    """
+    failed = {h: 0 for h in HEURISTIC_IDS}
+    for r in rows:
+        if not (r.get("NotEvaluatedHeuristics") or "").strip():
+            continue
+        for rule in failed_rules(r.get("FailedHeuristics")):
+            failed[rule] += 1
+    coverage = evaluation_coverage(rows)
+    return {h: (failed[h], coverage[h][0]) for h in HEURISTIC_IDS}
 
 
 def rule_id(entry):
@@ -726,9 +777,12 @@ def main(path):
             print("  Ninguna fila con NotEvaluatedHeuristics: todas son anteriores a 3.0.")
         else:
             print(f"  Filas con el dato: {known} de {len(rows)} (el resto es anterior a 3.0: desconocido)")
+            rates = failure_rates(rows)
             for h in HEURISTIC_IDS:
                 ev, total = coverage[h]
-                print(f"    {h:>3}: evaluada en {100 * ev / total:5.1f} % ({ev}/{total})")
+                fails, _ = rates[h]
+                rate = f"falla en {100 * fails / ev:5.1f} % ({fails}/{ev})" if ev else "falla en   —"
+                print(f"    {h:>3}: evaluada en {100 * ev / total:5.1f} % ({ev}/{total}) · {rate}")
             for rule, reasons in sorted(abstention_reasons(rows).items(), key=lambda kv: int(kv[0][1:])):
                 detail = ", ".join(f"{k}={v}" for k, v in sorted(reasons.items()))
                 print(f"    {rule} en N/A por motivo: {detail}")
