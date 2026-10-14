@@ -739,10 +739,20 @@ visible-neighbour and learned-route shortcuts, and an `N/A` transition never cou
 routes. Two different recent fixes at the same coordinates are a real measurement of rest and are
 evaluated.
 
+The learned zones are where this phone was attached to each cell, not the cells' coverage: two rural
+macrocells learned only at home and at work cover the road between them together, and a handover
+halfway has little movement and distant zones exactly like an attack. So H16 also uses where the
+phone is. The jump is incoherent only when the phone is in (or next to) the previous cell's learned
+zone and the new cell's zone is far from it: still at home, and a cell learned kilometres away
+appears. Outside the previous cell's zone (between both zones, or already in the new one) H16 says
+`N/A` with that reason; such a row is not marked as failed, so its position keeps feeding the learned
+zones.
+
 - `COHERENT` — the available movement evidence explains the handover.
-- `INCOHERENT` — mature local evidence describes a physically implausible jump. H16 has low weight
-  and cannot confirm an alert on its own.
-- `N/A` — no handover yet, insufficient or stale GPS, or a local zone still learning.
+- `INCOHERENT` — mature local evidence describes a physically implausible jump while the phone is in
+  the previous cell's zone. H16 has low weight and cannot confirm an alert on its own.
+- `N/A` — no handover yet, insufficient or stale GPS, a local zone still learning, or a distant jump
+  with the phone outside the previous cell's zone.
 
 There is deliberately no universal one-kilometre rule: rural macrocells, urban small cells, terrain,
 load balancing and operator policy make fixed tower-spacing thresholds unreliable.

@@ -11,6 +11,16 @@ GitHub pre-release of an earlier build was withdrawn.
 
 ### Audit fixes
 
+- **H16 uses where the phone is (dataset cut for H16).** It decided with three numbers: movement
+  between the two fixes, distance between the learned centres and the gap left after both P90 radii.
+  The learned zones are where the phone was attached, not coverage, so a normal handover halfway
+  between two large cells learned at home and at work failed exactly like the attack H16 targets
+  (still at home and a cell learned 15 km away appears), possibly every day at the same point. The
+  current fix position is now an input: the jump is incoherent only with the phone in (or next to)
+  the previous cell's zone and the new zone far from it. Outside the previous zone H16 is `N/A` with
+  the reason, so the row is not marked failed and keeps feeding the zones. Every earlier failing test
+  case (phone in the origin zone) still fails; the review's halfway, high-speed, visible-neighbour and
+  wide-zone cases no longer do.
 - **A reading with an unreadable Cell ID no longer gets the previous cell's local trust.** The service
   only refreshes its cached trust evidence for a readable Cell ID, and the engine did not check it, so
   a "N/A" reading of another cell could be judged against a mature foreign profile and marked as a

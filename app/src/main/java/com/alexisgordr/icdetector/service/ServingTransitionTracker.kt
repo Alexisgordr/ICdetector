@@ -71,6 +71,7 @@ internal class ServingTransitionTracker(
                 previous = prior.endpoint,
                 current = current.endpoint,
                 deviceDistanceMeters = if (previousLocation != null && location != null) previousLocation.distanceTo(location).toDouble() else null,
+                currentPosition = location?.let { com.alexisgordr.icdetector.models.CellLocationSample(it.latitude, it.longitude) },
                 previousAccuracyMeters = previousLocation?.accuracy,
                 currentAccuracyMeters = location?.accuracy,
                 fromSamples = db.getCellLocationSamples(prior.cell),

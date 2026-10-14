@@ -41,6 +41,7 @@ class TransitionGpsFreshnessTest {
         fromIdentity = "214-01-1-A-LTE", toIdentity = "214-01-1-B-LTE",
         elapsedSeconds = (current.snapshotElapsedMs - previous.snapshotElapsedMs) / 1_000L,
         previous = previous, current = current, deviceDistanceMeters = moved,
+        currentPosition = madrid.first(),   // quieto en la zona de origen
         previousAccuracyMeters = 10f, currentAccuracyMeters = 10f,
         fromSamples = madrid, toSamples = to, priorTrustedTransitions = prior, destinationWasNeighbor = neighbor
     )

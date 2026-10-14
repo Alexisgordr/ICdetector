@@ -61,6 +61,12 @@ object TransitionCoherence {
         val previous: Endpoint,
         val current: Endpoint,
         val deviceDistanceMeters: Double?,
+        /**
+         * 3.0 — Posición del fix de la celda nueva. Separa «quieto en la zona de la celda anterior y
+         * aparece una celda aprendida lejos» (lo que H16 persigue) de «a mitad de camino entre dos
+         * celdas grandes» (un handover normal): el desplazamiento entre dos fixes no lo distingue.
+         */
+        val currentPosition: CellLocationSample?,
         val previousAccuracyMeters: Float?,
         val currentAccuracyMeters: Float?,
         val fromSamples: List<CellLocationSample>,
@@ -73,7 +79,12 @@ object TransitionCoherence {
     private data class Geometry(
         val centerDistance: Double,
         val unexplainedGap: Double,
-        val inconsistent: Boolean
+        val inconsistent: Boolean,
+        /**
+         * 3.0 — Salto lejano con poco movimiento, pero el teléfono NO está en la zona aprendida de
+         * la celda anterior: no hay nada que contradecir. Motivo del N/A; null si no aplica.
+         */
+        val outsideOriginReason: String? = null
     )
 
     fun evaluate(input: Input): TransitionCoherenceResult {
@@ -123,6 +134,8 @@ object TransitionCoherence {
                 )
             }
         }
+
+        geometry?.outsideOriginReason?.let { return unavailable(it).copy(centerDistanceMeters = geometry.centerDistance.roundToInt()) }
 
         if (geometry == null) {
             return unavailable(
@@ -209,11 +222,39 @@ object TransitionCoherence {
         // Margen deliberadamente generoso: movimiento medido + errores GPS + 1,5 km de borde RF.
         val measurementMargin = moved +
             (input.previousAccuracyMeters ?: 0f) + (input.currentAccuracyMeters ?: 0f) + 1_500.0
-        val inconsistent = moved <= MAX_STATIONARY_MOVEMENT_M &&
+        val farGap = max(MIN_UNEXPLAINED_GAP_M, measurementMargin * 3.0)
+        val remoteJump = moved <= MAX_STATIONARY_MOVEMENT_M &&
             centers >= MIN_REMOTE_CENTERS_M &&
-            unexplainedGap > max(MIN_UNEXPLAINED_GAP_M, measurementMargin * 3.0)
-        return Geometry(centers, unexplainedGap, inconsistent)
+            unexplainedGap > farGap
+        if (!remoteJump) return Geometry(centers, unexplainedGap, inconsistent = false)
+
+        // 3.0 — Dónde está el teléfono respecto a las dos zonas. Las zonas son centros de
+        // OBSERVACIÓN (donde el móvil estuvo enganchado), no la cobertura: dos macroceldas vistas
+        // solo desde casa y desde el trabajo cubren juntas la carretera, y un handover a mitad de
+        // camino tiene poco movimiento y centros lejanos igual que el ataque. Solo es incoherente
+        // si el teléfono está en (o junto a) la zona de la celda anterior y la de la nueva queda
+        // lejos de él: quieto en casa y aparece una celda aprendida a kilómetros.
+        val here = input.currentPosition
+            ?: return Geometry(centers, unexplainedGap, inconsistent = false, outsideOriginReason = NO_POSITION)
+        val fromOutside = CellGeometry.distanceMeters(here.latitude, here.longitude, from.latitude, from.longitude) - from.radiusP90
+        val toOutside = CellGeometry.distanceMeters(here.latitude, here.longitude, to.latitude, to.longitude) - to.radiusP90
+        val atOrigin = fromOutside <= measurementMargin
+        if (atOrigin && toOutside > farGap) return Geometry(centers, unexplainedGap, inconsistent = true)
+        val reason = when {
+            !atOrigin && toOutside > measurementMargin -> OUTSIDE_BOTH
+            !atOrigin -> AT_DESTINATION
+            else -> DESTINATION_NOT_FAR
+        }
+        return Geometry(centers, unexplainedGap, inconsistent = false, outsideOriginReason = reason)
     }
+
+    internal const val NO_POSITION = "falta la posición del fix de la celda nueva."
+    internal const val OUTSIDE_BOTH =
+        "la posición está fuera de las zonas aprendidas de ambas celdas; entre dos celdas grandes ese salto puede ser normal."
+    internal const val AT_DESTINATION =
+        "la posición está en la zona aprendida de la celda nueva, no en la de la anterior."
+    internal const val DESTINATION_NOT_FAR =
+        "la zona aprendida de la celda nueva no queda lo bastante lejos de la posición."
 
     private fun passed(input: Input, centers: Double?, moved: Double, detail: String, learnable: Boolean) =
         TransitionCoherenceResult(

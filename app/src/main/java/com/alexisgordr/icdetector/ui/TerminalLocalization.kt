@@ -452,6 +452,14 @@ private val replacements = linkedMapOf(
     "no hubo cambio de celda." to "there was no cell change.",
     "el intervalo entre observaciones no permite atribuir el desplazamiento al handover." to "the interval between observations does not allow attributing the movement to the handover.",
     "La celda destino ya era vecina visible antes del handover." to "The destination cell was already a visible neighbour before the handover.",
+    // 3.0 — H16: posición del teléfono respecto a las dos zonas aprendidas (TransitionCoherence).
+    "falta la posición del fix de la celda nueva." to "the position of the new cell's fix is missing.",
+    "la posición está fuera de las zonas aprendidas de ambas celdas; entre dos celdas grandes ese salto puede ser normal." to
+        "the position is outside the learned zones of both cells; between two large cells that jump can be normal.",
+    "la posición está en la zona aprendida de la celda nueva, no en la de la anterior." to
+        "the position is in the new cell's learned zone, not in the previous one's.",
+    "la zona aprendida de la celda nueva no queda lo bastante lejos de la posición." to
+        "the new cell's learned zone is not far enough from the position.",
     " origen, " to " origin, ",
     " destino)." to " destination).",
     "pero las zonas aprendidas quedan a " to "but the learned zones are ",

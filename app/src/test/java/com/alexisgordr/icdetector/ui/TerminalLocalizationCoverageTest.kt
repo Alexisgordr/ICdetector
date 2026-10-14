@@ -21,6 +21,11 @@ class TerminalLocalizationCoverageTest {
     )
 
     private val lines = listOf(
+        // 3.0 — H16: posición respecto a las zonas aprendidas.
+        "N/A: falta la posición del fix de la celda nueva.",
+        "N/A: la posición está fuera de las zonas aprendidas de ambas celdas; entre dos celdas grandes ese salto puede ser normal.",
+        "N/A: la posición está en la zona aprendida de la celda nueva, no en la de la anterior.",
+        "N/A: la zona aprendida de la celda nueva no queda lo bastante lejos de la posición.",
         "[AUDIT] Celda 1234 — índice heurístico: 0% (10/16 reglas evaluadas; 6 sin datos) · sin registro en OpenCellID; no resta puntos porque esa base es incompleta",
         "[AUDIT] Celda 1234 — índice heurístico: 0% (10/16 reglas evaluadas; 6 sin datos) · respuesta descartada o no creíble; no concluye nada sobre la antena",
         "[AUDIT] Celda 1234 — índice heurístico: 0% (10/16 reglas evaluadas; 6 sin datos) · pendiente de verificar",

@@ -165,7 +165,7 @@ class HandoverContinuityTest {
         // H16 sin fix: N/A por GPS, no por interrupción, y nunca suma a rutas fiables.
         val samples = List(4) { CellLocationSample(40.0, -3.0) }
         val r = TransitionCoherence.evaluate(TransitionCoherence.Input("A0", "B", 5,
-            TransitionCoherence.Endpoint(100_000, null), TransitionCoherence.Endpoint(105_000, null), null, null, null,
+            TransitionCoherence.Endpoint(100_000, null), TransitionCoherence.Endpoint(105_000, null), null, null, null, null,
             samples, samples, 3, true))
         assertEquals(HeuristicStatus.NOT_EVALUATED, r.status)
         assertTrue(r.explanation.contains("no hay fix GPS"))

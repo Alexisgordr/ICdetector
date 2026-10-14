@@ -24,7 +24,9 @@ class TransitionCoherenceTest {
         to: List<CellLocationSample> = barcelona,
         prior: Int = 0,
         neighbor: Boolean = false,
-        accuracy: Float = 10f
+        accuracy: Float = 10f,
+        // 3.0 — Por defecto el teléfono está en la zona de origen (Madrid): el caso que H16 persigue.
+        here: CellLocationSample? = madrid.first()
     ) = TransitionCoherence.Input(
         fromIdentity = "214-01-1-A-LTE", toIdentity = "214-01-1-B-LTE",
         elapsedSeconds = 5,
@@ -32,6 +34,7 @@ class TransitionCoherenceTest {
         previous = TransitionCoherence.Endpoint(100_000L, 98_000L * 1_000_000L),
         current = TransitionCoherence.Endpoint(105_000L, 104_000L * 1_000_000L),
         deviceDistanceMeters = moved,
+        currentPosition = here,
         previousAccuracyMeters = accuracy, currentAccuracyMeters = accuracy,
         fromSamples = from, toSamples = to, priorTrustedTransitions = prior,
         destinationWasNeighbor = neighbor
