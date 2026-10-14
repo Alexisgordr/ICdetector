@@ -745,10 +745,10 @@ fun SecurityScorePanel(active: CellData, dbmHistory: List<Int>, geoHistory: List
                         fontSize = 9.sp
                     )
 
-                    // Probabilidad Bayesiana de amenaza
-                    val threatColor = when {
-                        active.anomalyConfidence >= 50f -> Color(0xFFCF6679)
-                        active.anomalyConfidence >= 20f -> Color(0xFFFFA000)
+                    // Probabilidad Bayesiana de amenaza: color según [anomalyConfidenceTier].
+                    val threatColor = when (anomalyConfidenceTier(active.anomalyConfidence)) {
+                        2 -> Color(0xFFCF6679)
+                        1 -> Color(0xFFFFA000)
                         else -> Color(0xFF555555)
                     }
                     // v2.1 — "Amenaza estimada" sugería una probabilidad estadística validada.

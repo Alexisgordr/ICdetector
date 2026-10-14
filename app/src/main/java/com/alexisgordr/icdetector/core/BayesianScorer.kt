@@ -14,8 +14,12 @@ package com.alexisgordr.icdetector.core
  * ratios exactos. Estos valores son interpretaciones expertas,
  * no constantes científicamente medidas.
  *
- * Prior P(IMSI) = 0.02 (2%) — estimación conservadora
+ * Prior P(IMSI) = 0.005 (0,5 %) — estimación conservadora
  * para entorno urbano europeo sin contexto especial.
+ * 3.0.0-beta5: bajado de 0.02 a 0.005. Con el 2 % una sola señal débil (p. ej. H6 sola,
+ * LR 7) ya pintaba un 12,5 %; con 0,5 % se queda en ~3,4 % y hace falta evidencia
+ * combinada para subir. Las LR no cambian; solo el punto de partida. Corte de dataset:
+ * anomaly_confidence no es comparable entre filas anteriores y posteriores a este cambio.
  *
  * Heurísticas agrupadas por correlación física para evitar
  * inflación del posterior por dependencia implícita en Naive Bayes.
@@ -32,7 +36,7 @@ package com.alexisgordr.icdetector.core
  */
 object BayesianScorer {
 
-    private const val PRIOR = 0.02f
+    internal const val PRIOR = 0.005f
 
     private val LIKELIHOOD_RATIOS = mapOf(
         // Grupo RF Dominance — señal dominante anómala

@@ -18,16 +18,18 @@ class BayesianScorerTest {
     private val DELTA = 0.1f
 
     @Test
-    fun `sin evidencia devuelve el prior del 2 por ciento`() {
+    fun `sin evidencia devuelve el prior del 0,5 por ciento`() {
+        // 3.0.0-beta5: prior 0.02 -> 0.005 (corte de dataset de anomaly_confidence).
+        assertEquals(0.005f, BayesianScorer.PRIOR, 0f)
         val result = BayesianScorer.calculate(emptyList(), "PENDING", false)
-        assertEquals(2.0f, result, DELTA)
+        assertEquals(0.5f, result, 0.01f)
     }
 
     @Test
     fun `una heuristica fuerte sola sube el posterior`() {
-        // ciphering (H9) es independiente, LR = 12 -> ~19.7%
+        // ciphering (H9) es independiente, LR = 12 -> ~5.7% con prior 0.005
         val result = BayesianScorer.calculate(listOf("ciphering"), "PENDING", false)
-        assertTrue("esperado ~19.7%, fue $result", result in 18f..22f)
+        assertTrue("esperado ~5.7%, fue $result", result in 5.5f..5.9f)
     }
 
     @Test
@@ -206,19 +208,19 @@ class BayesianScorerTest {
     @Test
     fun `H6 and H2 are the same nearby transmitter and do not multiply`() {
         val h6 = BayesianScorer.calculate(listOf("taDistance"), "PENDING", false)
-        assertEquals(12.5f, h6, DELTA)
-        // Antes, en grupos distintos: 44 %. Ahora cuenta solo la mayor (7,0).
+        assertEquals(3.4f, h6, DELTA)
+        // Antes, en grupos distintos, se multiplicaban. Ahora cuenta solo la mayor (7,0).
         assertEquals(h6, BayesianScorer.calculate(listOf("taDistance", "powerJump"), "PENDING", false), 0.001f)
         assertEquals(h6, BayesianScorer.calculate(listOf("taDistance", "ghostCells"), "PENDING", false), 0.001f)
     }
 
     @Test
     fun `H6 is damped by reputation but not by neighbour density`() {
-        assertEquals(8.6f, BayesianScorer.calculate(listOf("taDistance"), "PENDING", false, trustScore = 85), DELTA)
+        assertEquals(2.3f, BayesianScorer.calculate(listOf("taDistance"), "PENDING", false, trustScore = 85), DELTA)
         val dense = BayesianScorer.calculate(listOf("taDistance"), "PENDING", false, neighborCount = 6)
         assertEquals(dense, BayesianScorer.calculate(listOf("taDistance"), "PENDING", false, neighborCount = 0), 0.001f)
         // Amortiguar nunca invierte la evidencia.
-        assertTrue(BayesianScorer.calculate(listOf("taDistance"), "PENDING", false, neighborCount = 0, trustScore = 100) > 2.0f)
+        assertTrue(BayesianScorer.calculate(listOf("taDistance"), "PENDING", false, neighborCount = 0, trustScore = 100) > 0.5f)
     }
 
     @Test
