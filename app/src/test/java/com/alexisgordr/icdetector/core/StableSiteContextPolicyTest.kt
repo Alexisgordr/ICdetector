@@ -74,6 +74,22 @@ class StableSiteContextPolicyTest {
         assertTrue("una sola llamada", service.split("dbHelper.recordStableSiteContext(").size == 2)
     }
 
+    /**
+     * 3.0 (corte de campaña) — Un análisis descartado en mayPublish no enseña al sitio: el aprendizaje
+     * va después del bloque de publicación y solo si publicó. Antes se escribía antes del gate.
+     */
+    @Test fun `only a published cycle teaches the site`() {
+        val service = listOf(File("src/main/java"), File("app/src/main/java")).first { it.exists() }
+            .resolve("com/alexisgordr/icdetector/service/MiniICService.kt").readText()
+        val gate = service.indexOf("if (!collectionGeneration.mayPublish(cycleTicket)) return@withContext false")
+        val learn = service.indexOf("if (published) analyzedList.firstOrNull()")
+        val record = service.indexOf("dbHelper.recordStableSiteContext(")
+        assertTrue(service.contains("val published = withContext(Dispatchers.Main) {"))
+        assertTrue("el gate existe", gate > 0)
+        assertTrue("aprende después del gate y solo si publicó", gate < learn && learn < record)
+        assertFalse("nada lo escribe antes del gate", service.substring(0, gate).contains("recordStableSiteContext("))
+    }
+
     @Test fun `the deliberate exceptions to the clean-row rule are written down`() {
         val db = listOf(File("src/main/java"), File("app/src/main/java")).first { it.exists() }
             .resolve("com/alexisgordr/icdetector/storage/CellDbHelper.kt").readText()

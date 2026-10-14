@@ -86,7 +86,7 @@ class CollectionGenerationTest {
         // La comprobación es lo primero del bloque que publica, alerta y guarda.
         val publish = service.substringAfter("withContext(Dispatchers.Main) {\n                    // 3.0 (#24)")
         val firstCode = publish.lineSequence().drop(1).map { it.trim() }.first { it.isNotEmpty() && !it.startsWith("//") }
-        assertTrue(firstCode, firstCode == "if (!collectionGeneration.mayPublish(cycleTicket)) return@withContext")
+        assertTrue(firstCode, firstCode == "if (!collectionGeneration.mayPublish(cycleTicket)) return@withContext false")
         assertTrue(publish.indexOf("checkAlerts(") > 0)
         // Lista vacía, abstención, modo avión y refresco forzado invalidan los ciclos en curso.
         assertTrue(Regex("onSignalLost\\(\\)").findAll(service).count() >= 4)   // definición + 3 pérdidas

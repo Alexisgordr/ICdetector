@@ -1343,6 +1343,10 @@ class MiniICService : Service() {
                         siteKeys.map { key -> dbHelper.evaluateStableSiteCandidate(key, activeRaw, stableSitePreviousIdentity, motionEvidence) }
                     )!!
                 } else com.alexisgordr.icdetector.core.StableSiteDecision(reason = "NO_SERVING_CELL")
+                // Episodios de Stable-Site: registran el cambio de servidora observado y su decisión
+                // entra en el análisis (LocalCellTrustEngine), así que van antes de mayPublish, como
+                // el viaje de movilidad. No enseñan nada al sitio: eso es recordStableSiteContext,
+                // que solo corre con un ciclo publicado.
                 if (activeRaw != null && activeRaw.cellId != "N/A") {
                     val episodeObservation = dbHelper.observeStableSiteEpisodeStart(activeRaw.identityKey, stableSitePreviousIdentity)
                     recordStableSiteEpisodeStart(episodeObservation, stableSiteCandidate)
@@ -1355,8 +1359,11 @@ class MiniICService : Service() {
                 // H16 se prepara antes de analizar la celda: aquí todavía conservamos la última
                 // servidora. El resultado se retiene 20 s para que los tres ciclos temporales
                 // puedan observar el mismo handover, sin convertirlo en un fallo permanente.
-                // 3.0 — Escribe cell_transitions YA, antes de mayPublish: es la única escritura
-                // del ciclo fuera de la publicación (ver ServingTransitionTracker).
+                // 3.0 — Escribe cell_transitions YA, antes de mayPublish (ver ServingTransitionTracker).
+                // Es una de las escrituras que observan un hecho real del ciclo y no dependen de que
+                // se publique: el viaje de movilidad, los episodios de Stable-Site (arriba; su
+                // decisión la usa el propio análisis) y esta transición. Lo que se aprende o se
+                // muestra (historial, incidentes, caja negra, contexto de Stable-Site) va después.
                 val transitionCoherence = if (activeRaw != null && activeRaw.cellId != "N/A") {
                     transitionTracker.evaluate(activeRaw, currentLocation, neighbors, serviceContinuous = !continuityBroken)
                 } else TransitionCoherenceResult()
@@ -1584,40 +1591,14 @@ class MiniICService : Service() {
                     }
                 }
 
-                // v2.10.10 — Escritura de Stable-Site fuera del hilo principal. Se hacía dentro del
-                // bloque Main: hasta cuatro transacciones SQLite por ciclo que, con la base ocupada
-                // (poda, borrado), congelaban la interfaz. Sigue dentro del mutex de ciclos, así que
-                // el orden de las escrituras no cambia, y escribe exactamente lo mismo.
-                // 3.0 — Solo un ciclo limpio, sin racha de confirmación ni episodio abierto, enseña
-                // a Stable-Site (ver StableSiteContextPolicy). Ambos estados los cambia la
-                // publicación, bajo este mismo cerrojo.
-                analyzedList.firstOrNull()?.takeIf { it.isRegistered }?.takeIf { servingForSite ->
-                    com.alexisgordr.icdetector.core.StableSiteContextPolicy.mayLearn(
-                        servingForSite,
-                        inConfirmation = temporalConfidence.inConfirmation,
-                        episodeOpen = threatEpisodeTracker.hasOpenEpisode()
-                    )
-                }?.let { servingForSite ->
-                    siteKeys.forEach { key ->
-                        dbHelper.recordStableSiteContext(
-                            // One aggregate contribution per identity and minute. The PK also
-                            // makes retries/restarts idempotent without retaining raw snapshots.
-                            eventKey = "${System.currentTimeMillis() / 60_000L}:$key",
-                            siteKey = key,
-                            serving = activeRaw ?: servingForSite,
-                            neighbours = neighbors,
-                            motion = motionEvidence
-                        )
-                    }
-                }
-
-                withContext(Dispatchers.Main) {
+                val published = withContext(Dispatchers.Main) {
                     // 3.0 (#24) — Tras analizar: si mientras tanto se perdió la señal o cambió la
                     // servidora, este resultado ya no describe el presente. No se publica, no
-                    // alerta, no se guarda en historial/incidentes/caja negra ni alimenta los
-                    // contadores de confirmación. Las entregas llegan por el hilo principal, así
-                    // que nada puede cambiar entre esta comprobación y el resto del bloque.
-                    if (!collectionGeneration.mayPublish(cycleTicket)) return@withContext
+                    // alerta, no se guarda en historial/incidentes/caja negra, no enseña a
+                    // Stable-Site ni alimenta los contadores de confirmación. Las entregas llegan
+                    // por el hilo principal, así que nada puede cambiar entre esta comprobación y
+                    // el resto del bloque.
+                    if (!collectionGeneration.mayPublish(cycleTicket)) return@withContext false
                     // 3.0 (#20) — La confirmación temporal y los episodios empiezan de nuevo después
                     // de un hueco de cobertura. La línea del terminal deja constancia en la caja negra.
                     coverageContinuity.acknowledge(signalLosses, deliveredAtElapsedMs)
@@ -1846,6 +1827,36 @@ class MiniICService : Service() {
                         publishNotification {
                             updateNotificationText(getString(R.string.searching_network), force = recovered, kind = com.alexisgordr.icdetector.core.MonitoringNotificationText.TextKind.NO_SIGNAL)
                         }
+                    }
+                    true
+                }
+
+                // v2.10.10 — Escritura de Stable-Site fuera del hilo principal. Se hacía dentro del
+                // bloque Main: hasta cuatro transacciones SQLite por ciclo que, con la base ocupada
+                // (poda, borrado), congelaban la interfaz. Sigue dentro del mutex de ciclos.
+                // 3.0 — Solo un ciclo limpio, sin racha de confirmación ni episodio abierto, enseña
+                // a Stable-Site (ver StableSiteContextPolicy).
+                // 3.0 (corte de campaña) — Y solo un ciclo PUBLICADO: antes se escribía antes de
+                // mayPublish, así que un análisis descartado (la servidora cambió mientras tanto) no
+                // se mostraba ni alertaba, pero enseñaba al sitio. Ahora va detrás de la publicación,
+                // y la confirmación y el episodio que lee son los de ESTE ciclo, ya actualizados.
+                if (published) analyzedList.firstOrNull()?.takeIf { it.isRegistered }?.takeIf { servingForSite ->
+                    com.alexisgordr.icdetector.core.StableSiteContextPolicy.mayLearn(
+                        servingForSite,
+                        inConfirmation = temporalConfidence.inConfirmation,
+                        episodeOpen = threatEpisodeTracker.hasOpenEpisode()
+                    )
+                }?.let { servingForSite ->
+                    siteKeys.forEach { key ->
+                        dbHelper.recordStableSiteContext(
+                            // One aggregate contribution per identity and minute. The PK also
+                            // makes retries/restarts idempotent without retaining raw snapshots.
+                            eventKey = "${System.currentTimeMillis() / 60_000L}:$key",
+                            siteKey = key,
+                            serving = activeRaw ?: servingForSite,
+                            neighbours = neighbors,
+                            motion = motionEvidence
+                        )
                     }
                 }
                 }
