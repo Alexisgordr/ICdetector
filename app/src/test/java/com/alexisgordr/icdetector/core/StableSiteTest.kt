@@ -124,11 +124,11 @@ class StableSiteTest {
     }
 
     @Test fun `site key hides coordinates and tolerates ordinary jitter`() {
-        val a = StableSiteKey.from(42.82670, -1.64550)
-        val b = StableSiteKey.from(42.82675, -1.64545)
+        val a = StableSiteKey.candidates(42.82670, -1.64550).first()
+        val b = StableSiteKey.candidates(42.82675, -1.64545).first()
         assertTrue(StableSiteKey.candidates(42.82670, -1.64550).intersect(StableSiteKey.candidates(42.82675, -1.64545).toSet()).isNotEmpty())
         assertFalse(a.contains("42.82670")); assertEquals(20, a.length)
-        assertNotEquals(a, StableSiteKey.from(42.83670, -1.64550))
+        assertNotEquals(a, StableSiteKey.candidates(42.83670, -1.64550).first())
     }
 
     @Test fun `overlapping site grids survive jitter across a base grid corner`() {

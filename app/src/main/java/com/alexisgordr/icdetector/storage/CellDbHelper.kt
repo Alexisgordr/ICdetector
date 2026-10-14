@@ -194,9 +194,6 @@ class CellDbHelper(
          */
         const val VERIFIED_TTL_MS = 30L * 24 * 60 * 60 * 1000
 
-        /** Re-intento de una negativa firme: 1 h. Una antena recién desplegada puede aparecer. */
-        const val NOT_FOUND_TTL_MS = 60L * 60 * 1000
-
         /**
          * Días de historial que se conservan.
          *
@@ -2622,12 +2619,11 @@ class CellDbHelper(
             if (established.isEmpty()) null else carrier to established
         }.toMap()
         var trustedTransitions = 0
-        var trustedRoutes = 0
         readableDatabase.rawQuery(
             "SELECT trusted_observations FROM $TABLE_CELL_TRANSITIONS " +
                 "WHERE (from_identity=? OR to_identity=?) AND trusted_observations>0",
             arrayOf(cell.identityKey, cell.identityKey)
-        ).use { c -> while (c.moveToNext()) { trustedTransitions += c.getInt(0); trustedRoutes++ } }
+        ).use { c -> while (c.moveToNext()) trustedTransitions += c.getInt(0) }
         // 3.0 — El par actual se valida igual que el histórico antes de buscar su candidato: un
         // sentinel o un valor fuera de rango no es un par PCI/ARFCN nuevo. CellData no se toca (H8
         // sigue viendo el valor original).
@@ -2675,8 +2671,7 @@ class CellDbHelper(
             knownPcisByArfcn = knownPcisByArfcn,
             reconfigurationCandidate = candidate,
             rfObservations = rf,
-            trustedTransitions = trustedTransitions,
-            trustedRoutes = trustedRoutes
+            trustedTransitions = trustedTransitions
         )
     }
 

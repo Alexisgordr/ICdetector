@@ -21,8 +21,7 @@ data class LocalCellTrustEvidence(
     /** Quarantined evidence for the currently observed, not-yet-established RF pair. */
     val reconfigurationCandidate: LocalRfReconfiguration? = null,
     val rfObservations: Int = 0,
-    val trustedTransitions: Int = 0,
-    val trustedRoutes: Int = 0
+    val trustedTransitions: Int = 0
 )
 
 data class LocalRfReconfiguration(

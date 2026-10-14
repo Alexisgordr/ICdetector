@@ -20,7 +20,7 @@ class LocalTrustRfValidationTest {
     private fun mature(byArfcn: Map<Int, Set<Int>> = mapOf(2850 to setOf(10))) = LocalCellTrustEvidence(
         cleanObservations = 80, cappedCleanObservations = 35, distinctDays = 14, ageHours = 14L * 24,
         locatedObservations = 30, knownPcis = byArfcn.values.flatten().toSet(), knownArfcns = byArfcn.keys,
-        rfObservations = 60, knownPcisByArfcn = byArfcn, trustedTransitions = 20, trustedRoutes = 4
+        rfObservations = 60, knownPcisByArfcn = byArfcn, trustedTransitions = 20
     )
 
     private fun contradictions(c: CellData, e: LocalCellTrustEvidence = mature()) =

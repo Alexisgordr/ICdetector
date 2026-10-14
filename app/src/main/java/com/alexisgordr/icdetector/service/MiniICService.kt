@@ -194,10 +194,6 @@ class MiniICService : Service() {
     private lateinit var forensicRecorder: ForensicRecorder
     private val trustContradictionTransitions = TrustContradictionTransitionTracker()
     private val stableSiteMotion = com.alexisgordr.icdetector.core.MotionClassifier()
-    @Volatile private var latestMotionEvidence = com.alexisgordr.icdetector.core.MotionEvidence(
-        com.alexisgordr.icdetector.core.MotionState.UNKNOWN,
-        reason = com.alexisgordr.icdetector.core.MotionReason.NO_RECENT_FIX
-    )
     private var stableSitePreviousIdentity: String? = null
     private var lastStableSiteLog: String? = null
     private var stableSiteIntensiveActive = false
@@ -1307,9 +1303,7 @@ class MiniICService : Service() {
                 // Cellular polling only reads motion. New evidence enters from real Location
                 // callbacks, so a repeated lastKnownLocation cannot manufacture static time.
                 // 3.0 — Reloj monotónico, el mismo con que se sellan los fixes (no la hora civil).
-                val motionEvidence = stableSiteMotion.current(SystemClock.elapsedRealtime()).also {
-                    latestMotionEvidence = it
-                }
+                val motionEvidence = stableSiteMotion.current(SystemClock.elapsedRealtime())
                 // Mobility is contextual metadata only. Its result is deliberately not passed to
                 // ThreatAnalyzer, LocalCellTrust, Stable-Site, alerts or forensics.
                 // 3.0 — Como la racha de aislamiento de H1 (más abajo), es un efecto del ANÁLISIS,
@@ -2075,7 +2069,7 @@ class MiniICService : Service() {
     private fun observeMotionFix(location: Location) {
         // 3.0 — Orden, frescura y duración con el reloj monotónico del fix (elapsedRealtimeNanos),
         // comparado con SystemClock.elapsedRealtime. location.time (hora del GPS/civil) ya no entra.
-        latestMotionEvidence = stableSiteMotion.observe(
+        stableSiteMotion.observe(
             com.alexisgordr.icdetector.core.MotionFix(
                 location.latitude,
                 location.longitude,

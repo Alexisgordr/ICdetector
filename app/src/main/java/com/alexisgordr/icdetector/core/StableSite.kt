@@ -219,7 +219,6 @@ class MotionClassifier(
 /** 500 m Web-Mercator bucket, hashed before persistence to avoid exact-coordinate storage. */
 object StableSiteKey {
     const val GRID_METERS = 500.0
-    fun from(latitude: Double, longitude: Double): String = candidates(latitude, longitude).first()
     /** Four overlapping grids ensure that ordinary GNSS jitter cannot split every site view. */
     fun candidates(latitude: Double, longitude: Double): List<String> {
         val lat = latitude.coerceIn(-85.0, 85.0)

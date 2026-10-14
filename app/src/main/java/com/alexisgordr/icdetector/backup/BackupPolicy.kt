@@ -41,7 +41,7 @@ object BackupPolicy {
 
     /**
      * 3.0 — Consulta de SOLO LECTURA de los objetos que ninguna versión de la app crea: triggers y
-     * vistas. Auditado en todos los esquemas admitidos (20 a 23) y en todo el historial del código:
+     * vistas. Auditado en todos los esquemas admitidos (20 a 25) y en todo el historial del código:
      * la app solo crea tablas e índices. Los objetos internos de SQLite (`sqlite_sequence`,
      * `sqlite_stat*`, `sqlite_autoindex_*`) y `android_metadata` de Android son tablas o índices, así
      * que no aparecen aquí. Un trigger en una copia se ejecutaría al migrarla con el helper y seguiría

@@ -26,7 +26,7 @@ class LocalCellTrustEngineTest {
         ageHours = 14L * 24, locatedObservations = 30,
         knownPcis = setOf(10), knownArfcns = setOf(2850), rfObservations = 60,
         knownPcisByArfcn = mapOf(2850 to setOf(10)),
-        trustedTransitions = 20, trustedRoutes = 4
+        trustedTransitions = 20
     )
 
     @Test fun `confidence never claims certainty`() {

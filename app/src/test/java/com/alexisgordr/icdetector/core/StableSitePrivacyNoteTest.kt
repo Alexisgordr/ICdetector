@@ -15,7 +15,7 @@ class StableSitePrivacyNoteTest {
 
     @Test fun `a key can be matched to an approximate place by a candidate search`() {
         // Lo que afirma la nota: sin sal, cualquiera recalcula las claves de una zona y las empareja.
-        val target = StableSiteKey.from(40.4168, -3.7038)
+        val target = StableSiteKey.candidates(40.4168, -3.7038).first()
         var found: Pair<Double, Double>? = null
         var lat = 40.39
         while (found == null && lat <= 40.44) {
@@ -28,7 +28,7 @@ class StableSitePrivacyNoteTest {
         }
         val (fLat, fLon) = checkNotNull(found) { "la búsqueda de candidatos encuentra la clave" }
         assertTrue("a menos de ~1 km", abs(fLat - 40.4168) < 0.01 && abs(fLon + 3.7038) < 0.012)
-        assertEquals("determinista", target, StableSiteKey.from(40.4168, -3.7038))
+        assertEquals("determinista", target, StableSiteKey.candidates(40.4168, -3.7038).first())
     }
 
     @Test fun `the zip starts with a readable privacy note and keeps the csv files unchanged`() {
