@@ -717,25 +717,30 @@ class CellDbHelper(
         if (!hasMatureTrustedBaseline(cell.cellId, cell.mnc, cell.tac, cell.mcc, cell.radioTech, cutoff)) {
             return emptyList()
         }
+        // 3.0 — Se leen hasta PROFILE_SCAN_ROWS filas y se reparten entre días distintos
+        // (CellGeometry.spreadAcrossDays), en vez de quedarse con las [limit] más recientes.
+        val rows = mutableListOf<Pair<String, CellLocationSample>>()
         readableDatabase.rawQuery(
-            "SELECT $COLUMN_LAT,$COLUMN_LON FROM $TABLE_HISTORY " +
+            "SELECT $COLUMN_LAT,$COLUMN_LON,substr($COLUMN_TIMESTAMP,1,10) FROM $TABLE_HISTORY " +
                 "WHERE $COLUMN_CID=? AND $COLUMN_MNC=? AND $COLUMN_TAC=? AND $COLUMN_MCC=? " +
                 "AND $COLUMN_RADIO=? AND $COLUMN_LAT IS NOT NULL AND $COLUMN_LON IS NOT NULL " +
                 "AND $COLUMN_SCORE>=? AND ${StoredReasons.cleanSql(COLUMN_FAILED_H)} " +
                 "AND ${observedSince()} ORDER BY $NEWEST_FIRST LIMIT ?",
             arrayOf(
                 cell.cellId, cell.mnc, cell.tac, cell.mcc, cell.radioTech.name,
-                TRUSTED_BASELINE_MIN_SCORE.toString(), *since(cutoff), limit.toString()
+                TRUSTED_BASELINE_MIN_SCORE.toString(), *since(cutoff),
+                com.alexisgordr.icdetector.core.CellGeometry.PROFILE_SCAN_ROWS.toString()
             )
         ).use { cursor ->
             while (cursor.moveToNext()) {
                 val lat = cursor.getDouble(0)
                 val lon = cursor.getDouble(1)
                 if (lat in -90.0..90.0 && lon in -180.0..180.0 && !(lat == 0.0 && lon == 0.0)) {
-                    out += CellLocationSample(lat, lon)
+                    rows += cursor.getString(2).orEmpty() to CellLocationSample(lat, lon)
                 }
             }
         }
+        out += com.alexisgordr.icdetector.core.CellGeometry.spreadAcrossDays(rows, limit)
         return out
     }
 
@@ -781,7 +786,7 @@ class CellDbHelper(
      * Existe por una razón de coste, no de comodidad: la pestaña de geometría necesita el perfil
      * de varias decenas de celdas a la vez, y hacerlo con [getCellLocationSamples] serían tantas
      * consultas como celdas. Aquí se recorre el historial una vez, en orden descendente, y se
-     * queda con las [perCell] muestras más recientes de cada identidad — mismo criterio, mismo
+     * reparten [perCell] muestras de cada identidad entre días distintos — mismo criterio, mismo
      * saneamiento de coordenadas y misma ventana de 30 días que la consulta por celda, para que
      * los números que se dibujan sean exactamente los que usa H16.
      *
@@ -792,10 +797,10 @@ class CellDbHelper(
         days: Int = 30
     ): Map<String, List<CellLocationSample>> {
         val cutoff = System.currentTimeMillis() - days.toLong() * 24 * 60 * 60 * 1000
-        val out = LinkedHashMap<String, MutableList<CellLocationSample>>()
+        val rows = LinkedHashMap<String, MutableList<Pair<String, CellLocationSample>>>()
         readableDatabase.rawQuery(
             "SELECT $COLUMN_MCC,$COLUMN_MNC,$COLUMN_TAC,$COLUMN_CID,$COLUMN_RADIO," +
-                "$COLUMN_LAT,$COLUMN_LON FROM $TABLE_HISTORY " +
+                "$COLUMN_LAT,$COLUMN_LON,substr($COLUMN_TIMESTAMP,1,10) FROM $TABLE_HISTORY " +
                 "WHERE $COLUMN_LAT IS NOT NULL AND $COLUMN_LON IS NOT NULL " +
                 "AND $COLUMN_SCORE>=? " +
                 "AND ${StoredReasons.cleanSql(COLUMN_FAILED_H)} " +
@@ -813,11 +818,16 @@ class CellDbHelper(
                 if (lat == 0.0 && lon == 0.0) continue
                 val identity = "${cursor.getString(0)}-${cursor.getString(1)}-" +
                     "${cursor.getString(2)}-$cid-$radio"
-                val bucket = out.getOrPut(identity) { mutableListOf() }
-                if (bucket.size < perCell) bucket += CellLocationSample(lat, lon)
+                val bucket = rows.getOrPut(identity) { mutableListOf() }
+                if (bucket.size < com.alexisgordr.icdetector.core.CellGeometry.PROFILE_SCAN_ROWS) {
+                    bucket += cursor.getString(7).orEmpty() to CellLocationSample(lat, lon)
+                }
             }
         }
-        return out
+        // 3.0 — Mismo reparto entre días que getCellLocationSamples.
+        return rows.mapValuesTo(LinkedHashMap()) { (_, list) ->
+            com.alexisgordr.icdetector.core.CellGeometry.spreadAcrossDays(list, perCell)
+        }
     }
 
     fun getTrustedTransitionCount(fromIdentity: String, toIdentity: String): Int =

@@ -757,6 +757,11 @@ zones.
 There is deliberately no universal one-kilometre rule: rural macrocells, urban small cells, terrain,
 load balancing and operator policy make fixed tower-spacing thresholds unreliable.
 
+Each learned zone is built from up to 40 clean located samples of the last 30 days, spread across
+distinct days (each day gets a turn, and inside a day the samples are spaced along it), not the 40
+most recent. One long recent stay elsewhere therefore no longer moves the zone's centre on its own.
+The geometry view uses exactly the same samples.
+
 ### Offline geometry view
 
 The **GEOMETRY** tab draws observation centres, P90 coverage of the phone's own samples and known

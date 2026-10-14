@@ -11,6 +11,11 @@ GitHub pre-release of an earlier build was withdrawn.
 
 ### Audit fixes
 
+- **Learned zones sample distinct days (dataset cut for H16 and the geometry view).** A cell's zone
+  was its 40 most recent clean located samples, so it followed the last place the phone stayed long:
+  one long afternoon elsewhere moved the centre there. Up to 2,000 rows of the last 30 days are now
+  read and 40 samples spread across distinct days (a turn per day, spaced inside the day). The H16
+  query and the geometry view use the same selection.
 - **H16 uses where the phone is (dataset cut for H16).** It decided with three numbers: movement
   between the two fixes, distance between the learned centres and the gap left after both P90 radii.
   The learned zones are where the phone was attached, not coverage, so a normal handover halfway
