@@ -31,7 +31,8 @@ internal class SecurityAlertController(
     @Volatile private var previousNetworkType: String? = null
     @Volatile private var previousDbm: Int? = null
     private var lastStrongSignalAlarm: Long? = null
-    private val alarmEpisodes = AlarmEpisodeGate()
+    // 3.0 — Mismo reloj monotónico que el resto de duraciones de esta clase.
+    private val alarmEpisodes = AlarmEpisodeGate(clock = nowMs)
     private val legacyEpisodes = LegacyNetworkEpisodeGate()
     private var pingPongLogged = false
 

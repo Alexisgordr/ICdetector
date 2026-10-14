@@ -83,4 +83,17 @@ class AlarmEpisodeGateTest {
         // Termina el ping-pong: la alarma de una celda concreta es otro episodio.
         assertTrue(gate.onConfirmedAlarm("A"))
     }
+
+    /**
+     * 3.0 — El servicio le pasa el reloj monotónico: un salto de la hora de pared no puede
+     * cerrar ni alargar el episodio.
+     */
+    @Test fun `the service drives the gate with the monotonic clock`() {
+        val main = listOf(java.io.File("src/main/java"), java.io.File("app/src/main/java")).first { it.exists() }
+        val controller = main.resolve("com/alexisgordr/icdetector/service/SecurityAlertController.kt").readText()
+        assertTrue(controller.contains("AlarmEpisodeGate(clock = nowMs)"))
+        assertTrue(controller.contains("private val nowMs: () -> Long = SystemClock::elapsedRealtime"))
+        val gate = main.resolve("com/alexisgordr/icdetector/core/AlarmEpisodeGate.kt").readText()
+        assertFalse("sin reloj de pared por defecto", gate.contains("System::currentTimeMillis"))
+    }
 }
