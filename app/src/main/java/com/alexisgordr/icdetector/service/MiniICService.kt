@@ -1116,6 +1116,8 @@ class MiniICService : Service() {
         isFreshDelivery: Boolean = true,
         fromRegisteredCallback: Boolean = false
     ) {
+        // 3.0 — Ticket de esta entrega, en cuanto exista: un fallo después de abrirla debe cerrarla.
+        var deliveredTicket: com.alexisgordr.icdetector.core.CollectionGeneration.Ticket? = null
         try {
             // v2.10.4 — Sondeo del ServiceState en cada entrega de celdas. El tracker descarta las
             // repeticiones, así que solo un cambio real produce línea de terminal y evento.
@@ -1207,6 +1209,7 @@ class MiniICService : Service() {
             val cycleTicket = collectionGeneration.deliver(
                 list.firstOrNull { it.isRegistered }?.identityKey ?: "N/A"
             )
+            deliveredTicket = cycleTicket
             // 3.0 (A03) — Hora, posición y estado de servicio de ESTA lectura, fijados al recibirla.
             // El análisis puede tardar; la fila del historial y el propio análisis usan este
             // contexto, no el del momento en que termine. El estado de servicio ya se ha
@@ -1822,7 +1825,28 @@ class MiniICService : Service() {
                 }
             }
         } catch (e: Exception) {
-            e.printStackTrace()
+            // 3.0 — Antes solo printStackTrace: la entrega se perdía sin línea de terminal ni cambio
+            // de salud, y la pantalla seguía enseñando el último resultado como actual. Si el fallo
+            // llega después de deliver(), esa generación nueva ya invalidó al ciclo anterior en curso
+            // y ninguno publicará. Mismo contrato que el análisis: el tipo, nunca el mensaje.
+            onDeliveryFailed(deliveredTicket, e.javaClass.simpleName)
+        }
+    }
+
+    /**
+     * 3.0 — Fallo de una entrega en el hilo principal, antes de lanzar su ciclo. Con ticket, es el
+     * fallo de ese ciclo (onAnalysisFailed); sin él, la salud se marca igual, sin generación.
+     */
+    private fun onDeliveryFailed(ticket: com.alexisgordr.icdetector.core.CollectionGeneration.Ticket?, errorType: String) {
+        if (ticket != null) {
+            onAnalysisFailed(ticket, errorType)
+            return
+        }
+        val change = analysisHealthTracker.onDeliveryFailed()
+        _analysisHealth.value = analysisHealthTracker.state
+        if (change == com.alexisgordr.icdetector.core.AnalysisHealth.Change.BECAME_UNAVAILABLE) {
+            appendLog("[SYS]", "${com.alexisgordr.icdetector.core.AnalysisHealth.FAILURE_LOG} [$errorType]")
+            publishNotification { updateNotificationText(getString(R.string.analysis_unavailable), force = true) }
         }
     }
 

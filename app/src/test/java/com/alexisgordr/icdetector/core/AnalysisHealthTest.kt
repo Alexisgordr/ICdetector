@@ -136,6 +136,30 @@ class AnalysisHealthTest {
         assertEquals("ni se repite ni se deshace lo ya hecho, y no hay alerta", listOf("history"), writes)
     }
 
+    @Test fun `a delivery that fails before having a cycle is announced once and recovers`() {
+        val h = Harness()
+        assertEquals(Change.BECAME_UNAVAILABLE, h.health.onDeliveryFailed())
+        assertTrue(h.health.state.unavailable)
+        assertEquals("una sola línea por racha", Change.NONE, h.health.onDeliveryFailed())
+        h.runCycle(h.generation.deliver("A"), fails = false)
+        assertFalse(h.health.state.unavailable)
+        assertEquals(listOf("RECOVERED"), h.logs)
+    }
+
+    @Test fun `the service reports a failed delivery instead of swallowing it`() {
+        val main = listOf(File("src/main/java"), File("app/src/main/java")).first { it.exists() }
+        val service = main.resolve("com/alexisgordr/icdetector/service/MiniICService.kt").readText()
+        val process = service.substringAfter("private fun processCellInfo(").substringBefore("private fun onDeliveryFailed(")
+        assertFalse("ya no se traga el fallo", process.contains("e.printStackTrace()"))
+        assertTrue(process.contains("deliveredTicket = cycleTicket"))
+        assertTrue(process.contains("onDeliveryFailed(deliveredTicket, e.javaClass.simpleName)"))
+        val delivery = service.substringAfter("private fun onDeliveryFailed(").substringBefore("private fun onAnalysisFailed(")
+        assertTrue(delivery.contains("onAnalysisFailed(ticket, errorType)"))
+        assertTrue(delivery.contains("analysisHealthTracker.onDeliveryFailed()"))
+        assertTrue(delivery.contains("AnalysisHealth.FAILURE_LOG} [\$errorType]"))
+        listOf("checkAlerts", "securityAlerts", "dbHelper", "_cellFlow").forEach { assertFalse(it, delivery.contains(it)) }
+    }
+
     @Test fun `the service wires the boundary, recovery and presentation`() {
         val main = listOf(File("src/main/java"), File("app/src/main/java")).first { it.exists() }
         val res = listOf(File("src/main/res"), File("app/src/main/res")).first { it.exists() }

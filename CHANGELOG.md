@@ -11,6 +11,13 @@ GitHub pre-release of an earlier build was withdrawn.
 
 ### Audit fixes
 
+- **A failure while receiving a reading is no longer swallowed.** Everything between the modem
+  delivery and the start of the analysis (parsing, serving-cell selection, Timing Advance handling)
+  sat in a `catch` that only printed the stack trace: the reading was lost with no terminal line or
+  health change, and the screen kept the last result as current. Worse, a failure after the new
+  delivery was registered also invalidated the cycle still running. It now reports like an analysis
+  failure (type only, one line per streak, "analysis temporarily unavailable"); without a delivery
+  ticket yet, the health is marked the same way and recovers with the next published cycle.
 - **An `Error` inside the analysis cycle is a cycle failure too.** The cycle boundary caught only
   `Exception`; a `NoClassDefFoundError` from a vendor API or a `StackOverflowError` went to the scope's
   handler, the health was not marked and the screen kept the last result as current. It now catches

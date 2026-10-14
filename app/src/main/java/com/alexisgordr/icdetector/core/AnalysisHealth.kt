@@ -49,6 +49,17 @@ class AnalysisHealth {
         return Change.BECAME_UNAVAILABLE
     }
 
+    /**
+     * 3.0 — Una entrega falló ANTES de tener ciclo (parseo, selección de servidora, TA): no hay
+     * generación que comparar. El resultado visible ya no se actualizará por ella, así que se marca
+     * igual que un ciclo fallido; la recuperación llega con el siguiente ciclo publicado.
+     */
+    fun onDeliveryFailed(): Change {
+        if (state.unavailable) return Change.NONE
+        state = state.copy(unavailable = true)
+        return Change.BECAME_UNAVAILABLE
+    }
+
     /** Un ciclo válido terminó de publicarse. Solo aquí se marca la recuperación. */
     fun onCyclePublished(generation: Long, nowMs: Long): Change {
         if (generation < lastReportedGeneration) return Change.NONE
