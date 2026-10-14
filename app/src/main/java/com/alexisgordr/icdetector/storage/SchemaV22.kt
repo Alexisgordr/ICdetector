@@ -23,6 +23,14 @@ object SchemaV22 {
     const val TABLE_EVALUATIONS = "profile_evaluations"
     const val TABLE_MODE_EVENTS = "profile_mode_events"
 
+    /**
+     * 3.0 — Retención de referencias (LocalProfileStore.pruneProfiles). Android enlaza el corte como
+     * TEXTO, y COALESCE(...) es una expresión SIN afinidad: SQLite no lo convierte y compara número <
+     * texto, que es SIEMPRE cierto (cualquier número es menor que cualquier texto). Sin el CAST, cada
+     * mantenimiento borraba el perfil local entero y nunca maduraba.
+     */
+    const val PRUNE_PROFILES_WHERE = "COALESCE(last_evidence_ms, updated_at_ms) < CAST(? AS INTEGER)"
+
     /** Sentencias en orden; ver [CellDbHelper.onUpgrade]. Todas idempotentes. */
     val STATEMENTS: List<String> = listOf(
         "CREATE TABLE IF NOT EXISTS $TABLE_PROFILE (" +

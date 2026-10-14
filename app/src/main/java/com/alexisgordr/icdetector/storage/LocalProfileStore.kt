@@ -211,9 +211,9 @@ object LocalProfileStore {
         if (contextKey == null) db.delete(P, null, null) else db.delete(P, "context_key=?", arrayOf(contextKey))
     }
 
-    /** Retención: referencias sin evidencia nueva en [cutoffMs] o antes. */
+    /** Retención: referencias sin evidencia nueva antes de [cutoffMs] (ver SchemaV22.PRUNE_PROFILES_WHERE). */
     fun pruneProfiles(db: SQLiteDatabase, cutoffMs: Long): Int =
-        db.delete(P, "COALESCE(last_evidence_ms, updated_at_ms) < ?", arrayOf(cutoffMs.toString()))
+        db.delete(P, SchemaV22.PRUNE_PROFILES_WHERE, arrayOf(cutoffMs.toString()))
 
     private fun readProfile(c: Cursor): MetricProfile? {
         fun s(n: String) = c.getColumnIndexOrThrow(n).let { if (c.isNull(it)) null else c.getString(it) }
