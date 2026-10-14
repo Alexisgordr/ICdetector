@@ -139,7 +139,7 @@ class EvaluationCoverageTest(unittest.TestCase):
         rows = [
             {"NotEvaluatedHeuristics": "H1;H3(roaming)"},
             {"NotEvaluatedHeuristics": "H3(frontera);H9"},
-            {"NotEvaluatedHeuristics": "H1(csg);H2(csg);H3;H5(csg);H7(csg)"},  # H3 sin motivo
+            {"NotEvaluatedHeuristics": "H1(csg);H2(csg);H3;H5(csg);H6(csg);H7(csg)"},  # H3 sin motivo
             {"NotEvaluatedHeuristics": "NONE"},
         ]
         coverage = evaluation_coverage(rows)
@@ -148,7 +148,7 @@ class EvaluationCoverageTest(unittest.TestCase):
         self.assertEqual((3, 4), coverage["H5"])
         self.assertEqual({
             "H1": {"csg": 1}, "H2": {"csg": 1}, "H3": {"roaming": 1, "frontera": 1},
-            "H5": {"csg": 1}, "H7": {"csg": 1},
+            "H5": {"csg": 1}, "H6": {"csg": 1}, "H7": {"csg": 1},
         }, abstention_reasons(rows))
 
     def test_no_rows_with_the_column_means_unknown_not_evaluated(self):

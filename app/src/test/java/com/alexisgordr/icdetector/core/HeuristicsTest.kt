@@ -437,36 +437,37 @@ class HeuristicsTest {
         assertTrue(analyze(active(networkType = "4G LTE", arfcn = 1500)).arfcnSanityPassed)
     }
 
-    // ---------- Celda CSG (3.0, corte de campaña): H1, H2, H5 y H7 no se evalúan ----------
-    private fun femto(csg: Boolean) = active(dbm = -55, tac = "999").copy(
+    // ---------- Celda CSG (3.0, corte de campaña): H1, H2, H5, H6 y H7 no se evalúan ----------
+    // TA 0 en LTE: a menos de 78 m, con −55 dBm; justo lo que hace fallar H6 sin el indicador.
+    private fun femto(csg: Boolean) = active(dbm = -55, tac = "999", timingAdvance = 0).copy(
         csg = com.alexisgordr.icdetector.models.CsgInfo(indicator = csg, identity = 7, homeNodebName = "Casa")
     )
 
-    @Test fun `una celda CSG deja H1, H2, H5 y H7 en N-A con su motivo`() {
+    @Test fun `una celda CSG deja H1, H2, H5, H6 y H7 en N-A con su motivo`() {
         val weakMacro = listOf(neighbor(-112, tac = "100"), neighbor(-115, tac = "100"))
         val cell = ThreatAnalyzer.analyzeThreats(
             active = femto(csg = true), neighbors = weakMacro,
             cellChangeHistory = emptyList(), currentLocation = null, nowMs = NOW
         )
         val r = cell.heuristicReport
-        listOf(r.isolatedCell, r.powerJump, r.tacDeviation, r.ghostNeighbors).forEach {
+        listOf(r.isolatedCell, r.powerJump, r.tacDeviation, r.taDistance, r.ghostNeighbors).forEach {
             assertEquals(HeuristicStatus.NOT_EVALUATED, it)
         }
         val ids = r.notEvaluatedIds().split(";")
-        assertTrue(ids.containsAll(listOf("H1(csg)", "H2(csg)", "H5(csg)", "H7(csg)")))
+        assertTrue(ids.containsAll(listOf("H1(csg)", "H2(csg)", "H5(csg)", "H6(csg)", "H7(csg)")))
         assertNull(cell.suspiciousReason)
         assertEquals(100, cell.securityScore)
         // Las demás reglas siguen igual: H4 (MNC) se evalúa con las mismas vecinas.
         assertEquals(HeuristicStatus.PASSED, r.mncCount)
     }
 
-    @Test fun `la misma celda sin indicador CSG hace fallar H2, H5 y H7`() {
+    @Test fun `la misma celda sin indicador CSG hace fallar H2, H5, H6 y H7`() {
         val weakMacro = listOf(neighbor(-112, tac = "100"), neighbor(-115, tac = "100"))
         val r = ThreatAnalyzer.analyzeThreats(
             active = femto(csg = false), neighbors = weakMacro,
             cellChangeHistory = emptyList(), currentLocation = null, nowMs = NOW
         ).heuristicReport
-        listOf(r.powerJump, r.tacDeviation, r.ghostNeighbors).forEach { assertEquals(HeuristicStatus.FAILED, it) }
+        listOf(r.powerJump, r.tacDeviation, r.taDistance, r.ghostNeighbors).forEach { assertEquals(HeuristicStatus.FAILED, it) }
         assertFalse(r.notEvaluatedIds().contains("(csg)"))
     }
 

@@ -27,7 +27,7 @@ class TerminalLocalizationCoverageTest {
         "[sub-umbral] Inconsistencia MCC | Calidad de dato: NR-ARFCN 5G fuera de la tabla 3GPP",
         "Calidad de dato: el módem informa un canal fuera de la tabla 3GPP. No es evidencia de ataque y no resta puntos.",
         // 3.0 (corte de campaña) — Celda CSG.
-        "N/A: celda CSG (femtocelda): las reglas de dominancia e identidad local no aplican a una celda diseñada para ser aislada.",
+        "N/A: celda CSG (femtocelda): las reglas de dominancia, proximidad e identidad local no aplican a una celda diseñada para ser aislada.",
         "[HEUR] 1. Celda Aislada: N/A (celda CSG (femtocelda))",
         "[HEUR] 7. Espectro Fantasma: N/A (celda CSG (femtocelda))",
         // 3.0 (corte de campaña) — H9 reservada.

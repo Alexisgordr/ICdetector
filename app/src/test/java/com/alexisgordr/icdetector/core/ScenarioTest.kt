@@ -335,23 +335,26 @@ class ScenarioTest {
     }
 
     /**
-     * 3.0 (corte de campaña) — Femtocelda CSG (grupo cerrado de abonados) en casa: muy fuerte (−55 dBm), con su
-     * propio TAC y la macro de fuera muy débil. Antes del corte este único hecho benigno hacía fallar
-     * H2 (−20), H5 (−20) y H7 (−25) a la vez: score 35 y alarma confirmada. H1 no entra aquí (hay
-     * vecinas); [femtocellAlone] la cubre. Con el indicador CSG las cuatro quedan N/A.
+     * 3.0 (corte de campaña) — Femtocelda CSG (grupo cerrado de abonados) en casa: muy fuerte (−55 dBm), a
+     * pocos metros (TA LTE 0), con su propio TAC y la macro de fuera muy débil. Antes del corte este
+     * único hecho benigno hacía fallar H2 (−20), H5 (−20), H6 (−15) y H7 (−25) a la vez: score 20 y
+     * alarma confirmada. H1 no entra aquí (hay vecinas); [femtocellAlone] la cubre. Con el indicador
+     * CSG las cinco quedan N/A.
      */
     private fun femtocell(csg: Boolean) = (1..5).map {
         Cycle(
-            cell(cid = "777777", dbm = -55, tac = "99999", verified = VerificationStatus.PENDING)
+            cell(cid = "777777", dbm = -55, tac = "99999", verified = VerificationStatus.PENDING,
+                ta = 0, taUnit = TimingAdvanceUnit.LTE_INDEX)
                 .copy(csg = CsgInfo(indicator = csg, identity = 7, homeNodebName = "Casa")),
             neighbors = listOf(neighbor(-112), neighbor(-115, cid = "2001"))
         )
     }
 
-    /** La misma femtocelda sin ninguna vecina visible: con CSG, H1 no se evalúa. */
+    /** La misma femtocelda sin ninguna vecina visible: con CSG, H1 y H6 no se evalúan. */
     private fun femtocellAlone(csg: Boolean) = (1..5).map {
         Cycle(
-            cell(cid = "777777", dbm = -55, tac = "99999", verified = VerificationStatus.PENDING)
+            cell(cid = "777777", dbm = -55, tac = "99999", verified = VerificationStatus.PENDING,
+                ta = 0, taUnit = TimingAdvanceUnit.LTE_INDEX)
                 .copy(csg = CsgInfo(indicator = csg, identity = 7, homeNodebName = "Casa"))
         )
     }
@@ -522,24 +525,29 @@ class ScenarioTest {
         assertEquals(55, first.securityScore)
     }
 
-    @Test fun `escenario benigno - femtocelda CSG (H1, H2, H5 y H7 en N-A)`() {
+    @Test fun `escenario benigno - femtocelda CSG (H1, H2, H5, H6 y H7 en N-A)`() {
         expectNoAlarm("FEMTOCELL_CSG", femtocell(csg = true))
         val r = analyzeFirst(femtocell(csg = true)).heuristicReport
-        listOf(r.powerJump, r.tacDeviation, r.ghostNeighbors).forEach { assertEquals(HeuristicStatus.NOT_EVALUATED, it) }
-        assertTrue(r.notEvaluatedIds().split(";").containsAll(listOf("H1(csg)", "H2(csg)", "H5(csg)", "H7(csg)")))
+        listOf(r.powerJump, r.tacDeviation, r.taDistance, r.ghostNeighbors).forEach { assertEquals(HeuristicStatus.NOT_EVALUATED, it) }
+        assertTrue(r.notEvaluatedIds().split(";").containsAll(listOf("H1(csg)", "H2(csg)", "H5(csg)", "H6(csg)", "H7(csg)")))
         assertEquals(100, analyzeFirst(femtocell(csg = true)).securityScore)
         val alone = analyzeFirst(femtocellAlone(csg = true))
         assertEquals(HeuristicStatus.NOT_EVALUATED, alone.heuristicReport.isolatedCell)
+        assertEquals(HeuristicStatus.NOT_EVALUATED, alone.heuristicReport.taDistance)
+        assertEquals(100, alone.securityScore)
         assertEquals(0, run(femtocellAlone(csg = true)).alarms)
     }
 
     @Test fun `la misma femtocelda sin indicador CSG alarma - el cambio es el indicador`() {
         expectAlarm("FEMTOCELL_NO_CSG", femtocell(csg = false))
         val first = analyzeFirst(femtocell(csg = false))
-        listOf(first.heuristicReport.powerJump, first.heuristicReport.tacDeviation, first.heuristicReport.ghostNeighbors)
+        listOf(first.heuristicReport.powerJump, first.heuristicReport.tacDeviation,
+            first.heuristicReport.taDistance, first.heuristicReport.ghostNeighbors)
             .forEach { assertEquals(HeuristicStatus.FAILED, it) }
-        assertEquals(35, first.securityScore)
-        assertEquals(HeuristicStatus.FAILED, analyzeFirst(femtocellAlone(csg = false)).heuristicReport.isolatedCell)
+        assertEquals(20, first.securityScore)
+        val alone = analyzeFirst(femtocellAlone(csg = false)).heuristicReport
+        assertEquals(HeuristicStatus.FAILED, alone.isolatedCell)
+        assertEquals(HeuristicStatus.FAILED, alone.taDistance)
     }
 
     @Test fun `escenario adversario - downgrade forzado con tiron de potencia`() { expectAlarm("FORCED_DOWNGRADE", forcedBandDowngrade()) }

@@ -72,7 +72,7 @@ internal class AuditLogController(
                 HeuristicStatus.NOT_EVALUATED -> "N/A"
             }
             // 3.0 (corte de campaña) — H3 dice por qué se abstuvo (roaming, frontera, falta de datos), y
-            // H1/H2/H5/H7 si la servidora es CSG.
+            // H1/H2/H5/H6/H7 si la servidora es CSG.
             val note = if (result == HeuristicStatus.NOT_EVALUATED) {
                 report.abstentionText("H" + rule.substringBefore("."))?.let { " ($it)" }.orEmpty()
             } else ""

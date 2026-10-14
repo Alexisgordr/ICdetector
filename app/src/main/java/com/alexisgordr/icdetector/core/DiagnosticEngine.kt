@@ -43,7 +43,7 @@ object DiagnosticEngine {
             HeuristicStatus.FAILED -> "La condición anómala de esta regla está presente en el ciclo actual."
             HeuristicStatus.NOT_EVALUATED -> unavailable
         }
-        // 3.0 (corte de campaña) — En una celda CSG, H1/H2/H5/H7 no se evalúan por diseño: ese motivo manda.
+        // 3.0 (corte de campaña) — En una celda CSG, H1/H2/H5/H6/H7 no se evalúan por diseño: ese motivo manda.
         fun local(unavailable: String) = if (r.csgCell) CSG_NA_EXPLANATION else unavailable
         return listOf(
             HeuristicDiagnostic(1, "Celda aislada", r.isolatedCell,
@@ -67,7 +67,7 @@ object DiagnosticEngine {
             HeuristicDiagnostic(5, "Validación regional TAC", r.tacDeviation,
                 explanation(r.tacDeviation, local("N/A: no hay TAC válidos de vecinas de la misma tecnología y el mismo operador para contrastar."))),
             HeuristicDiagnostic(6, "Proximidad por Timing Advance", r.taDistance,
-                explanation(r.taDistance, "N/A: el módem no entrega un Timing Advance convertible a metros.")),
+                explanation(r.taDistance, local("N/A: el módem no entrega un Timing Advance convertible a metros."))),
             HeuristicDiagnostic(7, "Espectro de vecinos", r.ghostNeighbors,
                 explanation(r.ghostNeighbors, local(if (i.wifiActive) WIFI_NA else "N/A: no hay celdas vecinas de la misma tecnología para contrastar el espectro."))),
             // 3.0 (corte de campaña) — Aviso de calidad de dato: su fallo no es la condición de un ataque.
@@ -111,8 +111,8 @@ object DiagnosticEngine {
     private const val WIFI_NA = "N/A: Wi-Fi activo; se evita atribuir el contexto de red al enlace celular."
 
     /** 3.0 (corte de campaña) — H8 es un aviso de calidad de dato (ver ThreatAnalyzer, regla 8). */
-    /** 3.0 (corte de campaña) — H1, H2, H5 y H7 en una celda CSG. */
-    const val CSG_NA_EXPLANATION = "N/A: celda CSG (femtocelda): las reglas de dominancia e identidad local no aplican a una celda diseñada para ser aislada."
+    /** 3.0 (corte de campaña) — H1, H2, H5, H6 y H7 en una celda CSG. */
+    const val CSG_NA_EXPLANATION = "N/A: celda CSG (femtocelda): las reglas de dominancia, proximidad e identidad local no aplican a una celda diseñada para ser aislada."
     /** 3.0 (corte de campaña) — H9 está reservada: nunca se evalúa. */
     const val H9_NA_EXPLANATION = "N/A: Android no expone el estado de cifrado a aplicaciones sin privilegios; regla reservada."
     /** 3.0 (corte de campaña) — Explicaciones de H3 (servidora frente a SIM). */

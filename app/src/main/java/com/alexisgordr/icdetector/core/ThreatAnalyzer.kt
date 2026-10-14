@@ -210,8 +210,9 @@ object ThreatAnalyzer {
         var hTransitionCoherence = true
 
         // 3.0 (corte de campaña) — Una celda CSG (femtocelda, indicador de grupo cerrado de abonados) está
-        // diseñada para ser aislada, potente y con su propio TAC: un único hecho benigno hacía
-        // fallar H1, H2, H5 y H7 a la vez. En una CSG esas cuatro no se evalúan (N/A, sin puntos,
+        // diseñada para ser aislada, potente, cercana y con su propio TAC: un único hecho benigno
+        // hacía fallar H1, H2, H5, H6 y H7 a la vez (una femtocelda a 10 m con −55 dBm es justo
+        // "TA ≤ 100 m con señal ≥ −60 dBm"). En una CSG esas cinco no se evalúan (N/A, sin puntos,
         // sin motivo, fuera del bayesiano); el resto de reglas no cambia.
         val csgCell = active.csg?.indicator == true
 
@@ -329,7 +330,8 @@ object ThreatAnalyzer {
         // Si la unidad no es determinable (valor raspado del toString() del fabricante), no hay
         // conversión y H6 NO JUZGA. Abstenerse es correcto: una geometría inventada aquí es peor
         // que no tener geometría.
-        val taMeters = active.timingAdvance?.let { active.timingAdvanceUnit.toMeters(it) }
+        // En una celda CSG no hay distancia que juzgar: una femtocelda está cerca por diseño (ver csgCell).
+        val taMeters = active.timingAdvance?.takeUnless { csgCell }?.let { active.timingAdvanceUnit.toMeters(it) }
         eTa = taMeters != null
         //
         // 3.0 — Solo queda la rama de PROXIMIDAD (TA + señal). Había otra rama "geométrica" que
