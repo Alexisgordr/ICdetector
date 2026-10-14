@@ -182,6 +182,15 @@ class AnalysisHealthTest {
         assertFalse("un fallo de la cola no marca «no disponible»", tailFn.contains("analysisHealthTracker"))
     }
 
+    @Test fun `analysis-time effects are written down where they happen`() {
+        val main = listOf(File("src/main/java"), File("app/src/main/java")).first { it.exists() }
+        val tracker = main.resolve("com/alexisgordr/icdetector/service/ServingTransitionTracker.kt").readText()
+        assertTrue(tracker.contains("It is the only database write of the cycle that does not go through\n * publication."))
+        val failed = main.resolve("com/alexisgordr/icdetector/service/MiniICService.kt").readText()
+            .substringBefore("private fun onAnalysisFailed(")
+        assertTrue(failed.contains("la transición de H16 (cell_transitions)"))
+    }
+
     @Test fun `the service wires the boundary, recovery and presentation`() {
         val main = listOf(File("src/main/java"), File("app/src/main/java")).first { it.exists() }
         val res = listOf(File("src/main/res"), File("app/src/main/res")).first { it.exists() }

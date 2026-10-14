@@ -10,7 +10,16 @@ import com.alexisgordr.icdetector.models.TransitionCoherenceResult
 import com.alexisgordr.icdetector.models.identityKey
 import com.alexisgordr.icdetector.storage.CellDbHelper
 
-/** Owns handover history and evaluates geographical coherence between serving cells. */
+/**
+ * Owns handover history and evaluates geographical coherence between serving cells.
+ *
+ * 3.0 — [evaluate] runs during the ANALYSIS of a cycle, before the service checks whether that cycle
+ * may still publish (CollectionGeneration.mayPublish), and it writes the transition to
+ * `cell_transitions` right away. It is the only database write of the cycle that does not go through
+ * publication. That is deliberate: the handover was really observed, whether or not its cycle is
+ * later discarded, and a discarded cycle never evaluates the same handover twice (the next delivery
+ * sees the new cell as SAME_CELL).
+ */
 internal class ServingTransitionTracker(
     private val db: CellDbHelper,
     private val log: (String) -> Unit

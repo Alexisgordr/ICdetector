@@ -1317,6 +1317,9 @@ class MiniICService : Service() {
                 }
                 // Mobility is contextual metadata only. Its result is deliberately not passed to
                 // ThreatAnalyzer, LocalCellTrust, Stable-Site, alerts or forensics.
+                // 3.0 — Como la racha de aislamiento de H1 (más abajo), es un efecto del ANÁLISIS,
+                // no de la publicación: un ciclo descartado en mayPublish ya lo ha observado. Es una
+                // observación real y su token de frescura evita contarla dos veces.
                 val mobility = if (activeRaw != null && activeRaw.cellId != "N/A") {
                     // 3.0 (G4) — Tras una pérdida de servicio o un hueco no hay arista desde la celda anterior.
                     mobilityFamiliarity.observe(activeRaw.identityKey, motionEvidence, mobilityClock(), serviceContinuous = !continuityBroken)
@@ -1357,6 +1360,8 @@ class MiniICService : Service() {
                 // H16 se prepara antes de analizar la celda: aquí todavía conservamos la última
                 // servidora. El resultado se retiene 20 s para que los tres ciclos temporales
                 // puedan observar el mismo handover, sin convertirlo en un fallo permanente.
+                // 3.0 — Escribe cell_transitions YA, antes de mayPublish: es la única escritura
+                // del ciclo fuera de la publicación (ver ServingTransitionTracker).
                 val transitionCoherence = if (activeRaw != null && activeRaw.cellId != "N/A") {
                     transitionTracker.evaluate(activeRaw, currentLocation, neighbors, serviceContinuous = !continuityBroken)
                 } else TransitionCoherenceResult()
