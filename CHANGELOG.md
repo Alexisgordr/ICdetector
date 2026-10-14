@@ -11,6 +11,13 @@ GitHub pre-release of an earlier build was withdrawn.
 
 ### Audit fixes
 
+After the roadmap was complete, every part of the engine was reviewed in turn (data foundations,
+rule inputs, scoring, confirmation, local learning, geometry, the analysis cycle and the queries it
+learns from). The fixes are grouped by area, newest first within each group. Entries marked as a
+**dataset cut** change how a rule is evaluated; [Status.md](Status.md) lists them in one table.
+
+#### Detection rules
+
 - **H11 compares against rows spread across days (dataset cut for H11).** Its history was the 20 most
   recent clean located rows out of the last 300: after a few days spent mostly at another place under
   the same large cell, only that place remained, and H11 failed back at home. Up to 2,000 rows are now
@@ -25,34 +32,6 @@ GitHub pre-release of an earlier build was withdrawn.
   A row now qualifies when it is clean or carries the H15 reason anywhere. H15 only reads PCI, channel
   and time, validated per technology, so other reasons do not change what it reads. The "only this
   reason" rule stays where it matters, the Local Cell Trust quarantine.
-- **Stable-Site learns only from clean cycles.** Every minute the serving cell, the neighbours and the
-  RF fingerprints of neighbours without a Cell ID were added to the site context from ANY cycle,
-  confirmed alarms included: a transmitter insisting for three days at home became a known cell of
-  the site and corroborated itself as a neighbour in two. It was the only learning source that did
-  not filter dirty data. A cycle now teaches the site only with no failed rule, not suspicious, no
-  Local Cell Trust contradiction and no confirmation streak or multi-signal episode open
-  (`StableSiteContextPolicy`). The unverified-site marker does not count as dirty. Stable-Site stays
-  in shadow mode, so no alarm changes; the learned context stays clean for when it is enabled.
-- **A cycle is shown before its alerts and writes.** Publication ran incidents, black box,
-  `checkAlerts` (history row, alert and notification) and the external verification before updating
-  the screen and the health. A failure late in that sequence left an alarm sent and a row written
-  with the old screen and "analysis unavailable", contradicting `AnalysisHealth` ("never raises
-  alarms or publishes an incomplete cycle"). Now the verification is launched in its own `try`, then
-  the band context, then the screen, health and monitoring notification, and only then incidents,
-  black box, history and alerts. If that last part fails, the published result stays valid: health is
-  unchanged and one `[SYS]` line per streak says that part may be missing. The `AnalysisHealth`
-  comment now states exactly this guarantee.
-- **A failure while receiving a reading is no longer swallowed.** Everything between the modem
-  delivery and the start of the analysis (parsing, serving-cell selection, Timing Advance handling)
-  sat in a `catch` that only printed the stack trace: the reading was lost with no terminal line or
-  health change, and the screen kept the last result as current. Worse, a failure after the new
-  delivery was registered also invalidated the cycle still running. It now reports like an analysis
-  failure (type only, one line per streak, "analysis temporarily unavailable"); without a delivery
-  ticket yet, the health is marked the same way and recovers with the next published cycle.
-- **An `Error` inside the analysis cycle is a cycle failure too.** The cycle boundary caught only
-  `Exception`; a `NoClassDefFoundError` from a vendor API or a `StackOverflowError` went to the scope's
-  handler, the health was not marked and the screen kept the last result as current. It now catches
-  any `Throwable` except cancellation, reported by type only.
 - **Learned zones sample distinct days (dataset cut for H16 and the geometry view).** A cell's zone
   was its 40 most recent clean located samples, so it followed the last place the phone stayed long:
   one long afternoon elsewhere moved the centre there. Up to 2,000 rows of the last 30 days are now
@@ -68,46 +47,9 @@ GitHub pre-release of an earlier build was withdrawn.
   the reason, so the row is not marked failed and keeps feeding the zones. Every earlier failing test
   case (phone in the origin zone) still fails; the review's halfway, high-speed, visible-neighbour and
   wide-zone cases no longer do.
-- **A reading with an unreadable Cell ID no longer gets the previous cell's local trust.** The service
-  only refreshes its cached trust evidence for a readable Cell ID, and the engine did not check it, so
-  a "N/A" reading of another cell could be judged against a mature foreign profile and marked as a
-  PCI/ARFCN change. It never reached an alarm (H11 and H16 are N/A without a Cell ID) and such rows
-  feed nothing; the engine now judges them with no local evidence.
-- **An unverified Stable-Site marker no longer replaces the reasons of other rules.** With the site
-  protection enforced, the stored reason became `[sitio-sin-verificar] …` alone, so a power jump (H2)
-  seen in the same cycle lost its reason in the history. The marker is now added after the existing
-  reasons, as the local reconfiguration marker already was.
 - **Documented: H3 or H15 alone stay on the alarm boundary.** Each subtracts exactly 30, so alone
   the score is 70 and the cycle is not suspicious (`score < 70`). The manual now says so and states
   that this is a design decision pending validation with field data. No number changes.
-- **The strong-signal tone cooldown uses a monotonic clock.** `SecurityAlertController` read the civil
-  clock for it although it has an injected clock; that clock now defaults to `elapsedRealtime` for both
-  of its durations (this cooldown and the 2G/3G episode close).
-- **Without a modem timestamp, a cached delivery is not a new observation.** With a null observation
-  token every delivery counted as a new temporal phase, so three cached deliveries of the same sample
-  could confirm an alarm. Only a fresh delivery counts then, as in the episode tracker.
-- **A transmitter alternating identities can be confirmed.** Temporal confirmation counted phases per
-  serving identity and every identity change restarted it, so an emitter switching between two of its
-  own identities every few seconds never reached `3/3`, even with every cycle suspicious, while H10
-  (the rule for that behaviour) failed. While H10 fails, the phases now count on the sorted set of
-  identities in the ping-pong window (`PingPongRule.confirmationKey`), and the alarm episode uses the
-  same key so each switch does not notify again. **Effect on alarms:** H10 alone is unchanged (score
-  75, no suspicion); a new adversarial test scenario (alternating emitter) alarms and a new benign one
-  (border ping-pong while stationary) does not. The scenario bench now feeds identity changes and a
-  GPS speed through H10; `ThreatAnalyzer` takes the H10 speed as an input whose default is the
-  location's (the service does not change).
-- **A held multi-signal episode no longer supplies its own confirmation phases.** After two
-  sub-threshold failures of different families opened an episode, the 30 s hold kept the cell
-  suspicious, and each clean observation inside it advanced the temporal streak: two weak failures
-  followed by two clean cycles confirmed an alarm 15 s later. A held observation without fresh
-  failing evidence now neither advances nor breaks the streak (`ThreatEpisodeTracker` marks it,
-  `TemporalConfidence` keeps the phase). **Effect on alarms:** an episode alarm needs three promoted
-  observations with fresh evidence; a cell suspicious on its own is unchanged.
-- **Episode families and scorer groups are declared together.** `HeuristicCatalog` now states each
-  rule's Bayesian correlation group next to its episode family, and a test checks the declared group
-  against the scorer. They differ on purpose in three rules, each with its reason written down: H6
-  (RF dominance for the scorer, mobility for episodes), H14 (likewise) and H15 (one phenomenon with
-  H11 for the scorer, identity for episodes). Families are not changed: that would move alarms.
 - **H5 only compares TACs of the same operator.** A TAC is per network, so a neighbour of another
   network always has another TAC: at a border H3 and H5 failed together on the same foreign
   neighbour (score −50 and, in the Bayesian, 9.0 × 6.5 while mccMismatch is declared independent),
@@ -116,13 +58,6 @@ GitHub pre-release of an earlier build was withdrawn.
   numbers) or with them unreported. **Effect on alarms:** a serving cell whose only neighbour is
   foreign now scores 70 (H3 alone) and does not alarm; the adversarial test scenario "inconsistent
   network" now includes a legitimate same-operator neighbour with another TAC and still alarms.
-- **Bayesian: H6 grouped with RF dominance and damped by reputation.** H6 (TA ≤ 100 m with signal ≥
-  −60 dBm) was in the mobility group, but its condition is the same dominant signal that makes H2 and
-  H7 fail, so one nearby transmitter multiplied: H6 alone 12.5 %, H6 + H2 (living under a rooftop
-  macro) 44 %. H6 is now in RF_DOMINANCE (only the largest LR counts; 7.0 still leads), and local
-  reputation damps it (trust ≥ 80: 7.0 → 4.6, 8.6 %); neighbour density does not, since proximity does
-  not depend on it. The LR stays 7.0 (lower it to 5.0 if field data shows daily hits on trusted
-  cells). The score penalty (−15) is unchanged. `anomalyConfidence` is displayed and exported only.
 - **H1 freshness token: unknown is not "repeated".** The service passed 0 when the modem gave no
   reading timestamp, while `IsolatedCellConfidence` treats null as a fresh delivery; with a modem
   whose `timestampMillis` is 0 the first delivery counted and every later one was taken as a repeat,
@@ -166,6 +101,263 @@ GitHub pre-release of an earlier build was withdrawn.
   legitimate fingerprint that H8 flagged. NR channels are now valid from 1; H8 keeps failing on 0
   (same result, one rule) and learning no longer takes it as a carrier. EARFCN 0 (LTE Band 1) stays
   valid. Already learned data is not recalculated.
+- **H16 needs a recent GPS fix at each end (behaviour cut for H16).** The transition snapshots kept the
+  accepted position, which can be up to 120 s old or the same fix at both ends, so a cached position
+  could read as "0 m travelled" and, with distant learned zones, give `FAILED` (or let a shortcut
+  pass) without any measured movement. Each snapshot now records the fix's monotonic time
+  (`Location.elapsedRealtimeNanos`), and H16 measures the distance only when both ends have their own
+  fix, less than 10 s old relative to their snapshot (the live-fix freshness, now a shared constant;
+  the 120 s limit for other uses is unchanged), with a valid timestamp and different fixes. Otherwise
+  it returns `N/A` with the reason, before the geometry and the visible-neighbour and learned-route
+  shortcuts, and the transition never counts towards learned routes. Two different recent fixes at
+  the same coordinates are still evaluated. Geometric thresholds, the 20 s result hold, weights and
+  alarm wiring are unchanged; H11, Stable-Site, scores and likelihood ratios are not touched. Rows
+  from earlier builds are not recalculated; new rows may show H16 `N/A` where it was evaluated before
+  with insufficient GPS. No schema, migration or backup format change.
+- **Wi-Fi state per observation.** The rule explanations re-queried Wi-Fi when publishing, so a
+  Wi-Fi change between analysis and publication could explain a result with another reason (for
+  example "neighbours needed" for a rule that abstained because of Wi-Fi). They now use the value
+  captured for that analysis. Rule exclusions are unchanged. Concurrency: `isServiceRunning` is
+  `@Volatile` (a simple flag written on the main thread and read by the periodic loop), and
+  `applyLocationMode()` always runs on the main thread, so the compare-and-log of the location mode
+  is confined to one thread instead of relying on `@Volatile`.
+- **Neighbour selection (dataset cut for H1–H5, H7, H11, H16, the Bayesian density factor and
+  Stable-Site learning; commit `6e99267`).** A carrier the modem declares `SECONDARY_SERVING` but
+  publishes without `isRegistered` — typically the NR leg of 5G NSA, sometimes an LTE secondary — used
+  to count as a neighbour, because neighbours were "every unregistered entry". It now stays a
+  secondary carrier (shown in the Radio context and in `secondaryCarriers`) and is no longer counted
+  or compared as a neighbour. Affected consumers: H1 (isolation and its 3-delivery streak), H2 (power
+  gap), H3–H5 (MCC, MNC, TAC), H7 (ghost neighbours), the H11 distance threshold that depends on
+  neighbour density, H16 ("destination was a neighbour"), the Bayesian density factor, Stable-Site
+  learning and its neighbour diagnostic, and the neighbour count in the rule explanations. Expected
+  direction on NSA phones: fewer "neighbours", so H1 can see an isolated cell where it used to see one
+  neighbour, and H2/H7 can become `N/A` where the secondary was the only neighbour. The selection is a
+  single function (`ServingCellSelection.neighbours`). Unchanged: the serving-cell choice, the signal
+  filter, entries in `NONE`/`UNKNOWN` state, weights, thresholds, schema, backups, exports and the
+  forensic black box (which still records every non-serving entry with its connection state). How many
+  historical rows were affected has **not been measured**; rows are not rewritten or recomputed, the
+  per-row neighbour list is not stored, and Stable-Site aggregates learnt before this change may
+  include such carriers until they age out. New rows are identified by the `AppVersion` column.
+- **Timing Advance input (dataset cut for TA and H6).** The getters are range-checked (LTE 0…1282,
+  GSM 0…219); sentinels, negatives and out-of-range values store no TA. `toMeters()` applies the same
+  limits, so older rows or other inputs cannot produce a distance from an impossible index or
+  overflow. LTE no longer scrapes the manufacturer's `toString()`: its pattern also matched `data=0`
+  or `delta=0` and turned them into "TA 0". Expect **less TA coverage** on phones whose getter gave
+  nothing. NR reads the public `getTimingAdvanceMicros()` (API 34+) instead of reflection, accepting
+  its documented range 0…3846 (a raw 3GPP T_A index despite the name), still as `NR_RAW` with no
+  distance; text scraping remains only for NR, as `UNKNOWN` context, with delimited
+  field names and whole numbers. New rows are identified by the app version column (`AppVersion`,
+  which carries the build commit); earlier rows are not rewritten. This is a data-quality fix, not a
+  calibration or a demonstrated detection improvement.
+- **Parser sentinels and H11 RF comparison (dataset cut for H11 severity).** The parser now stores
+  `CellInfo.UNAVAILABLE` (`Int.MAX_VALUE`) as empty for PCI, PSC and the LTE/NR/UMTS/GSM channels, so
+  new CSV rows show an **empty field** where they used to show `2147483647`. Other measured values,
+  even out of range, are kept so H8 can still fail them. H11's +25 "RF inconsistency" severity now
+  needs a valid, comparable value on both sides (same technology, checked with `RadioChannels`):
+  a sentinel, an unknown value, an out-of-range value, or a historical row without technology is no
+  longer a mismatch. The geographic part of H11 is unchanged. Side effect: local cell confidence no
+  longer lists an ARFCN/PCI contradiction caused by a sentinel in the current reading. Rows from
+  earlier builds keep their stored values; the `AppVersion` column separates them.
+  Fix found in review: `getPreviousCellHistory` did not set the technology on the records it returned
+  (the query filters by it), so every record was `UNKNOWN` and, with the same-technology check above,
+  H11 could no longer add the RF severity at all. Records now carry their technology.
+- **NR and GSM labels.** An NR cell is labelled `5G NR` instead of `5G NR (SA)`: a `CellInfoNr` alone
+  does not show SA versus NSA (new rows only; the band indicator now uses the cell's technology).
+  Comments no longer claim that `getDbm()` is a guaranteed alternative to SS-RSRP or that GSM has no
+  physical identifier (Android exposes BSIC; the app does not record it). No CSI-RSRP substitution.
+- **H6 geometric branch removed.** H6 had a branch comparing TA with the distance to `active.lat/lon` as
+  the tower position (−40), but no production flow fills those fields (OpenCellID coordinates are only
+  shown as a distance), so it never ran. It is removed; the proximity branch (TA ≤ 100 m with signal
+  ≥ −60 dBm, −15) is unchanged, as are weights and the H6 likelihood ratio.
+- **Wi-Fi coverage documented.** The manual lists the rules that abstain on Wi-Fi (H1, H2, H7, H12,
+  H13), why, and what that leaves uncovered; no rule changes. H2, H7 and H13 now give "Wi-Fi active"
+  as their `N/A` reason instead of an unrelated one.
+
+#### Confirmation, scoring and alerts
+
+- **The strong-signal tone cooldown uses a monotonic clock.** `SecurityAlertController` read the civil
+  clock for it although it has an injected clock; that clock now defaults to `elapsedRealtime` for both
+  of its durations (this cooldown and the 2G/3G episode close).
+- **Without a modem timestamp, a cached delivery is not a new observation.** With a null observation
+  token every delivery counted as a new temporal phase, so three cached deliveries of the same sample
+  could confirm an alarm. Only a fresh delivery counts then, as in the episode tracker.
+- **A transmitter alternating identities can be confirmed.** Temporal confirmation counted phases per
+  serving identity and every identity change restarted it, so an emitter switching between two of its
+  own identities every few seconds never reached `3/3`, even with every cycle suspicious, while H10
+  (the rule for that behaviour) failed. While H10 fails, the phases now count on the sorted set of
+  identities in the ping-pong window (`PingPongRule.confirmationKey`), and the alarm episode uses the
+  same key so each switch does not notify again. **Effect on alarms:** H10 alone is unchanged (score
+  75, no suspicion); a new adversarial test scenario (alternating emitter) alarms and a new benign one
+  (border ping-pong while stationary) does not. The scenario bench now feeds identity changes and a
+  GPS speed through H10; `ThreatAnalyzer` takes the H10 speed as an input whose default is the
+  location's (the service does not change).
+- **A held multi-signal episode no longer supplies its own confirmation phases.** After two
+  sub-threshold failures of different families opened an episode, the 30 s hold kept the cell
+  suspicious, and each clean observation inside it advanced the temporal streak: two weak failures
+  followed by two clean cycles confirmed an alarm 15 s later. A held observation without fresh
+  failing evidence now neither advances nor breaks the streak (`ThreatEpisodeTracker` marks it,
+  `TemporalConfidence` keeps the phase). **Effect on alarms:** an episode alarm needs three promoted
+  observations with fresh evidence; a cell suspicious on its own is unchanged.
+- **Episode families and scorer groups are declared together.** `HeuristicCatalog` now states each
+  rule's Bayesian correlation group next to its episode family, and a test checks the declared group
+  against the scorer. They differ on purpose in three rules, each with its reason written down: H6
+  (RF dominance for the scorer, mobility for episodes), H14 (likewise) and H15 (one phenomenon with
+  H11 for the scorer, identity for episodes). Families are not changed: that would move alarms.
+- **Bayesian: H6 grouped with RF dominance and damped by reputation.** H6 (TA ≤ 100 m with signal ≥
+  −60 dBm) was in the mobility group, but its condition is the same dominant signal that makes H2 and
+  H7 fail, so one nearby transmitter multiplied: H6 alone 12.5 %, H6 + H2 (living under a rooftop
+  macro) 44 %. H6 is now in RF_DOMINANCE (only the largest LR counts; 7.0 still leads), and local
+  reputation damps it (trust ≥ 80: 7.0 → 4.6, 8.6 %); neighbour density does not, since proximity does
+  not depend on it. The LR stays 7.0 (lower it to 5.0 if field data shows daily hits on trusted
+  cells). The score penalty (−15) is unchanged. `anomalyConfidence` is displayed and exported only.
+- **One shared suspicious-score threshold.** `ScoreThreshold.SUSPICIOUS_BELOW` (70, compared as
+  `score < 70`) is now used by ThreatAnalyzer, the main screen colours and the statistics screen
+  instead of separate literals. Same value, same comparison; other 70s (−70 dBm RSRP, LTE band 70)
+  are untouched.
+- **Multi-signal episodes use a clock that counts deep sleep.** The episode tracker used its default
+  clock (`System.nanoTime`), which stops in deep sleep on Android, so its 90 s evidence window and
+  30 s promotion hold could stretch across a sleep. The service now injects
+  `SystemClock.elapsedRealtime`, the clock temporal confirmation already uses. Windows unchanged;
+  tests still inject a fake clock. Nothing stored changes.
+- **Latency factor follows H12 (anomaly-confidence cut).** The uncalibrated anomaly confidence applied
+  the latency likelihood ratio whenever the raw latency indicator was anomalous, even when H12 did not
+  fail (Wi-Fi, no measurement, weak signal or normal RF quality). It now applies it only when H12 is
+  `FAILED`, once, with the same weight. Rules, score and alarms are unchanged; stored
+  `AnomalyConfidence` values from earlier builds may be higher in those cases.
+- **2G/3G network alerts.** A hidden flag fixed to "on" fired the 2G/3G response every 60 seconds, and
+  the 4G/5G → 2G/3G path played its own tone outside any control. There is now a setting (*Off*,
+  *Notification only* — default — and *Notification and sound*), every path goes through it, and the
+  alert is given once per continuous 2G/3G episode, closed after 1 minute in a row on 4G/5G with
+  service; a loss of service restarts that minute instead of counting through it. Texts
+  describe use of or a change to 2G/3G, with coverage and calls without VoLTE as possible causes. The
+  setting travels in backups (same format); older backups restore the default.
+- **One sound path per alert.** 2G/3G alerts have their own channel, *2G/3G network*
+  (`miniic_legacy_network`, default importance); *Security alerts* (`miniic_security_alerts`) is kept
+  for confirmed alarms with the user's settings. 2G/3G alerts make no manual tone: *Notification only*
+  is silent and *Notification and sound* sounds as the channel and Android allow. A confirmed alarm
+  no longer plays a tone on every evaluation while it lasts; its notification, once per episode, is
+  its only sound. The strong-signal and latency tones are unchanged.
+- **Earlier signal as context.** The 2G/3G terminal line and notification show the last earlier
+  signal observed, validated with the same −140…−30 dBm range as H13's baseline and the local
+  profile; missing, sentinel or out-of-range values read "earlier signal unknown". Not scored.
+- **Airplane mode is manual.** The 2G/3G response tried to switch Airplane mode on by writing a secure
+  setting, which needs `WRITE_SECURE_SETTINGS`; the app does not declare it, so the write always
+  failed, and the manual promised an ADB grant that cannot work. The attempt is removed: the
+  notification offers a button to open Airplane mode settings. No permission is added.
+
+#### Local learning: trust, Stable-Site and local profile
+
+- **Stable-Site learns only from clean cycles.** Every minute the serving cell, the neighbours and the
+  RF fingerprints of neighbours without a Cell ID were added to the site context from ANY cycle,
+  confirmed alarms included: a transmitter insisting for three days at home became a known cell of
+  the site and corroborated itself as a neighbour in two. It was the only learning source that did
+  not filter dirty data. A cycle now teaches the site only with no failed rule, not suspicious, no
+  Local Cell Trust contradiction and no confirmation streak or multi-signal episode open
+  (`StableSiteContextPolicy`). The unverified-site marker does not count as dirty. Stable-Site stays
+  in shadow mode, so no alarm changes; the learned context stays clean for when it is enabled.
+- **A reading with an unreadable Cell ID no longer gets the previous cell's local trust.** The service
+  only refreshes its cached trust evidence for a readable Cell ID, and the engine did not check it, so
+  a "N/A" reading of another cell could be judged against a mature foreign profile and marked as a
+  PCI/ARFCN change. It never reached an alarm (H11 and H16 are N/A without a Cell ID) and such rows
+  feed nothing; the engine now judges them with no local evidence.
+- **An unverified Stable-Site marker no longer replaces the reasons of other rules.** With the site
+  protection enforced, the stored reason became `[sitio-sin-verificar] …` alone, so a power jump (H2)
+  seen in the same cycle lost its reason in the history. The marker is now added after the existing
+  reasons, as the local reconfiguration marker already was.
+- **Local profile: algorithm-version limit documented and tested, real write failures not hidden.**
+  Evaluations are unique per history row (and per observation): after a future algorithm version
+  the first-use learning could not store held-out evaluations for already evaluated observations, and
+  `INSERT OR IGNORE` dropped them without checking. A test reproduces it; such a conflict is now
+  recognised as expected (the earlier evaluation is kept, never replaced), while an evaluation that
+  is neither stored nor already present is a real failure: the first-use learning rolls back and is
+  not marked as done. `ProfileAlgorithm` stays 2. The manual says what must be decided before raising
+  it, and that the held-out part is the last 20 % of observations cut at an instant, not a number of
+  days.
+- **Local profile: clarifications, no change in method.** Profile days are UTC days (cap of 48 a day
+  and the three days for maturity), now documented. The texts that identify an H13 failure in the
+  stored reasons (`Potencia anómala vs historial`, `Huella RF incoherente con el historial`) are now
+  shared constants used by both the engine and the profile's H13 view, with exactly the historical
+  wording; stored reasons are never translated. The phone-model policy is described as it is: the
+  evaluation always abstains on another model, and learning replaces such a reference only once it
+  has expired (30 days after its last learned evidence), or at once after a reset; earlier text said
+  only a reset did.
+- **Local profile: one evaluation per observation (schema 24, interpretation change for profile
+  statistics).** One reading saved as two rows (periodic or handover row and a confirmed alarm of the
+  same cycle) was evaluated by the profile once per row: the second evaluation used a reference that
+  already contained the reading, and both counted in the statistics. Each observation now gets an
+  identity when it is received (`observation_id`, shared by all its rows, never deduced from signal
+  values). Schema 24 adds it to `history` and to `profile_evaluations` with a unique index; the
+  profile checks it in the same transaction as the evaluation and the learning, so an observation is
+  evaluated against the previous reference, learned at most once and counted once, also after a
+  restart or a restore. Reserved observations still never learn; a failed evaluation write rolls back
+  and the next row of the observation evaluates it. Bootstrap uses each observation once and reserves
+  20 % of observations. All rows are kept; the evaluation detail says how many rows share it. Earlier
+  rows and evaluations are not rewritten (no identity, possibly double-counted). Additive migration;
+  backups from schemas 20–23 still restore. History exports unchanged.
+- **Local profile: sustained quarantine documented.** The manual explains that the profile is per
+  cell identity, not per place, so a legitimate permanent change can stay quarantined and keep
+  showing high deviations; that quarantined readings do not move the last learned evidence; and that
+  the reference goes stale 30 days after that last evidence (later if readings are still accepted),
+  then relearns as a new generation. No automatic reset and no threshold change; the manual reset
+  is the way out. Documentation only.
+- **Stable-Site silent notices.** New setting *Stable-Site silent notices*, on by default. Only an
+  episode that **started** at a place whose reference was already prepared (`ACTIVE`, maturity
+  unchanged) can notify: the place is now evaluated before the serving change is recorded, and the
+  episode opened in that cycle is kept as pending a notice only if the place was mature then (an
+  app preference; there is never more than one open episode). A pending episode posts one notice,
+  *Unusual change at this place*, from a cycle whose result is published (after the existing
+  `mayPublish` check), with the phone confirmed still, a known place and previous cell, and the
+  existing shadow criteria met. Its own channel (`miniic_stable_site_notices`, low importance, no
+  sound, no vibration; no tone, never the alarm channel). It says that it does not confirm an attack
+  and opens the episode (or explains that it was deleted by retention or a reset). Otherwise it
+  abstains and the episode is stored as before; a discarded analysis keeps it pending. One notice
+  per episode at most: the pending mark is cleared on disk before the notice is attempted, so
+  readings, reopening the app and restarts never repeat it. Episodes that started before maturity
+  or before this version never notify, and a restore clears the pending mark. Turning the setting
+  off uses a pending episode up without a notice; maturity never turns it back on. The terminal
+  tells a posted notice from one blocked by Android, a failed one and one skipped by the setting; a
+  failed or blocked notification never fails the analysis. *Recorded in shadow* keeps its meaning.
+  `STABLE_SITE_ENFORCEMENT_ENABLED` stays `false`; score, Bayesian factor, Local Cell Trust,
+  temporal confirmation and alarms are unchanged. No schema
+  change. The setting travels in backups (same format); older backups restore the default (*on*).
+- **Stable-Site diagnostic and `motion.csv`.** A window long enough but with positions spread beyond
+  the static envelope was reported as `INSUFFICIENT_DURATION`; it is now `POSITIONS_DISPERSED`, and a
+  slow walking speed is `MOVEMENT` (terminal only; same conditions, same states). `duration_s` in
+  `motion.csv` is documented as the length of the classifier's window at the last saved evaluation of
+  that day and state (at most about 3 minutes), not time spent static; the column is unchanged. The
+  GSM comment now says Android exposes BSIC, which this app does not use as a PCI.
+- **Stable-Site motion uses monotonic time.** The motion classifier ordered fixes and measured
+  durations with `Location.time` and checked freshness against the civil clock, so a date/time
+  change or a late fix could shift them. It now uses `Location.elapsedRealtimeNanos` and
+  `SystemClock.elapsedRealtime` for order, freshness and duration; a fix older than the existing
+  60 s grace period, or stamped in a previous boot, is ignored. Thresholds unchanged; civil time
+  still names the day of each row. Motion state is in memory only, so a restart starts from
+  `UNKNOWN`.
+- **Local confidence validates the current PCI/ARFCN (dataset cut for local confidence).** The
+  learned references were already validated per technology (`RadioChannels`), but the current PCI and
+  ARFCN were compared raw: a sentinel (`Int.MAX_VALUE`) or an out-of-range value could appear as a new
+  carrier or PCI and mark the cell `CHANGED` with an RF contradiction. The current values are now
+  validated the same way before looking up references, comparing them, checking an accepted
+  reconfiguration or querying a reconfiguration candidate; an absent or invalid value is unknown and
+  never an RF contradiction by itself. Valid changes are detected as before. `CellData` keeps the
+  original values, so H8 still fails an out-of-range channel. For comparability: rows from earlier
+  builds may carry `CHANGED`, a `Cambio en identidad celular consolidada (PCI/ARFCN)` reason or a
+  quarantine caused only by an invalid reading; new rows do not. Use `AppVersion` to separate them;
+  nothing is rewritten and no profile needs to be reset.
+- **Local reconfiguration keeps other reasons (stored-text change).** When local cell confidence saw
+  a PCI/ARFCN change without an alarm, its marker *replaced* the reasons other rules had written for
+  that observation. It is now appended with ` | `, without blank or duplicate parts
+  (`StoredReasons.append`, also used by the alarm branch). Effect on filters, checked against real
+  SQLite: such a row stays out of trusted learning and of H15's history as before, and it no longer
+  counts as evidence for an accepted reconfiguration, which only takes rows whose **sole** reason is
+  the marker (`LOCAL_TRUST_RECONFIGURATION_HISTORY_LIKE`, score 100). Earlier rows are not rewritten;
+  rows from before this fix may show only the marker where other rules had also failed.
+- **Wi-Fi learning documented.** Rows recorded on Wi-Fi can feed the local references; "no failure"
+  is not "all rules evaluated"; the Wi-Fi state is not stored per row. A limitation to measure, not a
+  quantified bias.
+
+#### Serving cell, handovers and routes
+
 - **Serving-cell selection: no secondary as fallback, no "unknown = same" duplicates.** When no entry
   declares PRIMARY_SERVING, the fallback took the first registered entry with signal even if it
   declared SECONDARY_SERVING (a modem that only fills the state on the NR leg would make that leg
@@ -197,19 +389,94 @@ GitHub pre-release of an earlier build was withdrawn.
   PASSED or `N/A` means "earlier failures unknown". All writes (handovers and trip confirmation) were
   reviewed and share tested SQL; H16, learning and alarms are unchanged. Backups keep their format;
   schema 24 backups are migrated on restore, and older APKs refuse schema 25 backups as newer.
-- **Statistics without loading the whole history.** The RF intelligence summary read every history
-  row (`getRecords()` without a limit) and grouped them in Compose. It now runs aggregate SQL queries
-  in IO (`IntelStatsQuery`, no window functions for Android 10's SQLite) with loading, error and
-  empty states, and leaving the screen still cancels it. The figures are the same — checked against a
-  literal replica of the old calculation on randomised data with nulls, several technologies,
-  sub-threshold reasons and ties — except that a row with a NULL text field no longer silently drops
-  itself and every older row. Misleading labels are clarified without changing what they count:
-  CONNECTIONS → OBSERVATIONS, SUSPICIOUS → SCORE < 70 (a low score, not a confirmed alarm),
-  WITH GPS → OBS. WITH GPS, ANOMALIES → WITH REASON (it includes alarms still being confirmed).
-- **One shared suspicious-score threshold.** `ScoreThreshold.SUSPICIOUS_BELOW` (70, compared as
-  `score < 70`) is now used by ThreatAnalyzer, the main screen colours and the statistics screen
-  instead of separate literals. Same value, same comparison; other 70s (−70 dBm RSRP, LTE band 70)
-  are untouched.
+- **No routes across service gaps (interpretation change for routes and H16).** After a loss of
+  service (no cell, Airplane mode, unusable declared primary), more than 2 minutes without readings
+  or a restart without demonstrable continuity, the first cell was linked to the last one before the
+  gap, as if A→C had been an observed handover: H16 evaluated it, Topology counted it and the trip got
+  an edge. The existing continuity check (`CoverageContinuity`) now feeds both: that cell is a new
+  reference (`HandoverReference`), H16 says `N/A` with that reason, nothing is recorded in Topology
+  and the trip gets no edge; after a process restart in the same boot the first trip edge needs at
+  most 2 minutes since the last observation. A valid serving cell without GPS keeps continuity (only
+  the geometry is `N/A`). H16's rules, thresholds and weights, scores, alarms and Stable-Site are
+  unchanged. Stored routes are kept and not reclassified or recalculated; no schema change.
+- **Trips survive clock changes.** Trip durations and resumption compared civil times: moving the
+  clock back kept a trip open (negative durations) and moving it forward closed it by maximum
+  duration, and a restart could resume a trip on a backward clock. Intervals now use the monotonic
+  clock within one boot (`SystemClock.elapsedRealtime`, boot number from `Settings.Global.BOOT_COUNT`);
+  civil time only dates stored rows. A civil jump of more than 2 minutes closes the trip as
+  `CLOCK_CHANGED` at its last observed civil time. After a restart a trip resumes only with
+  continuity shown (same boot, its monotonic reference kept in an internal preference, at most 15
+  minutes since last seen); otherwise it closes as `ABANDONED` at its last observed time instead of
+  the restart time. A restore clears that reference. Limits unchanged; no schema or backup format
+  change; trips stored by earlier builds are not recalculated.
+- **Route familiarity: one rule for the service and Geometry.** The service judged a cell only by the
+  edges of the current trip that touched it, so on arrival it had a single edge and could almost
+  never reach `KNOWN_ON_ROUTE`; Geometry judged the same cell by all its stored edges. Both now use
+  `MobilityFamiliarityPolicy` (still two edges with three earlier trips each; the open trip never
+  counts) on every stored edge of the cell, and Geometry's current-cell line reads all of them, not
+  only the routes loaded on screen. The arrival in the current trip is reported apart
+  (`[MOBILITY] … arrival=priorTrips=n`), and the labels now say *earlier trips*. Contextual memory
+  only: no score, rule, alarm or Stable-Site change. Terminal lines from earlier builds are not
+  recalculated. No schema change.
+
+#### Analysis cycle and robustness
+
+- **A cycle is shown before its alerts and writes.** Publication ran incidents, black box,
+  `checkAlerts` (history row, alert and notification) and the external verification before updating
+  the screen and the health. A failure late in that sequence left an alarm sent and a row written
+  with the old screen and "analysis unavailable", contradicting `AnalysisHealth` ("never raises
+  alarms or publishes an incomplete cycle"). Now the verification is launched in its own `try`, then
+  the band context, then the screen, health and monitoring notification, and only then incidents,
+  black box, history and alerts. If that last part fails, the published result stays valid: health is
+  unchanged and one `[SYS]` line per streak says that part may be missing. The `AnalysisHealth`
+  comment now states exactly this guarantee.
+- **A failure while receiving a reading is no longer swallowed.** Everything between the modem
+  delivery and the start of the analysis (parsing, serving-cell selection, Timing Advance handling)
+  sat in a `catch` that only printed the stack trace: the reading was lost with no terminal line or
+  health change, and the screen kept the last result as current. Worse, a failure after the new
+  delivery was registered also invalidated the cycle still running. It now reports like an analysis
+  failure (type only, one line per streak, "analysis temporarily unavailable"); without a delivery
+  ticket yet, the health is marked the same way and recovers with the next published cycle.
+- **An `Error` inside the analysis cycle is a cycle failure too.** The cycle boundary caught only
+  `Exception`; a `NoClassDefFoundError` from a vendor API or a `StackOverflowError` went to the scope's
+  handler, the health was not marked and the screen kept the last result as current. It now catches
+  any `Throwable` except cancellation, reported by type only.
+- **Airplane mode on the main thread.** The periodic loop invalidated the running cycle and emptied
+  the cell list from a background thread, so it could slip between a cycle's `mayPublish` check and
+  its publication and leave old data on screen. The invalidation, the emptying and the notification
+  text now run on the main thread, like every publication. Reading the setting, scanning and the
+  recovery path are unchanged and stay off the main thread.
+- **Analysis health.** An internal error in an analysis cycle used to end in the generic coroutine
+  handler while the screen and the notification kept showing the last result as if it were
+  current. The cycle boundary now catches it (cancellation is rethrown): one terminal line when a
+  streak of failures starts and one when a valid cycle is published again, with the error type
+  only; «Analysis temporarily unavailable» on the main screen and in the monitoring notification;
+  the last valid result is shown as earlier, not updated. No alarm, no publication of an incomplete
+  cycle and no retry. Only a cycle that could still publish counts, so a discarded generation
+  cannot change the state of a newer one. What a cycle already did before failing stays done once;
+  it is not a global transaction (see `onAnalysisFailed`). The notification text is resolved from
+  the health state on every update, so no later text replaces the notice while the analysis is
+  unavailable; priority: write failure, then missing signal / airplane mode / searching, then the
+  notice, then any other text. Recovery forces a repaint past the 2-second limit. The visible result
+  and its validity time are published together, with nothing in between that can fail; a
+  notification failure is logged as such and is not an analysis failure.
+- **Restore refuses databases with triggers or views.** No version of the app creates them (audited
+  for every supported backup schema, 20–23, and the whole code history; SQLite's own objects and
+  `android_metadata` are tables or indexes). A trigger in a backup would have run when the app
+  opened the copy to migrate it and stayed in the installed database. The stager now rejects such a
+  backup as `CORRUPT_DATABASE` with a read-only `sqlite_master` query, before opening it with the
+  helper and again after migrating, before installing; nothing is removed silently. Legitimate
+  backups are unaffected; `.icdbackup` format and schema unchanged. MANUAL and README also state
+  that the SHA-256 and `integrity_check` detect damage, not tampering by someone who can recompute
+  them.
+- **Robustness.** A forensic case is created in one transaction (no half-created "PENDING" case).
+  A failed read of H15's RF history makes H15 abstain for that cycle instead of judging partial data.
+  A failed history prune is reported by the daily maintenance instead of looking like "0 rows". The
+  texts and patterns stored in `failed_heuristics` that queries depend on are shared constants
+  (`StoredReasons`), with the same strings. No change to scores, rules, schema or backups.
+
+#### External verification (OpenCellID)
+
 - **OpenCellID privacy, stated plainly.** Settings and the manual now say what each query sends (the
   API key and the cell identity: MCC, MNC, area code, Cell ID, technology), that Tor hides the IP but
   the same key lets queries be linked, and that with the proxy selected and Tor unavailable there is
@@ -256,176 +523,18 @@ GitHub pre-release of an earlier build was withdrawn.
   checked together): the current query goes from PENDING to ERROR and is retried, an old one changes
   nothing; ownership is released in the outer `finally`, after the `catch`, and a cancelled query
   never leaves an orphan PENDING.
-- **Local profile: algorithm-version limit documented and tested, real write failures not hidden.**
-  Evaluations are unique per history row (and per observation): after a future algorithm version
-  the first-use learning could not store held-out evaluations for already evaluated observations, and
-  `INSERT OR IGNORE` dropped them without checking. A test reproduces it; such a conflict is now
-  recognised as expected (the earlier evaluation is kept, never replaced), while an evaluation that
-  is neither stored nor already present is a real failure: the first-use learning rolls back and is
-  not marked as done. `ProfileAlgorithm` stays 2. The manual says what must be decided before raising
-  it, and that the held-out part is the last 20 % of observations cut at an instant, not a number of
-  days.
-- **Local profile: clarifications, no change in method.** Profile days are UTC days (cap of 48 a day
-  and the three days for maturity), now documented. The texts that identify an H13 failure in the
-  stored reasons (`Potencia anómala vs historial`, `Huella RF incoherente con el historial`) are now
-  shared constants used by both the engine and the profile's H13 view, with exactly the historical
-  wording; stored reasons are never translated. The phone-model policy is described as it is: the
-  evaluation always abstains on another model, and learning replaces such a reference only once it
-  has expired (30 days after its last learned evidence), or at once after a reset; earlier text said
-  only a reset did.
-- **Local profile: one evaluation per observation (schema 24, interpretation change for profile
-  statistics).** One reading saved as two rows (periodic or handover row and a confirmed alarm of the
-  same cycle) was evaluated by the profile once per row: the second evaluation used a reference that
-  already contained the reading, and both counted in the statistics. Each observation now gets an
-  identity when it is received (`observation_id`, shared by all its rows, never deduced from signal
-  values). Schema 24 adds it to `history` and to `profile_evaluations` with a unique index; the
-  profile checks it in the same transaction as the evaluation and the learning, so an observation is
-  evaluated against the previous reference, learned at most once and counted once, also after a
-  restart or a restore. Reserved observations still never learn; a failed evaluation write rolls back
-  and the next row of the observation evaluates it. Bootstrap uses each observation once and reserves
-  20 % of observations. All rows are kept; the evaluation detail says how many rows share it. Earlier
-  rows and evaluations are not rewritten (no identity, possibly double-counted). Additive migration;
-  backups from schemas 20–23 still restore. History exports unchanged.
-- **Local profile: sustained quarantine documented.** The manual explains that the profile is per
-  cell identity, not per place, so a legitimate permanent change can stay quarantined and keep
-  showing high deviations; that quarantined readings do not move the last learned evidence; and that
-  the reference goes stale 30 days after that last evidence (later if readings are still accepted),
-  then relearns as a new generation. No automatic reset and no threshold change; the manual reset
-  is the way out. Documentation only.
-- **No routes across service gaps (interpretation change for routes and H16).** After a loss of
-  service (no cell, Airplane mode, unusable declared primary), more than 2 minutes without readings
-  or a restart without demonstrable continuity, the first cell was linked to the last one before the
-  gap, as if A→C had been an observed handover: H16 evaluated it, Topology counted it and the trip got
-  an edge. The existing continuity check (`CoverageContinuity`) now feeds both: that cell is a new
-  reference (`HandoverReference`), H16 says `N/A` with that reason, nothing is recorded in Topology
-  and the trip gets no edge; after a process restart in the same boot the first trip edge needs at
-  most 2 minutes since the last observation. A valid serving cell without GPS keeps continuity (only
-  the geometry is `N/A`). H16's rules, thresholds and weights, scores, alarms and Stable-Site are
-  unchanged. Stored routes are kept and not reclassified or recalculated; no schema change.
-- **Trips survive clock changes.** Trip durations and resumption compared civil times: moving the
-  clock back kept a trip open (negative durations) and moving it forward closed it by maximum
-  duration, and a restart could resume a trip on a backward clock. Intervals now use the monotonic
-  clock within one boot (`SystemClock.elapsedRealtime`, boot number from `Settings.Global.BOOT_COUNT`);
-  civil time only dates stored rows. A civil jump of more than 2 minutes closes the trip as
-  `CLOCK_CHANGED` at its last observed civil time. After a restart a trip resumes only with
-  continuity shown (same boot, its monotonic reference kept in an internal preference, at most 15
-  minutes since last seen); otherwise it closes as `ABANDONED` at its last observed time instead of
-  the restart time. A restore clears that reference. Limits unchanged; no schema or backup format
-  change; trips stored by earlier builds are not recalculated.
-- **Route familiarity: one rule for the service and Geometry.** The service judged a cell only by the
-  edges of the current trip that touched it, so on arrival it had a single edge and could almost
-  never reach `KNOWN_ON_ROUTE`; Geometry judged the same cell by all its stored edges. Both now use
-  `MobilityFamiliarityPolicy` (still two edges with three earlier trips each; the open trip never
-  counts) on every stored edge of the cell, and Geometry's current-cell line reads all of them, not
-  only the routes loaded on screen. The arrival in the current trip is reported apart
-  (`[MOBILITY] … arrival=priorTrips=n`), and the labels now say *earlier trips*. Contextual memory
-  only: no score, rule, alarm or Stable-Site change. Terminal lines from earlier builds are not
-  recalculated. No schema change.
-- **H16 needs a recent GPS fix at each end (behaviour cut for H16).** The transition snapshots kept the
-  accepted position, which can be up to 120 s old or the same fix at both ends, so a cached position
-  could read as "0 m travelled" and, with distant learned zones, give `FAILED` (or let a shortcut
-  pass) without any measured movement. Each snapshot now records the fix's monotonic time
-  (`Location.elapsedRealtimeNanos`), and H16 measures the distance only when both ends have their own
-  fix, less than 10 s old relative to their snapshot (the live-fix freshness, now a shared constant;
-  the 120 s limit for other uses is unchanged), with a valid timestamp and different fixes. Otherwise
-  it returns `N/A` with the reason, before the geometry and the visible-neighbour and learned-route
-  shortcuts, and the transition never counts towards learned routes. Two different recent fixes at
-  the same coordinates are still evaluated. Geometric thresholds, the 20 s result hold, weights and
-  alarm wiring are unchanged; H11, Stable-Site, scores and likelihood ratios are not touched. Rows
-  from earlier builds are not recalculated; new rows may show H16 `N/A` where it was evaluated before
-  with insufficient GPS. No schema, migration or backup format change.
-- **Stable-Site silent notices.** New setting *Stable-Site silent notices*, on by default. Only an
-  episode that **started** at a place whose reference was already prepared (`ACTIVE`, maturity
-  unchanged) can notify: the place is now evaluated before the serving change is recorded, and the
-  episode opened in that cycle is kept as pending a notice only if the place was mature then (an
-  app preference; there is never more than one open episode). A pending episode posts one notice,
-  *Unusual change at this place*, from a cycle whose result is published (after the existing
-  `mayPublish` check), with the phone confirmed still, a known place and previous cell, and the
-  existing shadow criteria met. Its own channel (`miniic_stable_site_notices`, low importance, no
-  sound, no vibration; no tone, never the alarm channel). It says that it does not confirm an attack
-  and opens the episode (or explains that it was deleted by retention or a reset). Otherwise it
-  abstains and the episode is stored as before; a discarded analysis keeps it pending. One notice
-  per episode at most: the pending mark is cleared on disk before the notice is attempted, so
-  readings, reopening the app and restarts never repeat it. Episodes that started before maturity
-  or before this version never notify, and a restore clears the pending mark. Turning the setting
-  off uses a pending episode up without a notice; maturity never turns it back on. The terminal
-  tells a posted notice from one blocked by Android, a failed one and one skipped by the setting; a
-  failed or blocked notification never fails the analysis. *Recorded in shadow* keeps its meaning.
-  `STABLE_SITE_ENFORCEMENT_ENABLED` stays `false`; score, Bayesian factor, Local Cell Trust,
-  temporal confirmation and alarms are unchanged. No schema
-  change. The setting travels in backups (same format); older backups restore the default (*on*).
-- **Stable-Site diagnostic and `motion.csv`.** A window long enough but with positions spread beyond
-  the static envelope was reported as `INSUFFICIENT_DURATION`; it is now `POSITIONS_DISPERSED`, and a
-  slow walking speed is `MOVEMENT` (terminal only; same conditions, same states). `duration_s` in
-  `motion.csv` is documented as the length of the classifier's window at the last saved evaluation of
-  that day and state (at most about 3 minutes), not time spent static; the column is unchanged. The
-  GSM comment now says Android exposes BSIC, which this app does not use as a PCI.
-- **Stable-Site motion uses monotonic time.** The motion classifier ordered fixes and measured
-  durations with `Location.time` and checked freshness against the civil clock, so a date/time
-  change or a late fix could shift them. It now uses `Location.elapsedRealtimeNanos` and
-  `SystemClock.elapsedRealtime` for order, freshness and duration; a fix older than the existing
-  60 s grace period, or stamped in a previous boot, is ignored. Thresholds unchanged; civil time
-  still names the day of each row. Motion state is in memory only, so a restart starts from
-  `UNKNOWN`.
-- **Multi-signal episodes use a clock that counts deep sleep.** The episode tracker used its default
-  clock (`System.nanoTime`), which stops in deep sleep on Android, so its 90 s evidence window and
-  30 s promotion hold could stretch across a sleep. The service now injects
-  `SystemClock.elapsedRealtime`, the clock temporal confirmation already uses. Windows unchanged;
-  tests still inject a fake clock. Nothing stored changes.
-- **Local confidence validates the current PCI/ARFCN (dataset cut for local confidence).** The
-  learned references were already validated per technology (`RadioChannels`), but the current PCI and
-  ARFCN were compared raw: a sentinel (`Int.MAX_VALUE`) or an out-of-range value could appear as a new
-  carrier or PCI and mark the cell `CHANGED` with an RF contradiction. The current values are now
-  validated the same way before looking up references, comparing them, checking an accepted
-  reconfiguration or querying a reconfiguration candidate; an absent or invalid value is unknown and
-  never an RF contradiction by itself. Valid changes are detected as before. `CellData` keeps the
-  original values, so H8 still fails an out-of-range channel. For comparability: rows from earlier
-  builds may carry `CHANGED`, a `Cambio en identidad celular consolidada (PCI/ARFCN)` reason or a
-  quarantine caused only by an invalid reading; new rows do not. Use `AppVersion` to separate them;
-  nothing is rewritten and no profile needs to be reset.
-- **Local reconfiguration keeps other reasons (stored-text change).** When local cell confidence saw
-  a PCI/ARFCN change without an alarm, its marker *replaced* the reasons other rules had written for
-  that observation. It is now appended with ` | `, without blank or duplicate parts
-  (`StoredReasons.append`, also used by the alarm branch). Effect on filters, checked against real
-  SQLite: such a row stays out of trusted learning and of H15's history as before, and it no longer
-  counts as evidence for an accepted reconfiguration, which only takes rows whose **sole** reason is
-  the marker (`LOCAL_TRUST_RECONFIGURATION_HISTORY_LIKE`, score 100). Earlier rows are not rewritten;
-  rows from before this fix may show only the marker where other rules had also failed.
-- **Wi-Fi state per observation.** The rule explanations re-queried Wi-Fi when publishing, so a
-  Wi-Fi change between analysis and publication could explain a result with another reason (for
-  example "neighbours needed" for a rule that abstained because of Wi-Fi). They now use the value
-  captured for that analysis. Rule exclusions are unchanged. Concurrency: `isServiceRunning` is
-  `@Volatile` (a simple flag written on the main thread and read by the periodic loop), and
-  `applyLocationMode()` always runs on the main thread, so the compare-and-log of the location mode
-  is confined to one thread instead of relying on `@Volatile`.
-- **Airplane mode on the main thread.** The periodic loop invalidated the running cycle and emptied
-  the cell list from a background thread, so it could slip between a cycle's `mayPublish` check and
-  its publication and leave old data on screen. The invalidation, the emptying and the notification
-  text now run on the main thread, like every publication. Reading the setting, scanning and the
-  recovery path are unchanged and stay off the main thread.
-- **Analysis health.** An internal error in an analysis cycle used to end in the generic coroutine
-  handler while the screen and the notification kept showing the last result as if it were
-  current. The cycle boundary now catches it (cancellation is rethrown): one terminal line when a
-  streak of failures starts and one when a valid cycle is published again, with the error type
-  only; «Analysis temporarily unavailable» on the main screen and in the monitoring notification;
-  the last valid result is shown as earlier, not updated. No alarm, no publication of an incomplete
-  cycle and no retry. Only a cycle that could still publish counts, so a discarded generation
-  cannot change the state of a newer one. What a cycle already did before failing stays done once;
-  it is not a global transaction (see `onAnalysisFailed`). The notification text is resolved from
-  the health state on every update, so no later text replaces the notice while the analysis is
-  unavailable; priority: write failure, then missing signal / airplane mode / searching, then the
-  notice, then any other text. Recovery forces a repaint past the 2-second limit. The visible result
-  and its validity time are published together, with nothing in between that can fail; a
-  notification failure is logged as such and is not an analysis failure.
-- **Restore refuses databases with triggers or views.** No version of the app creates them (audited
-  for every supported backup schema, 20–23, and the whole code history; SQLite's own objects and
-  `android_metadata` are tables or indexes). A trigger in a backup would have run when the app
-  opened the copy to migrate it and stayed in the installed database. The stager now rejects such a
-  backup as `CORRUPT_DATABASE` with a read-only `sqlite_master` query, before opening it with the
-  helper and again after migrating, before installing; nothing is removed silently. Legitimate
-  backups are unaffected; `.icdbackup` format and schema unchanged. MANUAL and README also state
-  that the SHA-256 and `integrity_check` detect damage, not tampering by someone who can recompute
-  them.
+
+#### Exports, statistics and documentation
+
+- **Statistics without loading the whole history.** The RF intelligence summary read every history
+  row (`getRecords()` without a limit) and grouped them in Compose. It now runs aggregate SQL queries
+  in IO (`IntelStatsQuery`, no window functions for Android 10's SQLite) with loading, error and
+  empty states, and leaving the screen still cancels it. The figures are the same — checked against a
+  literal replica of the old calculation on randomised data with nulls, several technologies,
+  sub-threshold reasons and ties — except that a row with a NULL text field no longer silently drops
+  itself and every older row. Misleading labels are clarified without changing what they count:
+  CONNECTIONS → OBSERVATIONS, SUSPICIOUS → SCORE < 70 (a low score, not a confirmed alarm),
+  WITH GPS → OBS. WITH GPS, ANOMALIES → WITH REASON (it includes alarms still being confirmed).
 - **Forensic `cells.csv`: `role=SECONDARY` (export format change).** An entry stored as
   `SECONDARY_SERVING` is now exported with `role=SECONDARY` instead of `NEIGHBOR`; `SERVING` and
   `NEIGHBOR` are unchanged. Based only on the stored `connection_state`; samples without it (before
@@ -445,95 +554,9 @@ GitHub pre-release of an earlier build was withdrawn.
   JSON evidence are not modified. Checked by opening the exports in LibreOffice Calc (no formulas
   created, values unchanged after saving and reopening); Excel not checked. A reduction of risk, not a
   guarantee: spreadsheets differ in how they import CSV.
-- **Neighbour selection (dataset cut for H1–H5, H7, H11, H16, the Bayesian density factor and
-  Stable-Site learning; commit `6e99267`).** A carrier the modem declares `SECONDARY_SERVING` but
-  publishes without `isRegistered` — typically the NR leg of 5G NSA, sometimes an LTE secondary — used
-  to count as a neighbour, because neighbours were "every unregistered entry". It now stays a
-  secondary carrier (shown in the Radio context and in `secondaryCarriers`) and is no longer counted
-  or compared as a neighbour. Affected consumers: H1 (isolation and its 3-delivery streak), H2 (power
-  gap), H3–H5 (MCC, MNC, TAC), H7 (ghost neighbours), the H11 distance threshold that depends on
-  neighbour density, H16 ("destination was a neighbour"), the Bayesian density factor, Stable-Site
-  learning and its neighbour diagnostic, and the neighbour count in the rule explanations. Expected
-  direction on NSA phones: fewer "neighbours", so H1 can see an isolated cell where it used to see one
-  neighbour, and H2/H7 can become `N/A` where the secondary was the only neighbour. The selection is a
-  single function (`ServingCellSelection.neighbours`). Unchanged: the serving-cell choice, the signal
-  filter, entries in `NONE`/`UNKNOWN` state, weights, thresholds, schema, backups, exports and the
-  forensic black box (which still records every non-serving entry with its connection state). How many
-  historical rows were affected has **not been measured**; rows are not rewritten or recomputed, the
-  per-row neighbour list is not stored, and Stable-Site aggregates learnt before this change may
-  include such carriers until they age out. New rows are identified by the `AppVersion` column.
-- **Robustness.** A forensic case is created in one transaction (no half-created "PENDING" case).
-  A failed read of H15's RF history makes H15 abstain for that cycle instead of judging partial data.
-  A failed history prune is reported by the daily maintenance instead of looking like "0 rows". The
-  texts and patterns stored in `failed_heuristics` that queries depend on are shared constants
-  (`StoredReasons`), with the same strings. No change to scores, rules, schema or backups.
-- **Wi-Fi learning documented.** Rows recorded on Wi-Fi can feed the local references; "no failure"
-  is not "all rules evaluated"; the Wi-Fi state is not stored per row. A limitation to measure, not a
-  quantified bias.
-
-- **Timing Advance input (dataset cut for TA and H6).** The getters are range-checked (LTE 0…1282,
-  GSM 0…219); sentinels, negatives and out-of-range values store no TA. `toMeters()` applies the same
-  limits, so older rows or other inputs cannot produce a distance from an impossible index or
-  overflow. LTE no longer scrapes the manufacturer's `toString()`: its pattern also matched `data=0`
-  or `delta=0` and turned them into "TA 0". Expect **less TA coverage** on phones whose getter gave
-  nothing. NR reads the public `getTimingAdvanceMicros()` (API 34+) instead of reflection, accepting
-  its documented range 0…3846 (a raw 3GPP T_A index despite the name), still as `NR_RAW` with no
-  distance; text scraping remains only for NR, as `UNKNOWN` context, with delimited
-  field names and whole numbers. New rows are identified by the app version column (`AppVersion`,
-  which carries the build commit); earlier rows are not rewritten. This is a data-quality fix, not a
-  calibration or a demonstrated detection improvement.
-- **Parser sentinels and H11 RF comparison (dataset cut for H11 severity).** The parser now stores
-  `CellInfo.UNAVAILABLE` (`Int.MAX_VALUE`) as empty for PCI, PSC and the LTE/NR/UMTS/GSM channels, so
-  new CSV rows show an **empty field** where they used to show `2147483647`. Other measured values,
-  even out of range, are kept so H8 can still fail them. H11's +25 "RF inconsistency" severity now
-  needs a valid, comparable value on both sides (same technology, checked with `RadioChannels`):
-  a sentinel, an unknown value, an out-of-range value, or a historical row without technology is no
-  longer a mismatch. The geographic part of H11 is unchanged. Side effect: local cell confidence no
-  longer lists an ARFCN/PCI contradiction caused by a sentinel in the current reading. Rows from
-  earlier builds keep their stored values; the `AppVersion` column separates them.
-  Fix found in review: `getPreviousCellHistory` did not set the technology on the records it returned
-  (the query filters by it), so every record was `UNKNOWN` and, with the same-technology check above,
-  H11 could no longer add the RF severity at all. Records now carry their technology.
-- **NR and GSM labels.** An NR cell is labelled `5G NR` instead of `5G NR (SA)`: a `CellInfoNr` alone
-  does not show SA versus NSA (new rows only; the band indicator now uses the cell's technology).
-  Comments no longer claim that `getDbm()` is a guaranteed alternative to SS-RSRP or that GSM has no
-  physical identifier (Android exposes BSIC; the app does not record it). No CSI-RSRP substitution.
-
-- **Latency factor follows H12 (anomaly-confidence cut).** The uncalibrated anomaly confidence applied
-  the latency likelihood ratio whenever the raw latency indicator was anomalous, even when H12 did not
-  fail (Wi-Fi, no measurement, weak signal or normal RF quality). It now applies it only when H12 is
-  `FAILED`, once, with the same weight. Rules, score and alarms are unchanged; stored
-  `AnomalyConfidence` values from earlier builds may be higher in those cases.
-- **2G/3G network alerts.** A hidden flag fixed to "on" fired the 2G/3G response every 60 seconds, and
-  the 4G/5G → 2G/3G path played its own tone outside any control. There is now a setting (*Off*,
-  *Notification only* — default — and *Notification and sound*), every path goes through it, and the
-  alert is given once per continuous 2G/3G episode, closed after 1 minute in a row on 4G/5G with
-  service; a loss of service restarts that minute instead of counting through it. Texts
-  describe use of or a change to 2G/3G, with coverage and calls without VoLTE as possible causes. The
-  setting travels in backups (same format); older backups restore the default.
-- **One sound path per alert.** 2G/3G alerts have their own channel, *2G/3G network*
-  (`miniic_legacy_network`, default importance); *Security alerts* (`miniic_security_alerts`) is kept
-  for confirmed alarms with the user's settings. 2G/3G alerts make no manual tone: *Notification only*
-  is silent and *Notification and sound* sounds as the channel and Android allow. A confirmed alarm
-  no longer plays a tone on every evaluation while it lasts; its notification, once per episode, is
-  its only sound. The strong-signal and latency tones are unchanged.
-- **Earlier signal as context.** The 2G/3G terminal line and notification show the last earlier
-  signal observed, validated with the same −140…−30 dBm range as H13's baseline and the local
-  profile; missing, sentinel or out-of-range values read "earlier signal unknown". Not scored.
 - **Docs.** README's technical limitations state that H1, H2, H7, H12 and H13 abstain on Wi-Fi, and
   mention Android's *Allow 2G* setting where the device offers it (it does not block 3G; no universal
   route). The 2G/3G setting text says the same in English and Spanish.
-- **Airplane mode is manual.** The 2G/3G response tried to switch Airplane mode on by writing a secure
-  setting, which needs `WRITE_SECURE_SETTINGS`; the app does not declare it, so the write always
-  failed, and the manual promised an ADB grant that cannot work. The attempt is removed: the
-  notification offers a button to open Airplane mode settings. No permission is added.
-- **H6 geometric branch removed.** H6 had a branch comparing TA with the distance to `active.lat/lon` as
-  the tower position (−40), but no production flow fills those fields (OpenCellID coordinates are only
-  shown as a distance), so it never ran. It is removed; the proximity branch (TA ≤ 100 m with signal
-  ≥ −60 dBm, −15) is unchanged, as are weights and the H6 likelihood ratio.
-- **Wi-Fi coverage documented.** The manual lists the rules that abstain on Wi-Fi (H1, H2, H7, H12,
-  H13), why, and what that leaves uncovered; no rule changes. H2, H7 and H13 now give "Wi-Fi active"
-  as their `N/A` reason instead of an unrelated one.
 - **Cleanup.** A comment still described a VERIFIED bonus, a NOT_FOUND penalty and an H6 exception
   removed in v2.1. H9's reason no longer names "A5/0": the app can only receive "ciphering active or
   not" from the system, not the algorithm. `org.json` is a test-only dependency: on the phone the
