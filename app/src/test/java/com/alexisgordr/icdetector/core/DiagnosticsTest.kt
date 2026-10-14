@@ -214,6 +214,9 @@ class DiagnosticsTest {
         val csg = DiagnosticEngine.explain(cell(HeuristicReport(csgCell = true)), inputs)
         listOf(1, 2, 5, 6, 7).forEach { id -> assertEquals(DiagnosticEngine.CSG_NA_EXPLANATION, csg.first { it.id == id }.explanation) }
         assertTrue(csg.first { it.id == 4 }.explanation != DiagnosticEngine.CSG_NA_EXPLANATION)
+        // 3.0 (corte de campaña) — H11 con un fix viejo dice por qué se abstuvo.
+        assertEquals(DiagnosticEngine.H11_FIX_TOO_OLD_EXPLANATION,
+            DiagnosticEngine.explain(cell(HeuristicReport(mobileCellIdFixTooOld = true)), inputs).first { it.id == 11 }.explanation)
         // 3.0 (corte de campaña) — H9 reservada: siempre la misma explicación.
         val h9 = DiagnosticEngine.explain(cell(HeuristicReport()), inputs).first { it.id == 9 }
         assertEquals(HeuristicStatus.NOT_EVALUATED, h9.status)

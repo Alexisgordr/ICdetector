@@ -193,6 +193,8 @@ class TerminalLocalizationCoverageTest {
             com.alexisgordr.icdetector.core.DiagnosticEngine.H8_FAILED_EXPLANATION,
             com.alexisgordr.icdetector.core.DiagnosticEngine.H9_NA_EXPLANATION,
             com.alexisgordr.icdetector.core.DiagnosticEngine.CSG_NA_EXPLANATION,
+            com.alexisgordr.icdetector.core.DiagnosticEngine.H11_FIX_TOO_OLD_EXPLANATION,
+            com.alexisgordr.icdetector.models.HeuristicReport.H11_FIX_ABSTENTION_TEXT,
             com.alexisgordr.icdetector.models.StoredReasons.H15_REASON,
             com.alexisgordr.icdetector.models.StoredReasons.H13_RF_REASON,
             com.alexisgordr.icdetector.models.StoredReasons.h13PowerReason(20),

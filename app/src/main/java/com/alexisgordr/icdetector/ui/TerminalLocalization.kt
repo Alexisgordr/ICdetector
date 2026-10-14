@@ -344,6 +344,9 @@ private val replacements = linkedMapOf(
     "el módem no entrega un Timing Advance convertible a metros" to "the modem does not provide Timing Advance convertible to meters",
     "no hay celdas vecinas disponibles para contrastar el espectro" to "no neighbor cells are available for spectrum comparison",
     "el módem no entrega ARFCN/EARFCN para esta tecnología" to "the modem does not provide ARFCN/EARFCN for this technology",
+    // 3.0 (corte de campaña) — H11 sin fix reciente.
+    "el fix GPS tiene más de 60 s (o no se sabe su edad); en movimiento, la posición ya no sería la de esta lectura" to "the GPS fix is older than 60 s (or its age is unknown); when moving, the position would no longer be this reading's",
+    "fix GPS de más de 60 s o sin edad conocida" to "GPS fix older than 60 s or of unknown age",
     // 3.0 — Reinicio del watchdog de callbacks.
     "Watchdog: callbacks de telefonía reiniciados;" to "Watchdog: telephony callbacks restarted;",
     "s sin entregas de celdas." to "s without cell deliveries.",

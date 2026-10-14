@@ -80,6 +80,8 @@ object DiagnosticEngine {
                 explanation(r.pingPong, "N/A: hay cambios rápidos de celda, pero sin velocidad GPS no se puede saber si estás parado.")),
             HeuristicDiagnostic(11, "Consistencia geográfica", r.mobileCellId,
                 explanation(r.mobileCellId, when {
+                    // 3.0 (corte de campaña) — Fix demasiado viejo para H11 (ver MobileCellIdFixAge).
+                    r.mobileCellIdFixTooOld -> H11_FIX_TOO_OLD_EXPLANATION
                     !i.locationAvailable -> "N/A: falta una posición GPS reciente."
                     i.historyWithLocation == 0 -> "N/A: aún no hay observaciones previas geolocalizadas de esta celda."
                     else -> "N/A: identidad celular insuficiente para comparar."
@@ -111,6 +113,8 @@ object DiagnosticEngine {
     private const val WIFI_NA = "N/A: Wi-Fi activo; se evita atribuir el contexto de red al enlace celular."
 
     /** 3.0 (corte de campaña) — H8 es un aviso de calidad de dato (ver ThreatAnalyzer, regla 8). */
+    /** 3.0 (corte de campaña) — H11 con un fix de más de 60 s o sin edad conocida. */
+    const val H11_FIX_TOO_OLD_EXPLANATION = "N/A: el fix GPS tiene más de 60 s (o no se sabe su edad); en movimiento, la posición ya no sería la de esta lectura."
     /** 3.0 (corte de campaña) — H1, H2, H5, H6 y H7 en una celda CSG. */
     const val CSG_NA_EXPLANATION = "N/A: celda CSG (femtocelda): las reglas de dominancia, proximidad e identidad local no aplican a una celda diseñada para ser aislada."
     /** 3.0 (corte de campaña) — H9 está reservada: nunca se evalúa. */

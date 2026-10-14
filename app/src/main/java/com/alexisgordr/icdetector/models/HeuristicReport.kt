@@ -36,7 +36,9 @@ data class HeuristicReport(
     /** 3.0 (corte de campaña) — Por qué H3 se abstuvo, si se abstuvo (ver [MccAbstention]). */
     val mccAbstention: MccAbstention? = null,
     /** 3.0 (corte de campaña) — La servidora es CSG (femtocelda): H1, H2, H5, H6 y H7 no se evalúan. */
-    val csgCell: Boolean = false
+    val csgCell: Boolean = false,
+    /** 3.0 (corte de campaña) — H11 se abstuvo porque el fix GPS era demasiado viejo o de edad desconocida. */
+    val mobileCellIdFixTooOld: Boolean = false
 ) {
     // Compatibilidad: una regla que se abstiene no debe activar una alarma.
     val isolatedCellPassed get() = isolatedCell.passed
@@ -115,6 +117,7 @@ data class HeuristicReport(
     fun abstentionCode(id: String): String? = when {
         id == "H3" -> mccAbstention?.code
         csgCell && id in CSG_RULES -> CSG_ABSTENTION_CODE
+        id == "H11" && mobileCellIdFixTooOld -> H11_FIX_ABSTENTION_CODE
         else -> null
     }
 
@@ -122,6 +125,7 @@ data class HeuristicReport(
     fun abstentionText(id: String): String? = when {
         id == "H3" -> mccAbstention?.text
         csgCell && id in CSG_RULES -> CSG_ABSTENTION_TEXT
+        id == "H11" && mobileCellIdFixTooOld -> H11_FIX_ABSTENTION_TEXT
         else -> null
     }
 
@@ -139,6 +143,10 @@ data class HeuristicReport(
         val CSG_RULES = setOf("H1", "H2", "H5", "H6", "H7")
         const val CSG_ABSTENTION_CODE = "csg"
         const val CSG_ABSTENTION_TEXT = "celda CSG (femtocelda)"
+
+        /** 3.0 (corte de campaña) — H11 sin fix reciente (ver core/MobileCellIdFixAge). */
+        const val H11_FIX_ABSTENTION_CODE = "fix_viejo"
+        const val H11_FIX_ABSTENTION_TEXT = "fix GPS de más de 60 s o sin edad conocida"
     }
 
     private val statuses: List<HeuristicStatus>

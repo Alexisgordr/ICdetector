@@ -172,7 +172,8 @@ object ThreatAnalyzer {
         /**
          * 3.0 — Edad del fix de [currentLocation] en el momento de la entrega (reloj monotónico). Su
          * VELOCIDAD solo decide H10 si es reciente (PingPongRule.liveSpeed, [PingPongRule.SPEED_MAX_AGE_MS]);
-         * null = edad desconocida, no se usa la velocidad.
+         * null = edad desconocida, no se usa la velocidad. 3.0 (corte de campaña) — Y su POSICIÓN solo vale para
+         * H11 con 60 s o menos (MobileCellIdFixAge); con más, o desconocida, H11 se abstiene.
          */
         locationFixAgeMs: Long? = null,
         /**
@@ -423,10 +424,16 @@ object ThreatAnalyzer {
         }
 
         // 11. Consistencia Geográfica y RF (PCI/ARFCN)
-        eMobileCellId = currentLocation != null && active.cellId != "N/A" &&
+        // 3.0 (corte de campaña) — Solo con un fix de 60 s o menos (reloj monotónico; ver MobileCellIdFixAge).
+        // Antes valía cualquier fix aceptado por la ubicación (hasta 120 s en modo continuo): en
+        // movimiento, una posición vieja hacía parecer lejana una celda que estaba donde debía.
+        // Con un fix más viejo o sin edad, H11 se abstiene y lo deja escrito (`H11(fix_viejo)`).
+        val h11FixTooOld = currentLocation != null && !MobileCellIdFixAge.usable(locationFixAgeMs)
+        val h11Location = currentLocation.takeUnless { h11FixTooOld }
+        eMobileCellId = h11Location != null && active.cellId != "N/A" &&
             preloadedHistory.any { it.lat != null && it.lon != null }
         val (hMobileOk, hMobilePenalty, hMobileReason) = analyzeMobileCellId(
-            active, currentLocation, preloadedHistory, neighbors
+            active, h11Location, preloadedHistory, neighbors
         )
         if (!hMobileOk) {
             hMobileCellId = false
@@ -733,6 +740,7 @@ object ThreatAnalyzer {
             mccConsistency = status(eMcc, hMcc),
             mccAbstention = mccResult.abstention,
             csgCell = csgCell,
+            mobileCellIdFixTooOld = h11FixTooOld,
             mncCount = status(eMncCount, hMncCount),
             tacDeviation = status(eTac, hTac),
             taDistance = status(eTa, hTa),
