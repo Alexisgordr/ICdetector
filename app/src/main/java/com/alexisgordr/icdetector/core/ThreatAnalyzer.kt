@@ -215,7 +215,10 @@ object ThreatAnalyzer {
         // hacía fallar H1, H2, H5, H6 y H7 a la vez (una femtocelda a 10 m con −55 dBm es justo
         // "TA ≤ 100 m con señal ≥ −60 dBm"). En una CSG esas cinco no se evalúan (N/A, sin puntos,
         // sin motivo, fuera del bayesiano); el resto de reglas no cambia.
-        val csgCell = active.csg?.indicator == true
+        // 3.0 (corte de campaña) — Solo si esa identidad ya tiene historial local previo (CsgExemption): el
+        // indicador lo emite la propia celda, y un emisor hostil apagaba cinco reglas con un bit.
+        // Una celda CSG nueva se evalúa como cualquier otra.
+        val csgCell = CsgExemption.applies(active.csg?.indicator == true, reputation)
 
         var eIsolated = !isWifiActive && !csgCell
         var ePowerJump = false

@@ -58,7 +58,9 @@ class ScenarioTest {
          * 3.0 (corte de campaña) — ServiceState del ciclo, para H3 (servidora frente a SIM). Por defecto una
          * SIM española (214-07) registrada en su red, sin roaming, como en los datos de campo.
          */
-        val service: ServiceStateSnapshot? = homeService()
+        val service: ServiceStateSnapshot? = homeService(),
+        /** 3.0 (corte de campaña) — Reputación local de la servidora (historial previo); null = celda sin historial. */
+        val reputation: com.alexisgordr.icdetector.models.CellReputation? = null
     )
 
     private data class Outcome(
@@ -102,7 +104,8 @@ class ScenarioTest {
                 recentRegisteredDbm = c.recentDbm,
                 pingPongSpeedMps = c.speedMps,
                 nowMs = nowMs,
-                serviceState = c.service
+                serviceState = c.service,
+                reputation = c.reputation
             )
             val key = PingPongRule.confirmationKey(
                 analyzed.identityKey, changes, nowMs,
@@ -149,7 +152,8 @@ class ScenarioTest {
     /** Analiza solo el primer ciclo, con su ServiceState, fuera de la confirmación temporal. */
     private fun analyzeFirst(cycles: List<Cycle>) = cycles.first().let { c ->
         ThreatAnalyzer.analyzeThreats(
-            active = c.active, neighbors = c.neighbors, cellChangeHistory = emptyList(), currentLocation = null, nowMs = START_MS, serviceState = c.service
+            active = c.active, neighbors = c.neighbors, cellChangeHistory = emptyList(), currentLocation = null, nowMs = START_MS,
+            serviceState = c.service, reputation = c.reputation
         )
     }
 
@@ -346,22 +350,27 @@ class ScenarioTest {
      * único hecho benigno hacía fallar H2 (−20), H5 (−20), H6 (−15) y H7 (−25) a la vez: score 20 y
      * alarma confirmada. H1 no entra aquí (hay vecinas); [femtocellAlone] la cubre. Con el indicador
      * CSG las cinco quedan N/A.
+     *
+     * 3.0 (corte de campaña) — Solo si la femtocelda ya tiene historial local previo ([known], ver CsgExemption):
+     * el indicador lo emite la propia celda. Una CSG nueva se evalúa como cualquier otra.
      */
-    private fun femtocell(csg: Boolean) = (1..5).map {
+    private fun femtocell(csg: Boolean, known: Boolean = true) = (1..5).map {
         Cycle(
             cell(cid = "777777", dbm = -55, tac = "99999", verified = VerificationStatus.PENDING,
                 ta = 0, taUnit = TimingAdvanceUnit.LTE_INDEX)
                 .copy(csg = CsgInfo(indicator = csg, identity = 7, homeNodebName = "Casa")),
-            neighbors = listOf(neighbor(-112), neighbor(-115, cid = "2001"))
+            neighbors = listOf(neighbor(-112), neighbor(-115, cid = "2001")),
+            reputation = KNOWN_FEMTOCELL.takeIf { known }
         )
     }
 
-    /** La misma femtocelda sin ninguna vecina visible: con CSG, H1 y H6 no se evalúan. */
-    private fun femtocellAlone(csg: Boolean) = (1..5).map {
+    /** La misma femtocelda sin ninguna vecina visible: con CSG conocida, H1 y H6 no se evalúan. */
+    private fun femtocellAlone(csg: Boolean, known: Boolean = true) = (1..5).map {
         Cycle(
             cell(cid = "777777", dbm = -55, tac = "99999", verified = VerificationStatus.PENDING,
                 ta = 0, taUnit = TimingAdvanceUnit.LTE_INDEX)
-                .copy(csg = CsgInfo(indicator = csg, identity = 7, homeNodebName = "Casa"))
+                .copy(csg = CsgInfo(indicator = csg, identity = 7, homeNodebName = "Casa")),
+            reputation = KNOWN_FEMTOCELL.takeIf { known }
         )
     }
 
@@ -544,6 +553,27 @@ class ScenarioTest {
         assertEquals(0, run(femtocellAlone(csg = true)).alarms)
     }
 
+    /**
+     * 3.0 (corte de campaña) — CAMBIA DE RESULTADO. Una femtocelda CSG sin historial local previo ya no queda
+     * exenta: se evalúa como la de abajo sin indicador (H2, H5, H6 y H7 fallan, score 20) y alarma,
+     * igual que antes del corte de campaña. Sola, sin vecinas, H1 y H6 fallan: score 70, en la
+     * frontera, sin alarma. Es el coste asumido: el indicador lo emite la propia celda.
+     */
+    @Test fun `campaign cut - a new CSG femtocell without local history is evaluated like any cell`() {
+        expectAlarm("FEMTOCELL_CSG_NEW", femtocell(csg = true, known = false))
+        val first = analyzeFirst(femtocell(csg = true, known = false))
+        listOf(first.heuristicReport.powerJump, first.heuristicReport.tacDeviation,
+            first.heuristicReport.taDistance, first.heuristicReport.ghostNeighbors)
+            .forEach { assertEquals(HeuristicStatus.FAILED, it) }
+        assertEquals(20, first.securityScore)
+        assertTrue(!first.heuristicReport.notEvaluatedIds().contains("(csg)"))
+        val alone = analyzeFirst(femtocellAlone(csg = true, known = false))
+        assertEquals(HeuristicStatus.FAILED, alone.heuristicReport.isolatedCell)
+        assertEquals(HeuristicStatus.FAILED, alone.heuristicReport.taDistance)
+        assertEquals(70, alone.securityScore)
+        assertEquals(0, run(femtocellAlone(csg = true, known = false)).alarms)
+    }
+
     @Test fun `la misma femtocelda sin indicador CSG alarma - el cambio es el indicador`() {
         expectAlarm("FEMTOCELL_NO_CSG", femtocell(csg = false))
         val first = analyzeFirst(femtocell(csg = false))
@@ -626,6 +656,11 @@ class ScenarioTest {
         )
 
         const val START_MS = 1_700_000_000_000L
+
+        /** 3.0 (corte de campaña) — Femtocelda ya vista: 40 filas en 5 días (filas no limpias: falla H2/H5/H7). */
+        val KNOWN_FEMTOCELL = com.alexisgordr.icdetector.models.CellReputation(
+            observations = 40, distinctDays = 5, cleanRatio = 0.0, trustScore = 0
+        )
         /** Un ciclo cada 3 s: tres cambios de celda caben en la ventana de 10 s de H10. */
         const val CYCLE_MS = 3_000L
     }

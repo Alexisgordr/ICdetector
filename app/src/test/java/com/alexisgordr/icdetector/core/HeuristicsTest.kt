@@ -443,11 +443,16 @@ class HeuristicsTest {
         csg = com.alexisgordr.icdetector.models.CsgInfo(indicator = csg, identity = 7, homeNodebName = "Casa")
     )
 
+    // 3.0 (corte de campaña) — La exención exige historial local previo de la celda (CsgExemption).
+    private fun reputation(observations: Int, days: Int) =
+        com.alexisgordr.icdetector.models.CellReputation(observations, days, cleanRatio = 0.0, trustScore = 0)
+    private val known = reputation(observations = 40, days = 3)
+
     @Test fun `una celda CSG deja H1, H2, H5, H6 y H7 en N-A con su motivo`() {
         val weakMacro = listOf(neighbor(-112, tac = "100"), neighbor(-115, tac = "100"))
         val cell = ThreatAnalyzer.analyzeThreats(
             active = femto(csg = true), neighbors = weakMacro,
-            cellChangeHistory = emptyList(), currentLocation = null, nowMs = NOW
+            cellChangeHistory = emptyList(), currentLocation = null, nowMs = NOW, reputation = known
         )
         val r = cell.heuristicReport
         listOf(r.isolatedCell, r.powerJump, r.tacDeviation, r.taDistance, r.ghostNeighbors).forEach {
@@ -476,11 +481,30 @@ class HeuristicsTest {
     @Test fun `una CSG aislada no hace fallar H1`() {
         fun h1(csg: Boolean) = ThreatAnalyzer.analyzeThreats(
             active = femto(csg), neighbors = emptyList(),
-            cellChangeHistory = emptyList(), currentLocation = null, nowMs = NOW
+            cellChangeHistory = emptyList(), currentLocation = null, nowMs = NOW, reputation = known
         ).heuristicReport
         assertEquals(HeuristicStatus.FAILED, h1(false).isolatedCell)
         assertEquals(HeuristicStatus.NOT_EVALUATED, h1(true).isolatedCell)
         assertEquals("H1(csg)", h1(true).notEvaluatedIds().split(";").first())
+    }
+
+    @Test fun `una CSG nueva, sin historial previo, se evalua como cualquier celda`() {
+        val weakMacro = listOf(neighbor(-112, tac = "100"), neighbor(-115, tac = "100"))
+        fun report(reputation: com.alexisgordr.icdetector.models.CellReputation?) = ThreatAnalyzer.analyzeThreats(
+            active = femto(csg = true), neighbors = weakMacro,
+            cellChangeHistory = emptyList(), currentLocation = null, nowMs = NOW, reputation = reputation
+        ).heuristicReport
+        listOf(null, reputation(9, 3), reputation(40, 1)).forEach { rep ->
+            val r = report(rep)
+            listOf(r.powerJump, r.tacDeviation, r.taDistance, r.ghostNeighbors).forEach {
+                assertEquals("reputación $rep", HeuristicStatus.FAILED, it)
+            }
+            assertFalse(r.notEvaluatedIds().contains("(csg)"))
+        }
+        // Justo en el umbral (10 observaciones en 2 días) ya queda exenta.
+        assertEquals(HeuristicStatus.NOT_EVALUATED, report(reputation(10, 2)).powerJump)
+        assertTrue(CsgExemption.applies(true, reputation(10, 2)))
+        assertFalse("sin indicador no hay exención", CsgExemption.applies(false, known))
     }
 
     // ---------- H9: reservada (3.0, corte de campaña) ----------
