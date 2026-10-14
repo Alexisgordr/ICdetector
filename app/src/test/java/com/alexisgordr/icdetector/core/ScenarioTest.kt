@@ -66,27 +66,35 @@ class ScenarioTest {
         val cycles: Int,
         val reasons: List<String>,
         /** Ciclos con H10 (ping-pong) fallida, para saber que un escenario de ping-pong lo es. */
-        val pingPongFailures: Int = 0
+        val pingPongFailures: Int = 0,
+        /** 3.0 (corte de campaña) — Primer ciclo (desde 0) con H10 fallida; null si nunca falla. */
+        val firstPingPongFailure: Int? = null
     )
 
     /**
      * Recorre un escenario por la cadena completa y cuenta alarmas CONFIRMADAS. Un ciclo cada
-     * [CYCLE_MS]; los cambios de identidad se guardan como en el servicio (después del análisis) y
-     * alimentan H10 y la clave de confirmación del ping-pong.
+     * [CYCLE_MS]; los cambios de identidad alimentan H10 y la clave de confirmación del ping-pong.
+     *
+     * 3.0 (corte de campaña) — Como el servicio, el cambio se registra al recibir la lectura, ANTES del análisis
+     * ([CellChangeHistory]). [recordAfterAnalysis] reproduce el orden anterior (guardarlo al publicar)
+     * solo para el test que demuestra la diferencia.
      */
-    private fun run(cycles: List<Cycle>): Outcome {
+    private fun run(cycles: List<Cycle>, recordAfterAnalysis: Boolean = false): Outcome {
         val confirmation = TemporalConfidence()
-        val changes = mutableListOf<Pair<String, Long>>()
-        var previousIdentity: String? = null
+        val history = CellChangeHistory(PingPongRule.WINDOW_MS)
         var alarms = 0
         var pingPongFailures = 0
+        var firstPingPongFailure: Int? = null
         val reasons = mutableListOf<String>()
         cycles.forEachIndexed { i, c ->
             val nowMs = START_MS + i * CYCLE_MS
+            val identity = ServingIdentityChange.of(c.active)
+            if (!recordAfterAnalysis) history.observe(identity, nowMs)
+            val changes = history.snapshot()
             val analyzed = ThreatAnalyzer.analyzeThreats(
                 active = c.active,
                 neighbors = c.neighbors,
-                cellChangeHistory = changes.toList(),
+                cellChangeHistory = changes,
                 currentLocation = null,
                 rfStability = c.rfStability,
                 previousBand = c.previousBand,
@@ -101,19 +109,17 @@ class ScenarioTest {
                 pingPongFailed = analyzed.heuristicReport.pingPong == HeuristicStatus.FAILED
             )
             val confirmed = confirmation.apply(analyzed, confirmationKey = key)
-            if (analyzed.heuristicReport.pingPong == HeuristicStatus.FAILED) pingPongFailures++
-            val identity = c.active.identityKey
-            if (previousIdentity != null && identity != previousIdentity) {
-                changes.add(identity to nowMs)
-                changes.removeAll { nowMs - it.second > PingPongRule.WINDOW_MS }
+            if (analyzed.heuristicReport.pingPong == HeuristicStatus.FAILED) {
+                pingPongFailures++
+                if (firstPingPongFailure == null) firstPingPongFailure = i
             }
-            previousIdentity = identity
+            if (recordAfterAnalysis) history.observe(identity, nowMs)
             if (confirmed.isSuspicious) {
                 alarms++
                 reasons.add(confirmed.suspiciousReason ?: "sin motivo")
             }
         }
-        return Outcome(alarms, cycles.size, reasons, pingPongFailures)
+        return Outcome(alarms, cycles.size, reasons, pingPongFailures, firstPingPongFailure)
     }
 
     private fun cell(
@@ -552,6 +558,15 @@ class ScenarioTest {
 
     @Test fun `escenario adversario - downgrade forzado con tiron de potencia`() { expectAlarm("FORCED_DOWNGRADE", forcedBandDowngrade()) }
     @Test fun `escenario adversario - emisor que alterna dos identidades`() { expectAlarm("PINGPONG_EMITTER", pingPongEmitter()) }
+
+    /** 3.0 (corte de campaña) — H10 cuenta el cambio en el ciclo que lo observa, no en el siguiente. */
+    @Test fun `campaign cut - H10 fails one cycle earlier than with the old order`() {
+        val now = run(pingPongEmitter())
+        val before = run(pingPongEmitter(), recordAfterAnalysis = true)
+        assertEquals("primer fallo de H10 (ciclo desde 0)", 2, now.firstPingPongFailure)
+        assertEquals("con el orden antiguo, un ciclo después", 3, before.firstPingPongFailure)
+        assertTrue(now.alarms >= before.alarms)
+    }
 
     /**
      * La métrica que de verdad se puede citar: tasa de falsos positivos sobre el banco benigno.

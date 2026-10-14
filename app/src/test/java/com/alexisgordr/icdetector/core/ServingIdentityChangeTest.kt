@@ -47,7 +47,9 @@ class ServingIdentityChangeTest {
             File("app/src/main/java/com/alexisgordr/icdetector/service/MiniICService.kt")
         ).first { it.exists() }.readText()
         assertTrue(service.contains("ServingIdentityChange.step(prevServingIdentity, servingIdentity)"))
-        assertTrue(service.contains("cellChangeHistory.add(Pair(servingIdentity.key, currentTime))"))
+        // 3.0 (corte de campaña) — El historial de H10 se alimenta al recibir la lectura (CellChangeHistory),
+        // con la misma identidad completa: guarda Identity.key.
+        assertTrue(service.contains("cellChanges.observe(com.alexisgordr.icdetector.core.ServingIdentityChange.of(activeRaw), changeTimeMs)"))
         assertFalse(service.contains("if (cid != prevCid)"))
     }
 

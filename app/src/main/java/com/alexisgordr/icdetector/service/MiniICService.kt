@@ -383,7 +383,8 @@ class MiniICService : Service() {
     private val coverageContinuity = com.alexisgordr.icdetector.core.CoverageContinuity()
     private var prevRegisteredDbm: Int? = null
     private val recentRegisteredDbmTrend = CopyOnWriteArrayList<Int>()
-    private val cellChangeHistory = CopyOnWriteArrayList<Pair<String, Long>>()
+    // 3.0 (corte de campaña) — Cambios de servidora para H10, registrados al recibir cada lectura (ver CellChangeHistory).
+    private val cellChanges = com.alexisgordr.icdetector.core.CellChangeHistory(ThreatAnalyzer.PING_PONG_WINDOW_MS)
 
     inner class LocalBinder : Binder() {
         fun getService(): MiniICService = this@MiniICService
@@ -893,7 +894,7 @@ class MiniICService : Service() {
         lastIncidentIdentity = null
         lastLoggedPromotion = null
         securityAlerts.resetAlarmEpisode()
-        cellChangeHistory.clear()
+        cellChanges.clear()
     }
 
     /** Identidad completa de la celda para la que vale el estado de latencia publicado. */
@@ -1268,6 +1269,22 @@ class MiniICService : Service() {
             if (activeRaw != null && activeRaw.cellId != "N/A") resetLatencyIfCellChanged(activeRaw)
             // 3.0 — Lista sin celda registrada: tampoco hay servicio continuo (ver onSignalLost).
             if (activeRaw == null && ::securityAlerts.isInitialized) securityAlerts.onServiceInterrupted()
+
+            // 3.0 (corte de campaña) — H10: el cambio de servidora se registra AQUÍ, al recibir la lectura y antes
+            // de su análisis, para que el ciclo que lo observa ya lo cuente. Antes se guardaba al
+            // publicar (checkAlerts, después de ThreatAnalyzer) y el tercer cambio se detectaba un
+            // ciclo tarde. Se hace en el hilo principal, que recibe las entregas en orden.
+            // Un ciclo que después se descarta (isLatest/mayPublish) DEJA su cambio en el historial, a
+            // propósito: el módem sí informó de esa servidora, y los descartes ocurren justo cuando la
+            // servidora cambia mientras se analiza; quitarlos ocultaría los cambios rápidos que H10
+            // busca. Igual que la transición de H16 y el viaje de movilidad, es una observación del
+            // ciclo, no un resultado publicado. La copia es la de este instante: una lectura posterior
+            // no entra en el análisis de esta.
+            val changeTimeMs = System.currentTimeMillis()
+            if (activeRaw != null) {
+                cellChanges.observe(com.alexisgordr.icdetector.core.ServingIdentityChange.of(activeRaw), changeTimeMs)
+            }
+            val cellChangeHistory = cellChanges.snapshot()
 
             writeGate.launchSource(scope, Dispatchers.IO) {
                 cellProcessingMutex.withLock {
@@ -2284,9 +2301,8 @@ class MiniICService : Service() {
             locationController.onHandover(servingIdentity.key, prevServingIdentity?.key)
             auditController.generate(cell)
 
-            val currentTime = System.currentTimeMillis()
-            cellChangeHistory.add(Pair(servingIdentity.key, currentTime))
-            cellChangeHistory.removeAll { currentTime - it.second > ThreatAnalyzer.PING_PONG_WINDOW_MS }
+            // 3.0 (corte de campaña) — El cambio ya está en el historial de H10 desde que llegó la lectura
+            // (cellChanges.observe, antes del análisis).
 
             // El informe de heurísticas es la observación cruda del ciclo. No debe producir un
             // tono aquí: TemporalConfidence necesita tres ciclos antes de convertirla en alarma.
@@ -2296,7 +2312,7 @@ class MiniICService : Service() {
                 // Evidencia para la campaña, sin alerta: el informe sigue siendo crudo y todavía
                 // no ha superado los tres ciclos de TemporalConfidence.
                 appendLog("[RADIO]", "Ping-Pong observado (sin confirmar; sin tono).")
-            } else if (cellChangeHistory.size >= 3) {
+            } else if (cellChanges.size >= 3) {
                 // v2.10.7 — Antes afirmaba que la alerta se descartaba, pero esta rama no decide nada: H10 se
                 // evalúa en ThreatAnalyzer y puede confirmarse en los ciclos siguientes. Texto
                 // neutro; la lógica no cambia.
