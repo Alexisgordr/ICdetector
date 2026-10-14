@@ -23,7 +23,9 @@ class ExportMetadataTest {
         val app = header.indexOf("AppVersion")
         assertEquals(listOf("AppVersion", "ExportDevice", "ExportAndroid", "LocationMode"), header.subList(app, app + 4))
         // 3.0 (esquema 22) — Las columnas del perfil local van después: no mueven ninguna anterior.
-        assertTrue(header.drop(app + 4).all { it.startsWith("Profile") })
+        // 3.0 — Y tras ellas, los identificadores de la fila y de su lectura.
+        assertTrue(header.drop(app + 4).dropLast(2).all { it.startsWith("Profile") })
+        assertEquals(listOf("RowId", "ObservationId"), header.takeLast(2))
         val device = ExportUtils.ExportDevice("Google Pixel 8", "16 (API 36)")
         val row = ExportUtils.csvRow(base.copy(appVersion = "3.0.0-beta1"), device).split(",")
         assertEquals(header.size, row.size)
@@ -38,6 +40,28 @@ class ExportMetadataTest {
         assertEquals("ADAPTIVE", ExportUtils.csvRow(base.copy(locationMode = "ADAPTIVE")).split(",")[idx])
         assertEquals("CONTINUOUS", ExportUtils.csvRow(base.copy(locationMode = "CONTINUOUS")).split(",")[idx])
         assertEquals("", ExportUtils.csvRow(base).split(",")[idx])
+    }
+
+    @Test fun `each row carries its row id and the reading it comes from`() {
+        val header = ExportUtils.CSV_HEADER.split(",")
+        val periodic = ExportUtils.csvRow(base.copy(rowId = 41, observationId = "obs-7")).split(",")
+        val alarm = ExportUtils.csvRow(base.copy(rowId = 42, observationId = "obs-7")).split(",")
+        assertEquals(header.size, periodic.size)
+        assertEquals("41", periodic[header.indexOf("RowId")])
+        assertEquals("42", alarm[header.indexOf("RowId")])
+        assertEquals("dos filas de la misma lectura", periodic[header.indexOf("ObservationId")], alarm[header.indexOf("ObservationId")])
+        // Antes del esquema 24 no había identificador de lectura: vacío, nunca inventado.
+        assertEquals("", ExportUtils.csvRow(base.copy(rowId = 5)).split(",")[header.indexOf("ObservationId")])
+    }
+
+    @Test fun `the export query reads the row id and the observation id`() {
+        val src = listOf("src/main/java/com/alexisgordr/icdetector/storage/CellDbHelper.kt",
+            "app/src/main/java/com/alexisgordr/icdetector/storage/CellDbHelper.kt").map(::File).first { it.exists() }.readText()
+        val read = src.substringAfter("private fun readRecord(").substringBefore("return HistoryRecord(")
+        assertTrue(read.contains("cursor.getColumnIndex(COLUMN_ID)"))
+        assertTrue(read.contains("cursor.getColumnIndex(COLUMN_OBSERVATION_ID)"))
+        // El export lee h.*: trae id y observation_id sin alias que los oculten.
+        assertTrue(src.contains("private val EXPORT_QUERY = \"SELECT h.*, "))
     }
 
     @Test fun `rows before 3_0 have an unknown version`() {

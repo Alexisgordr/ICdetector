@@ -1905,7 +1905,12 @@ class CellDbHelper(
         val accuracyIdx = cursor.getColumnIndex(COLUMN_GPS_ACCURACY_M)
         val appVersionIdx = cursor.getColumnIndex(COLUMN_APP_VERSION)
         val locationModeIdx = cursor.getColumnIndex(COLUMN_LOCATION_MODE)
+        // 3.0 — Identificadores de la fila y de su lectura, para el export (RowId, ObservationId).
+        val rowIdIdx = cursor.getColumnIndex(COLUMN_ID)
+        val observationIdIdx = cursor.getColumnIndex(COLUMN_OBSERVATION_ID)
         return HistoryRecord(
+            rowId = if (rowIdIdx >= 0 && !cursor.isNull(rowIdIdx)) cursor.getLong(rowIdIdx) else null,
+            observationId = if (observationIdIdx >= 0 && !cursor.isNull(observationIdIdx)) cursor.getString(observationIdIdx) else null,
             locationMode = if (locationModeIdx >= 0 && !cursor.isNull(locationModeIdx)) cursor.getString(locationModeIdx) else null,
             appVersion = if (appVersionIdx >= 0 && !cursor.isNull(appVersionIdx)) cursor.getString(appVersionIdx) else null,
             observedAtMs = if (observedIdx >= 0 && !cursor.isNull(observedIdx)) cursor.getLong(observedIdx) else null,

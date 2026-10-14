@@ -115,7 +115,18 @@ data class HistoryRecord(
     /** 3.0 — Modo de ubicación (`CONTINUOUS` / `INTELLIGENT` / `ADAPTIVE`); null = desconocido. */
     val locationMode: String? = null,
     /** 3.0 — Evaluación del perfil local de esta fila (esquema 22); null si no se evaluó. */
-    val profile: ProfileExport? = null
+    val profile: ProfileExport? = null,
+    /**
+     * 3.0 — `history.id` de la fila, para cruzar el export con `profile_evaluations.history_id` o
+     * con una copia de seguridad. Null solo si la fila no viene de la base de datos.
+     */
+    val rowId: Long? = null,
+    /**
+     * 3.0 (esquema 24) — Lectura de la que sale la fila. Una misma lectura puede dar dos filas (la
+     * periódica o de handover y la de alarma confirmada), que comparten este valor. Null en filas
+     * anteriores al esquema 24.
+     */
+    val observationId: String? = null
 )
 
 /**

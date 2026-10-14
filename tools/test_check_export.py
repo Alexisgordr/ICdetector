@@ -7,7 +7,7 @@ import sys
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from check_export import (
     LTE_EARFCN_RANGES, bands_outside_table, calendar_period_stats, dataset_cut_summary, evaluation_coverage, gps_accuracy_issues, abstention_reasons, failure_rates, failed_rules, RULE_REASON_PREFIXES,
-    instant_issues, location_mode_summary, profile_summary, profile_row_issue, EXPECTED_COLUMNS_V30_PROFILE, PROFILE_ABSTAIN_REASONS, radio_context_summary, row_instant, version_key,
+    instant_issues, location_mode_summary, profile_summary, profile_row_issue, EXPECTED_COLUMNS_V30_IDS, observation_summary, PROFILE_ABSTAIN_REASONS, radio_context_summary, row_instant, version_key,
     ta_consistency_issues, ta_unit_diagnostic
 )
 
@@ -329,11 +329,22 @@ class LteBandTableTest(unittest.TestCase):
     def test_old_exports_without_the_extra_profile_columns_are_not_rejected(self):
         self.assertIsNone(profile_row_issue({"ProfileMode": "SHADOW", "ProfileLevel": "LOW", "ProfileScore": "2.5"}))
 
-    def test_profile_columns_match_the_app_and_come_last(self):
+    def test_columns_match_the_app_with_profile_then_ids_last(self):
         kotlin = (Path(__file__).resolve().parent.parent /
                   "app/src/main/java/com/alexisgordr/icdetector/utils/ExportUtils.kt").read_text(encoding="utf-8")
         header = "".join(re.findall(r'"([^"]*)"', kotlin.split("const val CSV_HEADER =")[1].split("const val")[0]))
-        self.assertEqual(EXPECTED_COLUMNS_V30_PROFILE, header.split(","))
+        self.assertEqual(EXPECTED_COLUMNS_V30_IDS, header.split(","))
+
+    def test_rows_of_the_same_reading_are_grouped(self):
+        rows = [
+            {"RowId": "1", "ObservationId": "a"}, {"RowId": "2", "ObservationId": "a"},
+            {"RowId": "3", "ObservationId": "b"}, {"RowId": "4", "ObservationId": ""},
+        ]
+        self.assertEqual((1, 1, 2, 0), observation_summary(rows))
+
+    def test_repeated_row_ids_are_counted(self):
+        rows = [{"RowId": "7", "ObservationId": "a"}, {"RowId": "7", "ObservationId": "b"}, {"RowId": "", "ObservationId": "c"}]
+        self.assertEqual((0, 0, 0, 1), observation_summary(rows))
 
 if __name__ == "__main__":
     unittest.main()

@@ -57,6 +57,11 @@ PROFILE_COLUMNS = [
     "ProfileAlgorithm", "ProfileRevision", "ProfileEvidence", "ProfileLearned", "ProfileHoldout",
 ]
 EXPECTED_COLUMNS_V30_PROFILE = EXPECTED_COLUMNS_V30_LOCATION + PROFILE_COLUMNS
+# 3.0 — Identificadores, al final: RowId es history.id (cruza con profile_evaluations.history_id y
+# con una copia de seguridad); ObservationId, la lectura de origen, que comparten las dos filas de
+# una misma lectura (periódica o de handover, y alarma confirmada). Vacío antes del esquema 24.
+ID_COLUMNS = ["RowId", "ObservationId"]
+EXPECTED_COLUMNS_V30_IDS = EXPECTED_COLUMNS_V30_PROFILE + ID_COLUMNS
 PROFILE_MODES = ("SHADOW", "EXPERIMENTAL_DISPLAY")
 PROFILE_LEVELS = ("NONE", "LOW", "MODERATE", "HIGH", "ABSTAIN")
 # Cortes de dataset: a partir de esta versión cambió cómo se evalúa la regla indicada.
@@ -496,6 +501,21 @@ def dataset_cut_summary(rows):
     return versions, unknown, cuts
 
 
+def observation_summary(rows):
+    """
+    3.0 — Filas por lectura (ObservationId). Devuelve (filas sin ObservationId, lecturas con más de
+    una fila, filas en esas lecturas, RowId repetidos). Dos filas de una lectura son una sola
+    observación: cuéntala una vez al estimar tasas por observación.
+    """
+    per_observation = Counter((r.get("ObservationId") or "").strip() for r in rows)
+    without = per_observation.pop("", 0)
+    shared = {k: n for k, n in per_observation.items() if n > 1}
+    row_ids = Counter((r.get("RowId") or "").strip() for r in rows)
+    row_ids.pop("", None)
+    repeated_ids = sum(1 for n in row_ids.values() if n > 1)
+    return without, len(shared), sum(shared.values()), repeated_ids
+
+
 def calendar_period_stats(times, row_count):
     """Periodo inclusivo y densidad solo sobre días que realmente contienen observaciones."""
     dates = {t.date() for t in times}
@@ -817,6 +837,19 @@ def main(path):
                 + "; ".join(f"{d or '?'} {a}".strip() for d, a in devices)
                 + ". Analízalos por separado."
             )
+
+    if "ObservationId" in columns:
+        without, shared, shared_rows, repeated_ids = observation_summary(rows)
+        print("\nLECTURAS Y FILAS (3.0)")
+        print(f"  Lecturas con más de una fila: {shared} ({shared_rows} filas); "
+              f"filas sin ObservationId (anteriores al esquema 24): {without}")
+        if shared:
+            notes.append(
+                f"{shared} lecturas tienen más de una fila (p. ej. periódica y alarma confirmada). "
+                "Para tasas por observación, agrupa por ObservationId."
+            )
+        check("RowId único en el fichero", repeated_ids == 0,
+              f"{repeated_ids} RowId repetidos: ¿une exports de varias bases de datos?" if repeated_ids else "")
 
     if "LocationMode" in columns:
         modes, unknown, invalid = location_mode_summary(rows)
