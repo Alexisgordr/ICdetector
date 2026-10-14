@@ -234,7 +234,10 @@ class StableSiteStorageTest {
 
     @Test fun tripResumesAfterHelperRestartAndGeometryReadsDoNotOwnLifecycle(){
         val config=MobilityFamiliarityConfig(3,2,3,20,30,1_000,100,10_000)
-        val first=MobilityFamiliarityEngine(db,config,true){"persistent-trip"}
+        // 3.0 (G3) — El ancla monotónica del viaje sobrevive al reinicio (el servicio la guarda en
+        // preferencias); aquí, un almacén compartido por los dos motores hace ese papel.
+        val anchors=InMemoryMobilityAnchorStore()
+        val first=MobilityFamiliarityEngine(db,config,true,anchors){"persistent-trip"}
         first.observe("A",MotionEvidence(MotionState.MOVING),0)
         first.observe("B",MotionEvidence(MotionState.MOVING),1)
         // Geometry reads the same route table, but opening/closing that UI has no write path to
@@ -242,7 +245,7 @@ class StableSiteStorageTest {
         db.getCellTransitions()
         assertEquals(1,count(db.readableDatabase,"SELECT COUNT(*) FROM mobility_trips WHERE state='OPEN' AND trip_id='persistent-trip'"))
         db.close();db=CellDbHelper(context);db.writableDatabase
-        val resumed=MobilityFamiliarityEngine(db,config,true){"must-not-be-created"}
+        val resumed=MobilityFamiliarityEngine(db,config,true,anchors){"must-not-be-created"}
         assertEquals("persistent-trip",resumed.recover(2).tripId)
         resumed.observe("C",MotionEvidence(MotionState.MOVING),3)
         resumed.observe("C",MotionEvidence(MotionState.STATIC_CONFIRMED),4)

@@ -153,13 +153,19 @@ class CellDbHelperTrustEvidenceTest {
     }
 
     @Test
-    fun h15DoesNotReadmitRowsThatAlsoFailedAnotherHeuristic() {
+    fun h15ReadmitsItsOwnRowsEvenWhenAnotherHeuristicAlsoFailed() {
+        // 3.0 — Una fila que lleva el motivo de H15 cuenta para H15 aunque otra regla fallara en la
+        // misma fila (antes quedaba fuera y el PCI del clon dejaba de contarse). Una fila con otro
+        // motivo y sin el de H15 sigue fuera.
         seedH15Baseline()
         val base = System.currentTimeMillis() - 60_000
         insertH15Row(base, 200, "$H15_REASON | Consistencia geográfica fallida", 30)
+        insertH15Row(base + 1_000, 311, "Consistencia geográfica fallida", 30)
 
         val evidence = checkNotNull(helper.getCellRfStability(CID_H15, MNC, TAC, MCC, RadioTech.LTE)) { "lectura RF fallida" }
-        assertFalse(evidence.pciByArfcn.getValue(2850).toMap().containsKey(200))
+        val carrier = evidence.pciByArfcn.getValue(2850).toMap()
+        assertEquals(1, carrier[200])
+        assertFalse("una fila sin el motivo de H15 sigue fuera", carrier.containsKey(311))
     }
 
     @Test

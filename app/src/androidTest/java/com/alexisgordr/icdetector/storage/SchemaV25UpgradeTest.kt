@@ -37,6 +37,22 @@ class SchemaV25UpgradeTest {
                 "observations INTEGER NOT NULL DEFAULT 0, trusted_observations INTEGER NOT NULL DEFAULT 0, " +
                 "last_status TEXT NOT NULL, last_seen_ms INTEGER NOT NULL, trip_count INTEGER NOT NULL DEFAULT 0, last_trip_id TEXT, " +
                 "mobility_first_seen_ms INTEGER, mobility_last_seen_ms INTEGER, PRIMARY KEY(from_identity, to_identity))"
+
+        /**
+         * Tablas de viajes que toda base real tiene desde el esquema 17 (createMobilityTables). V19 del
+         * fixture no las incluye, y sin ellas el helper no puede escribir viajes.
+         */
+        val V17_MOBILITY = listOf(
+            "CREATE TABLE IF NOT EXISTS mobility_trips (trip_id TEXT PRIMARY KEY NOT NULL, started_at_ms INTEGER NOT NULL, " +
+                "last_seen_ms INTEGER NOT NULL, has_moving INTEGER NOT NULL DEFAULT 0, last_serving TEXT, " +
+                "same_serving_since_ms INTEGER NOT NULL, static_since_ms INTEGER, state TEXT NOT NULL, close_reason TEXT, closed_at_ms INTEGER)",
+            "CREATE TABLE IF NOT EXISTS mobility_trip_cells (trip_id TEXT NOT NULL, cell_identity TEXT NOT NULL, " +
+                "PRIMARY KEY(trip_id,cell_identity), FOREIGN KEY(trip_id) REFERENCES mobility_trips(trip_id) ON DELETE CASCADE)",
+            "CREATE TABLE IF NOT EXISTS mobility_trip_edges (trip_id TEXT NOT NULL, from_identity TEXT NOT NULL, to_identity TEXT NOT NULL, " +
+                "PRIMARY KEY(trip_id,from_identity,to_identity), FOREIGN KEY(trip_id) REFERENCES mobility_trips(trip_id) ON DELETE CASCADE)",
+            "CREATE UNIQUE INDEX IF NOT EXISTS idx_one_open_mobility_trip ON mobility_trips(state) WHERE state='OPEN'",
+            "CREATE INDEX IF NOT EXISTS idx_mobility_trips_closed ON mobility_trips(state,closed_at_ms)"
+        )
     }
 
     @Before fun createSchema24() {
@@ -46,6 +62,7 @@ class SchemaV25UpgradeTest {
             SchemaV20UpgradeTest.V19.forEach(db::execSQL)
             listOf(SchemaV20.STATEMENTS, SchemaV21.STATEMENTS, SchemaV22.STATEMENTS, SchemaV23.STATEMENTS, SchemaV24.STATEMENTS).forEach { it.forEach(db::execSQL) }
             db.execSQL(V24_TRANSITIONS)
+            V17_MOBILITY.forEach(db::execSQL)
             db.execSQL("INSERT INTO cell_transitions VALUES ('A','F',4,1,'FAILED',2000,0,NULL,NULL,NULL)")
             db.execSQL("INSERT INTO cell_transitions VALUES ('A','P',9,6,'PASSED',3000,2,'t0',100,200)")
             db.execSQL("INSERT INTO cell_transitions VALUES ('A','N',2,0,'NOT_EVALUATED',4000,0,NULL,NULL,NULL)")
