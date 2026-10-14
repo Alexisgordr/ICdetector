@@ -211,7 +211,7 @@ class HeuristicsTest {
         assertTrue(analyze(active(dbm = -60), neighbors = listOf(neighbor(-80))).powerJumpPassed)
     }
 
-    // ---------- H3: Consistencia MCC (3.0.0-beta5: servidora frente a SIM) ----------
+    // ---------- H3: Consistencia MCC (3.0 (corte de campaña): servidora frente a SIM) ----------
     private fun service(sim: String? = "21407", network: String? = "21407", roaming: Boolean = false) =
         ServiceStateSnapshot(
             timestampMs = NOW, state = ServiceRegistrationState.IN_SERVICE,
@@ -299,7 +299,7 @@ class HeuristicsTest {
     // ---------- H3/H4 sin identidad de vecinas ----------
     // Caso real de campo (Pixel 9a): el módem solo da EARFCN/PCI/potencia de las vecinas. Sin
     // MCC/MNC que comparar, H3 y H4 deben abstenerse, no darse por superadas.
-    // 3.0.0-beta5 — H3 ya no depende de las vecinas: aquí es N/A porque no hay ServiceState.
+    // 3.0 (corte de campaña) — H3 ya no depende de las vecinas: aquí es N/A porque no hay ServiceState.
     @Test fun `H3 y H4 no se evaluan si ninguna vecina trae MCC ni MNC`() {
         val n = listOf(neighbor(-90, mcc = "N/A", mnc = "N/A"), neighbor(-95, mcc = "N/A", mnc = "N/A"))
         val report = analyze(active(), neighbors = n)
@@ -437,7 +437,7 @@ class HeuristicsTest {
         assertTrue(analyze(active(networkType = "4G LTE", arfcn = 1500)).arfcnSanityPassed)
     }
 
-    // ---------- Celda CSG (3.0.0-beta5): H1, H2, H5 y H7 no se evalúan ----------
+    // ---------- Celda CSG (3.0, corte de campaña): H1, H2, H5 y H7 no se evalúan ----------
     private fun femto(csg: Boolean) = active(dbm = -55, tac = "999").copy(
         csg = com.alexisgordr.icdetector.models.CsgInfo(indicator = csg, identity = 7, homeNodebName = "Casa")
     )
@@ -480,7 +480,7 @@ class HeuristicsTest {
         assertEquals("H1(csg)", h1(true).notEvaluatedIds().split(";").first())
     }
 
-    // ---------- H9: reservada (3.0.0-beta5) ----------
+    // ---------- H9: reservada (3.0, corte de campaña) ----------
     @Test fun `H9 es siempre N-A y no resta puntos`() {
         val cell = ThreatAnalyzer.analyzeThreats(
             active = active(), neighbors = listOf(neighbor(-95)),
@@ -507,7 +507,7 @@ class HeuristicsTest {
         assertEquals(HeuristicStatus.PASSED, analyze(active().copy(radioTech = RadioTech.LTE, arfcn = 1301)).arfcnSanity)
         assertEquals(HeuristicStatus.PASSED, analyze(active().copy(radioTech = RadioTech.NR, arfcn = 632_628)).arfcnSanity)
     }
-    // ---------- H8: aviso de calidad de dato (3.0.0-beta5) ----------
+    // ---------- H8: aviso de calidad de dato (3.0, corte de campaña) ----------
     @Test fun `H8 failing is kept in the row but subtracts no points and adds no confidence`() {
         fun run(arfcn: Int) = ThreatAnalyzer.analyzeThreats(
             active = active().copy(radioTech = RadioTech.LTE, arfcn = arfcn), neighbors = emptyList(),

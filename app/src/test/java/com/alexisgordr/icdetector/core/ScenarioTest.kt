@@ -55,7 +55,7 @@ class ScenarioTest {
         /** Velocidad GPS que decide H10; null = sin velocidad (H10 en N/A si hay ráfaga). */
         val speedMps: Float? = null,
         /**
-         * 3.0.0-beta5 — ServiceState del ciclo, para H3 (servidora frente a SIM). Por defecto una
+         * 3.0 (corte de campaña) — ServiceState del ciclo, para H3 (servidora frente a SIM). Por defecto una
          * SIM española (214-07) registrada en su red, sin roaming, como en los datos de campo.
          */
         val service: ServiceStateSnapshot? = homeService()
@@ -291,8 +291,8 @@ class ScenarioTest {
     }
 
     /**
-     * 3.0.0-beta5 — Módem que informa un EARFCN fuera de la tabla 3GPP en una zona de frontera.
-     * H8 es un aviso de calidad de dato y no resta puntos. Con la H3 de vecinas (antes de beta5)
+     * 3.0 (corte de campaña) — Módem que informa un EARFCN fuera de la tabla 3GPP en una zona de frontera.
+     * H8 es un aviso de calidad de dato y no resta puntos. Con la H3 de vecinas (antes del corte de campaña)
      * este escenario quedaba en 55 y confirmaba 3 alarmas; con H8 sin puntos, en 70 y sin alarma;
      * con H3 frente a la SIM, la vecina extranjera ya no cuenta: score 100.
      */
@@ -305,7 +305,7 @@ class ScenarioTest {
     }
 
     /**
-     * 3.0.0-beta5 — Frontera: servidora de tu país (214, la de la SIM) rodeada de vecinas francesas
+     * 3.0 (corte de campaña) — Frontera: servidora de tu país (214, la de la SIM) rodeada de vecinas francesas
      * (208). La H3 antigua fallaba en cada ciclo por las vecinas; ahora pasa: no se consultan.
      */
     private fun borderForeignNeighbours() = (1..5).map {
@@ -320,7 +320,7 @@ class ScenarioTest {
     }
 
     /**
-     * 3.0.0-beta5 — PLMN extranjero aislado sin roaming: la servidora anuncia 208-01, la SIM es
+     * 3.0 (corte de campaña) — PLMN extranjero aislado sin roaming: la servidora anuncia 208-01, la SIM es
      * 214-07, Android no declara roaming y ninguna vecina es del 208 (son de la red de casa o no
      * hay). Es el patrón que H3 busca ahora, y falla. Con vecinas de casa, H3 sola resta 30 y deja
      * el score en 70, en la frontera del umbral (`score < 70`): no alarma sin otra señal (ver
@@ -335,8 +335,8 @@ class ScenarioTest {
     }
 
     /**
-     * 3.0.0-beta5 — Femtocelda CSG (grupo cerrado de abonados) en casa: muy fuerte (−55 dBm), con su
-     * propio TAC y la macro de fuera muy débil. Hasta beta4 este único hecho benigno hacía fallar
+     * 3.0 (corte de campaña) — Femtocelda CSG (grupo cerrado de abonados) en casa: muy fuerte (−55 dBm), con su
+     * propio TAC y la macro de fuera muy débil. Antes del corte este único hecho benigno hacía fallar
      * H2 (−20), H5 (−20) y H7 (−25) a la vez: score 35 y alarma confirmada. H1 no entra aquí (hay
      * vecinas); [femtocellAlone] la cubre. Con el indicador CSG las cuatro quedan N/A.
      */
@@ -409,7 +409,7 @@ class ScenarioTest {
      * este escenario tenía una sola vecina extranjera y alarmaba porque H3 y H5 contaban la misma
      * vecina dos veces. Ahora el TAC se contrasta con una vecina real de la red suplantada.
      *
-     * 3.0.0-beta5 — CAMBIA DE RESULTADO. La servidora anuncia el MCC de la SIM (214), así que la
+     * 3.0 (corte de campaña) — CAMBIA DE RESULTADO. La servidora anuncia el MCC de la SIM (214), así que la
      * nueva H3 pasa y la vecina extranjera ya no cuenta. Queda H5 sola (−20, score 80): no alarma.
      * Sale del banco adversario (no entra en el benigno: no es benigno, solo ya no alarma); su
      * test fija el resultado nuevo.
@@ -481,7 +481,7 @@ class ScenarioTest {
 
     @Test fun `escenario adversario - transmisor dominante`() { expectAlarm("DOMINANT_TX", dominantTransmitter()) }
     @Test fun `escenario adversario - clon con PCI alternante en la misma portadora`() { expectAlarm("CLONE_SAME_CARRIER", clonedIdentitySameCarrier()) }
-    @Test fun `beta5 - red incoherente (MCC de vecina y TAC) ya no alarma`() {
+    @Test fun `corte de campaña - red incoherente (MCC de vecina y TAC) ya no alarma`() {
         expectNoAlarm("INCONSISTENT_NET", inconsistentNetwork())
         val first = analyzeFirst(inconsistentNetwork())
         assertEquals(HeuristicStatus.PASSED, first.heuristicReport.mccConsistency)

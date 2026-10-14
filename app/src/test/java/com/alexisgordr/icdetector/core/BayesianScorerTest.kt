@@ -19,7 +19,7 @@ class BayesianScorerTest {
 
     @Test
     fun `sin evidencia devuelve el prior del 0,5 por ciento`() {
-        // 3.0.0-beta5: prior 0.02 -> 0.005 (corte de dataset de anomaly_confidence).
+        // 3.0 (corte de campaña): prior 0.02 -> 0.005 (corte de dataset de anomaly_confidence).
         assertEquals(0.005f, BayesianScorer.PRIOR, 0f)
         val result = BayesianScorer.calculate(emptyList(), "PENDING", false)
         assertEquals(0.5f, result, 0.01f)
@@ -158,7 +158,7 @@ class BayesianScorerTest {
         assertEquals("MCC no depende de la reputación", nueva, probada, 0.001f)
     }
 
-    /** 3.0.0-beta5 — H9 está reservada: una app no puede ver el cifrado, así que no tiene LR. */
+    /** 3.0 (corte de campaña) — H9 está reservada: una app no puede ver el cifrado, así que no tiene LR. */
     @Test
     fun `H9 is reserved and never moves the posterior`() {
         val prior = BayesianScorer.calculate(emptyList(), "PENDING", false)

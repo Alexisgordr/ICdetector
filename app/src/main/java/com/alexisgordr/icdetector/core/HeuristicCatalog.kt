@@ -41,7 +41,7 @@ enum class HeuristicCatalog(
 ) {
     ISOLATED_CELL("H1", "isolated", Family.RF_DOMINANCE, G.RF_DOMINANCE, null, { it.isolatedCell }),
     POWER_JUMP("H2", "powerJump", Family.RF_DOMINANCE, G.RF_DOMINANCE, null, { it.powerJump }),
-    // 3.0.0-beta5 — H3 compara el MCC de la servidora con el de la SIM (no con las vecinas), con
+    // 3.0 (corte de campaña) — H3 compara el MCC de la servidora con el de la SIM (no con las vecinas), con
     // roaming y frontera como abstención: ver MccConsistencyRule. Mismo peso y misma familia.
     MCC_CONSISTENCY("H3", "mccMismatch", Family.IDENTITY, G.INDEPENDENT, null, { it.mccConsistency }),
     MNC_COUNT("H4", "mncCount", Family.IDENTITY, G.WEAK_IDENTITY, null, { it.mncCount }),
@@ -49,9 +49,9 @@ enum class HeuristicCatalog(
     TA_DISTANCE("H6", "taDistance", Family.MOBILITY, G.RF_DOMINANCE,
         "Proximidad: para el scorer es la misma señal dominante que H2/H7; para el episodio, movilidad.", { it.taDistance }),
     GHOST_NEIGHBORS("H7", "ghostCells", Family.RF_DOMINANCE, G.RF_DOMINANCE, null, { it.ghostNeighbors }),
-    // 3.0.0-beta5 — Aviso de calidad de dato: ni peso en el scorer ni familia de episodio.
+    // 3.0 (corte de campaña) — Aviso de calidad de dato: ni peso en el scorer ni familia de episodio.
     ARFCN_SANITY("H8", "arfcn", Family.DATA_QUALITY, G.NOT_SCORED, null, { it.arfcnSanity }),
-    // 3.0.0-beta5 — Reservada: Android no expone el estado de cifrado a una app sin privilegios,
+    // 3.0 (corte de campaña) — Reservada: Android no expone el estado de cifrado a una app sin privilegios,
     // así que H9 es siempre N/A. Conserva id y posición (CSV, numeración), sin peso ni familia.
     HARDWARE_CIPHERING("H9", "ciphering", Family.UNAVAILABLE, G.NOT_SCORED, null, { it.hardwareCiphering }),
     PING_PONG("H10", "pingPong", Family.MOBILITY, G.MOBILITY, null, { it.pingPong }),
@@ -66,6 +66,6 @@ enum class HeuristicCatalog(
 
     fun status(report: HeuristicReport): HeuristicStatus = statusOf(report)
 
-    /** 3.0.0-beta5 — ¿Su fallo es evidencia de amenaza? No para los avisos de calidad de dato (H8). */
+    /** 3.0 (corte de campaña) — ¿Su fallo es evidencia de amenaza? No para los avisos de calidad de dato (H8). */
     val isEvidence: Boolean get() = scorerGroup != G.NOT_SCORED
 }

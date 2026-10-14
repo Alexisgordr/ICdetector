@@ -210,11 +210,11 @@ class DiagnosticsTest {
             h3(HeuristicReport(mccAbstention = MccAbstention.BORDER))
         )
         assertEquals("N/A: ${DiagnosticEngine.H3_UNKNOWN_ABSTENTION}.", h3(HeuristicReport()))
-        // 3.0.0-beta5 — Celda CSG: H1/H2/H5/H7 explican la abstención por la CSG, las demás no.
+        // 3.0 (corte de campaña) — Celda CSG: H1/H2/H5/H7 explican la abstención por la CSG, las demás no.
         val csg = DiagnosticEngine.explain(cell(HeuristicReport(csgCell = true)), inputs)
         listOf(1, 2, 5, 7).forEach { id -> assertEquals(DiagnosticEngine.CSG_NA_EXPLANATION, csg.first { it.id == id }.explanation) }
         assertTrue(csg.first { it.id == 4 }.explanation != DiagnosticEngine.CSG_NA_EXPLANATION)
-        // 3.0.0-beta5 — H9 reservada: siempre la misma explicación.
+        // 3.0 (corte de campaña) — H9 reservada: siempre la misma explicación.
         val h9 = DiagnosticEngine.explain(cell(HeuristicReport()), inputs).first { it.id == 9 }
         assertEquals(HeuristicStatus.NOT_EVALUATED, h9.status)
         assertEquals(DiagnosticEngine.H9_NA_EXPLANATION, h9.explanation)

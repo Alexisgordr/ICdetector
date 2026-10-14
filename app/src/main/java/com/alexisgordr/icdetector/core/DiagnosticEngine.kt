@@ -43,7 +43,7 @@ object DiagnosticEngine {
             HeuristicStatus.FAILED -> "La condición anómala de esta regla está presente en el ciclo actual."
             HeuristicStatus.NOT_EVALUATED -> unavailable
         }
-        // 3.0.0-beta5 — En una celda CSG, H1/H2/H5/H7 no se evalúan por diseño: ese motivo manda.
+        // 3.0 (corte de campaña) — En una celda CSG, H1/H2/H5/H7 no se evalúan por diseño: ese motivo manda.
         fun local(unavailable: String) = if (r.csgCell) CSG_NA_EXPLANATION else unavailable
         return listOf(
             HeuristicDiagnostic(1, "Celda aislada", r.isolatedCell,
@@ -56,7 +56,7 @@ object DiagnosticEngine {
                 })),
             HeuristicDiagnostic(2, "Estabilidad de potencia", r.powerJump,
                 explanation(r.powerJump, local(if (i.wifiActive) WIFI_NA else "N/A: hacen falta celdas vecinas de la misma tecnología con potencia para comparar."))),
-            // 3.0.0-beta5 — H3 compara la servidora con la SIM (MccConsistencyRule).
+            // 3.0 (corte de campaña) — H3 compara la servidora con la SIM (MccConsistencyRule).
             HeuristicDiagnostic(3, "Consistencia MCC", r.mccConsistency, when (r.mccConsistency) {
                 HeuristicStatus.PASSED -> H3_PASSED_EXPLANATION
                 HeuristicStatus.FAILED -> H3_FAILED_EXPLANATION
@@ -70,7 +70,7 @@ object DiagnosticEngine {
                 explanation(r.taDistance, "N/A: el módem no entrega un Timing Advance convertible a metros.")),
             HeuristicDiagnostic(7, "Espectro de vecinos", r.ghostNeighbors,
                 explanation(r.ghostNeighbors, local(if (i.wifiActive) WIFI_NA else "N/A: no hay celdas vecinas de la misma tecnología para contrastar el espectro."))),
-            // 3.0.0-beta5 — Aviso de calidad de dato: su fallo no es la condición de un ataque.
+            // 3.0 (corte de campaña) — Aviso de calidad de dato: su fallo no es la condición de un ataque.
             HeuristicDiagnostic(8, "Calidad de dato ARFCN", r.arfcnSanity,
                 if (r.arfcnSanity == HeuristicStatus.FAILED) H8_FAILED_EXPLANATION
                 else explanation(r.arfcnSanity, "N/A: el módem no entrega ARFCN/EARFCN para esta tecnología.")),
@@ -110,12 +110,12 @@ object DiagnosticEngine {
      */
     private const val WIFI_NA = "N/A: Wi-Fi activo; se evita atribuir el contexto de red al enlace celular."
 
-    /** 3.0.0-beta5 — H8 es un aviso de calidad de dato (ver ThreatAnalyzer, regla 8). */
-    /** 3.0.0-beta5 — H1, H2, H5 y H7 en una celda CSG. */
+    /** 3.0 (corte de campaña) — H8 es un aviso de calidad de dato (ver ThreatAnalyzer, regla 8). */
+    /** 3.0 (corte de campaña) — H1, H2, H5 y H7 en una celda CSG. */
     const val CSG_NA_EXPLANATION = "N/A: celda CSG (femtocelda): las reglas de dominancia e identidad local no aplican a una celda diseñada para ser aislada."
-    /** 3.0.0-beta5 — H9 está reservada: nunca se evalúa. */
+    /** 3.0 (corte de campaña) — H9 está reservada: nunca se evalúa. */
     const val H9_NA_EXPLANATION = "N/A: Android no expone el estado de cifrado a aplicaciones sin privilegios; regla reservada."
-    /** 3.0.0-beta5 — Explicaciones de H3 (servidora frente a SIM). */
+    /** 3.0 (corte de campaña) — Explicaciones de H3 (servidora frente a SIM). */
     const val H3_PASSED_EXPLANATION = "El MCC de la servidora coincide con el de la SIM."
     const val H3_FAILED_EXPLANATION = "El MCC de la servidora no es el de la SIM, sin roaming y sin vecinas con ese MCC."
     const val H3_UNKNOWN_ABSTENTION = "faltan datos de la SIM o de la servidora"

@@ -4,7 +4,7 @@ import com.alexisgordr.icdetector.core.BayesianScorer
 import org.junit.Assert.assertEquals
 import org.junit.Test
 
-/** 3.0.0-beta5: los umbrales de color del panel siguen al prior de 0,005 (30/10, antes 50/20). */
+/** 3.0 (corte de campaña): los umbrales de color del panel siguen al prior de 0,005 (30/10, antes 50/20). */
 class AnomalyConfidenceTierTest {
 
     @Test

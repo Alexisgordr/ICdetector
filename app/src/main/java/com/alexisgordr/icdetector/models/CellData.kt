@@ -82,7 +82,7 @@ data class CellData(
     /** Solo en la celda analizada: portadoras secundarias y entradas registradas extra. */
     val secondaryCarriers: List<SecondaryCarrier> = emptyList(),
     /**
-     * 3.0.0-beta5 — Aviso de calidad de dato de esta observación (H8), o null. No es un motivo de
+     * 3.0 (corte de campaña) — Aviso de calidad de dato de esta observación (H8), o null. No es un motivo de
      * sospecha: no va en [suspiciousReason] (pantalla, notificaciones, incidentes), pero sí se
      * guarda en la fila del historial ([com.alexisgordr.icdetector.models.StoredReasons.forRow]).
      */

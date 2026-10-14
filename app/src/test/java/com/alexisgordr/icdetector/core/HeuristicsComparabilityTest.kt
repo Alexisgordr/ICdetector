@@ -105,7 +105,7 @@ class HeuristicsComparabilityTest {
     private fun foreign(mcc: String = "214", mnc: String = "01", tac: String = "9999") = neighbour(mnc = mnc, tac = tac).copy(mcc = mcc)
 
     @Test fun `H5 ignores neighbours of another operator, so it does not fail together with H3`() {
-        // Frontera: la única vecina es de otro país (y otra red). H5 no la usa. 3.0.0-beta5: H3
+        // Frontera: la única vecina es de otro país (y otra red). H5 no la usa. 3.0 (corte de campaña): H3
         // compara la servidora con la SIM, así que con la SIM de casa tampoco falla por esa vecina.
         val homeSim = ServiceStateSnapshot(
             timestampMs = 0L, state = ServiceRegistrationState.IN_SERVICE,

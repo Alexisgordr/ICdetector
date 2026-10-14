@@ -33,9 +33,9 @@ data class HeuristicReport(
     val bandDowngrade: HeuristicStatus = HeuristicStatus.NOT_EVALUATED,
     val rfStability: HeuristicStatus = HeuristicStatus.NOT_EVALUATED,
     val transitionCoherence: HeuristicStatus = HeuristicStatus.NOT_EVALUATED,
-    /** 3.0.0-beta5 — Por qué H3 se abstuvo, si se abstuvo (ver [MccAbstention]). */
+    /** 3.0 (corte de campaña) — Por qué H3 se abstuvo, si se abstuvo (ver [MccAbstention]). */
     val mccAbstention: MccAbstention? = null,
-    /** 3.0.0-beta5 — La servidora es CSG (femtocelda): H1, H2, H5 y H7 no se evalúan. */
+    /** 3.0 (corte de campaña) — La servidora es CSG (femtocelda): H1, H2, H5 y H7 no se evalúan. */
     val csgCell: Boolean = false
 ) {
     // Compatibilidad: una regla que se abstiene no debe activar una alarma.
@@ -83,7 +83,7 @@ data class HeuristicReport(
      * [NONE_NOT_EVALUATED] si todas se evaluaron. Se guarda en cada fila del historial para poder
      * medir cuánto tiempo fue evaluable cada regla. Nunca coincide con una regla que falló.
      *
-     * 3.0.0-beta5 — Una regla puede llevar entre paréntesis el motivo de su abstención, p. ej.
+     * 3.0 (corte de campaña) — Una regla puede llevar entre paréntesis el motivo de su abstención, p. ej.
      * `H1(csg);H3(roaming);H6`, para que el CSV distinga casos sin reconstruirlos: H3 lo toma de
      * [MccAbstention], y H1/H2/H5/H7 llevan `(csg)` en una celda CSG ([CSG_RULES]).
      */
@@ -110,7 +110,7 @@ data class HeuristicReport(
         /** Valor explícito de "todas evaluadas", distinto del vacío de las filas anteriores a 3.0. */
         const val NONE_NOT_EVALUATED = "NONE"
 
-        /** 3.0.0-beta5 — Reglas que no se evalúan en una celda CSG. */
+        /** 3.0 (corte de campaña) — Reglas que no se evalúan en una celda CSG. */
         val CSG_RULES = setOf("H1", "H2", "H5", "H7")
         const val CSG_ABSTENTION_CODE = "csg"
         const val CSG_ABSTENTION_TEXT = "celda CSG (femtocelda)"

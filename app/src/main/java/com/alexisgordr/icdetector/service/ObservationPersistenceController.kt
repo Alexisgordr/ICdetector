@@ -105,7 +105,7 @@ internal class ObservationPersistenceController(
     private fun record(
         cell: CellData,
         context: ObservationContext,
-        // 3.0.0-beta5 — El aviso de calidad de dato (H8) no se muestra, pero sí se guarda.
+        // 3.0 (corte de campaña) — El aviso de calidad de dato (H8) no se muestra, pero sí se guarda.
         reason: String = com.alexisgordr.icdetector.models.StoredReasons.forRow(cell.suspiciousReason, cell.dataQualityReason)
     ) {
         if (!isRecordable(cell)) return

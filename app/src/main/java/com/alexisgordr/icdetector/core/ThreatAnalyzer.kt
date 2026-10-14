@@ -21,7 +21,7 @@ object ThreatAnalyzer {
     /** Ventana de H10: cambios de celda considerados "rápidos". */
     internal const val PING_PONG_WINDOW_MS = PingPongRule.WINDOW_MS
 
-    /** 3.0.0-beta5 — Motivos de H8, aviso de calidad de dato (ver la regla 8 en analyzeThreats). */
+    /** 3.0 (corte de campaña) — Motivos de H8, aviso de calidad de dato (ver la regla 8 en analyzeThreats). */
     const val H8_LTE_REASON = "Calidad de dato: EARFCN 4G fuera de la tabla 3GPP"
     const val H8_NR_REASON = "Calidad de dato: NR-ARFCN 5G fuera de la tabla 3GPP"
 
@@ -185,7 +185,7 @@ object ThreatAnalyzer {
         ),
         nowMs: Long = System.currentTimeMillis(),
         /**
-         * 3.0.0-beta5 — ServiceState de esta observación (el del contexto capturado al recibirla):
+         * 3.0 (corte de campaña) — ServiceState de esta observación (el del contexto capturado al recibirla):
          * H3 compara el MCC de la servidora con el de la SIM y mira el roaming. Null = N/A.
          */
         serviceState: ServiceStateSnapshot? = null
@@ -209,7 +209,7 @@ object ThreatAnalyzer {
         var hLatencyCorrelation = true
         var hTransitionCoherence = true
 
-        // 3.0.0-beta5 — Una celda CSG (femtocelda, indicador de grupo cerrado de abonados) está
+        // 3.0 (corte de campaña) — Una celda CSG (femtocelda, indicador de grupo cerrado de abonados) está
         // diseñada para ser aislada, potente y con su propio TAC: un único hecho benigno hacía
         // fallar H1, H2, H5 y H7 a la vez. En una CSG esas cuatro no se evalúan (N/A, sin puntos,
         // sin motivo, fuera del bayesiano); el resto de reglas no cambia.
@@ -264,7 +264,7 @@ object ThreatAnalyzer {
             score -= 20
         }
 
-        // 3. Consistencia MCC — 3.0.0-beta5: servidora frente a SIM, no frente a las vecinas
+        // 3. Consistencia MCC — 3.0 (corte de campaña): servidora frente a SIM, no frente a las vecinas
         // (ver MccConsistencyRule). Las vecinas solo sirven para reconocer una frontera.
         val mccResult = MccConsistencyRule.evaluate(active, neighbors, serviceState)
         eMcc = mccResult.status != HeuristicStatus.NOT_EVALUATED
@@ -376,7 +376,7 @@ object ThreatAnalyzer {
         // aprendizaje. El NR-ARFCN 0 no lo usa ninguna banda: RadioChannels no lo acepta, así que H8
         // lo marca y el aprendizaje no lo toma por una portadora legítima.
         //
-        // 3.0.0-beta5 — H8 es un aviso de CALIDAD DE DATO, no evidencia de amenaza: un IMSI catcher
+        // 3.0 (corte de campaña) — H8 es un aviso de CALIDAD DE DATO, no evidencia de amenaza: un IMSI catcher
         // necesita un canal válido para que el móvil se registre en él, así que un ARFCN fuera de la
         // tabla 3GPP describe un módem que informa mal, no un ataque. Se sigue evaluando, publicando
         // (informe, terminal, caja negra) y guardando en la fila con su motivo, pero no resta puntos,
@@ -401,7 +401,7 @@ object ThreatAnalyzer {
             }
         }
 
-        // 9. Cifrado — 3.0.0-beta5: regla reservada. Android no expone a una app sin privilegios
+        // 9. Cifrado — 3.0 (corte de campaña): regla reservada. Android no expone a una app sin privilegios
         // el estado de cifrado del módem, así que no hay nada que evaluar: H9 es siempre N/A, sin
         // puntos ni LR. Conserva su id y su posición en el informe (CSV y numeración).
 

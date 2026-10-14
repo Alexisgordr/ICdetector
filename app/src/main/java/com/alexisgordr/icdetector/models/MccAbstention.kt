@@ -1,7 +1,7 @@
 package com.alexisgordr.icdetector.models
 
 /**
- * 3.0.0-beta5 — Por qué H3 (consistencia MCC) se abstuvo en una observación.
+ * 3.0 (corte de campaña) — Por qué H3 (consistencia MCC) se abstuvo en una observación.
  *
  * [code] se guarda en `not_evaluated_heuristics` junto al id (`H3(roaming)`), así que el CSV dice
  * qué caso fue sin tener que reconstruirlo. Es ASCII y estable: cambiarlo cambia lo que leen las

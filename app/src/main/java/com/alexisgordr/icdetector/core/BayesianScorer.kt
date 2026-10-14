@@ -16,7 +16,7 @@ package com.alexisgordr.icdetector.core
  *
  * Prior P(IMSI) = 0.005 (0,5 %) — estimación conservadora
  * para entorno urbano europeo sin contexto especial.
- * 3.0.0-beta5: bajado de 0.02 a 0.005. Con el 2 % una sola señal débil (p. ej. H6 sola,
+ * 3.0 (corte de campaña): bajado de 0.02 a 0.005. Con el 2 % una sola señal débil (p. ej. H6 sola,
  * LR 7) ya pintaba un 12,5 %; con 0,5 % se queda en ~3,4 % y hace falta evidencia
  * combinada para subir. Las LR no cambian; solo el punto de partida. Corte de dataset:
  * anomaly_confidence no es comparable entre filas anteriores y posteriores a este cambio.
@@ -63,10 +63,10 @@ object BayesianScorer {
 
         // Independientes
         // Expert-derived LR estimate — not directly reported by source paper
-        // 3.0.0-beta5 — "arfcn" (H8) ya no está: un ARFCN fuera de la tabla 3GPP no es evidencia de
+        // 3.0 (corte de campaña) — "arfcn" (H8) ya no está: un ARFCN fuera de la tabla 3GPP no es evidencia de
         // ataque (un IMSI catcher necesita un canal válido para que el móvil se registre), sino un
         // módem que informa mal. H8 es un aviso de calidad de dato ([DATA_QUALITY_KEYS]).
-        // 3.0.0-beta5 — "ciphering" (H9) tampoco: Android no expone el estado de cifrado a una app sin
+        // 3.0 (corte de campaña) — "ciphering" (H9) tampoco: Android no expone el estado de cifrado a una app sin
         // privilegios, H9 nunca se evalúa y una LR de 12 para una regla que no mide nada no es
         // honesta. Queda reservada ([UNAVAILABLE_KEYS]).
         "latency"     to 1.8f   // Experimental — demasiadas variables confundentes
@@ -162,15 +162,15 @@ object BayesianScorer {
 
     /**
      * 3.0 (fase 4) — Grupo de correlación del scorer; INDEPENDENT = actualiza por su cuenta.
-     * 3.0.0-beta5 — NOT_SCORED: la regla no es evidencia y no tiene LR: H8 (se evalúa y se publica
+     * 3.0 (corte de campaña) — NOT_SCORED: la regla no es evidencia y no tiene LR: H8 (se evalúa y se publica
      * como calidad de dato) y H9 (reservada: no se puede evaluar desde una app).
      */
     enum class Group { RF_DOMINANCE, MOBILITY, WEAK_IDENTITY, INDEPENDENT, NOT_SCORED }
 
-    /** 3.0.0-beta5 — Claves de reglas que son avisos de calidad de dato, sin LR: H8. */
+    /** 3.0 (corte de campaña) — Claves de reglas que son avisos de calidad de dato, sin LR: H8. */
     internal val DATA_QUALITY_KEYS = setOf("arfcn")
 
-    /** 3.0.0-beta5 — Claves de reglas que una app no puede evaluar, sin LR: H9 (cifrado). */
+    /** 3.0 (corte de campaña) — Claves de reglas que una app no puede evaluar, sin LR: H9 (cifrado). */
     internal val UNAVAILABLE_KEYS = setOf("ciphering")
 
     /** Claves sin LR: ni calidad de dato ni reglas reservadas son evidencia. */

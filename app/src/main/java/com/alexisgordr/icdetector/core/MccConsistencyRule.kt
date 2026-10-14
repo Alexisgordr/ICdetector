@@ -6,7 +6,7 @@ import com.alexisgordr.icdetector.models.MccAbstention
 import com.alexisgordr.icdetector.models.ServiceStateSnapshot
 
 /**
- * 3.0.0-beta5 — H3, consistencia MCC: compara la servidora con la SIM, no con las vecinas.
+ * 3.0 (corte de campaña) — H3, consistencia MCC: compara la servidora con la SIM, no con las vecinas.
  *
  * Antes H3 fallaba si alguna vecina tenía un MCC distinto del de la servidora. Eso es justo lo que
  * ocurre cerca de una frontera, y no lo que hace un IMSI catcher: el falso suele anunciar un PLMN
@@ -27,7 +27,7 @@ import com.alexisgordr.icdetector.models.ServiceStateSnapshot
  */
 object MccConsistencyRule {
 
-    /** Comienzo del motivo guardado de H3. Las filas anteriores a beta5 llevan solo este texto. */
+    /** Comienzo del motivo guardado de H3. Las filas anteriores al corte de campaña llevan solo este texto. */
     const val REASON_PREFIX = "Inconsistencia MCC"
 
     /** Motivo guardado cuando H3 falla, con los dos MCC comparados. */

@@ -270,7 +270,7 @@ def evaluation_coverage(rows):
         if not raw:
             continue
         known += 1
-        # 3.0.0-beta5 — Una regla puede llevar el motivo de su abstención entre paréntesis
+        # 3.0 (corte de campaña) — Una regla puede llevar el motivo de su abstención entre paréntesis
         # (`H3(roaming)`, `H1(csg)`): sigue siendo esa regla.
         skipped = set() if raw == "NONE" else {rule_id(x) for x in raw.split(";") if x.strip()}
         for h in HEURISTIC_IDS:
@@ -286,9 +286,9 @@ def rule_id(entry):
 
 def abstention_reasons(rows):
     """
-    3.0.0-beta5 — Motivos de abstención guardados entre paréntesis (`H3(roaming)`, `H1(csg)`, ...):
+    3.0 (corte de campaña) — Motivos de abstención guardados entre paréntesis (`H3(roaming)`, `H1(csg)`, ...):
     {regla: {motivo: filas}}. Solo cuentan las entradas con motivo; `H3` a secas (filas anteriores
-    a beta5, o sin motivo guardado) no aparece.
+    al corte de campaña, o sin motivo guardado) no aparece.
     """
     counts = {}
     for r in rows:

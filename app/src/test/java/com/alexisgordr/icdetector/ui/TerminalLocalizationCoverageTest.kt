@@ -21,18 +21,18 @@ class TerminalLocalizationCoverageTest {
     )
 
     private val lines = listOf(
-        // 3.0.0-beta5 — H8, aviso de calidad de dato.
+        // 3.0 (corte de campaña) — H8, aviso de calidad de dato.
         "[HEUR] 8. Calidad de dato ARFCN: FAILED",
         "Calidad de dato: EARFCN 4G fuera de la tabla 3GPP",
         "[sub-umbral] Inconsistencia MCC | Calidad de dato: NR-ARFCN 5G fuera de la tabla 3GPP",
         "Calidad de dato: el módem informa un canal fuera de la tabla 3GPP. No es evidencia de ataque y no resta puntos.",
-        // 3.0.0-beta5 — Celda CSG.
+        // 3.0 (corte de campaña) — Celda CSG.
         "N/A: celda CSG (femtocelda): las reglas de dominancia e identidad local no aplican a una celda diseñada para ser aislada.",
         "[HEUR] 1. Celda Aislada: N/A (celda CSG (femtocelda))",
         "[HEUR] 7. Espectro Fantasma: N/A (celda CSG (femtocelda))",
-        // 3.0.0-beta5 — H9 reservada.
+        // 3.0 (corte de campaña) — H9 reservada.
         "N/A: Android no expone el estado de cifrado a aplicaciones sin privilegios; regla reservada.",
-        // 3.0.0-beta5 — H3: servidora frente a SIM (motivo, abstenciones, diagnóstico).
+        // 3.0 (corte de campaña) — H3: servidora frente a SIM (motivo, abstenciones, diagnóstico).
         "Inconsistencia MCC: servidora 208 ≠ SIM 214, sin roaming ni vecinas con ese MCC",
         "[sub-umbral] Inconsistencia MCC",
         "[HEUR] 3. Consistencia MCC: N/A (sin ServiceState, no se sabe si hay roaming)",
