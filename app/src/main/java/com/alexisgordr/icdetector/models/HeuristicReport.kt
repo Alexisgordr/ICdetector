@@ -32,7 +32,9 @@ data class HeuristicReport(
     val signalBaseline: HeuristicStatus = HeuristicStatus.NOT_EVALUATED,
     val bandDowngrade: HeuristicStatus = HeuristicStatus.NOT_EVALUATED,
     val rfStability: HeuristicStatus = HeuristicStatus.NOT_EVALUATED,
-    val transitionCoherence: HeuristicStatus = HeuristicStatus.NOT_EVALUATED
+    val transitionCoherence: HeuristicStatus = HeuristicStatus.NOT_EVALUATED,
+    /** 3.0.0-beta5 — Por qué H3 se abstuvo, si se abstuvo (ver [MccAbstention]). */
+    val mccAbstention: MccAbstention? = null
 ) {
     // Compatibilidad: una regla que se abstiene no debe activar una alarma.
     val isolatedCellPassed get() = isolatedCell.passed
@@ -78,9 +80,13 @@ data class HeuristicReport(
      * 3.0 (#29) — Reglas que se abstuvieron en este ciclo, separadas por `;` (`H1;H6;H9`), o
      * [NONE_NOT_EVALUATED] si todas se evaluaron. Se guarda en cada fila del historial para poder
      * medir cuánto tiempo fue evaluable cada regla. Nunca coincide con una regla que falló.
+     *
+     * 3.0.0-beta5 — H3 lleva además el motivo de la abstención, p. ej. `H1;H3(roaming);H6`, para
+     * que el CSV distinga roaming, frontera y falta de datos ([MccAbstention.storedId]).
      */
     fun notEvaluatedIds(): String =
-        byId.filter { it.second == HeuristicStatus.NOT_EVALUATED }.joinToString(";") { it.first }
+        byId.filter { it.second == HeuristicStatus.NOT_EVALUATED }
+            .joinToString(";") { (id, _) -> if (id == "H3") mccAbstention?.storedId ?: id else id }
             .ifEmpty { NONE_NOT_EVALUATED }
 
     companion object {

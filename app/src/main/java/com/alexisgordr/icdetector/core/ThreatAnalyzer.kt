@@ -12,6 +12,7 @@ import com.alexisgordr.icdetector.models.CellReputation
 import com.alexisgordr.icdetector.models.CellRfFingerprint
 import com.alexisgordr.icdetector.models.VerificationStatus
 import com.alexisgordr.icdetector.models.RadioTech
+import com.alexisgordr.icdetector.models.ServiceStateSnapshot
 
 object ThreatAnalyzer {
     /** CellInfo.UNAVAILABLE: el módem no entrega la frecuencia. No es una frecuencia. */
@@ -49,8 +50,8 @@ object ThreatAnalyzer {
      */
     /** 3.0 — MCC y MNC de la vecina iguales a los de la servidora (como números), o sin informar. */
     internal fun sameOperatorOrUnknown(active: CellData, neighbour: CellData): Boolean {
-        fun known(v: String) = v.isNotBlank() && v != "N/A"
-        fun same(a: String, b: String) = a.trim().toIntOrNull()?.let { it == b.trim().toIntOrNull() } ?: (a.trim() == b.trim())
+        fun known(v: String) = MccConsistencyRule.known(v)
+        fun same(a: String, b: String) = MccConsistencyRule.sameCode(a, b)
         val mccOk = !known(neighbour.mcc) || !known(active.mcc) || same(neighbour.mcc, active.mcc)
         val mncOk = !known(neighbour.mnc) || (known(active.mnc) && same(neighbour.mnc, active.mnc))
         return mccOk && mncOk
@@ -184,7 +185,12 @@ object ThreatAnalyzer {
         pingPongSpeedMps: Float? = PingPongRule.liveSpeed(
             currentLocation?.takeIf { it.hasSpeed() }?.speed, locationFixAgeMs
         ),
-        nowMs: Long = System.currentTimeMillis()
+        nowMs: Long = System.currentTimeMillis(),
+        /**
+         * 3.0.0-beta5 — ServiceState de esta observación (el del contexto capturado al recibirla):
+         * H3 compara el MCC de la servidora con el de la SIM y mira el roaming. Null = N/A.
+         */
+        serviceState: ServiceStateSnapshot? = null
     ): CellData {
         val reasons = mutableListOf<String>()
         var score = 100
@@ -255,12 +261,13 @@ object ThreatAnalyzer {
             score -= 20
         }
 
-        // 3. MNC/MCC Inconsistency
-        eMcc = active.mcc != "N/A" && neighbors.any { it.mcc != "N/A" }
-        val differentMcc = neighbors.filter { it.mcc != "N/A" && active.mcc != "N/A" && it.mcc != active.mcc }
-        if (differentMcc.isNotEmpty()) {
+        // 3. Consistencia MCC — 3.0.0-beta5: servidora frente a SIM, no frente a las vecinas
+        // (ver MccConsistencyRule). Las vecinas solo sirven para reconocer una frontera.
+        val mccResult = MccConsistencyRule.evaluate(active, neighbors, serviceState)
+        eMcc = mccResult.status != HeuristicStatus.NOT_EVALUATED
+        if (mccResult.status == HeuristicStatus.FAILED) {
             hMcc = false
-            reasons.add("Inconsistencia MCC")
+            reasons.add(mccResult.failReason ?: MccConsistencyRule.REASON_PREFIX)
             score -= 30
         }
 
@@ -721,6 +728,7 @@ object ThreatAnalyzer {
             isolatedCell = status(eIsolated, hIsolated),
             powerJump = status(ePowerJump, hPowerJump),
             mccConsistency = status(eMcc, hMcc),
+            mccAbstention = mccResult.abstention,
             mncCount = status(eMncCount, hMncCount),
             tacDeviation = status(eTac, hTac),
             taDistance = status(eTa, hTa),

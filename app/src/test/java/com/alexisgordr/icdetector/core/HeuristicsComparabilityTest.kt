@@ -3,6 +3,8 @@ package com.alexisgordr.icdetector.core
 import com.alexisgordr.icdetector.models.CellData
 import com.alexisgordr.icdetector.models.HeuristicStatus
 import com.alexisgordr.icdetector.models.RadioTech
+import com.alexisgordr.icdetector.models.ServiceRegistrationState
+import com.alexisgordr.icdetector.models.ServiceStateSnapshot
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -104,10 +106,20 @@ class HeuristicsComparabilityTest {
     private fun foreign(mcc: String = "214", mnc: String = "01", tac: String = "9999") = neighbour(mnc = mnc, tac = tac).copy(mcc = mcc)
 
     @Test fun `H5 ignores neighbours of another operator, so it does not fail together with H3`() {
-        // Frontera: la única vecina es de otro país (y otra red). H3 falla; H5 ya no por la misma vecina.
-        val border = analyze(serving(tac = "31601"), listOf(foreign(mcc = "208", mnc = "10")))
-        assertEquals(HeuristicStatus.FAILED, border.heuristicReport.mccConsistency)
+        // Frontera: la única vecina es de otro país (y otra red). H5 no la usa. 3.0.0-beta5: H3
+        // compara la servidora con la SIM, así que con la SIM de casa tampoco falla por esa vecina.
+        val homeSim = ServiceStateSnapshot(
+            timestampMs = 0L, state = ServiceRegistrationState.IN_SERVICE,
+            operatorNumeric = "21407", simOperator = "21407"
+        )
+        val border = ThreatAnalyzer.analyzeThreats(
+            active = serving(tac = "31601"), neighbors = listOf(foreign(mcc = "208", mnc = "10")),
+            isHardwareCipheringActive = true, cellChangeHistory = emptyList(), currentLocation = null,
+            isNetworkLatencyAvailable = false, serviceState = homeSim
+        )
+        assertEquals(HeuristicStatus.PASSED, border.heuristicReport.mccConsistency)
         assertEquals(HeuristicStatus.NOT_EVALUATED, border.heuristicReport.tacDeviation)
+        assertEquals(100, border.securityScore)
         // País multioperador: solo hay vecinas de otro MNC con TAC: H5 N/A, sin restar.
         val multi = analyze(serving(tac = "31601"), listOf(foreign(mnc = "01"), foreign(mnc = "04")))
         assertEquals(HeuristicStatus.NOT_EVALUATED, multi.heuristicReport.tacDeviation)

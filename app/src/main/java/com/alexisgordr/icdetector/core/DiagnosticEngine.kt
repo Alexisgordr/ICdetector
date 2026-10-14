@@ -54,8 +54,12 @@ object DiagnosticEngine {
                 })),
             HeuristicDiagnostic(2, "Estabilidad de potencia", r.powerJump,
                 explanation(r.powerJump, if (i.wifiActive) WIFI_NA else "N/A: hacen falta celdas vecinas de la misma tecnología con potencia para comparar.")),
-            HeuristicDiagnostic(3, "Consistencia MCC", r.mccConsistency,
-                explanation(r.mccConsistency, "N/A: falta MCC válido en la celda activa o en sus vecinas.")),
+            // 3.0.0-beta5 — H3 compara la servidora con la SIM (MccConsistencyRule).
+            HeuristicDiagnostic(3, "Consistencia MCC", r.mccConsistency, when (r.mccConsistency) {
+                HeuristicStatus.PASSED -> H3_PASSED_EXPLANATION
+                HeuristicStatus.FAILED -> H3_FAILED_EXPLANATION
+                HeuristicStatus.NOT_EVALUATED -> "N/A: ${r.mccAbstention?.text ?: H3_UNKNOWN_ABSTENTION}."
+            }),
             HeuristicDiagnostic(4, "Límite MNC", r.mncCount,
                 explanation(r.mncCount, "N/A: faltan MNC válidos de celdas vecinas.")),
             HeuristicDiagnostic(5, "Validación regional TAC", r.tacDeviation,
@@ -105,5 +109,9 @@ object DiagnosticEngine {
     private const val WIFI_NA = "N/A: Wi-Fi activo; se evita atribuir el contexto de red al enlace celular."
 
     /** 3.0.0-beta5 — H8 es un aviso de calidad de dato (ver ThreatAnalyzer, regla 8). */
+    /** 3.0.0-beta5 — Explicaciones de H3 (servidora frente a SIM). */
+    const val H3_PASSED_EXPLANATION = "El MCC de la servidora coincide con el de la SIM."
+    const val H3_FAILED_EXPLANATION = "El MCC de la servidora no es el de la SIM, sin roaming y sin vecinas con ese MCC."
+    const val H3_UNKNOWN_ABSTENTION = "faltan datos de la SIM o de la servidora"
     const val H8_FAILED_EXPLANATION = "Calidad de dato: el módem informa un canal fuera de la tabla 3GPP. No es evidencia de ataque y no resta puntos."
 }

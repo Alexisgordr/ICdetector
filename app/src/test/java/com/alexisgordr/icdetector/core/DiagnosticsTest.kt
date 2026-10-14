@@ -195,6 +195,24 @@ class DiagnosticsTest {
     }
 
     @Test
+    fun `H3 diagnostics say why it passed, failed or abstained`() {
+        val inputs = DiagnosticEngine.Inputs(
+            neighborCount = 2, wifiActive = false, locationAvailable = false,
+            historyWithLocation = 0, latencyAvailable = false,
+            cipheringAvailable = false, previousBandAvailable = false,
+            signalBaseline = null, rfFingerprint = null, rfStability = null, reputation = null
+        )
+        fun h3(report: HeuristicReport) = DiagnosticEngine.explain(cell(report), inputs).first { it.id == 3 }.explanation
+        assertEquals(DiagnosticEngine.H3_PASSED_EXPLANATION, h3(HeuristicReport(mccConsistency = HeuristicStatus.PASSED)))
+        assertEquals(DiagnosticEngine.H3_FAILED_EXPLANATION, h3(HeuristicReport(mccConsistency = HeuristicStatus.FAILED)))
+        assertEquals(
+            "N/A: PLMN extranjero con vecinas coherentes (frontera).",
+            h3(HeuristicReport(mccAbstention = MccAbstention.BORDER))
+        )
+        assertEquals("N/A: ${DiagnosticEngine.H3_UNKNOWN_ABSTENTION}.", h3(HeuristicReport()))
+    }
+
+    @Test
     fun `maturity reflects actual analyzer thresholds`() {
         val inputs = DiagnosticEngine.Inputs(
             neighborCount = 1, wifiActive = false, locationAvailable = true,

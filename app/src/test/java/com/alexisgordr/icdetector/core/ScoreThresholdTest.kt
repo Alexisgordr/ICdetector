@@ -30,7 +30,7 @@ class ScoreThresholdTest {
 
     @Test fun `H3 and H15 alone stay on the boundary and the manual says it is unvalidated`() {
         val analyzer = src("core/ThreatAnalyzer.kt")
-        val h3 = analyzer.substringAfter("reasons.add(\"Inconsistencia MCC\")").substringBefore("}")
+        val h3 = analyzer.substringAfter("reasons.add(mccResult.failReason ?: MccConsistencyRule.REASON_PREFIX)").substringBefore("}")
         val h15 = analyzer.substringAfter("StoredReasons.H15_REASON)").substringBefore("}")
         assertTrue(h3.contains("score -= 30"))
         assertTrue(h15.contains("score -= 30"))

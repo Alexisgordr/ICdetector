@@ -3,6 +3,9 @@ package com.alexisgordr.icdetector.core
 import com.alexisgordr.icdetector.models.CellData
 import com.alexisgordr.icdetector.models.HeuristicReport
 import com.alexisgordr.icdetector.models.HeuristicStatus
+import com.alexisgordr.icdetector.models.MccAbstention
+import com.alexisgordr.icdetector.models.ServiceRegistrationState
+import com.alexisgordr.icdetector.models.ServiceStateSnapshot
 import com.alexisgordr.icdetector.models.VerificationStatus
 import com.alexisgordr.icdetector.models.RadioTech
 import org.junit.Assert.assertEquals
@@ -215,12 +218,77 @@ class HeuristicsTest {
         assertTrue(analyze(active(dbm = -60), neighbors = listOf(neighbor(-80))).powerJumpPassed)
     }
 
-    // ---------- H3: Inconsistencia MCC ----------
-    @Test fun `H3 dispara con vecina de distinto MCC`() {
-        assertFalse(analyze(active(mcc = "214"), neighbors = listOf(neighbor(-90, mcc = "208"))).mccConsistencyPassed)
+    // ---------- H3: Consistencia MCC (3.0.0-beta5: servidora frente a SIM) ----------
+    private fun service(sim: String? = "21407", network: String? = "21407", roaming: Boolean = false) =
+        ServiceStateSnapshot(
+            timestampMs = NOW, state = ServiceRegistrationState.IN_SERVICE,
+            roaming = roaming, operatorNumeric = network, simOperator = sim
+        )
+
+    private fun analyzeMcc(active: CellData, neighbors: List<CellData>, service: ServiceStateSnapshot?) =
+        ThreatAnalyzer.analyzeThreats(
+            active = active, neighbors = neighbors, isHardwareCipheringActive = true,
+            cellChangeHistory = emptyList(), currentLocation = null, nowMs = NOW, serviceState = service
+        )
+
+    @Test fun `H3 pasa si la servidora tiene el MCC de la SIM, aunque las vecinas sean de otro pais`() {
+        // Antes esto fallaba (vecina 208): ahora las vecinas no se consultan si coincide con la SIM.
+        val cell = analyzeMcc(active(mcc = "214"), listOf(neighbor(-90, mcc = "208")), service())
+        assertEquals(HeuristicStatus.PASSED, cell.heuristicReport.mccConsistency)
+        assertNull(cell.heuristicReport.mccAbstention)
+        assertEquals(100, cell.securityScore)
     }
-    @Test fun `H3 no dispara con mismo MCC`() {
-        assertTrue(analyze(active(mcc = "214"), neighbors = listOf(neighbor(-90, mcc = "214"))).mccConsistencyPassed)
+
+    @Test fun `H3 compara el MCC como numero`() {
+        val cell = analyzeMcc(active(mcc = "0214"), emptyList(), service(sim = "21407"))
+        assertEquals(HeuristicStatus.PASSED, cell.heuristicReport.mccConsistency)
+    }
+
+    @Test fun `H3 falla con MCC extranjero sin roaming y sin vecinas de ese MCC, con el motivo exacto`() {
+        val cell = analyzeMcc(active(mcc = "208"), listOf(neighbor(-90, mcc = "214")), service(sim = "21407", network = "20801"))
+        assertEquals(HeuristicStatus.FAILED, cell.heuristicReport.mccConsistency)
+        assertEquals(
+            "Inconsistencia MCC: servidora 208 ≠ SIM 214, sin roaming ni vecinas con ese MCC",
+            cell.suspiciousReason
+        )
+        assertEquals(70, cell.securityScore)
+        // Sin vecinas tampoco hay frontera que lo explique.
+        assertEquals(HeuristicStatus.FAILED,
+            analyzeMcc(active(mcc = "208"), emptyList(), service(sim = "21407")).heuristicReport.mccConsistency)
+    }
+
+    @Test fun `H3 queda N-A con roaming declarado`() {
+        val report = analyzeMcc(active(mcc = "208"), emptyList(), service(sim = "21407", roaming = true)).heuristicReport
+        assertEquals(HeuristicStatus.NOT_EVALUATED, report.mccConsistency)
+        assertEquals(MccAbstention.ROAMING, report.mccAbstention)
+        assertTrue(report.notEvaluatedIds().split(";").contains("H3(roaming)"))
+    }
+
+    @Test fun `H3 queda N-A en frontera, con vecinas del mismo MCC extranjero`() {
+        val cell = analyzeMcc(active(mcc = "208"), listOf(neighbor(-90, mcc = "208"), neighbor(-95, mcc = "214")), service(sim = "21407"))
+        assertEquals(HeuristicStatus.NOT_EVALUATED, cell.heuristicReport.mccConsistency)
+        assertEquals(MccAbstention.BORDER, cell.heuristicReport.mccAbstention)
+        assertEquals("PLMN extranjero con vecinas coherentes (frontera)", MccAbstention.BORDER.text)
+        assertTrue(cell.heuristicReport.notEvaluatedIds().split(";").contains("H3(frontera)"))
+        assertNull(cell.suspiciousReason)
+        assertEquals(100, cell.securityScore)
+    }
+
+    @Test fun `H3 queda N-A sin ServiceState, sin SIM o sin MCC de servidora, sin volver a la regla antigua`() {
+        val foreignNeighbour = listOf(neighbor(-90, mcc = "208"))
+        fun abstention(active: CellData, service: ServiceStateSnapshot?) =
+            analyzeMcc(active, foreignNeighbour, service).heuristicReport.also {
+                assertEquals(HeuristicStatus.NOT_EVALUATED, it.mccConsistency)
+            }.mccAbstention
+        assertEquals(MccAbstention.NO_SERVICE_STATE, abstention(active(mcc = "214"), null))
+        assertEquals(MccAbstention.NO_SIM, abstention(active(mcc = "214"), service(sim = null)))
+        assertEquals(MccAbstention.NO_SIM, abstention(active(mcc = "214"), service(sim = "")))
+        assertEquals(MccAbstention.NO_SERVING_MCC, abstention(active(mcc = "N/A"), service(network = null)))
+    }
+
+    @Test fun `H3 usa el MCC del ServiceState si la celda no lo informa`() {
+        val report = analyzeMcc(active(mcc = "N/A"), emptyList(), service(sim = "21407", network = "20801")).heuristicReport
+        assertEquals(HeuristicStatus.FAILED, report.mccConsistency)
     }
 
     // ---------- H4: Multitud de MNCs (>4) ----------
@@ -239,6 +307,7 @@ class HeuristicsTest {
     // ---------- H3/H4 sin identidad de vecinas ----------
     // Caso real de campo (Pixel 9a): el módem solo da EARFCN/PCI/potencia de las vecinas. Sin
     // MCC/MNC que comparar, H3 y H4 deben abstenerse, no darse por superadas.
+    // 3.0.0-beta5 — H3 ya no depende de las vecinas: aquí es N/A porque no hay ServiceState.
     @Test fun `H3 y H4 no se evaluan si ninguna vecina trae MCC ni MNC`() {
         val n = listOf(neighbor(-90, mcc = "N/A", mnc = "N/A"), neighbor(-95, mcc = "N/A", mnc = "N/A"))
         val report = analyze(active(), neighbors = n)

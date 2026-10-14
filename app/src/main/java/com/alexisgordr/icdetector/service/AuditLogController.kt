@@ -71,7 +71,11 @@ internal class AuditLogController(
                 HeuristicStatus.FAILED -> "FAILED"
                 HeuristicStatus.NOT_EVALUATED -> "N/A"
             }
-            log("[HEUR]", "$rule: $status")
+            // 3.0.0-beta5 — H3 dice por qué se abstuvo (roaming, frontera, falta de datos).
+            val note = if (result == HeuristicStatus.NOT_EVALUATED && rule.startsWith("3. ")) {
+                report.mccAbstention?.let { " (${it.text})" }.orEmpty()
+            } else ""
+            log("[HEUR]", "$rule: $status$note")
         }
         logTimingAdvance(cell)
 

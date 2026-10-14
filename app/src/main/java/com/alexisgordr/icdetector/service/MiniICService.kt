@@ -1575,7 +1575,10 @@ class MiniICService : Service() {
                             // 3.0 — La velocidad de H10 solo vale con un fix reciente; sin marca monotónica, vieja.
                             // Edad en la ENTREGA, no tras esperar al mutex del análisis.
                             locationFixAgeMs = currentLocation?.elapsedRealtimeNanos?.takeIf { it > 0 }
-                                ?.let { deliveredAtElapsedMs - it / 1_000_000L }
+                                ?.let { deliveredAtElapsedMs - it / 1_000_000L },
+                            // 3.0.0-beta5 — H3 (servidora frente a SIM) usa el ServiceState de ESTA
+                            // lectura, el mismo que se guarda en la fila.
+                            serviceState = observationContext.service
                         ).copy(distanceToTowerMeters = towerDistance)
                         com.alexisgordr.icdetector.core.LocalCellTrustEngine.apply(
                             analyzed,

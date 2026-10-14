@@ -26,6 +26,17 @@ class TerminalLocalizationCoverageTest {
         "[sub-umbral] Calidad de dato: EARFCN 4G fuera de la tabla 3GPP",
         "[sub-umbral] Calidad de dato: NR-ARFCN 5G fuera de la tabla 3GPP",
         "Calidad de dato: el módem informa un canal fuera de la tabla 3GPP. No es evidencia de ataque y no resta puntos.",
+        // 3.0.0-beta5 — H3: servidora frente a SIM (motivo, abstenciones, diagnóstico).
+        "Inconsistencia MCC: servidora 208 ≠ SIM 214, sin roaming ni vecinas con ese MCC",
+        "[sub-umbral] Inconsistencia MCC",
+        "[HEUR] 3. Consistencia MCC: N/A (sin ServiceState, no se sabe si hay roaming)",
+        "[HEUR] 3. Consistencia MCC: N/A (sin MCC de la SIM)",
+        "[HEUR] 3. Consistencia MCC: N/A (sin MCC de la servidora)",
+        "[HEUR] 3. Consistencia MCC: N/A (MCC distinto del de la SIM con roaming declarado)",
+        "[HEUR] 3. Consistencia MCC: N/A (PLMN extranjero con vecinas coherentes (frontera))",
+        "El MCC de la servidora coincide con el de la SIM.",
+        "El MCC de la servidora no es el de la SIM, sin roaming y sin vecinas con ese MCC.",
+        "N/A: faltan datos de la SIM o de la servidora.",
         // 3.0 — H16: posición respecto a las zonas aprendidas.
         "N/A: falta la posición del fix de la celda nueva.",
         "N/A: la posición está fuera de las zonas aprendidas de ambas celdas; entre dos celdas grandes ese salto puede ser normal.",

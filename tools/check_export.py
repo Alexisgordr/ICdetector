@@ -270,11 +270,30 @@ def evaluation_coverage(rows):
         if not raw:
             continue
         known += 1
-        skipped = set() if raw == "NONE" else {x.strip() for x in raw.split(";") if x.strip()}
+        # 3.0.0-beta5 — H3 lleva el motivo de su abstención: `H3(roaming)` sigue siendo H3.
+        skipped = set() if raw == "NONE" else {x.strip().split("(")[0] for x in raw.split(";") if x.strip()}
         for h in HEURISTIC_IDS:
             if h not in skipped:
                 evaluated[h] += 1
     return {h: (evaluated[h], known) for h in HEURISTIC_IDS}
+
+
+def h3_abstentions(rows):
+    """
+    3.0.0-beta5 — Motivos por los que H3 se abstuvo (`H3(roaming)`, `H3(frontera)`, ...), con su
+    número de filas. Las filas anteriores a beta5 escriben `H3` a secas: cuentan como "sin motivo".
+    """
+    counts = {}
+    for r in rows:
+        raw = (r.get("NotEvaluatedHeuristics") or "").strip()
+        for x in raw.split(";"):
+            x = x.strip()
+            if x == "H3":
+                counts["sin motivo"] = counts.get("sin motivo", 0) + 1
+            elif x.startswith("H3(") and x.endswith(")"):
+                reason = x[3:-1]
+                counts[reason] = counts.get(reason, 0) + 1
+    return counts
 
 
 def gps_accuracy_issues(rows):
@@ -704,6 +723,10 @@ def main(path):
             for h in HEURISTIC_IDS:
                 ev, total = coverage[h]
                 print(f"    {h:>3}: evaluada en {100 * ev / total:5.1f} % ({ev}/{total})")
+            abstentions = h3_abstentions(rows)
+            if abstentions:
+                detail = ", ".join(f"{k}={v}" for k, v in sorted(abstentions.items()))
+                print(f"    H3 en N/A por motivo: {detail}")
         accuracies = [fnum(r, "GpsAccuracyM") for r in rows if fnum(r, "GpsAccuracyM") is not None]
         if accuracies:
             vague = sum(1 for a in accuracies if a > VAGUE_ACCURACY_M)

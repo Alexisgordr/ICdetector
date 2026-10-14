@@ -4,6 +4,8 @@ import com.alexisgordr.icdetector.models.CellData
 import com.alexisgordr.icdetector.models.CellRfStability
 import com.alexisgordr.icdetector.models.HeuristicStatus
 import com.alexisgordr.icdetector.models.RadioTech
+import com.alexisgordr.icdetector.models.ServiceRegistrationState
+import com.alexisgordr.icdetector.models.ServiceStateSnapshot
 import com.alexisgordr.icdetector.models.TimingAdvanceUnit
 import com.alexisgordr.icdetector.models.VerificationStatus
 import com.alexisgordr.icdetector.models.identityKey
@@ -50,7 +52,12 @@ class ScenarioTest {
         val previousDbm: Int? = null,
         val recentDbm: List<Int> = emptyList(),
         /** Velocidad GPS que decide H10; null = sin velocidad (H10 en N/A si hay ráfaga). */
-        val speedMps: Float? = null
+        val speedMps: Float? = null,
+        /**
+         * 3.0.0-beta5 — ServiceState del ciclo, para H3 (servidora frente a SIM). Por defecto una
+         * SIM española (214-07) registrada en su red, sin roaming, como en los datos de campo.
+         */
+        val service: ServiceStateSnapshot? = homeService()
     )
 
     private data class Outcome(
@@ -87,7 +94,8 @@ class ScenarioTest {
                 previousDbm = c.previousDbm,
                 recentRegisteredDbm = c.recentDbm,
                 pingPongSpeedMps = c.speedMps,
-                nowMs = nowMs
+                nowMs = nowMs,
+                serviceState = c.service
             )
             val key = PingPongRule.confirmationKey(
                 analyzed.identityKey, changes, nowMs,
@@ -132,6 +140,14 @@ class ScenarioTest {
         isRegistered = false, networkType = "4G LTE", cellId = cid, mnc = mnc, tac = tac,
         dbm = dbm, mcc = mcc, arfcn = 1301, pci = 300
     )
+
+    /** Analiza solo el primer ciclo, con su ServiceState, fuera de la confirmación temporal. */
+    private fun analyzeFirst(cycles: List<Cycle>) = cycles.first().let { c ->
+        ThreatAnalyzer.analyzeThreats(
+            active = c.active, neighbors = c.neighbors, isHardwareCipheringActive = true,
+            cellChangeHistory = emptyList(), currentLocation = null, nowMs = START_MS, serviceState = c.service
+        )
+    }
 
     private fun expectNoAlarm(name: String, cycles: List<Cycle>): Int {
         val r = run(cycles)
@@ -277,15 +293,46 @@ class ScenarioTest {
     }
 
     /**
-     * 3.0.0-beta5 — Módem que informa un EARFCN fuera de la tabla 3GPP en una zona de frontera
-     * (una vecina extranjera: H3 sola, score 70). H8 es un aviso de calidad de dato: antes restaba
-     * 15 (score 55) y este escenario confirmaba 3 alarmas; ahora no alarma.
+     * 3.0.0-beta5 — Módem que informa un EARFCN fuera de la tabla 3GPP en una zona de frontera.
+     * H8 es un aviso de calidad de dato y no resta puntos. Con la H3 de vecinas (antes de beta5)
+     * este escenario quedaba en 55 y confirmaba 3 alarmas; con H8 sin puntos, en 70 y sin alarma;
+     * con H3 frente a la SIM, la vecina extranjera ya no cuenta: score 100.
      */
     private fun invalidChannelAtBorder() = (1..5).map {
         Cycle(
             // H8 solo se evalúa con la tecnología declarada (LTE aquí).
             cell(dbm = -85, arfcn = 300_000).copy(radioTech = RadioTech.LTE),
             neighbors = listOf(neighbor(-95), neighbor(-99, cid = "3000", mnc = "01", mcc = "208", tac = "500"))
+        )
+    }
+
+    /**
+     * 3.0.0-beta5 — Frontera: servidora de tu país (214, la de la SIM) rodeada de vecinas francesas
+     * (208). La H3 antigua fallaba en cada ciclo por las vecinas; ahora pasa: no se consultan.
+     */
+    private fun borderForeignNeighbours() = (1..5).map {
+        Cycle(
+            cell(dbm = -88),
+            neighbors = listOf(
+                neighbor(-92, cid = "3001", mnc = "01", mcc = "208", tac = "500"),
+                neighbor(-96, cid = "3002", mnc = "10", mcc = "208", tac = "600"),
+                neighbor(-99)
+            )
+        )
+    }
+
+    /**
+     * 3.0.0-beta5 — PLMN extranjero aislado sin roaming: la servidora anuncia 208-01, la SIM es
+     * 214-07, Android no declara roaming y ninguna vecina es del 208 (son de la red de casa o no
+     * hay). Es el patrón que H3 busca ahora, y falla. Con vecinas de casa, H3 sola resta 30 y deja
+     * el score en 70, en la frontera del umbral (`score < 70`): no alarma sin otra señal (ver
+     * MANUAL, «H3 or H15 alone»). Sin ninguna vecina se suma H1 (celda aislada, −15): 55, alarma.
+     */
+    private fun foreignPlmnIsolated(withHomeNeighbours: Boolean) = (1..5).map {
+        Cycle(
+            cell(dbm = -80, mcc = "208", mnc = "01", verified = VerificationStatus.PENDING),
+            neighbors = if (withHomeNeighbours) listOf(neighbor(-95), neighbor(-99, cid = "2001")) else emptyList(),
+            service = homeService(network = "20801")
         )
     }
 
@@ -341,6 +388,11 @@ class ScenarioTest {
      * de su propio operador. 3.0 (fase 4) — H5 solo compara con vecinas del mismo operador: antes
      * este escenario tenía una sola vecina extranjera y alarmaba porque H3 y H5 contaban la misma
      * vecina dos veces. Ahora el TAC se contrasta con una vecina real de la red suplantada.
+     *
+     * 3.0.0-beta5 — CAMBIA DE RESULTADO. La servidora anuncia el MCC de la SIM (214), así que la
+     * nueva H3 pasa y la vecina extranjera ya no cuenta. Queda H5 sola (−20, score 80): no alarma.
+     * Sale del banco adversario (no entra en el benigno: no es benigno, solo ya no alarma); su
+     * test fija el resultado nuevo.
      */
     private fun inconsistentNetwork() = (1..5).map {
         Cycle(
@@ -381,12 +433,9 @@ class ScenarioTest {
     @Test fun `una sola vecina extranjera ya no cuenta dos veces (H3 sin H5)`() { expectNoAlarm("FOREIGN_NEIGHBOUR_ONLY", foreignNeighbourOnly()) }
     @Test fun `escenario benigno - canal invalido del modem en frontera (H8 solo calidad de dato)`() {
         expectNoAlarm("INVALID_CHANNEL_BORDER", invalidChannelAtBorder())
-        val first = ThreatAnalyzer.analyzeThreats(
-            active = invalidChannelAtBorder().first().active, neighbors = invalidChannelAtBorder().first().neighbors,
-            isHardwareCipheringActive = true, cellChangeHistory = emptyList(), currentLocation = null
-        )
+        val first = analyzeFirst(invalidChannelAtBorder())
         assertEquals("H8 se evalúa y falla", HeuristicStatus.FAILED, first.heuristicReport.arfcnSanity)
-        assertEquals("H3 sola: frontera, sin H8 en los puntos", 70, first.securityScore)
+        assertEquals("sin H8 en los puntos, y H3 pasa con la SIM", 100, first.securityScore)
     }
     @Test fun `escenario benigno - ping-pong de frontera en parado`() {
         expectNoAlarm("BORDER_PINGPONG", borderPingPong())
@@ -396,7 +445,47 @@ class ScenarioTest {
 
     @Test fun `escenario adversario - transmisor dominante`() { expectAlarm("DOMINANT_TX", dominantTransmitter()) }
     @Test fun `escenario adversario - clon con PCI alternante en la misma portadora`() { expectAlarm("CLONE_SAME_CARRIER", clonedIdentitySameCarrier()) }
-    @Test fun `escenario adversario - red incoherente (MCC y TAC)`() { expectAlarm("INCONSISTENT_NET", inconsistentNetwork()) }
+    @Test fun `beta5 - red incoherente (MCC de vecina y TAC) ya no alarma`() {
+        expectNoAlarm("INCONSISTENT_NET", inconsistentNetwork())
+        val first = analyzeFirst(inconsistentNetwork())
+        assertEquals(HeuristicStatus.PASSED, first.heuristicReport.mccConsistency)
+        assertEquals(HeuristicStatus.FAILED, first.heuristicReport.tacDeviation)
+        assertEquals(80, first.securityScore)
+    }
+
+    @Test fun `escenario benigno - frontera con vecinas extranjeras (H3 pasa)`() {
+        expectNoAlarm("BORDER_FOREIGN_NEIGHBOURS", borderForeignNeighbours())
+        borderForeignNeighbours().forEach { c ->
+            assertEquals(HeuristicStatus.PASSED, analyzeFirst(listOf(c)).heuristicReport.mccConsistency)
+        }
+    }
+
+    @Test fun `PLMN extranjero sin roaming con vecinas de casa - H3 falla, sola no alarma`() {
+        val cycles = foreignPlmnIsolated(withHomeNeighbours = true)
+        cycles.forEach { c ->
+            val analyzed = analyzeFirst(listOf(c))
+            assertEquals(HeuristicStatus.FAILED, analyzed.heuristicReport.mccConsistency)
+            assertEquals(
+                "Inconsistencia MCC: servidora 208 ≠ SIM 214, sin roaming ni vecinas con ese MCC",
+                analyzed.suspiciousReason
+            )
+            assertEquals(70, analyzed.securityScore)
+        }
+        assertEquals("H3 sola queda en 70, la frontera del umbral", 0, run(cycles).alarms)
+        // Mismo escenario con roaming declarado: N/A, sin puntos.
+        val roaming = cycles.map { it.copy(service = homeService(network = "20801", roaming = true)) }
+        assertEquals(HeuristicStatus.NOT_EVALUATED, analyzeFirst(roaming).heuristicReport.mccConsistency)
+        assertEquals(100, analyzeFirst(roaming).securityScore)
+    }
+
+    @Test fun `escenario adversario - PLMN extranjero aislado sin roaming`() {
+        expectAlarm("FOREIGN_PLMN_ISOLATED", foreignPlmnIsolated(withHomeNeighbours = false))
+        val first = analyzeFirst(foreignPlmnIsolated(withHomeNeighbours = false))
+        assertEquals(HeuristicStatus.FAILED, first.heuristicReport.mccConsistency)
+        assertEquals(HeuristicStatus.FAILED, first.heuristicReport.isolatedCell)
+        assertEquals(55, first.securityScore)
+    }
+
     @Test fun `escenario adversario - downgrade forzado con tiron de potencia`() { expectAlarm("FORCED_DOWNGRADE", forcedBandDowngrade()) }
     @Test fun `escenario adversario - emisor que alterna dos identidades`() { expectAlarm("PINGPONG_EMITTER", pingPongEmitter()) }
 
@@ -416,7 +505,8 @@ class ScenarioTest {
             "TA_SCRAPED" to scrapedTimingAdvance(),
             "INTERMITTENT" to intermittentSuspicion(),
             "BORDER_PINGPONG" to borderPingPong(),
-            "INVALID_CHANNEL_BORDER" to invalidChannelAtBorder()
+            "INVALID_CHANNEL_BORDER" to invalidChannelAtBorder(),
+            "BORDER_FOREIGN_NEIGHBOURS" to borderForeignNeighbours()
         )
         var totalCycles = 0
         var totalAlarms = 0
@@ -439,7 +529,7 @@ class ScenarioTest {
         val adversarial = listOf(
             "DOMINANT_TX" to dominantTransmitter(),
             "CLONE_SAME_CARRIER" to clonedIdentitySameCarrier(),
-            "INCONSISTENT_NET" to inconsistentNetwork(),
+            "FOREIGN_PLMN_ISOLATED" to foreignPlmnIsolated(withHomeNeighbours = false),
             "FORCED_DOWNGRADE" to forcedBandDowngrade(),
             "PINGPONG_EMITTER" to pingPongEmitter()
         )
@@ -449,6 +539,12 @@ class ScenarioTest {
     }
 
     private companion object {
+        /** SIM 214-07; [network] es el PLMN que anuncia la red. */
+        fun homeService(network: String = "21407", roaming: Boolean = false) = ServiceStateSnapshot(
+            timestampMs = START_MS, state = ServiceRegistrationState.IN_SERVICE,
+            roaming = roaming, operatorNumeric = network, simOperator = "21407"
+        )
+
         const val START_MS = 1_700_000_000_000L
         /** Un ciclo cada 3 s: tres cambios de celda caben en la ventana de 10 s de H10. */
         const val CYCLE_MS = 3_000L

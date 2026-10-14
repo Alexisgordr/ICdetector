@@ -41,6 +41,8 @@ enum class HeuristicCatalog(
 ) {
     ISOLATED_CELL("H1", "isolated", Family.RF_DOMINANCE, G.RF_DOMINANCE, null, { it.isolatedCell }),
     POWER_JUMP("H2", "powerJump", Family.RF_DOMINANCE, G.RF_DOMINANCE, null, { it.powerJump }),
+    // 3.0.0-beta5 — H3 compara el MCC de la servidora con el de la SIM (no con las vecinas), con
+    // roaming y frontera como abstención: ver MccConsistencyRule. Mismo peso y misma familia.
     MCC_CONSISTENCY("H3", "mccMismatch", Family.IDENTITY, G.INDEPENDENT, null, { it.mccConsistency }),
     MNC_COUNT("H4", "mncCount", Family.IDENTITY, G.WEAK_IDENTITY, null, { it.mncCount }),
     TAC_DEVIATION("H5", "tacDev", Family.IDENTITY, G.WEAK_IDENTITY, null, { it.tacDeviation }),
