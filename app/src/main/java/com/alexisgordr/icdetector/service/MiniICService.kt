@@ -594,7 +594,9 @@ class MiniICService : Service() {
             historyGeneration = { historyEpoch.current() },
             locationMode = { locationMode.storedValue },
             afterWrite = localProfile::onRowWritten,
-            onAfterWriteError = { e -> localProfile.recordFailure("evaluation", e) }
+            onAfterWriteError = { e -> localProfile.recordFailure("evaluation", e) },
+            // 3.0 — La fila cuenta como fallida (noteWriteResult avisa); el error queda en logcat.
+            onInsertError = { e -> Log.e("MiniIC", "Escritura del historial fallida: ${e.javaClass.simpleName}", e) }
         )
         securityAlerts = SecurityAlertController(
             tone = { toneGenerator },

@@ -51,7 +51,12 @@ internal class ObservationPersistenceController(
      */
     private val afterWrite: (ObservationRow, Long) -> Unit = { _, _ -> },
     /** 3.0 (F10) — Fallo absorbido de [afterWrite], para diagnóstico. Tampoco puede fallar hacia aquí. */
-    private val onAfterWriteError: (Throwable) -> Unit = {}
+    private val onAfterWriteError: (Throwable) -> Unit = {},
+    /**
+     * 3.0 — Excepción de [insert] (p. ej. SQLiteFullException o SQLiteCantOpenDatabaseException al
+     * abrir la base de datos). Se registra aquí y la fila cuenta como fallida (-1) para [onWrite].
+     */
+    private val onInsertError: (Throwable) -> Unit = {}
 ) {
     private var lastPeriodicWrite = 0L
 
@@ -72,9 +77,25 @@ internal class ObservationPersistenceController(
     private fun pending(cell: CellData, reason: String, context: ObservationContext) =
         Pending(ObservationRow(cell, reason, context), historyGeneration())
 
-    /** Escribe en orden; null si la fila pertenece a un historial que ya se borró. */
-    private fun write(pending: Pending): Long? =
-        if (pending.generation != historyGeneration()) null else insert(pending.row)
+    /**
+     * Escribe en orden; null si la fila pertenece a un historial que ya se borró.
+     *
+     * 3.0 — Una excepción al escribir cuenta como fila fallida (-1), igual que un insert rechazado.
+     * Antes, si fallaba la apertura de la base de datos (writableDatabase, fuera del insert), la
+     * excepción subía al manejador de corrutinas del servicio, [onWrite] no se llamaba y la salud
+     * de recolección no avisaba de nada. El error no se pierde: va a [onInsertError].
+     */
+    private fun write(pending: Pending): Long? {
+        if (pending.generation != historyGeneration()) return null
+        return try {
+            insert(pending.row)
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            runCatching { onInsertError(e) }
+            -1L
+        }
+    }
 
     fun recordHandover(cell: CellData, context: ObservationContext) {
         record(cell, context)
