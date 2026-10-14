@@ -11,6 +11,10 @@ GitHub pre-release of an earlier build was withdrawn.
 
 ### Audit fixes
 
+- **An `Error` inside the analysis cycle is a cycle failure too.** The cycle boundary caught only
+  `Exception`; a `NoClassDefFoundError` from a vendor API or a `StackOverflowError` went to the scope's
+  handler, the health was not marked and the screen kept the last result as current. It now catches
+  any `Throwable` except cancellation, reported by type only.
 - **Learned zones sample distinct days (dataset cut for H16 and the geometry view).** A cell's zone
   was its 40 most recent clean located samples, so it followed the last place the phone stayed long:
   one long afternoon elsewhere moved the centre there. Up to 2,000 rows of the last 30 days are now

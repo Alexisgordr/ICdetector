@@ -65,6 +65,23 @@ class AnalysisHealthTest {
         assertFalse(AnalysisHealth.FAILURE_LOG.contains("%"))
     }
 
+    @Test fun `an Error is a cycle failure too, reported by type`() {
+        listOf<Throwable>(NoClassDefFoundError("vendor/Api"), StackOverflowError(), OutOfMemoryError()).forEach { error ->
+            var reported: String? = null
+            runBlocking { AnalysisHealth.guard(onFailure = { reported = it }) { throw error } }
+            assertEquals(error.javaClass.simpleName, reported)
+        }
+        val h = Harness()
+        val ticket = h.generation.deliver("A")
+        runBlocking {
+            AnalysisHealth.guard(onFailure = { type ->
+                if (h.health.onCycleFailed(ticket.generation, h.generation.mayPublish(ticket)) == Change.BECAME_UNAVAILABLE) h.logs += "FAIL:$type"
+            }) { throw NoClassDefFoundError("vendor/Api") }
+        }
+        assertTrue(h.health.state.unavailable)
+        assertEquals(listOf("FAIL:NoClassDefFoundError"), h.logs)
+    }
+
     @Test fun `cancellation is rethrown and never reported as a failure`() {
         var reported = false
         try {

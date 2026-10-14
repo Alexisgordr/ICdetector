@@ -64,8 +64,10 @@ class AnalysisHealth {
 
         /**
          * El límite del ciclo: ejecuta [block] UNA vez, sin reintentos. Una cancelación se relanza y
-         * no cuenta como fallo; cualquier otra excepción va a [onFailure] (solo su tipo, nunca el
-         * mensaje, que puede llevar identificadores). Lo que [block] ya hizo antes del fallo se
+         * no cuenta como fallo; cualquier otro Throwable va a [onFailure] (solo su tipo, nunca el
+         * mensaje, que puede llevar identificadores). 3.0 — También los Error (NoClassDefFoundError
+         * de una API de fabricante, StackOverflowError, OutOfMemoryError): antes salían al manejador
+         * del scope y la pantalla seguía enseñando el último resultado como actual. Lo que [block] ya hizo antes del fallo se
          * queda hecho: no se repite ni se deshace. `inline` para que el ciclo pueda suspender y
          * salir con `return@...` desde dentro, como antes.
          */
@@ -74,7 +76,7 @@ class AnalysisHealth {
                 block()
             } catch (e: CancellationException) {
                 throw e
-            } catch (e: Exception) {
+            } catch (e: Throwable) {
                 onFailure(e.javaClass.simpleName)
             }
         }
