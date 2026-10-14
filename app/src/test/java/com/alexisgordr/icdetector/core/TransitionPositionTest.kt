@@ -121,4 +121,10 @@ class TransitionPositionTest {
             assertTrue(reason, en != "N/A: $reason" && !en.contains("posición") && !en.contains("zona"))
         }
     }
+
+    @Test fun `the manual explains H16 coverage in the saving location modes`() {
+        val manual = listOf(java.io.File("MANUAL.md"), java.io.File("../MANUAL.md")).first { it.exists() }.readText()
+        assertTrue(manual.contains("**H16 coverage:** H16 needs a fix under 10 s old at *both* ends of a handover."))
+        assertTrue(manual.contains("only Continuous gives H16 regular coverage"))
+    }
 }

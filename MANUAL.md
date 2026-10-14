@@ -153,6 +153,12 @@ app does not request the privileged battery-optimization exemption itself.
   - **Adaptive**: retains continuous GPS with the screen on while reception is usable. With the
     screen off, it requests fixes on relevant events, at most once a minute.
 
+  **H16 coverage:** H16 needs a fix under 10 s old at *both* ends of a handover. In Smart and in
+  Adaptive with the screen off, the GPS window opens when the handover is detected, too late for the
+  observation before it, so H16 will be `N/A` (no recent fix for the previous cell) most of the time.
+  It fails closed and matches the battery policy; only Continuous gives H16 regular coverage. Keep it
+  in mind when reading the not-evaluated column (`NotEvaluatedHeuristics`).
+
   **Poor reception:** Smart and Adaptive pause repeated acquisition after three failed probes
   (or Smart windows without any new live fix). Either saving mode also stops a continuous stream
   after three minutes without a new usable GPS fix; further handovers cannot extend that search.
