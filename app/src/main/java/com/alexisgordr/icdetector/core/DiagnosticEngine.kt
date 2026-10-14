@@ -43,16 +43,19 @@ object DiagnosticEngine {
             HeuristicStatus.FAILED -> "La condición anómala de esta regla está presente en el ciclo actual."
             HeuristicStatus.NOT_EVALUATED -> unavailable
         }
+        // 3.0.0-beta5 — En una celda CSG, H1/H2/H5/H7 no se evalúan por diseño: ese motivo manda.
+        fun local(unavailable: String) = if (r.csgCell) CSG_NA_EXPLANATION else unavailable
         return listOf(
             HeuristicDiagnostic(1, "Celda aislada", r.isolatedCell,
                 explanation(r.isolatedCell, when {
+                    r.csgCell -> CSG_NA_EXPLANATION
                     i.wifiActive -> WIFI_NA
                     i.neighborCount == 0 && i.isolationProgress != null ->
                         "N/A: sin vecinas, pendiente de confirmar (${i.isolationProgress.first}/${i.isolationProgress.second} entregas)."
                     else -> "N/A: sin lectura celular válida."
                 })),
             HeuristicDiagnostic(2, "Estabilidad de potencia", r.powerJump,
-                explanation(r.powerJump, if (i.wifiActive) WIFI_NA else "N/A: hacen falta celdas vecinas de la misma tecnología con potencia para comparar.")),
+                explanation(r.powerJump, local(if (i.wifiActive) WIFI_NA else "N/A: hacen falta celdas vecinas de la misma tecnología con potencia para comparar."))),
             // 3.0.0-beta5 — H3 compara la servidora con la SIM (MccConsistencyRule).
             HeuristicDiagnostic(3, "Consistencia MCC", r.mccConsistency, when (r.mccConsistency) {
                 HeuristicStatus.PASSED -> H3_PASSED_EXPLANATION
@@ -62,11 +65,11 @@ object DiagnosticEngine {
             HeuristicDiagnostic(4, "Límite MNC", r.mncCount,
                 explanation(r.mncCount, "N/A: faltan MNC válidos de celdas vecinas.")),
             HeuristicDiagnostic(5, "Validación regional TAC", r.tacDeviation,
-                explanation(r.tacDeviation, "N/A: no hay TAC válidos de vecinas de la misma tecnología y el mismo operador para contrastar.")),
+                explanation(r.tacDeviation, local("N/A: no hay TAC válidos de vecinas de la misma tecnología y el mismo operador para contrastar."))),
             HeuristicDiagnostic(6, "Proximidad por Timing Advance", r.taDistance,
                 explanation(r.taDistance, "N/A: el módem no entrega un Timing Advance convertible a metros.")),
             HeuristicDiagnostic(7, "Espectro de vecinos", r.ghostNeighbors,
-                explanation(r.ghostNeighbors, if (i.wifiActive) WIFI_NA else "N/A: no hay celdas vecinas de la misma tecnología para contrastar el espectro.")),
+                explanation(r.ghostNeighbors, local(if (i.wifiActive) WIFI_NA else "N/A: no hay celdas vecinas de la misma tecnología para contrastar el espectro."))),
             // 3.0.0-beta5 — Aviso de calidad de dato: su fallo no es la condición de un ataque.
             HeuristicDiagnostic(8, "Calidad de dato ARFCN", r.arfcnSanity,
                 if (r.arfcnSanity == HeuristicStatus.FAILED) H8_FAILED_EXPLANATION
@@ -108,6 +111,8 @@ object DiagnosticEngine {
     private const val WIFI_NA = "N/A: Wi-Fi activo; se evita atribuir el contexto de red al enlace celular."
 
     /** 3.0.0-beta5 — H8 es un aviso de calidad de dato (ver ThreatAnalyzer, regla 8). */
+    /** 3.0.0-beta5 — H1, H2, H5 y H7 en una celda CSG. */
+    const val CSG_NA_EXPLANATION = "N/A: celda CSG (femtocelda): las reglas de dominancia e identidad local no aplican a una celda diseñada para ser aislada."
     /** 3.0.0-beta5 — H9 está reservada: nunca se evalúa. */
     const val H9_NA_EXPLANATION = "N/A: Android no expone el estado de cifrado a aplicaciones sin privilegios; regla reservada."
     /** 3.0.0-beta5 — Explicaciones de H3 (servidora frente a SIM). */

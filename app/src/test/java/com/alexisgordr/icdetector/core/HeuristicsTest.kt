@@ -437,6 +437,49 @@ class HeuristicsTest {
         assertTrue(analyze(active(networkType = "4G LTE", arfcn = 1500)).arfcnSanityPassed)
     }
 
+    // ---------- Celda CSG (3.0.0-beta5): H1, H2, H5 y H7 no se evalúan ----------
+    private fun femto(csg: Boolean) = active(dbm = -55, tac = "999").copy(
+        csg = com.alexisgordr.icdetector.models.CsgInfo(indicator = csg, identity = 7, homeNodebName = "Casa")
+    )
+
+    @Test fun `una celda CSG deja H1, H2, H5 y H7 en N-A con su motivo`() {
+        val weakMacro = listOf(neighbor(-112, tac = "100"), neighbor(-115, tac = "100"))
+        val cell = ThreatAnalyzer.analyzeThreats(
+            active = femto(csg = true), neighbors = weakMacro,
+            cellChangeHistory = emptyList(), currentLocation = null, nowMs = NOW
+        )
+        val r = cell.heuristicReport
+        listOf(r.isolatedCell, r.powerJump, r.tacDeviation, r.ghostNeighbors).forEach {
+            assertEquals(HeuristicStatus.NOT_EVALUATED, it)
+        }
+        val ids = r.notEvaluatedIds().split(";")
+        assertTrue(ids.containsAll(listOf("H1(csg)", "H2(csg)", "H5(csg)", "H7(csg)")))
+        assertNull(cell.suspiciousReason)
+        assertEquals(100, cell.securityScore)
+        // Las demás reglas siguen igual: H4 (MNC) se evalúa con las mismas vecinas.
+        assertEquals(HeuristicStatus.PASSED, r.mncCount)
+    }
+
+    @Test fun `la misma celda sin indicador CSG hace fallar H2, H5 y H7`() {
+        val weakMacro = listOf(neighbor(-112, tac = "100"), neighbor(-115, tac = "100"))
+        val r = ThreatAnalyzer.analyzeThreats(
+            active = femto(csg = false), neighbors = weakMacro,
+            cellChangeHistory = emptyList(), currentLocation = null, nowMs = NOW
+        ).heuristicReport
+        listOf(r.powerJump, r.tacDeviation, r.ghostNeighbors).forEach { assertEquals(HeuristicStatus.FAILED, it) }
+        assertFalse(r.notEvaluatedIds().contains("(csg)"))
+    }
+
+    @Test fun `una CSG aislada no hace fallar H1`() {
+        fun h1(csg: Boolean) = ThreatAnalyzer.analyzeThreats(
+            active = femto(csg), neighbors = emptyList(),
+            cellChangeHistory = emptyList(), currentLocation = null, nowMs = NOW
+        ).heuristicReport
+        assertEquals(HeuristicStatus.FAILED, h1(false).isolatedCell)
+        assertEquals(HeuristicStatus.NOT_EVALUATED, h1(true).isolatedCell)
+        assertEquals("H1(csg)", h1(true).notEvaluatedIds().split(";").first())
+    }
+
     // ---------- H9: reservada (3.0.0-beta5) ----------
     @Test fun `H9 es siempre N-A y no resta puntos`() {
         val cell = ThreatAnalyzer.analyzeThreats(

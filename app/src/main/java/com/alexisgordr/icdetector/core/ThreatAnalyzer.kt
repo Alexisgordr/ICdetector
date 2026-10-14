@@ -209,7 +209,13 @@ object ThreatAnalyzer {
         var hLatencyCorrelation = true
         var hTransitionCoherence = true
 
-        var eIsolated = !isWifiActive
+        // 3.0.0-beta5 — Una celda CSG (femtocelda, indicador de grupo cerrado de abonados) está
+        // diseñada para ser aislada, potente y con su propio TAC: un único hecho benigno hacía
+        // fallar H1, H2, H5 y H7 a la vez. En una CSG esas cuatro no se evalúan (N/A, sin puntos,
+        // sin motivo, fuera del bayesiano); el resto de reglas no cambia.
+        val csgCell = active.csg?.indicator == true
+
+        var eIsolated = !isWifiActive && !csgCell
         var ePowerJump = false
         var eMcc = false
         var eMncCount = false
@@ -231,7 +237,7 @@ object ThreatAnalyzer {
         // confirmado 3 entregas seguidas, la regla todavía no sabe: N/A, no "superada".
         // Sin vecinas y con señal débil sí se evalúa: los datos están y la condición (celda
         // FUERTE y sola) no se da; una celda débil y sola es normal en zona rural.
-        if (!isWifiActive && neighbors.isEmpty() && active.dbm >= -80) {
+        if (!isWifiActive && !csgCell && neighbors.isEmpty() && active.dbm >= -80) {
             if (isolatedCellConfirmed) {
                 hIsolated = false
                 reasons.add("Celda aislada")
@@ -251,8 +257,8 @@ object ThreatAnalyzer {
         // tecnología: eso solo hace la regla más conservadora.
         val samePowerScale = neighbors.filter { it.radioTech == active.radioTech }
         val nextStrongest = samePowerScale.maxOfOrNull { it.dbm }
-        ePowerJump = !isWifiActive && nextStrongest != null
-        if (!isWifiActive && nextStrongest != null && active.dbm >= -75 && (active.dbm - nextStrongest > 35)) {
+        ePowerJump = !isWifiActive && !csgCell && nextStrongest != null
+        if (ePowerJump && nextStrongest != null && active.dbm >= -75 && (active.dbm - nextStrongest > 35)) {
             hPowerJump = false
             reasons.add("Salto potencia (>35dB)")
             score -= 20
@@ -297,7 +303,7 @@ object ThreatAnalyzer {
         // bayesiano declara mccMismatch independiente), y en un país multioperador H5 fallaba sola
         // si las únicas vecinas con TAC eran de otro MNC.
         val sameTechTac = neighbors.filter { it.radioTech == active.radioTech && sameOperatorOrUnknown(active, it) }
-        if (sameTechTac.isNotEmpty() && active.tac != "N/A") {
+        if (!csgCell && sameTechTac.isNotEmpty() && active.tac != "N/A") {
             val neighborTacs = sameTechTac.map { it.tac }.filter { it != "N/A" }
             eTac = neighborTacs.isNotEmpty()
             if (neighborTacs.isNotEmpty() && !neighborTacs.contains(active.tac)) {
@@ -349,8 +355,8 @@ object ThreatAnalyzer {
         // falsos positivos en zonas rurales con macroceldas
         // 3.0 — Misma escala de potencia que la servidora (ver H2): un -110 de RSRP es una vecina
         // normal; un -110 de RSSI, una vecina muerta.
-        eGhost = !isWifiActive && samePowerScale.isNotEmpty()
-        if (!isWifiActive && active.dbm >= -65 && samePowerScale.isNotEmpty()
+        eGhost = !isWifiActive && !csgCell && samePowerScale.isNotEmpty()
+        if (eGhost && active.dbm >= -65
             && samePowerScale.all { it.dbm <= -110 }) {
             hGhost = false
             reasons.add("Vecinos fantasma")
@@ -720,6 +726,7 @@ object ThreatAnalyzer {
             powerJump = status(ePowerJump, hPowerJump),
             mccConsistency = status(eMcc, hMcc),
             mccAbstention = mccResult.abstention,
+            csgCell = csgCell,
             mncCount = status(eMncCount, hMncCount),
             tacDeviation = status(eTac, hTac),
             taDistance = status(eTa, hTa),

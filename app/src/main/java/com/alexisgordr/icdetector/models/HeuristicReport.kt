@@ -34,7 +34,9 @@ data class HeuristicReport(
     val rfStability: HeuristicStatus = HeuristicStatus.NOT_EVALUATED,
     val transitionCoherence: HeuristicStatus = HeuristicStatus.NOT_EVALUATED,
     /** 3.0.0-beta5 — Por qué H3 se abstuvo, si se abstuvo (ver [MccAbstention]). */
-    val mccAbstention: MccAbstention? = null
+    val mccAbstention: MccAbstention? = null,
+    /** 3.0.0-beta5 — La servidora es CSG (femtocelda): H1, H2, H5 y H7 no se evalúan. */
+    val csgCell: Boolean = false
 ) {
     // Compatibilidad: una regla que se abstiene no debe activar una alarma.
     val isolatedCellPassed get() = isolatedCell.passed
@@ -81,17 +83,37 @@ data class HeuristicReport(
      * [NONE_NOT_EVALUATED] si todas se evaluaron. Se guarda en cada fila del historial para poder
      * medir cuánto tiempo fue evaluable cada regla. Nunca coincide con una regla que falló.
      *
-     * 3.0.0-beta5 — H3 lleva además el motivo de la abstención, p. ej. `H1;H3(roaming);H6`, para
-     * que el CSV distinga roaming, frontera y falta de datos ([MccAbstention.storedId]).
+     * 3.0.0-beta5 — Una regla puede llevar entre paréntesis el motivo de su abstención, p. ej.
+     * `H1(csg);H3(roaming);H6`, para que el CSV distinga casos sin reconstruirlos: H3 lo toma de
+     * [MccAbstention], y H1/H2/H5/H7 llevan `(csg)` en una celda CSG ([CSG_RULES]).
      */
     fun notEvaluatedIds(): String =
         byId.filter { it.second == HeuristicStatus.NOT_EVALUATED }
-            .joinToString(";") { (id, _) -> if (id == "H3") mccAbstention?.storedId ?: id else id }
+            .joinToString(";") { (id, _) -> abstentionCode(id)?.let { "$id($it)" } ?: id }
             .ifEmpty { NONE_NOT_EVALUATED }
+
+    /** Código del motivo por el que [id] se abstuvo, o null si no se guarda ninguno. */
+    fun abstentionCode(id: String): String? = when {
+        id == "H3" -> mccAbstention?.code
+        csgCell && id in CSG_RULES -> CSG_ABSTENTION_CODE
+        else -> null
+    }
+
+    /** Texto del motivo para el terminal (castellano, como el resto), o null. */
+    fun abstentionText(id: String): String? = when {
+        id == "H3" -> mccAbstention?.text
+        csgCell && id in CSG_RULES -> CSG_ABSTENTION_TEXT
+        else -> null
+    }
 
     companion object {
         /** Valor explícito de "todas evaluadas", distinto del vacío de las filas anteriores a 3.0. */
         const val NONE_NOT_EVALUATED = "NONE"
+
+        /** 3.0.0-beta5 — Reglas que no se evalúan en una celda CSG. */
+        val CSG_RULES = setOf("H1", "H2", "H5", "H7")
+        const val CSG_ABSTENTION_CODE = "csg"
+        const val CSG_ABSTENTION_TEXT = "celda CSG (femtocelda)"
     }
 
     private val statuses: List<HeuristicStatus>

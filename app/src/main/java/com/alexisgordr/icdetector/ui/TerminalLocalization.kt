@@ -345,6 +345,9 @@ private val replacements = linkedMapOf(
     "el módem no entrega un Timing Advance convertible a metros" to "the modem does not provide Timing Advance convertible to meters",
     "no hay celdas vecinas disponibles para contrastar el espectro" to "no neighbor cells are available for spectrum comparison",
     "el módem no entrega ARFCN/EARFCN para esta tecnología" to "the modem does not provide ARFCN/EARFCN for this technology",
+    // 3.0.0-beta5 — Celda CSG: H1/H2/H5/H7 no se evalúan.
+    "celda CSG (femtocelda): las reglas de dominancia e identidad local no aplican a una celda diseñada para ser aislada" to "CSG cell (femtocell): the dominance and local-identity rules do not apply to a cell designed to be isolated",
+    "celda CSG (femtocelda)" to "CSG cell (femtocell)",
     // 3.0.0-beta5 — H9 reservada.
     "Android no expone el estado de cifrado a aplicaciones sin privilegios; regla reservada" to "Android does not expose ciphering status to unprivileged apps; reserved rule",
     "todavía no existe una secuencia temporal utilizable" to "no usable temporal sequence exists yet",

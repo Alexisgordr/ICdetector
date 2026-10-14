@@ -2,6 +2,7 @@ package com.alexisgordr.icdetector.core
 
 import com.alexisgordr.icdetector.models.CellData
 import com.alexisgordr.icdetector.models.CellRfStability
+import com.alexisgordr.icdetector.models.CsgInfo
 import com.alexisgordr.icdetector.models.HeuristicStatus
 import com.alexisgordr.icdetector.models.RadioTech
 import com.alexisgordr.icdetector.models.ServiceRegistrationState
@@ -333,6 +334,28 @@ class ScenarioTest {
         )
     }
 
+    /**
+     * 3.0.0-beta5 — Femtocelda CSG (grupo cerrado de abonados) en casa: muy fuerte (−55 dBm), con su
+     * propio TAC y la macro de fuera muy débil. Hasta beta4 este único hecho benigno hacía fallar
+     * H2 (−20), H5 (−20) y H7 (−25) a la vez: score 35 y alarma confirmada. H1 no entra aquí (hay
+     * vecinas); [femtocellAlone] la cubre. Con el indicador CSG las cuatro quedan N/A.
+     */
+    private fun femtocell(csg: Boolean) = (1..5).map {
+        Cycle(
+            cell(cid = "777777", dbm = -55, tac = "99999", verified = VerificationStatus.PENDING)
+                .copy(csg = CsgInfo(indicator = csg, identity = 7, homeNodebName = "Casa")),
+            neighbors = listOf(neighbor(-112), neighbor(-115, cid = "2001"))
+        )
+    }
+
+    /** La misma femtocelda sin ninguna vecina visible: con CSG, H1 no se evalúa. */
+    private fun femtocellAlone(csg: Boolean) = (1..5).map {
+        Cycle(
+            cell(cid = "777777", dbm = -55, tac = "99999", verified = VerificationStatus.PENDING)
+                .copy(csg = CsgInfo(indicator = csg, identity = 7, homeNodebName = "Casa"))
+        )
+    }
+
     // ------------------------------------------------------------------ escenarios adversarios
 
     /**
@@ -483,6 +506,26 @@ class ScenarioTest {
         assertEquals(55, first.securityScore)
     }
 
+    @Test fun `escenario benigno - femtocelda CSG (H1, H2, H5 y H7 en N-A)`() {
+        expectNoAlarm("FEMTOCELL_CSG", femtocell(csg = true))
+        val r = analyzeFirst(femtocell(csg = true)).heuristicReport
+        listOf(r.powerJump, r.tacDeviation, r.ghostNeighbors).forEach { assertEquals(HeuristicStatus.NOT_EVALUATED, it) }
+        assertTrue(r.notEvaluatedIds().split(";").containsAll(listOf("H1(csg)", "H2(csg)", "H5(csg)", "H7(csg)")))
+        assertEquals(100, analyzeFirst(femtocell(csg = true)).securityScore)
+        val alone = analyzeFirst(femtocellAlone(csg = true))
+        assertEquals(HeuristicStatus.NOT_EVALUATED, alone.heuristicReport.isolatedCell)
+        assertEquals(0, run(femtocellAlone(csg = true)).alarms)
+    }
+
+    @Test fun `la misma femtocelda sin indicador CSG alarma - el cambio es el indicador`() {
+        expectAlarm("FEMTOCELL_NO_CSG", femtocell(csg = false))
+        val first = analyzeFirst(femtocell(csg = false))
+        listOf(first.heuristicReport.powerJump, first.heuristicReport.tacDeviation, first.heuristicReport.ghostNeighbors)
+            .forEach { assertEquals(HeuristicStatus.FAILED, it) }
+        assertEquals(35, first.securityScore)
+        assertEquals(HeuristicStatus.FAILED, analyzeFirst(femtocellAlone(csg = false)).heuristicReport.isolatedCell)
+    }
+
     @Test fun `escenario adversario - downgrade forzado con tiron de potencia`() { expectAlarm("FORCED_DOWNGRADE", forcedBandDowngrade()) }
     @Test fun `escenario adversario - emisor que alterna dos identidades`() { expectAlarm("PINGPONG_EMITTER", pingPongEmitter()) }
 
@@ -503,7 +546,8 @@ class ScenarioTest {
             "INTERMITTENT" to intermittentSuspicion(),
             "BORDER_PINGPONG" to borderPingPong(),
             "INVALID_CHANNEL_BORDER" to invalidChannelAtBorder(),
-            "BORDER_FOREIGN_NEIGHBOURS" to borderForeignNeighbours()
+            "BORDER_FOREIGN_NEIGHBOURS" to borderForeignNeighbours(),
+            "FEMTOCELL_CSG" to femtocell(csg = true)
         )
         var totalCycles = 0
         var totalAlarms = 0

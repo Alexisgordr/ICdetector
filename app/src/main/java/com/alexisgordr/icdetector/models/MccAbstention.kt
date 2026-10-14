@@ -19,7 +19,4 @@ enum class MccAbstention(val code: String, val text: String) {
     ROAMING("roaming", "MCC distinto del de la SIM con roaming declarado"),
     /** MCC distinto del de la SIM sin roaming, pero hay vecinas con ese mismo MCC. */
     BORDER("frontera", "PLMN extranjero con vecinas coherentes (frontera)");
-
-    /** Lo que se guarda en `not_evaluated_heuristics` para H3, p. ej. `H3(frontera)`. */
-    val storedId: String get() = "H3($code)"
 }

@@ -26,6 +26,10 @@ class TerminalLocalizationCoverageTest {
         "[sub-umbral] Calidad de dato: EARFCN 4G fuera de la tabla 3GPP",
         "[sub-umbral] Calidad de dato: NR-ARFCN 5G fuera de la tabla 3GPP",
         "Calidad de dato: el módem informa un canal fuera de la tabla 3GPP. No es evidencia de ataque y no resta puntos.",
+        // 3.0.0-beta5 — Celda CSG.
+        "N/A: celda CSG (femtocelda): las reglas de dominancia e identidad local no aplican a una celda diseñada para ser aislada.",
+        "[HEUR] 1. Celda Aislada: N/A (celda CSG (femtocelda))",
+        "[HEUR] 7. Espectro Fantasma: N/A (celda CSG (femtocelda))",
         // 3.0.0-beta5 — H9 reservada.
         "N/A: Android no expone el estado de cifrado a aplicaciones sin privilegios; regla reservada.",
         // 3.0.0-beta5 — H3: servidora frente a SIM (motivo, abstenciones, diagnóstico).

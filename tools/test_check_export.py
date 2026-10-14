@@ -6,7 +6,7 @@ import sys
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from check_export import (
-    LTE_EARFCN_RANGES, bands_outside_table, calendar_period_stats, dataset_cut_summary, evaluation_coverage, gps_accuracy_issues, h3_abstentions,
+    LTE_EARFCN_RANGES, bands_outside_table, calendar_period_stats, dataset_cut_summary, evaluation_coverage, gps_accuracy_issues, abstention_reasons,
     instant_issues, location_mode_summary, profile_summary, profile_row_issue, EXPECTED_COLUMNS_V30_PROFILE, PROFILE_ABSTAIN_REASONS, radio_context_summary, row_instant, version_key,
     ta_consistency_issues, ta_unit_diagnostic
 )
@@ -135,15 +135,21 @@ class EvaluationCoverageTest(unittest.TestCase):
         self.assertEqual((1, 3), coverage["H9"])
         self.assertEqual((3, 3), coverage["H5"])
 
-    def test_h3_with_its_abstention_reason_is_still_h3(self):
+    def test_a_rule_with_its_abstention_reason_is_still_that_rule(self):
         rows = [
             {"NotEvaluatedHeuristics": "H1;H3(roaming)"},
             {"NotEvaluatedHeuristics": "H3(frontera);H9"},
-            {"NotEvaluatedHeuristics": "H3"},          # anterior a beta5: sin motivo
+            {"NotEvaluatedHeuristics": "H1(csg);H2(csg);H3;H5(csg);H7(csg)"},  # H3 sin motivo
             {"NotEvaluatedHeuristics": "NONE"},
         ]
-        self.assertEqual((1, 4), evaluation_coverage(rows)["H3"])
-        self.assertEqual({"roaming": 1, "frontera": 1, "sin motivo": 1}, h3_abstentions(rows))
+        coverage = evaluation_coverage(rows)
+        self.assertEqual((1, 4), coverage["H3"])
+        self.assertEqual((2, 4), coverage["H1"])
+        self.assertEqual((3, 4), coverage["H5"])
+        self.assertEqual({
+            "H1": {"csg": 1}, "H2": {"csg": 1}, "H3": {"roaming": 1, "frontera": 1},
+            "H5": {"csg": 1}, "H7": {"csg": 1},
+        }, abstention_reasons(rows))
 
     def test_no_rows_with_the_column_means_unknown_not_evaluated(self):
         coverage = evaluation_coverage([{"NotEvaluatedHeuristics": ""}, {}])
