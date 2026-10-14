@@ -11,6 +11,13 @@ GitHub pre-release of an earlier build was withdrawn.
 
 ### Audit fixes
 
+- **H15 keeps its evidence when another rule fails in the same row (dataset cut for H15).** H15's
+  history took clean rows or rows whose ONLY reason was H15. A clone that also dominated in power
+  wrote "power jump | RF identity unstable" rows, which were left out: the clone's PCI stopped being
+  counted exactly when the attack was most evident, and H15 could stop failing while H2 kept failing.
+  A row now qualifies when it is clean or carries the H15 reason anywhere. H15 only reads PCI, channel
+  and time, validated per technology, so other reasons do not change what it reads. The "only this
+  reason" rule stays where it matters, the Local Cell Trust quarantine.
 - **Stable-Site learns only from clean cycles.** Every minute the serving cell, the neighbours and the
   RF fingerprints of neighbours without a Cell ID were added to the site context from ANY cycle,
   confirmed alarms included: a transmitter insisting for three days at home became a known cell of

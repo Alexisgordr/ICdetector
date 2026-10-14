@@ -62,20 +62,19 @@ object StoredReasons {
     /** Lo mismo en Kotlin para una fila ya leída (misma semántica que [cleanSql]). */
     fun isClean(reason: String?): Boolean = reason == null || reason.isBlank() || reason == CLEAN
 
-    /** Patrones LIKE de una fila cuyo único motivo es H15: directo, sub-umbral o en confirmación. */
-    val H15_ONLY_LIKE: Array<String> = arrayOf(
-        "$H15_PREFIX%",
-        "$SUBTHRESHOLD_PREFIX $H15_PREFIX%",
-        "$CONFIRMING_LIKE $H15_PREFIX%"
-    )
+    /** Patrón LIKE de una fila que lleva el motivo de H15 en cualquier posición. */
+    const val H15_ANY_LIKE = "%$H15_PREFIX%"
 
     /**
-     * SQL de las filas válidas para el historial de H15: limpias con score ≥ ?, o con H15 como ÚNICO
-     * motivo (ninguna otra regla, por eso se excluye el separador). Parámetros: el score mínimo y
-     * después los tres [H15_ONLY_LIKE].
+     * SQL de las filas válidas para el historial de H15: limpias con score ≥ ?, o que llevan el
+     * motivo de H15, solo o junto a otros. Parámetros: el score mínimo y después [H15_ANY_LIKE].
+     *
+     * 3.0 — Antes solo valían las filas con H15 como ÚNICO motivo: un clon que además dominara en
+     * potencia (H2) dejaba filas «Salto potencia | Identidad RF inestable» fuera, y su PCI dejaba de
+     * contarse justo cuando el ataque era más evidente. H15 solo lee PCI, ARFCN y tiempo (validados
+     * con RadioChannels), así que otros motivos de la fila no contaminan lo que lee. El «solo» se
+     * mantiene donde sí importa: la cuarentena de confianza local.
      */
     fun h15EligibleSql(scoreColumn: String, reasonColumn: String): String =
-        "(($scoreColumn >= ? AND ${cleanSql(reasonColumn)}) " +
-            "OR (($reasonColumn LIKE ? OR $reasonColumn LIKE ? OR $reasonColumn LIKE ?) " +
-            "AND $reasonColumn NOT LIKE '%$SEPARATOR%'))"
+        "(($scoreColumn >= ? AND ${cleanSql(reasonColumn)}) OR $reasonColumn LIKE ?)"
 }

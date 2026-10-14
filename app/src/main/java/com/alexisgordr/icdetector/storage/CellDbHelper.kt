@@ -2973,15 +2973,16 @@ class CellDbHelper(
         val recentWindow = now - (48L * 60 * 60 * 1000)   // últimas 48 h
 
         // H15 necesita conservar su propio baseline después de disparar. Además de filas limpias,
-        // admite filas cuyo único fallo sea H15; otras heurísticas nunca contaminan esta historia.
-        val h15Patterns = StoredReasons.H15_ONLY_LIKE
+        // admite las que llevan el motivo de H15, solo o junto a otros (ver h15EligibleSql): H15
+        // solo lee PCI, ARFCN y tiempo, que otros motivos de la fila no alteran.
+        val h15Pattern = StoredReasons.H15_ANY_LIKE
         val eligibleSql = StoredReasons.h15EligibleSql(COLUMN_SCORE, COLUMN_FAILED_H)
         val mature = db.rawQuery(
             "SELECT COUNT(*),COUNT(DISTINCT substr($COLUMN_TIMESTAMP,1,10)) FROM $TABLE_HISTORY " +
                 "WHERE $COLUMN_CID=? AND $COLUMN_MNC=? AND $COLUMN_TAC=? AND $COLUMN_MCC=? " +
                 "AND $COLUMN_RADIO=? AND ${observedSince()} AND $eligibleSql",
             arrayOf(cellId, mnc, tac, mcc, radio.name, *since(thirtyDaysAgo),
-                TRUSTED_BASELINE_MIN_SCORE.toString(), *h15Patterns)
+                TRUSTED_BASELINE_MIN_SCORE.toString(), h15Pattern)
         ).use { it.moveToFirst() && it.getInt(0) >= TRUSTED_BASELINE_MIN_SAMPLES &&
             it.getInt(1) >= TRUSTED_BASELINE_MIN_DAYS }
         if (!mature) {
@@ -3004,7 +3005,7 @@ class CellDbHelper(
         val cursor = db.rawQuery(
             query,
             arrayOf(cellId, mnc, tac, mcc, radio.name,
-                TRUSTED_BASELINE_MIN_SCORE.toString(), *h15Patterns, *since(thirtyDaysAgo))
+                TRUSTED_BASELINE_MIN_SCORE.toString(), h15Pattern, *since(thirtyDaysAgo))
         )
         return cursor.use {
             RfStabilityAccumulator.readComplete(radio, recentWindow) { acc ->

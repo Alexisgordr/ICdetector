@@ -983,7 +983,9 @@ operator policy can produce similar transitions.
 **RF identity / PCI (H15).** Repeated alternation between PCI values on the same carrier. A PCI run
 counts as one episode however many samples Android reports, and a stable one-way change is handled
 as a reconfiguration, not instability. Operator reconfiguration and modem reporting remain possible
-explanations.
+explanations. H15 keeps its own evidence after it fires: besides clean rows, it reads every row that
+carries its own reason, also when other rules failed in the same row (a clone that also dominates in
+power), since it only reads PCI, channel and time.
 
 **Mobility sanity (H16).** See section 5.
 
