@@ -970,6 +970,14 @@ PCI/PSC or channel only if both values are valid for the same technology; an unk
 modem can attribute a secondary carrier's channel or PCI to the serving cell, which can still look
 like a valid difference. That limit is documented for a separate review.
 
+H11 compares the current position with up to 20 earlier clean located rows of the cell (last 30 days,
+not the last 5 minutes, not within 50 m), chosen across distinct days rather than the 20 most recent,
+so a few days spent mostly elsewhere under the same large cell do not leave only that place in the
+comparison. It fails when at least two of those rows, and at least 30 %, are anomalously far. A rule
+of this kind cannot tell a large cell seen for the first time at a second legitimate place from a
+cell appearing where it should not: there most earlier rows are far, H11 fails, and that row is not
+learned. That is by design, not a sampling issue.
+
 **Regional, latency and external correlation (H12 and others).** These depend on reliable location,
 tower-database results, network reachability and enough samples, and may legitimately remain `N/A`.
 

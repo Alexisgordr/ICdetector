@@ -92,14 +92,21 @@ object CellGeometry {
      * recientes. Con las más recientes, el perfil se parecía al último sitio donde el móvil pasó
      * mucho rato (una tarde larga en otro sitio desplazaba el centro y borraba el resto). Cada día
      * recibe un cupo por turnos (el más reciente primero) y, dentro del día, las muestras se toman
-     * espaciadas a lo largo de él, no las más recientes.
+     * espaciadas a lo largo de él, no las más recientes. Si hay más días que [limit], se toma un día
+     * de cada tramo de la ventana.
+     *
+     * También elige el historial de H11 (CellDbHelper.getPreviousCellHistory).
      *
      * @param rowsNewestFirst (día, muestra), de la más reciente a la más antigua.
      */
-    fun spreadAcrossDays(rowsNewestFirst: List<Pair<String, CellLocationSample>>, limit: Int): List<CellLocationSample> {
-        val byDay = LinkedHashMap<String, MutableList<CellLocationSample>>()
+    fun <T> spreadAcrossDays(rowsNewestFirst: List<Pair<String, T>>, limit: Int): List<T> {
+        val byDay = LinkedHashMap<String, MutableList<T>>()
         rowsNewestFirst.forEach { (day, sample) -> byDay.getOrPut(day) { mutableListOf() } += sample }
-        val days = byDay.values.toList()
+        val allDays = byDay.values.toList()
+        // Con más días que muestras, días espaciados a lo largo de toda la ventana (no los más
+        // recientes, que es lo que daría una sola vuelta de turnos).
+        val days = if (allDays.size <= limit) allDays
+        else (0 until limit).map { k -> allDays[k * allDays.size / limit] }
         val quota = IntArray(days.size)
         var taken = 0
         while (taken < limit) {

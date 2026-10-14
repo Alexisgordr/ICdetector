@@ -11,6 +11,13 @@ GitHub pre-release of an earlier build was withdrawn.
 
 ### Audit fixes
 
+- **H11 compares against rows spread across days (dataset cut for H11).** Its history was the 20 most
+  recent clean located rows out of the last 300: after a few days spent mostly at another place under
+  the same large cell, only that place remained, and H11 failed back at home. Up to 2,000 rows are now
+  read and 20 chosen across distinct days (days spaced along the window when there are more than 20;
+  the H16 zones use the same selection). This does not change the case of a large cell seen for the
+  first time at a second legitimate place once it is mature: most earlier rows are far, H11 fails by
+  design and that row is not learned; the manual says so.
 - **H15 keeps its evidence when another rule fails in the same row (dataset cut for H15).** H15's
   history took clean rows or rows whose ONLY reason was H15. A clone that also dominated in power
   wrote "power jump | RF identity unstable" rows, which were left out: the clone's PCI stopped being

@@ -2336,10 +2336,15 @@ class CellDbHelper(
               AND ${observedBefore()}
               AND ${observedSince(strict = true)}
             ORDER BY $NEWEST_FIRST
-            LIMIT 300
+            LIMIT ${com.alexisgordr.icdetector.core.CellGeometry.PROFILE_SCAN_ROWS}
         """.trimIndent()
 
         val maxUsableRecords = 20
+        // 3.0 — Antes, las 20 filas MÁS RECIENTES (de las 300 últimas): con una celda vista mucho en
+        // casa, un segundo sitio legítimo aprendido antes quedaba fuera y H11 fallaba allí. Ahora se
+        // leen hasta PROFILE_SCAN_ROWS y se eligen 20 repartidas entre días distintos, como las zonas
+        // de H16 (CellGeometry.spreadAcrossDays).
+        val candidates = mutableListOf<Pair<String, HistoryRecord>>()
         val cursor = db.rawQuery(
             query,
             arrayOf(
@@ -2351,7 +2356,6 @@ class CellDbHelper(
 
         if (cursor.moveToFirst()) {
             do {
-                if (history.size >= maxUsableRecords) break
                 val lat = cursor.getDouble(cursor.getColumnIndexOrThrow(COLUMN_LAT))
                 val lon = cursor.getDouble(cursor.getColumnIndexOrThrow(COLUMN_LON))
                 
@@ -2369,7 +2373,7 @@ class CellDbHelper(
                     val arfcn = if (cursor.isNull(cursor.getColumnIndexOrThrow(COLUMN_ARFCN))) null
                               else cursor.getInt(cursor.getColumnIndexOrThrow(COLUMN_ARFCN))
 
-                    history.add(
+                    val record = (
                         HistoryRecord(
                             timestamp = cursor.getString(cursor.getColumnIndexOrThrow(COLUMN_TIMESTAMP)),
                             netType = cursor.getString(cursor.getColumnIndexOrThrow(COLUMN_NET_TYPE)),
@@ -2394,13 +2398,15 @@ class CellDbHelper(
                             radio = radio
                         )
                     )
+                    candidates += record.timestamp.take(10) to record
                 }
             } while (cursor.moveToNext())
         }
         } finally {
             cursor.close()
         }
-        
+
+        history += com.alexisgordr.icdetector.core.CellGeometry.spreadAcrossDays(candidates, maxUsableRecords)
         return history
     }
 
