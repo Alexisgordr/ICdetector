@@ -66,7 +66,8 @@ class SchemaV22MigrationTest {
         val clear = helper.substringAfter("fun clear() {").substringBefore("fun pruneOldRecords(")
         assertTrue(clear.contains("DELETE FROM \${SchemaV22.TABLE_EVALUATIONS}"))
         assertTrue(clear.contains("LocalProfileStore.reset(db)"))
-        val prune = helper.substringAfter("fun pruneOldRecords(").substringBefore("db.setTransactionSuccessful()")
+        // 3.0 — La guardia del reloj cierra antes su propia transacción: se mira hasta el final.
+        val prune = helper.substringAfter("fun pruneOldRecords(").substringBefore("MaintenanceReport.Prune.Done(historyDeleted)")
         assertTrue(prune.contains("LocalProfileStore.pruneProfiles(db, hardSiteCutoff)"))
         assertTrue(prune.contains("history_id NOT IN (SELECT \$COLUMN_ID FROM \$TABLE_HISTORY)"))
     }

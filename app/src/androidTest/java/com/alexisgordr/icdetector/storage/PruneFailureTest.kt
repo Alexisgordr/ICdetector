@@ -36,7 +36,8 @@ class PruneFailureTest {
     }
 
     @Test fun successDeletesOnlyOldRows() {
-        assertEquals(2, helper.pruneOldRecords())
+        // 3.0 — Filas sin instante y solo 2 a borrar: la guardia del reloj deja podar.
+        assertEquals(com.alexisgordr.icdetector.core.MaintenanceReport.Prune.Done(2), helper.pruneOldRecords())
         assertEquals(1, count())
     }
 

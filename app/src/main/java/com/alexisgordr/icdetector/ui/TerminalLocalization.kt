@@ -116,6 +116,13 @@ private val replacements = linkedMapOf(
     "no permite afirmar ni desmentir nada sobre esta antena" to "provides no evidence for or against this cell",
     "Firmas geográficas obtenidas" to "Geographic signatures obtained",
     "Poda de histórico fallida" to "History pruning failed",
+    // 3.0 — Poda omitida por la guardia del reloj (RetentionClockGuard).
+    "Poda de histórico omitida: el reloj del teléfono va por delante de la última observación guardada; no se ha borrado nada." to
+        "History pruning skipped: the phone's clock is ahead of the last stored observation; nothing was deleted.",
+    "Poda de histórico omitida: borraría" to "History pruning skipped: it would delete",
+    "registros (de" to "records (of",
+    "; más del" to "; more than",
+    "¿reloj adelantado? No se ha borrado nada." to "is the clock ahead? Nothing was deleted.",
     "no se ha borrado nada; se reintentará en el próximo mantenimiento." to
         "nothing was deleted; it will be retried at the next maintenance.",
     "Poda de histórico" to "History pruning",

@@ -18,7 +18,7 @@ internal class DatabaseMaintenance(
         // 3.0 — La poda tiene su propio resultado: si falla (la transacción ya se revirtió), se dice
         // una vez en este ciclo diario, sin el mensaje del error, y el tope forense se aplica igual.
         val prune = try {
-            MaintenanceReport.Prune.Done(db.pruneOldRecords())
+            db.pruneOldRecords()
         } catch (e: kotlinx.coroutines.CancellationException) {
             throw e
         } catch (e: Exception) {

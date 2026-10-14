@@ -26,6 +26,9 @@ class TerminalLocalizationCoverageTest {
         "Calidad de dato: EARFCN 4G fuera de la tabla 3GPP",
         "[sub-umbral] Inconsistencia MCC | Calidad de dato: NR-ARFCN 5G fuera de la tabla 3GPP",
         "Calidad de dato: el módem informa un canal fuera de la tabla 3GPP. No es evidencia de ataque y no resta puntos.",
+        // 3.0 — Poda omitida por la guardia del reloj.
+        "[SYS] ⚠️ Poda de histórico omitida: el reloj del teléfono va por delante de la última observación guardada; no se ha borrado nada.",
+        "[SYS] ⚠️ Poda de histórico omitida: borraría 900 registros (de 1000; más del 25 %); ¿reloj adelantado? No se ha borrado nada.",
         // 3.0 — Watchdog de callbacks.
         "[SYS] Watchdog: callbacks de telefonía reiniciados; 45 s sin entregas de celdas.",
         // 3.0 (corte de campaña) — Celda CSG.

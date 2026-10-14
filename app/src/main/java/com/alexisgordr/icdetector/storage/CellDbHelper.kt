@@ -2063,9 +2063,14 @@ class CellDbHelper(
      * cualquier tabla ya no se devuelve como "0 filas borradas" ni se ignora: la transacción se
      * revierte y la excepción llega a [com.alexisgordr.icdetector.service.DatabaseMaintenance],
      * que lo registra como fallo. Retención y condiciones de borrado sin cambios.
+     *
+     * 3.0 — Antes de borrar, [RetentionClockGuard] comprueba que la hora de pared sea creíble frente
+     * a los datos. Si no lo es, no se poda ninguna tabla por antigüedad (todas usan esa hora) y se
+     * devuelve [MaintenanceReport.Prune.Skipped].
      */
-    fun pruneOldRecords(daysToKeep: Int = DEFAULT_RETENTION_DAYS): Int {
-        val cutoff = System.currentTimeMillis() - (daysToKeep.toLong() * 24 * 60 * 60 * 1000)
+    fun pruneOldRecords(daysToKeep: Int = DEFAULT_RETENTION_DAYS): MaintenanceReport.Prune {
+        val nowMs = System.currentTimeMillis()
+        val cutoff = nowMs - (daysToKeep.toLong() * 24 * 60 * 60 * 1000)
         // 3.0 (#23) — Por instante cuando existe; las filas anteriores, por su texto local.
         val cutoffArgs = since(cutoff)
         val updatedBefore = ObservationTime.beforeClause(SchemaV20.UPDATED_AT_MS, "updated_at")
@@ -2074,6 +2079,17 @@ class CellDbHelper(
         // forenses sin sus muestras ni tablas de sitios a medio recortar.
         db.beginTransaction()
         return try {
+            val newest = db.rawQuery(RetentionGuardSql.NEWEST_OBSERVED, null).use { c ->
+                if (c.moveToFirst() && !c.isNull(0)) c.getLong(0) else null
+            }
+            val (total, due) = db.rawQuery(RetentionGuardSql.DUE_AND_TOTAL, cutoffArgs).use { c ->
+                if (c.moveToFirst()) c.getInt(0) to c.getInt(1) else 0 to 0
+            }
+            val guard = RetentionClockGuard.decide(cutoff, newest, rowsDue = due, totalRows = total)
+            if (guard != RetentionClockGuard.Decision.Prune) {
+                db.setTransactionSuccessful()
+                return MaintenanceReport.Prune.Skipped(guard)
+            }
             val historyDeleted = db.delete(TABLE_HISTORY, observedBefore(), cutoffArgs)
             db.delete(TABLE_INCIDENTS, updatedBefore, cutoffArgs)
             val oldCases = db.rawQuery("SELECT id FROM $TABLE_FORENSIC_CASES WHERE $updatedBefore", cutoffArgs).use { c ->
@@ -2090,9 +2106,10 @@ class CellDbHelper(
                 "DELETE FROM $TABLE_SERVICE_STATE_EVENTS WHERE id NOT IN " +
                     "(SELECT id FROM $TABLE_SERVICE_STATE_EVENTS ORDER BY ts_ms DESC, id DESC LIMIT $MAX_SERVICE_STATE_EVENTS)"
             )
-            val siteCutoff = System.currentTimeMillis() - 120L * 24 * 60 * 60 * 1000
-            val eventCutoff = System.currentTimeMillis() - 14L * 24 * 60 * 60 * 1000
-            val hardSiteCutoff = System.currentTimeMillis() - 365L * 24 * 60 * 60 * 1000
+            // 3.0 — La misma hora que ha validado la guardia, no otra lectura del reloj.
+            val siteCutoff = nowMs - 120L * 24 * 60 * 60 * 1000
+            val eventCutoff = nowMs - 14L * 24 * 60 * 60 * 1000
+            val hardSiteCutoff = nowMs - 365L * 24 * 60 * 60 * 1000
             db.delete(TABLE_SITE_EVENTS, "seen_ms < ?", arrayOf(eventCutoff.toString()))
             db.delete(TABLE_SITE_CELLS, "last_seen_ms < ? AND observations < 3", arrayOf(siteCutoff.toString()))
             db.delete(TABLE_SITE_CELLS, "last_seen_ms < ?", arrayOf(hardSiteCutoff.toString()))
@@ -2113,7 +2130,7 @@ class CellDbHelper(
             db.execSQL("DELETE FROM ${SchemaV22.TABLE_EVALUATIONS} WHERE history_id NOT IN (SELECT $COLUMN_ID FROM $TABLE_HISTORY)")
             LocalProfileStore.pruneProfiles(db, hardSiteCutoff)
             db.setTransactionSuccessful()
-            historyDeleted
+            MaintenanceReport.Prune.Done(historyDeleted)
         } finally {
             db.endTransaction()
         }
