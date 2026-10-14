@@ -9,7 +9,7 @@ The current state of the project in one page. What changed in each release is in
 | | Version | Version code | DB schema | Where |
 |---|---|---|---|---|
 | **Stable release** | v2.10.10 | 38 | 19 | GitHub Releases |
-| **Development** | 3.0.0-beta4 | 39 | 25 | Branch `ICdetection-v3.0.0-beta` · draft PR #34 · source only, no APK published |
+| **Development** | 3.0.0-beta4 | 39 | 25 | Branch `ICdetection-v3.0.0-beta` · draft PR #34 · APK as the [`v3.0.0-Prerelease`](https://github.com/Alexisgordr/ICdetector/releases/tag/v3.0.0-Prerelease) pre-release |
 | **Field campaign** | 3.0.0-beta4 | 39 | 25 | Day 1 = a fresh database on a build with the campaign cut ([IMPORTANT.md](IMPORTANT.md)) |
 | **Previous campaign stage** | v2.10.5 | 33 | 19 | Baseline of the v2.10.x stage, closed |
 

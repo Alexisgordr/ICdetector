@@ -53,8 +53,9 @@
 > - **Stable — v2.10.10.** The latest published release; bug fixes only.
 > - **Field campaign — 3.0.0-beta4.** More accurate rule inputs, stricter confirmation, a fully
 >   audited engine, backup and restore. The field-collection campaign runs on this build, with its
->   campaign cut, from a fresh database ([IMPORTANT.md](IMPORTANT.md)). No APK is published; it is
->   available as source on the [`ICdetection-v3.0.0-beta`](https://github.com/Alexisgordr/ICdetector/tree/ICdetection-v3.0.0-beta)
+>   campaign cut, from a fresh database ([IMPORTANT.md](IMPORTANT.md)). The APK is published as a
+>   [pre-release](https://github.com/Alexisgordr/ICdetector/releases/tag/v3.0.0-Prerelease), and the source is on the
+>   [`ICdetection-v3.0.0-beta`](https://github.com/Alexisgordr/ICdetector/tree/ICdetection-v3.0.0-beta)
 >   branch ([build it yourself](#-getting-started)). **3.0 needs a clean install** from v2.10.x.
 >
 > Details: [Status.md](Status.md) · [CHANGELOG.md](CHANGELOG.md)
@@ -167,7 +168,8 @@ imposed by Android.
 1. **Download** the stable APK from [GitHub Releases](https://github.com/Alexisgordr/ICdetector/releases).
    Every release is the same app (`com.alexisgordr.icdetector`), so a newer version installs over an
    older one and keeps its data.
-2. **Trying the 3.0 beta?** It is published as source only. Build it from the beta branch:
+2. **Trying the 3.0 beta?** Download the APK from the [`v3.0.0-Prerelease`](https://github.com/Alexisgordr/ICdetector/releases/tag/v3.0.0-Prerelease)
+   pre-release, or build it from the beta branch:
 
    ```bash
    git clone -b ICdetection-v3.0.0-beta https://github.com/Alexisgordr/ICdetector.git

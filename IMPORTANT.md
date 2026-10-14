@@ -4,7 +4,7 @@
 >
 > | | |
 > |---|---|
-> | **Campaign build** | 3.0.0-beta4 (version code 39) with the campaign cut, built from the `ICdetection-v3.0.0-beta` branch |
+> | **Campaign build** | 3.0.0-beta4 (version code 39) with the campaign cut: the [`v3.0.0-Prerelease`](https://github.com/Alexisgordr/ICdetector/releases/tag/v3.0.0-Prerelease) APK, or built from the `ICdetection-v3.0.0-beta` branch |
 > | **Day 1** | A fresh database on that build |
 > | **Database schema** | 25 |
 > | **Duration** | Approximately three months |
@@ -71,8 +71,8 @@ that observed it (`AppVersion`), so cuts can be applied per row.
 ## Recommended database reset
 
 For a clean dataset, start from a **fresh local database on a 3.0.0-beta4 build that includes the
-whole campaign cut and the fixes made with it**: build from the latest commit of the
-`ICdetection-v3.0.0-beta` branch.
+whole campaign cut and the fixes made with it**: the [`v3.0.0-Prerelease`](https://github.com/Alexisgordr/ICdetector/releases/tag/v3.0.0-Prerelease)
+APK, or a build from the latest commit of the `ICdetection-v3.0.0-beta` branch.
 
 > **How to reset:** export anything you want to keep, then open **History → Delete history** and
 > type `DELETE` (English interface) or `BORRAR` (Spanish interface) to confirm.

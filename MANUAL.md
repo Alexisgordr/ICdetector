@@ -70,8 +70,9 @@ is presentation context; an NSA icon cannot make its LTE anchor behave like a ph
 ICdetection requires **Android 12 or later**: it collects cells, service state and the 5G display
 state through callbacks that exist from Android 12 on.
 
-Stable versions are published as an APK on the project's GitHub Releases page. Betas are published
-as source only: build them from their branch with `./gradlew assembleDebug`. Every version is the
+Stable versions are published as an APK on the project's GitHub Releases page. The 3.0 beta is
+published there as a pre-release APK ([`v3.0.0-Prerelease`](https://github.com/Alexisgordr/ICdetector/releases/tag/v3.0.0-Prerelease)), and can also be built
+from its branch with `./gradlew assembleDebug`. Every version is the
 same app (`com.alexisgordr.icdetector`, *ICdetection*), so a newer release installs over an older one
 and keeps its data; a build signed with your own key cannot update the published APK, so uninstall
 first.

@@ -4,10 +4,11 @@ Every notable change to ICdetection, newest first. Releases inside the field-col
 fix bugs; a fix that changes how a rule is evaluated is marked as a **dataset cut** for that rule.
 Version numbers follow the app's `versionName`; the Android `versionCode` is given where it matters.
 
-## 3.0.0-beta4 (development beta, source only)
+## 3.0.0-beta4 (development beta, pre-release APK)
 
-Available as source on the `ICdetection-v3.0.0-beta` branch; no APK is published. A short-lived
-GitHub pre-release of an earlier build was withdrawn.
+Published as a pre-release APK ([`v3.0.0-Prerelease`](https://github.com/Alexisgordr/ICdetector/releases/tag/v3.0.0-Prerelease) on GitHub Releases) and as
+source on the `ICdetection-v3.0.0-beta` branch. A short-lived GitHub pre-release of an earlier build
+was withdrawn.
 
 ### Campaign cut
 
