@@ -591,4 +591,5 @@
     <string name="route_failures_at_least">Al menos %1$d fallo(s): uno o más antes de que se contaran, %2$d desde entonces.</string>
     <string name="route_failures_unknown">Fallos desde que se cuentan: %1$d. Los anteriores se desconocen.</string>
     <string name="route_review_note">REVISAR: rutas con al menos un FAILED registrado. Un N/A por sí solo no cuenta.</string>
+    <string name="arfcn_out_of_table">ARFCN fuera de la tabla 3GPP (calidad de dato)</string>
 </resources>

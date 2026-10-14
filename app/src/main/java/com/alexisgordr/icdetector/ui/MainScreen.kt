@@ -18,6 +18,8 @@ import androidx.compose.material.pullrefresh.pullRefresh
 import androidx.compose.material.pullrefresh.rememberPullRefreshState
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.lifecycle.compose.LocalLifecycleOwner
@@ -37,6 +39,7 @@ import androidx.core.content.ContextCompat
 import com.alexisgordr.icdetector.MainActivity
 import com.alexisgordr.icdetector.R
 import com.alexisgordr.icdetector.models.*
+import com.alexisgordr.icdetector.models.HeuristicStatus
 import com.alexisgordr.icdetector.service.MiniICService
 import com.alexisgordr.icdetector.storage.CellDbHelper
 import kotlinx.coroutines.delay
@@ -613,19 +616,20 @@ fun MainScreenContent(dbHelper: CellDbHelper, service: MiniICService?) {
                                         )
                                         Spacer(Modifier.height(4.dp))
                                         
-                                        // 1. Evaluamos dinámicamente si la heurística de sanidad del ARFCN ha fallado
-                                        val esArfcnFalso = active?.heuristicReport?.arfcnSanityPassed == false
-                                        
-                                        // 2. Asignamos el color: si es falso, usamos el rojo de alerta del proyecto (0xFFCF6679)
-                                        val arfcnColor = if (esArfcnFalso) Color(0xFFCF6679) else Color.White
-                                        
+                                        // 3.0 (corte de campaña) — H8 es un aviso de CALIDAD DE DATO, no una sospecha:
+                                        // un canal fuera de la tabla 3GPP se muestra en el gris de "dato dudoso"
+                                        // (el mismo de Components.kt), con peso normal, nunca en el rojo de alerta.
+                                        val arfcnOutOfTable = active?.heuristicReport?.arfcnSanity == HeuristicStatus.FAILED
+                                        val arfcnNote = stringResource(R.string.arfcn_out_of_table)
                                         Text(
                                             text = active?.arfcn?.toString() ?: "N/A",
-                                            color = arfcnColor,
+                                            color = if (arfcnOutOfTable) Color(0xFF888888) else Color.White,
                                             fontFamily = FontFamily.Monospace,
                                             fontSize = 13.sp,
-                                            // Si es falso, aumentamos el grosor a ExtraBold para que resalte todavía más
-                                            fontWeight = if (esArfcnFalso) FontWeight.ExtraBold else FontWeight.Bold
+                                            fontWeight = if (arfcnOutOfTable) FontWeight.Normal else FontWeight.Bold,
+                                            modifier = if (arfcnOutOfTable) {
+                                                Modifier.semantics { contentDescription = arfcnNote }
+                                            } else Modifier
                                         )
                                     }
                                 }
