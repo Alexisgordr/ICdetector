@@ -1021,8 +1021,8 @@ Spanish. Active incidents and captures cannot be deleted. Deleting a forensic ca
 its samples, so export it first if it may be useful.
 
 **Delete history** (same confirmation word) removes antenna history, incidents, forensic cases,
-transitions, service-state events, Stable-Site learning and route-familiarity trips in one
-all-or-nothing operation. It is safe while monitoring is running: the service closes the open
+transitions, service-state events, Stable-Site learning, route-familiarity trips and the local
+profile in one all-or-nothing operation. It is safe while monitoring is running: the service closes the open
 forensic case, discards pending writes and in-flight verifications, and restarts its baselines and
 episode tracking from a clean state.
 
