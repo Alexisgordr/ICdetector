@@ -49,6 +49,8 @@ class HeuristicCatalogTest {
         assertEquals(BayesianScorer.Group.NOT_SCORED, BayesianScorer.groupOf(h9.scorerKey))
         assertTrue("sin LR", h9.scorerKey !in BayesianScorer.weightedKeys)
         assertEquals(listOf("H8", "H9"), HeuristicCatalog.entries.filter { !it.isEvidence }.map { it.id })
+        // El recuento de fallos del informe usa la misma lista.
+        assertEquals(HeuristicCatalog.entries.filter { !it.isEvidence }.map { it.id }.toSet(), HeuristicReport.NON_EVIDENCE_IDS)
     }
 
     @Test fun `the analyzer emits only catalogued keys`() {

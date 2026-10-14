@@ -64,6 +64,16 @@ class LocalCellTrustEngineTest {
         assertEquals(LocalCellTrustState.QUARANTINED, out.localCellTrust.state)
     }
 
+    /** 3.0 (corte de campaña) — H8 es calidad de dato y H9 está reservada: no ponen en cuarentena. */
+    @Test fun `a failed H8 alone is not quarantine`() {
+        val report = HeuristicReport(arfcnSanity = HeuristicStatus.FAILED)
+        assertEquals(0, report.failedCount)
+        assertEquals(1, report.dataQualityFailedCount)
+        assertEquals(LocalCellTrustState.ESTABLISHED, LocalCellTrustEngine.apply(cell(report = report), mature()).localCellTrust.state)
+        assertEquals(LocalCellTrustState.QUARANTINED, LocalCellTrustEngine.apply(
+            cell(report = report.copy(tacDeviation = HeuristicStatus.FAILED)), mature()).localCellTrust.state)
+    }
+
     @Test fun `two days remain learning`() {
         val evidence = mature().copy(distinctDays = 2, ageHours = 30, cappedCleanObservations = 6)
         val out = LocalCellTrustEngine.apply(cell(), evidence)

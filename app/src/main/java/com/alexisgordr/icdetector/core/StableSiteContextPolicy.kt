@@ -9,9 +9,10 @@ import com.alexisgordr.icdetector.models.CellData
  * Antes se anotaba CUALQUIER ciclo, alarma confirmada incluida: un emisor que insistiera 3 días en
  * casa pasaba a ser celda conocida del sitio, y como vecina se corroboraba a sí mismo en 2. Era la
  * única fuente de aprendizaje de la app que no filtraba los ciclos sucios. Ahora solo aprende de un
- * ciclo con el mismo criterio que una fila limpia del historial (ninguna regla fallida, no
- * sospechoso, sin contradicción de confianza local) y sin racha de confirmación ni episodio
- * multiseñal abiertos.
+ * ciclo con el mismo criterio que una fila limpia del historial (ninguna regla de evidencia fallida,
+ * no sospechoso, sin contradicción de confianza local) y sin racha de confirmación ni episodio
+ * multiseñal abiertos. 3.0 (corte de campaña): un H8 fallado (calidad de dato) no lo impide; la fila
+ * del historial sí lo guarda y no cuenta como limpia, pero Stable-Site no lee canales.
  *
  * La marca de sitio sin verificar NO cuenta como sucia: es la propia novedad que Stable-Site mide, y
  * si la excluyera una celda nueva legítima nunca llegaría a ser conocida del sitio.

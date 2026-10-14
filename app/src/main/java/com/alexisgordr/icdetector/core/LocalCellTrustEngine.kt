@@ -89,6 +89,7 @@ object LocalCellTrustEngine {
         // A second, different signal (H11 or H16), not an independent one: see the class comment.
         val positionOrHandoverContradiction = "GEOMETRY" in contradictions || "HANDOVER" in contradictions
         val alarmCandidate = eligible && rfChanged && positionOrHandoverContradiction
+        // Solo reglas de evidencia: un H8 fallado (calidad de dato) no pone la celda en cuarentena.
         val hasFailures = cell.heuristicReport.failedCount > 0
         val state = when {
             contradictions.isNotEmpty() -> LocalCellTrustState.CHANGED

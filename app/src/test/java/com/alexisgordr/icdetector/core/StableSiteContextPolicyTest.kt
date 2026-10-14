@@ -30,6 +30,11 @@ class StableSiteContextPolicyTest {
         assertFalse(may(clean.copy(localCellTrust = LocalCellTrust(contradictions = setOf("PCI")))))
     }
 
+    /** 3.0 (corte de campaña) — Un H8 fallado (calidad de dato) no impide aprender el sitio. */
+    @Test fun `a failed H8 alone still teaches the site`() {
+        assertTrue(may(clean.copy(heuristicReport = HeuristicReport(arfcnSanity = HeuristicStatus.FAILED))))
+    }
+
     @Test fun `an ongoing confirmation or episode blocks learning, even on a clean cycle`() {
         assertFalse(may(confirming = true))
         assertFalse(may(episode = true))
