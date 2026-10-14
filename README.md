@@ -7,7 +7,7 @@
 *Observe the cellular environment. Keep the evidence. Never overclaim.*
 
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](LICENSE)
-![Platform](https://img.shields.io/badge/Platform-Android%2010%2B-green.svg)
+![Platform](https://img.shields.io/badge/Platform-Android%2012%2B-green.svg)
 ![Root Required](https://img.shields.io/badge/Root-Not%20Required-brightgreen.svg)
 [![Release](https://img.shields.io/github/v/release/Alexisgordr/ICdetector?label=release&color=brightgreen)](https://github.com/Alexisgordr/ICdetector/releases/latest)
 [![Featured in Awesome Telco](https://img.shields.io/badge/Featured%20in-Awesome%20Telco-6f42c1.svg)](https://github.com/ravens/awesome-telco#imsi-catcher-detection)
@@ -52,9 +52,9 @@
 >
 > - **Stable — v2.10.10.** The latest published release; bug fixes only.
 > - **Field campaign — 3.0.0-beta4.** More accurate rule inputs, stricter confirmation, a fully
->   audited engine, backup and restore. The field-collection campaign now runs on this build, from a
->   fresh database ([IMPORTANT.md](IMPORTANT.md)). No APK is published; it is available as source on
->   the [`ICdetection-v3.0.0-beta`](https://github.com/Alexisgordr/ICdetector/tree/ICdetection-v3.0.0-beta)
+>   audited engine, backup and restore. The field-collection campaign runs on this build, with its
+>   campaign cut, from a fresh database ([IMPORTANT.md](IMPORTANT.md)). No APK is published; it is
+>   available as source on the [`ICdetection-v3.0.0-beta`](https://github.com/Alexisgordr/ICdetector/tree/ICdetection-v3.0.0-beta)
 >   branch ([build it yourself](#-getting-started)). **3.0 needs a clean install** from v2.10.x.
 >
 > Details: [Status.md](Status.md) · [CHANGELOG.md](CHANGELOG.md)
@@ -64,7 +64,8 @@
 >
 > I reviewed the whole app, part by part: the inputs of every rule, scoring, temporal confirmation,
 > local learning, geometry, the analysis cycle and the data the engine learns from. The resulting
-> fixes are in 3.0.0-beta4 ([CHANGELOG.md](CHANGELOG.md)). For now I am not planning more updates:
+> fixes, and a final campaign cut, are in 3.0.0-beta4 ([CHANGELOG.md](CHANGELOG.md)). For now I am not
+> planning more updates:
 > the next step is to collect field data and let the evidence speak.
 >
 > **This last update is large.** Many rules changed how they are evaluated, and the earlier betas
@@ -193,6 +194,7 @@ The [Field Manual](MANUAL.md) covers setup, every screen, the rules and the expo
 ICdetection continuously performs multi-layer heuristic analysis during cell reselections, handovers,
 signal transitions, topology changes, mobility events and changes in local radio behaviour. Sixteen
 rules (H1–H16) are evaluated on every cycle; each one passes, fails or reports `N/A` with a reason.
+Fourteen of them count as evidence: H8 is a data-quality flag and H9 is reserved.
 
 <details open>
 <summary><strong>Analysis layers</strong></summary>
@@ -207,8 +209,10 @@ Detects abnormal power jumps and dominance deltas between the serving cell and i
 potentially indicating forced camping. Softened in sparse or rural contexts.
 
 #### MCC Consistency Validation (H3)
-Detects Mobile Country Code inconsistencies between nearby cells. Requires neighbours that report
-their own MCC; otherwise it is `N/A`.
+Compares the serving cell's Mobile Country Code with the SIM's. It fails only for a foreign network
+on its own: a different MCC, no roaming declared by Android and no neighbour sharing that MCC.
+Roaming, a foreign network with coherent neighbours (a border) and a missing SIM or service state
+are `N/A`, with the reason stored in the row.
 
 #### Multi-MNC Density Analysis (H4)
 Flags unusually high operator-code diversity. Weak evidence: MVNOs, roaming, transport hubs and
@@ -229,13 +233,16 @@ that always report zero are detected per technology (`STUB_ZERO`) and excluded f
 Detects a very strong serving cell while every visible neighbour is extremely weak — possibly an
 artificially controlled RF environment, or simply difficult radio conditions.
 
-#### ARFCN / Frequency Sanity Validation (H8)
-Guards against impossible or malformed channel values using technology-specific limits. It is not a
-complete regional spectrum validator. A frequency the modem does not report is `N/A`, not failed.
+#### ARFCN Data Quality (H8)
+Flags impossible or malformed channel values using technology-specific limits. It is a data-quality
+flag, not evidence: a rogue cell needs a valid channel for the phone to register, so an impossible
+value describes the modem's report. It subtracts no points and is stored in the row, not shown as a
+suspicion. A frequency the modem does not report is `N/A`, not failed.
 
-#### Ciphering Integrity Monitoring (H9)
-Android does not give a regular app access to the modem's ciphering state, so H9 is always `N/A` —
-never assumed to be `PASSED`. ICdetection does not claim null-cipher or IMSI-disclosure detection.
+#### Ciphering (H9, reserved)
+Android does not give a regular app access to the modem's ciphering state, so H9 is a reserved rule:
+always `N/A`, never assumed to be `PASSED`, with no weight. ICdetection does not claim null-cipher or
+IMSI-disclosure detection.
 
 #### Anti Ping-Pong Analysis (H10)
 Detects aggressive reselection loops: three changes of the full serving identity (MCC, MNC, TAC,
@@ -279,7 +286,7 @@ cannot trigger an alert by itself.
 
 > [!NOTE]
 > **Which layers carry the weight depends on the device.** On phones that do not report neighbour
-> identities (common on Pixel devices), H3, H4 and H5 usually stay `N/A`. Detection then rests mainly
+> identities (common on Pixel devices), H4 and H5 usually stay `N/A`. Detection then rests mainly
 > on signal behaviour (H2, H7, H13), RF identity stability (H15), geographic and mobility coherence
 > (H11, H16) and Local Cell Trust. 2G/3G use is reported once per episode as context, not as a
 > confirmed attack.
@@ -304,8 +311,8 @@ These layers refine evidence using the device's own history. They are fully offl
 - **Context-aware scoring** — environment-sensitive signals are softened by neighbour density and
   local reputation.
 - **Bayesian-inspired anomaly confidence** — combines failed heuristics into an **uncalibrated**
-  signal (0–95). Likelihood ratios are expert-derived, not empirically calibrated, so the value is not
-  a literal probability.
+  signal (0–95) from a 0.5 % prior, so one signal alone stays low. Likelihood ratios are
+  expert-derived, not empirically calibrated, so the value is not a literal probability.
 
 ---
 
@@ -370,7 +377,7 @@ without data for another reason shows **WAITING**.
 | **Secondary carriers** | Carrier-aggregation secondaries and the NR leg of 5G NSA, listed instead of analysed. |
 | **Bandwidth & bands** | Carrier bandwidth and the bands each cell declares. |
 | **Additional PLMNs** | Extra networks announced by the cell (e.g. network sharing). |
-| **CSG** | Closed subscriber group — a possible femtocell. Context, not an anomaly by itself. |
+| **CSG** | Closed subscriber group — a possible femtocell. Not an anomaly by itself; on a CSG cell H1, H2, H5, H6 and H7 are `N/A`, since a femtocell is isolated, strong and close by design. |
 | **Service state** | In service, emergency only, out of service or radio off; data/voice registration, roaming, network PLMN and SIM PLMN. |
 
 The **RADIO** tab (History → RADIO) shows the live serving cell, its carriers, every visible cell and
@@ -604,7 +611,7 @@ are welcome in the issues.
 |---|---|
 | **14+** | Best practical support currently available in Android userland. |
 | **12 / 13** | Supported in heuristic-analysis mode. |
-| **10 / 11** | May work depending on device telemetry; advanced behaviour can be limited. |
+| **10 / 11** | Not supported: the app requires Android 12, where the telephony callbacks it relies on exist. |
 
 ---
 

@@ -10,7 +10,7 @@ The current state of the project in one page. What changed in each release is in
 |---|---|---|---|---|
 | **Stable release** | v2.10.10 | 38 | 19 | GitHub Releases |
 | **Development** | 3.0.0-beta4 | 39 | 25 | Branch `ICdetection-v3.0.0-beta` · draft PR #34 · source only, no APK published |
-| **Field campaign** | 3.0.0-beta4 | 39 | 25 | Day 1 = a fresh database on this build ([IMPORTANT.md](IMPORTANT.md)) |
+| **Field campaign** | 3.0.0-beta4 | 39 | 25 | Day 1 = a fresh database on a build with the campaign cut ([IMPORTANT.md](IMPORTANT.md)) |
 | **Previous campaign stage** | v2.10.5 | 33 | 19 | Baseline of the v2.10.x stage, closed |
 
 - **App identity:** `com.alexisgordr.icdetector`, *ICdetection*, for stable releases and betas
@@ -22,8 +22,9 @@ The current state of the project in one page. What changed in each release is in
 
 ## 3.0 roadmap — GitHub issue #27
 
-Every item is implemented. Score weights and the alarm threshold are unchanged; what changed is the
-data the rules receive and how evidence is confirmed.
+Every item is implemented. The roadmap kept score weights and the alarm threshold; what it changed
+is the data the rules receive and how evidence is confirmed. The later campaign cut (below) changes
+how some evidence is weighed; the alarm threshold is still unchanged.
 
 | Phase | Scope | Issues | State |
 |---|---|---|---|
@@ -50,24 +51,33 @@ changed between 3.0 betas. Each row records the app version and build commit tha
 | Location mode | Smart and adaptive rows can have fewer fresh positions (`LocationMode`); fix ages use the monotonic clock in every mode |
 | Neighbours | A secondary carrier published as unregistered is no longer a neighbour (H1–H5, H7, H11, H16, density factor, Stable-Site) |
 | Confirmation (all alarms) | Restarts after a signal loss or a gap of more than 2 min (#20); a held multi-signal episode no longer advances it; while H10 fails it counts on the set of ping-pong identities; without a modem timestamp only fresh deliveries count |
-| H1 | Isolation streak restarts after a gap; `N/A` while pending (#20 #28); unknown freshness token is not "repeated" |
-| H2, H7 | Power compared only with neighbours of the same technology |
+| H1 | Isolation streak restarts after a gap; `N/A` while pending (#20 #28); unknown freshness token is not "repeated"; `N/A` on a CSG cell (campaign cut) |
+| H2, H7 | Power compared only with neighbours of the same technology; `N/A` on a CSG cell (campaign cut) |
+| H3 | Serving cell compared with the SIM, not with the neighbours; roaming and borders are `N/A` with a stored reason (campaign cut) |
 | H4 | Never subtracts points while not evaluated |
-| H5 | Placeholders read as unavailable (#11); TAC compared only with neighbours of the same technology and operator |
-| H6, `TAUnit` | Timing Advance only from the same transmitter, range-checked; stub-zero evidence per technology and per site (#21 #33); geometric branch removed |
+| H5 | Placeholders read as unavailable (#11); TAC compared only with neighbours of the same technology and operator; `N/A` on a CSG cell (campaign cut) |
+| H6, `TAUnit` | Timing Advance only from the same transmitter, range-checked; stub-zero evidence per technology and per site (#21 #33); geometric branch removed; `N/A` on a CSG cell (campaign cut) |
+| H8 | Data-quality flag: no points, no weight, not shown as a suspicion; its reason is still stored in the row (campaign cut) |
 | H10, handover rows | Handover = change of the full serving identity (#19); a transient unreadable Cell ID is not a handover; H10 uses only a recent GPS speed |
 | H11 | Parser sentinels are not an RF difference; history chosen across days |
 | H12 | Evaluated only on a real measurement; learning state (#26) |
 | H14 | Complete band table, same-eNodeB changes ignored, 5G SA, band context reset after a gap (#32 #10 #8 #20) |
 | H15 | EARFCN 0 learnt, impossible PCIs ignored (#22); rows carrying the H15 reason stay in its history whatever else failed |
 | H16 | Own recent fix at each end; no route across a service gap; incoherent only with the phone in the previous cell's zone; zones sampled across days |
-| Anomaly confidence | Latency factor only when H12 fails; H6 in the RF-dominance group, damped by reputation |
+| Anomaly confidence | Latency factor only when H12 fails; H6 in the RF-dominance group, damped by reputation; prior 0.5 % instead of 2 %, and no weight for H8 or H9 (campaign cut) |
 | Local learning | Local confidence validates PCI/ARFCN; Stable-Site learns only from clean cycles; local profile: one evaluation per observation (schema 24) |
+
+**Campaign cut.** Made on 3.0.0-beta4 after collection had started, without a new version name.
+Rows recorded by builds up to commit `3e67f8e` (the `AppVersion` commit is `3e67f8e` or one of its
+ancestors) are before it; rows from later builds are after it. The scenario bench results it changes
+are listed in [CHANGELOG.md](CHANGELOG.md).
 
 ## Known limitations and open items
 
-- **H9 (ciphering)** is always `N/A`: Android does not expose the modem's ciphering state to
-  regular apps.
+- **H9 (ciphering)** is reserved and always `N/A`: Android does not expose the modem's ciphering
+  state to regular apps.
+- **H3 near borders** can fail when your operator's foreign partner is configured as non-roaming and
+  no neighbour reports its MCC; see the [MANUAL](MANUAL.md#8-main-heuristic-families).
 - **H6 on 5G NR** stays `N/A`: Android's NR Timing Advance has no defensible distance conversion yet.
 - **H16 in Smart and Adaptive location modes** is mostly `N/A`: it needs a recent fix at both ends of
   a handover.
@@ -80,6 +90,15 @@ changed between 3.0 betas. Each row records the app version and build commit tha
   [MANUAL](MANUAL.md#local-profile-shadow-mode-experimental).
 - **H3 or H15 alone** leave the score at 70, on the alarm boundary; whether that is right will be
   reviewed with field data.
+- **Femtocells (CSG)** with H1, H2, H5, H6 and H7 abstaining have clean rows, so nothing stops one
+  from reaching `ESTABLISHED` or teaching Stable-Site as a serving cell. This is how it works today;
+  it will be reviewed with field data.
+- **Android 12 or later** is required (minSdk 31): there is no fallback for the telephony callbacks
+  on Android 10 and 11.
+- **One active SIM**; dual SIM is not supported. **Revoking the phone permission** while monitoring
+  stops readings without a warning. See [MANUAL → Technical limitations](MANUAL.md#15-technical-limitations).
+- **Forensic storage** has only a sample cap (20,000); an age or size cap is left for after the
+  campaign.
 - **No ground truth, no negative control, limited coverage** — see
   [README → What the field campaign can and cannot show](README.md#-what-the-field-campaign-can-and-cannot-show).
 

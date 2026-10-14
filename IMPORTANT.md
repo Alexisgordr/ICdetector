@@ -4,7 +4,7 @@
 >
 > | | |
 > |---|---|
-> | **Campaign build** | 3.0.0-beta4 (version code 39), built from the `ICdetection-v3.0.0-beta` branch |
+> | **Campaign build** | 3.0.0-beta4 (version code 39) with the campaign cut, built from the `ICdetection-v3.0.0-beta` branch |
 > | **Day 1** | A fresh database on that build |
 > | **Database schema** | 25 |
 > | **Duration** | Approximately three months |
@@ -55,15 +55,22 @@ for everything else. No reset is needed.
 
 ### Dataset cuts during the campaign
 
-None yet on 3.0.0-beta4. Every later fix that changes how a rule is evaluated will be listed in
-[CHANGELOG.md](CHANGELOG.md) and [Status.md](Status.md) as a cut for that rule. Each row records the
-app version and build commit that observed it (`AppVersion`), so cuts can be applied per row.
+**The campaign cut on 3.0.0-beta4.** At the start of collection, H3, H8, H9, femtocell (CSG) cells and
+the anomaly-confidence prior were changed together. Unlike the bug fixes described above, this
+changes how evidence is weighed; it was made once, early, so that the rest of the campaign runs on a
+single method. [Status.md](Status.md#dataset-cuts-in-30) lists what changed and how to tell rows from
+before and after it.
+
+Every later fix that changes how a rule is evaluated will be listed in [CHANGELOG.md](CHANGELOG.md)
+and [Status.md](Status.md) as a cut for that rule. Each row records the app version and build commit
+that observed it (`AppVersion`), so cuts can be applied per row.
 
 ---
 
 ## Recommended database reset
 
-For a clean dataset, start from a **fresh local database on 3.0.0-beta4**.
+For a clean dataset, start from a **fresh local database on a 3.0.0-beta4 build that includes the
+campaign cut**.
 
 > **How to reset:** export anything you want to keep, then open **History → Delete history** and
 > type `DELETE` (English interface) or `BORRAR` (Spanish interface) to confirm.
@@ -80,7 +87,8 @@ the database and the app keeps working. In that case, **note the date you update
 before it belong to an earlier dataset and can be separated by `AppVersion`. Coming from v2.10.x,
 3.0 needs a clean install anyway.
 
-> **Day 1 = 3.0.0-beta4 behaviour, schema 25, a fresh database and the audited detection baseline.**
+> **Day 1 = 3.0.0-beta4 with the campaign cut, schema 25, a fresh database and the audited detection
+> baseline.**
 
 ---
 

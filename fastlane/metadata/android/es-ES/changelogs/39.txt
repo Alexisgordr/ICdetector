@@ -3,7 +3,7 @@
 • Por fila: hora UTC, precisión GPS, versión y reglas no evaluadas.
 • Entradas más fiables: identidad completa, vecinas de la misma tecnología, TA por emisor, todas las bandas LTE, 5G SA.
 • Confirmación más estricta: se reinicia tras huecos; episodios con evidencia nueva.
-• H16 mira dónde está el móvil.
-• Copias de seguridad, modos de ubicación, perfil local (sombra).
+• H16 mira dónde está el móvil; H3 mira la SIM.
+• Copias, modos de ubicación, perfil local (sombra).
 
-Pesos y umbrales sin cambios; cortes de dataset por regla.
+H8 calidad de dato, H9 reservada, femtoceldas exentas, prior menor.

@@ -9,6 +9,58 @@ Version numbers follow the app's `versionName`; the Android `versionCode` is giv
 Available as source on the `ICdetection-v3.0.0-beta` branch; no APK is published. A short-lived
 GitHub pre-release of an earlier build was withdrawn.
 
+### Campaign cut
+
+Made after collection had started, without a new version name: builds after commit `3e67f8e` include
+it. It is a **dataset cut** for H1, H2, H3, H5, H6, H7, H8 and the anomaly confidence; the alarm
+threshold is unchanged. [Status.md](Status.md) lists it in the dataset-cuts table.
+
+- **H3 compares the serving cell with the SIM.** It used to fail whenever a neighbour had another
+  MCC, which is what a phone sees near any border. It now compares the serving MCC with the SIM's,
+  using the service state recorded with the observation. It fails only for a foreign network on its
+  own (different MCC, no roaming, no neighbour sharing that MCC). Roaming, a foreign network with
+  coherent neighbours, and a missing SIM or service state are `N/A`, and the reason is stored in
+  `NotEvaluatedHeuristics` as `H3(roaming)`, `H3(frontera)`, `H3(sin_sim)`, `H3(sin_servicestate)` or
+  `H3(sin_mcc_servidora)`. A failure stores both codes. Points (−30) and weight are unchanged.
+- **H8 is a data-quality flag.** A rogue cell needs a valid channel for the phone to register, so an
+  impossible channel describes the modem's report, not an attack. H8 no longer subtracts 15 points,
+  has no weight in the anomaly confidence, does not count for multi-signal episodes and is not shown
+  as a suspicion (screen, alerts, incidents); the panel shows the channel in grey, not in the alert
+  colour. It is still evaluated, shown in the terminal audit and stored in the row (which therefore
+  is not clean), but it no longer quarantines the cell in Local Cell Trust or stops Stable-Site from
+  learning: the failed-rule count used there counts evidence rules only.
+- **H9 is reserved.** Android does not expose the ciphering state to apps, so H9 never ran but still
+  carried a weight of 12. It now has no weight and is always `N/A`; its number is kept. No data
+  changes.
+- **Femtocells (CSG).** On a serving cell that declares a closed subscriber group, H1, H2, H5, H6 and
+  H7 are `N/A` (`H1(csg)`, …): a femtocell is isolated, strong, a few metres away and on its own TAC
+  by design, and that single fact used to fail all five.
+- **Anomaly confidence starts from a 0.5 % prior** instead of 2 %, so a single signal stays low
+  (H6 alone: 3.4 % instead of 12.5 %). The likelihood ratios are unchanged. The panel colours move
+  to amber from 10 and red from 30 (were 20 and 50).
+- **Export checker.** `tools/check_export.py` reads a rule with its reason in parentheses as that rule,
+  reports the abstention reasons per rule, and gives each rule's failure rate (failed / evaluated),
+  which on benign field data estimates the denominator of its likelihood ratio.
+- **Scenario bench.** INCONSISTENT_NET (foreign neighbour plus a TAC mismatch) no longer alarms and
+  leaves the adversarial bench; FOREIGN_PLMN_ISOLATED (foreign network, no roaming, no neighbours)
+  joins it and alarms. A femtocell and an invalid channel at a border no longer alarm.
+
+#### Fixes made together with the cut
+
+- **Android 12 is the minimum (minSdk 31).** Below it no telephony callback was registered and
+  there is no fallback: only manual polling worked, H3 stayed `N/A` and 5G NSA was never detected.
+- **Stable-Site learns only from published cycles.** Its learning write ran before the publication
+  check, so an analysis discarded because the serving cell changed still taught the site.
+- **Database maintenance runs when monitoring starts.** The first retention prune waited for 24 h
+  of uptime when the phone had booted less than a day earlier.
+- **Forensic export carries every recorded field.** New `trust_site.csv` (local trust and
+  Stable-Site per sample); `timeline.csv` gains `required_phases`, `data_quality_reason` and
+  `heuristics` (with abstention reasons); `cells.csv` gains `registered`, `bands`, `csg_indicator`
+  and `secondary_carriers`; `case.json` gains `sampleSchemaVersion`. `terminal.log` joins the
+  overlapping 40-line windows without dropping repeated lines.
+- Dead code and an unused verification failure removed; translation coverage is now checked
+  against the engine's own constants.
+
 ### Audit fixes
 
 After the roadmap was complete, every part of the engine was reviewed in turn (data foundations,

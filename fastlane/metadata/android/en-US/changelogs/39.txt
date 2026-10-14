@@ -3,7 +3,7 @@
 • Per row: exact UTC time, GPS accuracy, app version and unevaluated rules.
 • More accurate rule inputs: full cell identity, same-technology neighbours, TA per transmitter, all LTE bands, 5G SA.
 • Stricter confirmation: restarts after gaps; episodes need fresh evidence.
-• H16 checks where the phone is.
+• H16 checks where the phone is; H3 checks the SIM.
 • Backup and restore, location modes, local profile (shadow).
 
-Weights and thresholds unchanged; dataset cuts per rule.
+H8 data quality, H9 reserved, femtocells exempt, lower prior.

@@ -44,7 +44,8 @@ While monitoring, it can:
 - Observe the serving cell and the cellular information exposed by Android.
 - Record MCC, MNC, Cell ID, TAC, PCI, channel, RSRP, RSRQ, SINR, radio technology and Timing Advance
   when available.
-- Evaluate sixteen anomaly heuristics (H1–H16) in every analysis cycle.
+- Evaluate sixteen heuristics (H1–H16) in every analysis cycle; fourteen count as evidence (H8 is a
+  data-quality flag and H9 is reserved).
 - Learn the historical behaviour of repeatedly observed cells.
 - Cross-reference cells with OpenCellID when configured.
 - Require suspicious behaviour to persist through three analysis phases, or two when two
@@ -56,7 +57,7 @@ While monitoring, it can:
 The available observations vary by phone, modem, Android version, operator, radio conditions and
 power-saving restrictions.
 
-Physical interpretation — channel sanity (H8), geographic distance (H11) and band downgrade (H14) —
+Physical interpretation — channel data quality (H8), geographic distance (H11) and band downgrade (H14) —
 follows the radio technology of the actual `CellInfo` observation. The 4G/5G label shown by Android
 is presentation context; an NSA icon cannot make its LTE anchor behave like a physical NR cell.
 
@@ -65,6 +66,9 @@ is presentation context; an NSA icon cannot make its LTE anchor behave like a ph
 ## 2. Installation and setup
 
 ### Installing
+
+ICdetection requires **Android 12 or later**: it collects cells, service state and the 5G display
+state through callbacks that exist from Android 12 on.
 
 Stable versions are published as an APK on the project's GitHub Releases page. Betas are published
 as source only: build them from their branch with `./gradlew assembleDebug`. Every version is the
@@ -369,9 +373,10 @@ neighbour-baseline days and thirty serving observations. New sites, movement, un
 unavailable neighbours cannot activate a hold. A single serving sighting does not make an identity
 known: corroboration needs three serving days or two neighbour days.
 
-**What it learns from.** Only clean cycles count towards these days and observations: no rule
-failed (sub-threshold included), the cell is not suspicious, Local Cell Trust found no
-contradiction, and no temporal confirmation streak or multi-signal episode is open. Otherwise a
+**What it learns from.** Only clean, published cycles count towards these days and observations: no
+evidence rule failed (sub-threshold included; H8, a data-quality flag, does not count), the cell is
+not suspicious, Local Cell Trust found no contradiction, and no temporal confirmation streak or
+multi-signal episode is open after the cycle. A cycle discarded before publication teaches nothing. Otherwise a
 transmitter that kept triggering alarms at home for three days would become a known cell of the site
 and, as a neighbour, corroborate itself in two. The site's own unverified-cell marker does not block
 learning: it is the novelty Stable-Site measures, and a new legitimate cell must still be able to
@@ -620,7 +625,8 @@ scratch. A normal handover or the refresh button does not interrupt anything.
 **Results always belong to their reading.** The time, GPS position and service state of each history
 row are those of the moment the reading arrived, not of the moment the analysis finished. If the
 signal is lost or the serving cell changes while an analysis is still running, its result is
-discarded instead of being shown, alerting or being stored.
+discarded instead of being shown, alerting, being stored or teaching Stable-Site. Only records of the
+serving change itself are kept: the handover route, the mobility trip and the Stable-Site episode.
 
 **Interruptions.** If the service stops or the device restarts while an incident or forensic capture
 is open, the record is closed as `INTERRUPTED`. The app never describes an unobserved period as
@@ -629,7 +635,9 @@ continuous monitoring.
 ### Local cell confidence
 
 The main status card shows a confidence percentage and one of five states: `NEW`, `LEARNING`,
-`ESTABLISHED`, `CHANGED` or `QUARANTINED`. The percentage grows from clean observations across days,
+`ESTABLISHED`, `CHANGED` or `QUARANTINED` (any failed evidence rule; H8 and H9 do not count). A sixth
+state, `SITE_UNVERIFIED`, exists in the code for Stable-Site enforcement, which is off; it cannot
+appear while Stable-Site runs in shadow mode. The percentage grows from clean observations across days,
 GPS evidence, stable RF identity and trusted handover routes. Reaching `ESTABLISHED` takes at least
 fourteen distinct days within a 90-day window; rapid sampling is capped and cannot accelerate trust.
 Detailed radio and coordinate analysis uses the latest 500 clean rows, within which at least eight
@@ -722,9 +730,9 @@ The diagnostics view shows the state and explanation of each rule:
 
 Common reasons for `N/A`: the modem does not expose the measurement; GPS is unavailable or
 inaccurate; external tower coordinates are unavailable; the baseline is not mature; too few
-observations exist; a network request is pending or failed; Android does not expose ciphering
-information. `N/A` is an honest abstention, not a defect — the explanation names the missing
-prerequisite.
+observations exist; a network request is pending or failed; the serving cell is a CSG femtocell
+(H1, H2, H5, H6 and H7); the rule is reserved (H9). `N/A` is an honest abstention, not a defect — the
+explanation names the missing prerequisite.
 
 **H1 (isolated cell)** with no neighbours and strong signal shows *"pending confirmation (x/3
 deliveries)"* until three fresh deliveries confirm the isolation; only then can it fail.
@@ -845,7 +853,7 @@ reconfigure their networks.
 ## 7. Temporal phases: `1/3`, `2/3` and `3/3`
 
 A cycle is suspicious when its score is below 70 (`score < 70`). Two rules subtract exactly 30:
-MCC mismatch (H3) and RF identity instability (H15). Alone, each leaves the score at 70, on the
+MCC mismatch with the SIM (H3) and RF identity instability (H15). Alone, each leaves the score at 70, on the
 boundary, so neither starts the phases by itself; they count only together with another failure or
 through a multi-signal episode. This is a design decision that has not been validated yet, not a
 property shown to be desirable: whether H3 or H15 alone should be enough will be reviewed with field
@@ -894,20 +902,43 @@ presented as a confirmed threat.
 
 No individual rule proves the presence of a rogue base station.
 
-**Cell isolation and neighbours (H1, H3–H5, H7).** A strong serving cell without coherent neighbours
+**Cell isolation and neighbours (H1, H4, H5, H7).** A strong serving cell without coherent neighbours
 can be suspicious, but rural coverage, indoor deployments, modem limitations and temporary network
-conditions look similar. H3 (MCC), H4 (MNC) and H5 (TAC) need neighbours that report their identity;
-many modems report only frequency, PCI and signal, so these rules can stay `N/A` permanently.
+conditions look similar. H4 (MNC) and H5 (TAC) need neighbours that report their identity; many
+modems report only frequency, PCI and signal, so these rules can stay `N/A` permanently.
+
+**Femtocells (CSG).** When the serving cell declares a closed subscriber group, it is a femtocell:
+isolated, strong, a few metres away and on its own TAC by design. H1, H2, H5, H6 and H7 are then
+`N/A` (stored as `H1(csg)`, `H2(csg)`, `H5(csg)`, `H6(csg)`, `H7(csg)`) and every other rule runs as
+usual. The indicator comes
+from the cell itself, so a rogue cell could also declare it; the remaining rules still apply to it.
 
 **Comparable neighbours only (H2, H5, H7).** These rules compare the serving cell with neighbours of
 the **same technology** only. TAC (LTE), TAC (NR) and LAC (GSM/UMTS) are different identifier spaces,
 and signal is reported as RSRP (LTE/NR), RSSI (GSM) or RSCP (UMTS), which are not comparable: an LTE
 RSRP is typically 20–30 dB below a GSM RSSI for the same coverage. Without same-technology
 neighbours these rules are `N/A`. H1 still counts neighbours of any technology (that only makes it
-more conservative), and H3/H4 compare MCC/MNC, which are shared by all technologies. H5 also uses
-only neighbours of the **same operator** (same MCC and MNC, or not reported): a TAC belongs to one
-network, so a neighbour of another network always has another TAC. A foreign neighbour therefore
-makes H3 fail, not H3 and H5 together.
+more conservative), and H4 compares MNC, which is shared by all technologies. H5 also uses only
+neighbours of the **same operator** (same MCC and MNC, or not reported): a TAC belongs to one
+network, so a neighbour of another network always has another TAC, and a foreign neighbour does not
+make H5 fail.
+
+**MCC consistency (H3).** H3 compares the country code (MCC) of the serving cell with the SIM's, using
+the service state recorded with the same observation. The serving MCC is the cell's own, or the
+network code from the service state when the cell does not report one; codes are compared as numbers.
+
+| Situation | Result |
+|---|---|
+| Serving MCC equals the SIM's | Passed; neighbours are not consulted |
+| Different MCC, Android declares roaming | `N/A` (`H3(roaming)`): expected abroad |
+| Different MCC, no roaming, a neighbour shares the serving MCC | `N/A` (`H3(frontera)`): a foreign network coherent with its surroundings, typical of a border |
+| Different MCC, no roaming, no neighbour shares it | **Failed**: a foreign network on its own. The row stores both codes, e.g. `Inconsistencia MCC: servidora 208 ≠ SIM 214, …` |
+| No service state, no SIM MCC or no serving MCC | `N/A` (`H3(sin_servicestate)`, `H3(sin_sim)`, `H3(sin_mcc_servidora)`) |
+
+**Limitation near borders.** Recognising a border needs at least one neighbour that reports its MCC,
+and most modems do not report neighbour identities. If your operator has a foreign partner network
+configured as non-roaming, H3 can fail near a border while every neighbour is `N/A`. H3 alone leaves
+the score at 70 and does not raise an alarm (section 7), but the row and the CSV show the failure.
 
 **Which entries count as neighbours.** A neighbour is an entry the modem reports as not registered
 and does **not** declare `SECONDARY_SERVING`. A secondary carrier (the NR leg of 5G NSA, or an LTE
@@ -935,12 +966,21 @@ Android's getter, never from the manufacturer's text, so some phones report litt
 T_A index (0–3846), not microseconds, and it is kept as raw context without a distance;
 a value read from text, only for NR, is marked `UNKNOWN`.
 
-**Channel sanity (H8).** Impossible or malformed channel values fail, using technology-specific
-limits. When the modem does not report the frequency at all, H8 is `N/A`: a missing value is not an
-impossible one.
+**Channel data quality (H8).** Impossible or malformed channel values fail, using
+technology-specific limits. A failure is a **data-quality flag, not evidence of an attack**: a rogue
+cell needs a valid channel for the phone to register on it, so an impossible value describes the
+modem's report. H8 subtracts no points, does not feed the anomaly confidence or multi-signal
+episodes, and is not shown as a suspicion; its status appears in the terminal audit and the
+diagnostics, and its reason is stored in the row (`Calidad de dato: EARFCN 4G fuera de la tabla
+3GPP`). The panel shows such a channel in grey, not in the alert colour. The row does not count as
+clean, so the references learned from clean history rows skip it; it does not put the cell in
+quarantine or stop Stable-Site from learning, and the local profile learns from it like from any
+stored row. When the modem does not report the frequency at all, H8 is `N/A`: a missing value is not
+an impossible one.
 
-**Ciphering visibility (H9).** Regular Android apps cannot inspect the modem's ciphering state, so H9
-is always `N/A`. ICdetection does not claim null-cipher or IMSI-disclosure detection.
+**Ciphering (H9, reserved).** Regular Android apps cannot inspect the modem's ciphering state, so H9
+is a reserved rule: always `N/A`, with no points and no weight. It keeps its number so that exports
+and the rule list stay aligned. ICdetection does not claim null-cipher or IMSI-disclosure detection.
 
 **Ping-Pong (H10).** Three changes of the full serving identity (MCC, MNC, TAC, Cell ID or
 technology) within 10 s while the phone is not moving fast. Without a GPS speed it cannot tell
@@ -996,7 +1036,7 @@ score or rule.
 
 | Modules | What they share | Effect today |
 |---|---|---|
-| H13 and the local profile | The serving level (and RSRQ) of the same cell, compared with references learned from the same clean history rows. | None on the engine: the profile is shadow or display only. In *History → Local profile* the H13 line says agreement is not a confirmation. |
+| H13 and the local profile | The serving level (and RSRQ) of the same cell. H13 learns from clean history rows; the profile from every stored row (score, rules and H8 play no part). | None on the engine: the profile is shadow or display only. In *History → Local profile* the H13 line says agreement is not a confirmation. |
 | H13 power and H13 RSRQ/SINR fingerprint | One cell's signal history. | Already guarded: they share one flag, and the fingerprint only counts when the power check did not fail. |
 | H11 and H16 | The current GPS fix and the positions stored for the cell(s) in history. A wrong fix, or a learned zone that is off, can fail both. | **Possible double counting.** Both are in the list of strong failures that shortens temporal confirmation from three phases to two, while the episode tracker already puts both in the same *mobility* family. |
 | H11, H15 and local cell confidence | PCI/ARFCN values of the same cell: H11 adds severity when PCI/ARFCN differ far away, H15 looks for PCI alternation, local confidence lists PCI/ARFCN as contradictions. | **Possible double counting** of one PCI change across three outputs. Local confidence also requires a failed H11 or H16 to raise its case, but that is a different signal, not an independent one. |
@@ -1095,6 +1135,7 @@ ICD-YYYY-MM-DD-NNNN.zip
 ├── timeline.csv
 ├── cells.csv
 ├── heuristics.csv
+├── trust_site.csv
 ├── capabilities.json
 ├── terminal.log
 └── SHA256SUMS.txt
@@ -1103,11 +1144,12 @@ ICD-YYYY-MM-DD-NNNN.zip
 | File | Purpose |
 |---|---|
 | `case.json` | Case metadata, state, timing, summary and device/app context |
-| `timeline.csv` | Chronological measurements and analysis state |
-| `cells.csv` | Serving, secondary-carrier and neighbour-cell observations (`role`) |
+| `timeline.csv` | Chronological measurements and analysis state, including the data-quality notice (H8) and every rule's state with its abstention reason |
+| `cells.csv` | Serving, secondary-carrier and neighbour-cell observations (`role`), with bands, CSG indicator and secondary carriers |
 | `heuristics.csv` | Rule state and explanation by cycle |
+| `trust_site.csv` | Local cell confidence (state, percentage, contradictions) and the Stable-Site decision by cycle |
 | `capabilities.json` | Data the device could and could not provide |
-| `terminal.log` | Relevant diagnostic log entries |
+| `terminal.log` | Terminal lines around the case, in order; repeated lines are separate events |
 | `SHA256SUMS.txt` | SHA-256 digests to detect later modification |
 
 In `cells.csv`, `role` is `SERVING` (the analysed cell), `SECONDARY` (an entry the modem declared
@@ -1163,9 +1205,12 @@ ProfileAlgorithm, ProfileRevision, ProfileEvidence, ProfileLearned, ProfileHoldo
   for GSM.
 - `FailedHeuristics` entries marked `[sub-umbral]` failed without reaching the alarm threshold; they
   are kept on purpose so false positives can be studied (shown as `[sub-threshold]` in English).
-- `AnomalyConfidence` is uncalibrated analytical output, not a measured probability.
+- `AnomalyConfidence` is uncalibrated analytical output, not a measured probability. It starts from
+  a 0.5 % prior; the panel shows it amber from 10 and red from 30.
 - `NotEvaluatedHeuristics` lists the rules that could not be evaluated (`H1;H6;H9`), or `NONE`. A
-  rule listed here neither passed nor failed.
+  rule listed here neither passed nor failed. Some rules carry the reason in parentheses: H3
+  (`roaming`, `frontera`, `sin_sim`, `sin_servicestate`, `sin_mcc_servidora`) and, on a CSG cell,
+  H1, H2, H5, H6 and H7 (`csg`); for example `H1(csg);H3(roaming);H9`.
 - `GpsAccuracyM` is the accuracy of the row's fix in metres; filter large values before analysing
   geometry.
 - `AppVersion` is the version that recorded the row; use it to apply dataset cuts per row. From
@@ -1194,8 +1239,10 @@ python3 tools/check_export.py path/to/export.csv
 ```
 
 The validator checks the invariants the design guarantees, applies technology-specific physical-ID
-ranges, and reports calendar coverage, the evaluation coverage of each rule, GPS accuracy, app
-versions and the dataset cuts the file crosses. It warns when a file joins several phones.
+ranges, and reports calendar coverage, how often each rule was evaluated and how often it failed
+when evaluated (with the reasons it was `N/A`), GPS accuracy, app versions and the dataset cuts the
+file crosses. On mostly benign field data, that failure rate estimates how often each rule fails
+without an attack. It warns when a file joins several phones.
 
 Exports can contain precise locations, network identifiers, device information and security
 observations. Redact sensitive information before sharing publicly.
@@ -1336,6 +1383,13 @@ Because ICdetection runs in Android user space without root:
 - Carrier aggregation and modem behaviour can make identities appear unstable.
 - Operator-side lawful interception is not visible from these observations.
 - A sophisticated IMSI catcher may expose no anomaly through public Android APIs.
+- **One active SIM.** Android returns the cells of both SIMs, but the app reads them through the
+  default subscription: a cell of the second SIM without its own MCC inherits the first SIM's, H3
+  compares it with the first SIM, and with two registered cells the serving one is the first Android
+  lists, in an order it does not guarantee. Dual SIM is not supported in this version.
+- **Revoking the phone permission while monitoring** stops new readings without a warning: the
+  screen keeps showing the last cell list.
+- **Forensic storage** is capped by number of samples (20,000), not by age or size.
 
 ICdetection provides leads, historical context and structured evidence about behaviour visible to
 Android; it cannot guarantee detection.
@@ -1357,15 +1411,15 @@ Why each exclusion exists, and how strong the reason is:
 | H13 | RF, own history | Most of the baseline is learned with the phone in connected mode; idle readings may follow a different distribution. | **Precaution, not validated.** |
 
 Consequences: at home or at work on Wi-Fi, often for many hours, these five rules give no evidence,
-so the strongest remaining signals there are H6, H8, H11, H14, H15 and H16 (when their own data is
-available). H3–H5 also depend on neighbour reports but do not abstain on Wi-Fi; that inconsistency is
+so the strongest remaining signals there are H3, H6, H11, H14, H15 and H16 (when their own data is
+available). H4 and H5 also depend on neighbour reports but do not abstain on Wi-Fi; that inconsistency is
 documented, not changed.
 
 **Learning from rows recorded on Wi-Fi.** A row recorded while Wi-Fi was connected is stored like
 any other. If it has no failed rule (stored as `OK`) and passes the usual filters (score, age,
-location), the local references — H13's signal baseline and RSRQ/SINR fingerprint, H15's RF history,
-local cell confidence and the local profile — can learn from it, even though some rules did not run
-in that cycle. "No failure recorded" therefore does not mean "every rule was evaluated": check
+location), the local references — H13's signal baseline and RSRQ/SINR fingerprint, H15's RF history
+and local cell confidence — can learn from it, even though some rules did not run in that cycle (the
+local profile learns from every stored row anyway). "No failure recorded" therefore does not mean "every rule was evaluated": check
 `NotEvaluatedHeuristics`. The Wi-Fi state is not stored per row and cannot be reconstructed
 afterwards (a row listing H1, H2, H7, H12 and H13 as not evaluated suggests it, but those rules can
 also abstain for other reasons). Whether mixing Wi-Fi (idle) and mobile-data (connected) readings
@@ -1411,7 +1465,8 @@ shadow mode and comparing it with the same places on mobile data — so no rule 
 
 **Most rules show `N/A`.** Check permissions, GPS, API configuration, connectivity and the capability
 explanations, and allow time for baselines to mature. Some measurements stay unavailable on a given
-modem; H3, H4 and H5 in particular remain `N/A` on modems that do not report neighbour identities.
+modem; H4 and H5 in particular remain `N/A` on modems that do not report neighbour identities, and
+H3 without a SIM or while the service state is unknown.
 
 **Every neighbour shows the same number** (for example `268435455`). Your modem fills neighbours with
 placeholder values, as some MediaTek modems do. ICdetection reads them as unavailable, but such
