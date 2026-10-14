@@ -68,4 +68,12 @@ class StableSiteContextPolicyTest {
         assertTrue(gate.contains("episodeOpen = threatEpisodeTracker.hasOpenEpisode()"))
         assertTrue("una sola llamada", service.split("dbHelper.recordStableSiteContext(").size == 2)
     }
+
+    @Test fun `the deliberate exceptions to the clean-row rule are written down`() {
+        val db = listOf(File("src/main/java"), File("app/src/main/java")).first { it.exists() }
+            .resolve("com/alexisgordr/icdetector/storage/CellDbHelper.kt").readText()
+        assertTrue(db.substringBefore("val globallyKnown = scalar(").endsWith(
+            "// aprendizaje, solo distingue una celda nunca vista de una ya conocida en otro sitio.\n        "))
+        assertTrue(db.contains("// 3.0 — Ventana de 90 días, frente a los 30 del baseline de potencia"))
+    }
 }

@@ -1139,6 +1139,8 @@ class CellDbHelper(
         val state = maturity.state
         val currentServingDays = roleDays(current.identityKey, "SERVING")
         val currentNeighbourDays = roleDays(current.identityKey, "NEIGHBOUR")
+        // 3.0 — Sin filtro de limpieza a propósito: «vista alguna vez en el historial» no es
+        // aprendizaje, solo distingue una celda nunca vista de una ya conocida en otro sitio.
         val globallyKnown = scalar("SELECT COUNT(*) FROM $TABLE_HISTORY WHERE $COLUMN_CID=? AND $COLUMN_MNC=? AND $COLUMN_TAC=? AND $COLUMN_MCC=? AND $COLUMN_RADIO=? LIMIT 1", arrayOf(current.cellId,current.mnc,current.tac,current.mcc,current.radioTech.name)) > 0
         // After a process/device restart the in-memory previous identity is absent. Recover the
         // most recently observed established serving identity at this site, excluding the current
@@ -2729,6 +2731,10 @@ class CellDbHelper(
         radiusMeters: Float = 1000f
     ): CellRfFingerprint? {
         val db = this.readableDatabase
+        // 3.0 — Ventana de 90 días, frente a los 30 del baseline de potencia (getCellSignalBaseline):
+        // RSRQ/SINR se miden en menos filas y necesitan más historia. El precio, asumido: tras una
+        // reconfiguración de la celda, la huella arrastra valores antiguos hasta dos meses más que
+        // la potencia.
         val ninetyDaysAgo = System.currentTimeMillis() - (90L * 24 * 60 * 60 * 1000)
 
         if (!hasMatureTrustedBaseline(cellId, mnc, tac, mcc, radio, ninetyDaysAgo)) return null
