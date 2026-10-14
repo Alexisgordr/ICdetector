@@ -175,6 +175,38 @@ class TerminalLocalizationCoverageTest {
         "[SERVICIO] Estado de servicio: EN SERVICIO · red=21407 (Movistar) · SIM=21407 · datos=LTE no registrado · roaming=no"
     )
 
+    /**
+     * 3.0 (corte de campaña) — Los textos que el motor guarda o muestra salen de sus constantes, no de
+     * una lista a mano: un motivo nuevo sin traducción rompe este test.
+     */
+    private val engineTexts: List<String> =
+        com.alexisgordr.icdetector.models.MccAbstention.entries.map { it.text } + listOf(
+            com.alexisgordr.icdetector.models.HeuristicReport.CSG_ABSTENTION_TEXT,
+            com.alexisgordr.icdetector.core.ThreatAnalyzer.H8_LTE_REASON,
+            com.alexisgordr.icdetector.core.ThreatAnalyzer.H8_NR_REASON,
+            com.alexisgordr.icdetector.core.MccConsistencyRule.failReason(208, 214),
+            com.alexisgordr.icdetector.core.DiagnosticEngine.H3_PASSED_EXPLANATION,
+            com.alexisgordr.icdetector.core.DiagnosticEngine.H3_FAILED_EXPLANATION,
+            "N/A: " + com.alexisgordr.icdetector.core.DiagnosticEngine.H3_UNKNOWN_ABSTENTION,
+            com.alexisgordr.icdetector.core.DiagnosticEngine.H8_FAILED_EXPLANATION,
+            com.alexisgordr.icdetector.core.DiagnosticEngine.H9_NA_EXPLANATION,
+            com.alexisgordr.icdetector.core.DiagnosticEngine.CSG_NA_EXPLANATION,
+            com.alexisgordr.icdetector.models.StoredReasons.H15_REASON,
+            com.alexisgordr.icdetector.models.StoredReasons.H13_RF_REASON,
+            com.alexisgordr.icdetector.models.StoredReasons.h13PowerReason(20),
+            com.alexisgordr.icdetector.models.StoredReasons.confirmingPrefix(2, 3),
+            com.alexisgordr.icdetector.models.SUBTHRESHOLD_PREFIX,
+            com.alexisgordr.icdetector.models.SITE_UNVERIFIED_PREFIX,
+            com.alexisgordr.icdetector.models.LOCAL_TRUST_RECONFIGURATION_REASON
+        )
+
+    @Test fun `every text the engine stores or shows from a constant is translated`() {
+        val leftovers = engineTexts.map { it to localizeTerminalLine(it) }
+            .filter { (source, translated) -> translated == source || spanish.containsMatchIn(translated) }
+            .map { (source, translated) -> "$source\n  → $translated" }
+        assertTrue(leftovers.joinToString("\n"), leftovers.isEmpty())
+    }
+
     @Test fun `no spanish words remain in english terminal lines`() {
         val leftovers = lines.map { it to localizeTerminalLine(it) }
             .filter { (_, translated) -> spanish.containsMatchIn(translated) }

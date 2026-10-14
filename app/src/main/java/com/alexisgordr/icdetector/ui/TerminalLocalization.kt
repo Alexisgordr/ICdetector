@@ -198,7 +198,6 @@ private val replacements = linkedMapOf(
     "Límite MNC" to "MNC limit",
     "Validación Regional TAC" to "Regional TAC validation",
     "Cifrado Nulo" to "Null ciphering",
-    "Sanidad ARFCN" to "ARFCN sanity",
     // 3.0 (corte de campaña) — H8 es un aviso de calidad de dato.
     "Calidad de dato ARFCN" to "ARFCN data quality",
     "Calidad de dato: EARFCN 4G fuera de la tabla 3GPP" to "Data quality: 4G EARFCN outside the 3GPP table",
