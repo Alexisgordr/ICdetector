@@ -1592,7 +1592,16 @@ class MiniICService : Service() {
                 // bloque Main: hasta cuatro transacciones SQLite por ciclo que, con la base ocupada
                 // (poda, borrado), congelaban la interfaz. Sigue dentro del mutex de ciclos, así que
                 // el orden de las escrituras no cambia, y escribe exactamente lo mismo.
-                analyzedList.firstOrNull()?.takeIf { it.isRegistered }?.let { servingForSite ->
+                // 3.0 — Solo un ciclo limpio, sin racha de confirmación ni episodio abierto, enseña
+                // a Stable-Site (ver StableSiteContextPolicy). Ambos estados los cambia la
+                // publicación, bajo este mismo cerrojo.
+                analyzedList.firstOrNull()?.takeIf { it.isRegistered }?.takeIf { servingForSite ->
+                    com.alexisgordr.icdetector.core.StableSiteContextPolicy.mayLearn(
+                        servingForSite,
+                        inConfirmation = temporalConfidence.inConfirmation,
+                        episodeOpen = threatEpisodeTracker.hasOpenEpisode()
+                    )
+                }?.let { servingForSite ->
                     siteKeys.forEach { key ->
                         dbHelper.recordStableSiteContext(
                             // One aggregate contribution per identity and minute. The PK also

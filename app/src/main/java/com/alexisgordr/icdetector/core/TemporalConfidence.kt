@@ -53,6 +53,12 @@ class TemporalConfidence(
      */
     fun interrupt() = reset()
 
+    /**
+     * 3.0 — Hay una racha de sospecha en curso (en confirmación o alarma ya confirmada). Lo lee el
+     * análisis bajo el mismo cerrojo que la publicación, que es quien la cambia.
+     */
+    val inConfirmation: Boolean get() = anomalyStreaks.isNotEmpty()
+
     /** Olvida todas las rachas. Útil al reiniciar el servicio o entre escenarios de test. */
     fun reset() {
         anomalyStreaks.clear()

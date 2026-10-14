@@ -134,6 +134,9 @@ class ThreatEpisodeTracker(
         )
     }
 
+    /** 3.0 — Hay una promoción de episodio vigente (incluida la retención de 30 s). */
+    fun hasOpenEpisode(): Boolean = promotedIdentity != null && nowMs() <= promotedUntilMs
+
     /**
      * 3.0 (#20) — Pérdida de señal: la evidencia de antes del hueco no se correlaciona con la de
      * después, aunque siga dentro de la ventana de 90 s.

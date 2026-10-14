@@ -11,6 +11,14 @@ GitHub pre-release of an earlier build was withdrawn.
 
 ### Audit fixes
 
+- **Stable-Site learns only from clean cycles.** Every minute the serving cell, the neighbours and the
+  RF fingerprints of neighbours without a Cell ID were added to the site context from ANY cycle,
+  confirmed alarms included: a transmitter insisting for three days at home became a known cell of
+  the site and corroborated itself as a neighbour in two. It was the only learning source that did
+  not filter dirty data. A cycle now teaches the site only with no failed rule, not suspicious, no
+  Local Cell Trust contradiction and no confirmation streak or multi-signal episode open
+  (`StableSiteContextPolicy`). The unverified-site marker does not count as dirty. Stable-Site stays
+  in shadow mode, so no alarm changes; the learned context stays clean for when it is enabled.
 - **A cycle is shown before its alerts and writes.** Publication ran incidents, black box,
   `checkAlerts` (history row, alert and notification) and the external verification before updating
   the screen and the health. A failure late in that sequence left an alarm sent and a row written

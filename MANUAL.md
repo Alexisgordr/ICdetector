@@ -373,6 +373,14 @@ neighbour-baseline days and thirty serving observations. New sites, movement, un
 unavailable neighbours cannot activate a hold. A single serving sighting does not make an identity
 known: corroboration needs three serving days or two neighbour days.
 
+**What it learns from.** Only clean cycles count towards these days and observations: no rule
+failed (sub-threshold included), the cell is not suspicious, Local Cell Trust found no
+contradiction, and no temporal confirmation streak or multi-signal episode is open. Otherwise a
+transmitter that kept triggering alarms at home for three days would become a known cell of the site
+and, as a neighbour, corroborate itself in two. The site's own unverified-cell marker does not block
+learning: it is the novelty Stable-Site measures, and a new legitimate cell must still be able to
+become known.
+
 **Shadow mode.** At an active site, a serving identity new to that site may meet the
 `SITE_UNVERIFIED` conditions. Stable-Site only reports this — the terminal says that it *would* apply
 the hold — while trust learning, forensics and alarms remain unchanged. Novelty is stored as one
