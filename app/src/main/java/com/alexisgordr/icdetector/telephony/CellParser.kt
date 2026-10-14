@@ -2,7 +2,6 @@ package com.alexisgordr.icdetector.telephony
 
 import android.os.Build
 import android.telephony.*
-import androidx.annotation.RequiresApi
 import com.alexisgordr.icdetector.models.CellConnectionState
 import com.alexisgordr.icdetector.models.CellData
 import com.alexisgordr.icdetector.models.CsgInfo
@@ -166,41 +165,32 @@ object CellParser {
     internal fun validBandwidth(value: Int): Int? = value.takeIf { it in 1 until Int.MAX_VALUE }
 
     private fun extrasLte(id: CellIdentityLte): IdentityExtras =
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-            try {
-                IdentityExtras(
-                    bands = id.bands.toList(),
-                    additionalPlmns = id.additionalPlmns.sorted(),
-                    csg = id.closedSubscriberGroupInfo?.let { csgOf(it) }
-                )
-            } catch (_: Exception) { IdentityExtras() }
-        } else IdentityExtras()
+        try {
+            IdentityExtras(
+                bands = id.bands.toList(),
+                additionalPlmns = id.additionalPlmns.sorted(),
+                csg = id.closedSubscriberGroupInfo?.let { csgOf(it) }
+            )
+        } catch (_: Exception) { IdentityExtras() }
 
     private fun extrasNr(id: CellIdentityNr): IdentityExtras =
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-            try {
-                IdentityExtras(bands = id.bands.toList(), additionalPlmns = id.additionalPlmns.sorted())
-            } catch (_: Exception) { IdentityExtras() }
-        } else IdentityExtras()
+        try {
+            IdentityExtras(bands = id.bands.toList(), additionalPlmns = id.additionalPlmns.sorted())
+        } catch (_: Exception) { IdentityExtras() }
 
     private fun extrasWcdma(id: CellIdentityWcdma): IdentityExtras =
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-            try {
-                IdentityExtras(
-                    additionalPlmns = id.additionalPlmns.sorted(),
-                    csg = id.closedSubscriberGroupInfo?.let { csgOf(it) }
-                )
-            } catch (_: Exception) { IdentityExtras() }
-        } else IdentityExtras()
+        try {
+            IdentityExtras(
+                additionalPlmns = id.additionalPlmns.sorted(),
+                csg = id.closedSubscriberGroupInfo?.let { csgOf(it) }
+            )
+        } catch (_: Exception) { IdentityExtras() }
 
     private fun extrasGsm(id: CellIdentityGsm): IdentityExtras =
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-            try {
-                IdentityExtras(additionalPlmns = id.additionalPlmns.sorted())
-            } catch (_: Exception) { IdentityExtras() }
-        } else IdentityExtras()
+        try {
+            IdentityExtras(additionalPlmns = id.additionalPlmns.sorted())
+        } catch (_: Exception) { IdentityExtras() }
 
-    @RequiresApi(Build.VERSION_CODES.R)
     private fun csgOf(info: ClosedSubscriberGroupInfo): CsgInfo = CsgInfo(
         indicator = info.csgIndicator,
         identity = info.csgIdentity.takeIf { it in 0 until Int.MAX_VALUE },

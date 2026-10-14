@@ -54,7 +54,7 @@ android {
 
     defaultConfig {
         applicationId = "com.alexisgordr.icdetector"
-        minSdk = 29
+        minSdk = 31
         targetSdk = 37
 
         versionCode = 39

@@ -35,6 +35,17 @@ class AppIdentityTest {
         assertTrue(manifest.contains("android:label=\"ICdetection\""))
     }
 
+    /**
+     * 3.0 (corte de campaña) — Android 12 es el mínimo real: la recolección se registra con
+     * TelephonyCallback (API 31) y no hay respaldo con PhoneStateListener. En Android 10/11 no
+     * llegaban celdas, ServiceState ni DisplayInfo por callback (H3 siempre N/A, sin 5G NSA).
+     */
+    @Test fun `the minimum is Android 12, where the telephony callbacks exist`() {
+        assertEquals(31, Regex("minSdk = (\\d+)").find(gradle())!!.groupValues[1].toInt())
+        val controller = file("src/main/java/com/alexisgordr/icdetector/service/TelephonyCollectionController.kt")
+        assertFalse("sin guardas muertas de API 31", controller.contains("VERSION_CODES.S"))
+    }
+
     @Test fun `3_0 follows 2_10_10 and no store note is ahead of it`() {
         val code = Regex("versionCode = (\\d+)").find(gradle())!!.groupValues[1].toInt()
         assertEquals(39, code)

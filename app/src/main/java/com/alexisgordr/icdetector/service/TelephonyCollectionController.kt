@@ -4,7 +4,6 @@ import android.annotation.SuppressLint
 import android.Manifest
 import android.content.Context
 import android.content.pm.PackageManager
-import android.os.Build
 import android.telephony.AccessNetworkConstants
 import android.telephony.CellInfo
 import android.telephony.NetworkRegistrationInfo
@@ -12,7 +11,6 @@ import android.telephony.ServiceState
 import android.telephony.TelephonyCallback
 import android.telephony.TelephonyDisplayInfo
 import android.telephony.TelephonyManager
-import androidx.annotation.RequiresApi
 import androidx.core.content.ContextCompat
 import com.alexisgordr.icdetector.models.NetworkTypeNames
 import com.alexisgordr.icdetector.models.ServiceRegistrationState
@@ -36,7 +34,7 @@ internal class TelephonyCollectionController(
     private var retryCount = 0
 
     fun start() {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S || !hasPhonePermission()) return
+        if (!hasPhonePermission()) return
         registerCellCallback()
         registerDisplayCallback()
         registerServiceStateCallback()
@@ -44,7 +42,7 @@ internal class TelephonyCollectionController(
 
     fun requestFreshCellInfo() {
         recoverCallbacksIfStale()
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) start()
+        start()
         if (!hasLocationPermission()) return
         try {
             manager.requestCellInfoUpdate(
@@ -74,7 +72,7 @@ internal class TelephonyCollectionController(
     @SuppressLint("MissingPermission")
     fun displayNetworkType(): String {
         val info = lastDisplayInfo
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R && info != null) {
+        if (info != null) {
             val override = info.overrideNetworkType
             if (override == TelephonyDisplayInfo.OVERRIDE_NETWORK_TYPE_NR_NSA ||
                 override == TelephonyDisplayInfo.OVERRIDE_NETWORK_TYPE_NR_ADVANCED
@@ -93,7 +91,6 @@ internal class TelephonyCollectionController(
     }
 
     fun destroy() {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) return
         listOf(cellCallback, displayCallback, serviceStateCallback).forEach { callback ->
             callback?.let { try { manager.unregisterTelephonyCallback(it) } catch (_: Exception) {} }
         }
@@ -103,8 +100,8 @@ internal class TelephonyCollectionController(
     }
 
     /**
-     * v2.10.4 — Lectura activa del ServiceState, para Android 10 (sin callbacks) y como red de
-     * seguridad si un callback se pierde. Devuelve null si Android no la permite.
+     * v2.10.4 — Lectura activa del ServiceState, como red de seguridad si un callback se pierde
+     * (3.0: la app exige Android 12, así que los callbacks existen siempre). Devuelve null si Android no la permite.
      */
     @SuppressLint("MissingPermission")
     fun pollServiceState(): ServiceStateSnapshot? {
@@ -119,7 +116,7 @@ internal class TelephonyCollectionController(
     }
 
     private fun registerServiceStateCallback() {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S || serviceStateCallback != null) return
+        if (serviceStateCallback != null) return
         try {
             val callback = object : TelephonyCallback(), TelephonyCallback.ServiceStateListener {
                 override fun onServiceStateChanged(serviceState: ServiceState) {
@@ -141,9 +138,7 @@ internal class TelephonyCollectionController(
     // Callers are gated by hasPhonePermission(); individual vendor getters remain best-effort.
     @SuppressLint("MissingPermission")
     private fun snapshotOf(serviceState: ServiceState, source: ServiceStateSource): ServiceStateSnapshot {
-        val registration = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-            try { registrationOf(serviceState) } catch (_: Exception) { RegistrationDomains() }
-        } else RegistrationDomains()
+        val registration = try { registrationOf(serviceState) } catch (_: Exception) { RegistrationDomains() }
         return ServiceStateSnapshot(
             timestampMs = System.currentTimeMillis(),
             state = ServiceRegistrationState.fromAndroid(runCatching { serviceState.state }.getOrDefault(-1)),
@@ -174,7 +169,6 @@ internal class TelephonyCollectionController(
         val voiceNetwork: String? = null
     )
 
-    @RequiresApi(Build.VERSION_CODES.R)
     @Suppress("DEPRECATION") // El SDK actual aún no expone un sustituto público equivalente.
     private fun registrationOf(serviceState: ServiceState): RegistrationDomains {
         var dataRegistered: Boolean? = null
@@ -200,7 +194,7 @@ internal class TelephonyCollectionController(
     }
 
     private fun registerCellCallback() {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S || cellCallback != null) return
+        if (cellCallback != null) return
         try {
             val callback = object : TelephonyCallback(), TelephonyCallback.CellInfoListener {
                 override fun onCellInfoChanged(cellInfo: MutableList<CellInfo>) {
@@ -217,7 +211,7 @@ internal class TelephonyCollectionController(
     }
 
     private fun registerDisplayCallback() {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S || displayCallback != null) return
+        if (displayCallback != null) return
         try {
             val callback = object : TelephonyCallback(), TelephonyCallback.DisplayInfoListener {
                 override fun onDisplayInfoChanged(displayInfo: TelephonyDisplayInfo) {
@@ -232,7 +226,6 @@ internal class TelephonyCollectionController(
     }
 
     private fun recoverCallbacksIfStale() {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) return
         if (System.currentTimeMillis() - lastRegisteredCallbackAt <= CALLBACK_TIMEOUT_MS) return
         retryCount++
         if (retryCount < MAX_RETRIES) return

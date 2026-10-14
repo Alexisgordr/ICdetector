@@ -1147,12 +1147,7 @@ class MiniICService : Service() {
                     // reloj con el ancla LTE.
                     parsedTokens.add(
                         if (parsed.isRegistered) {
-                            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-                                info.timestampMillis
-                            } else {
-                                @Suppress("DEPRECATION")
-                                TimeUnit.NANOSECONDS.toMillis(info.timeStamp)
-                            }
+                            info.timestampMillis
                         } else null
                     )
                 }
