@@ -52,8 +52,8 @@
 >
 > - **Stable — v2.10.10.** Used by the ongoing field-collection campaign (dataset baseline v2.10.5).
 >   Bug fixes only; see [IMPORTANT.md](IMPORTANT.md).
-> - **In development — 3.0.0-beta4.** The 3.0 roadmap: schema 21, more accurate rule inputs and
->   stricter confirmation. No APK is published; it is available as source on the
+> - **In development — 3.0.0-beta4.** More accurate rule inputs, stricter confirmation, a reviewed
+>   engine, backup and restore. No APK is published; it is available as source on the
 >   [`ICdetection-v3.0.0-beta`](https://github.com/Alexisgordr/ICdetector/tree/ICdetection-v3.0.0-beta)
 >   branch ([build it yourself](#-getting-started)). **3.0 needs a clean install** from v2.10.x.
 >   Do not install it on a phone that collects campaign data.
@@ -222,9 +222,9 @@ Cell ID or technology) within 10 s while the phone is not moving fast. Without a
 `N/A` instead of assuming you are stationary.
 
 #### Geographic Consistency Analysis (H11)
-Validates Cell IDs against a local GPS history built from the device's own observations, revealing
-the same Cell ID appearing from physically inconsistent locations. It does not rely on public tower
-databases.
+Validates Cell IDs against a local GPS history built from the device's own clean observations, spread
+across days, revealing the same Cell ID appearing from physically inconsistent locations. It does not
+rely on public tower databases.
 
 #### Latency Correlation (H12, optional)
 Compares network latency with this cell's own learned reference. Evaluated only on a real
@@ -248,9 +248,11 @@ one episode however many samples Android reports: `48,48,200,200,48` is one alte
 not instability.
 
 #### Mobility Sanity (H16)
-Compares a real handover with device movement, GPS quality, visible neighbours, locally learned
-coverage zones and trusted previous transitions. It has no fixed maximum tower distance, returns
-`N/A` when evidence is not defensible, and its low weight cannot trigger an alert by itself.
+Compares a real handover with device movement, GPS quality, where the phone is relative to the zones
+where it learned both cells, visible neighbours and trusted previous transitions. A distant jump is
+incoherent only while the phone is still in the previous cell's zone; between two large cells it is
+`N/A`. It has no fixed maximum tower distance, needs a recent fix at both ends, and its low weight
+cannot trigger an alert by itself.
 
 </details>
 
@@ -355,9 +357,8 @@ the recent service-state changes, exportable to CSV. The serving cell is chosen 
 `PRIMARY_SERVING` status, never by signal strength; if a declared primary has unusable telemetry, the
 cycle abstains instead of promoting a secondary. A secondary carrier is never counted as a
 neighbour, even when the modem publishes it as unregistered (the NR leg of 5G NSA): neighbour-based
-rules, the Bayesian density factor and Stable-Site use only real neighbours. Before 3.0 beta (commit
-`6e99267`) such carriers counted; the effect on earlier rows has not been measured and is not
-recomputed (see the [manual](MANUAL.md)).
+rules, the Bayesian density factor and Stable-Site use only real neighbours (how this affects rows
+from earlier builds is explained in the [manual](MANUAL.md)).
 
 ---
 
@@ -372,7 +373,9 @@ approximate location; cell identities, times and counts can also reveal habits. 
 confirmation and includes a `PRIVACY.txt` note.
 
 Stable-Site is **shadow-only**: it does not change H1–H16, the security score, anomaly confidence,
-Local Cell Trust, temporal confidence, alerts or forensic decisions.
+Local Cell Trust, temporal confidence, alerts or forensic decisions. It learns only from clean cycles
+(no failed rule, no open confirmation or episode), so a transmitter that keeps triggering alarms
+cannot become a known cell of the site.
 
 - **Neighbour capability:** `FULL_NEIGHBOUR_IDENTITY`, `RF_NEIGHBOUR_ONLY` (validated local RF
   context `RFCTX:v1:RAT:ARFCN:PCI`, never presented as a Cell ID) or `NO_NEIGHBOUR_DATA`.
@@ -430,15 +433,11 @@ For long collection sessions the app keeps a GPS-only stream and a partial wake 
 monitoring, which increases battery use. At 5% battery or less while unplugged, both pause and resume
 after charging; where GPS keeps failing, precise fixes are retried less often.
 
-**Location mode.** Settings offers *Continuous* (default), *Smart* and *Adaptive*, with names and
-descriptions also available in Spanish. Continuous retains the permanent GPS stream for campaigns.
-Smart uses short acquisition windows roughly every 45 seconds; a handover to a cell not seen in the
-last 10 minutes opens or extends a continuous GPS window until 60 seconds after that change, so GPS
-stays active during a journey, while hopping between known cells at rest does not. Smart and Adaptive pause after
-repeated acquisition failures and retry after 2, 5 and 10 minutes; cell changes and suspected
-anomalies may request an earlier bounded attempt. Cellular scanning continues independently.
-GPS positions for every cell and a particular battery saving cannot be guaranteed. Each row records
-its selected mode; see the [manual](MANUAL.md) for timing and coverage.
+**Location mode.** *Continuous* (default) keeps the GPS stream for campaigns. *Smart* and *Adaptive*
+save battery with short, bounded acquisition windows (a handover to a new cell opens one during a
+journey) and back off when reception is poor; cellular scanning continues independently. Saving
+modes cannot guarantee a position for every cell, and H16 is mostly `N/A` in them. Each row records
+its mode; the [manual](MANUAL.md) gives the timing.
 
 ---
 
@@ -461,16 +460,12 @@ automatic cloud backup and phone-to-phone transfer exclude every app file (`allo
 disabled and the extraction rules exclude all data), so a vendor transfer tool following
 Android's rules does not copy the database to another phone.
 
-**Backup and restore (3.0).** *Settings → Backup* saves everything in one file (without the
-OpenCelliD key) and restores it on another install; a new install asks whether to restore a backup
-before recording anything. Restoring replaces the current data after you
-save a copy of it, and is safe against interruptions; backups from v2.10.x are refused to keep the
-campaign data separate. It is meant for moving data right away (a new phone, or before and
-after a reset), not as a long-term archive: restoring an old backup replaces everything recorded
-since and brings back outdated learning; use the exports to archive. A backup whose database
-contains triggers or views is refused before it is opened for migration. Its checksum and
-integrity check detect damage, not tampering: whoever can edit the file can recompute them, so
-restore only backups you made yourself. See the [manual](MANUAL.md#backup-and-restore-30).
+**Backup and restore.** *Settings → Backup* saves everything in one file (without the OpenCellID
+key) and restores it on another install; a new install asks whether to restore one before recording
+anything. Restoring replaces the current data after saving a copy of it and is safe against
+interruptions; backups from v2.10.x are refused. It is meant for moving data now (a new phone, a
+reset), not as an archive: use the exports for that. Its checksum detects damage, not tampering, so
+restore only backups you made yourself. See the [manual](MANUAL.md#backup-and-restore).
 
 **Complete local reset.** *Delete history* removes antenna history, incidents, forensic cases,
 transitions, service-state events, Stable-Site learning and route-familiarity trips in a single

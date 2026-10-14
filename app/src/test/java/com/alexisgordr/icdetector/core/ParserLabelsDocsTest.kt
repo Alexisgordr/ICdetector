@@ -36,7 +36,7 @@ class ParserLabelsDocsTest {
         assertTrue(manual.contains("`PCI` and `ARFCN` are empty when Android reported \"not available\""))
         assertTrue(manual.contains("LTE index 0–1282, GSM index 0–219"))
         assertTrue(manual.contains("T_A index (0–3846), not microseconds"))
-        assertTrue(manual.contains("the app no longer reads it from the manufacturer's text"))
+        assertTrue(manual.contains("never from the manufacturer's text"))
         assertTrue(manual.contains("Carrier aggregation is not handled specially here"))
         assertTrue(manual.contains("`NetType` for an NR cell is `5G NR`"))
     }

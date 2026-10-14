@@ -9,7 +9,7 @@
 > | **Database schema** | 19 |
 > | **Duration** | Approximately three months |
 >
-> **3.0 is not part of the campaign.** The 3.0 betas change the database (schema 21), the inputs of
+> **3.0 is not part of the campaign.** The 3.0 betas change the database (schema 25), the inputs of
 > several rules and how alarms are confirmed, so their data is not comparable with the campaign.
 > They are the same app as the stable release (`com.alexisgordr.icdetector`): installing one on the
 > phone that collects campaign data would upgrade and migrate its database. **Keep the campaign phone
@@ -173,16 +173,11 @@ recalibrate the likelihood ratios, which would also need data from real attacks.
 
 ## A note on the release history
 
-I want to apologize for the unusually high number of releases during development. Real-world testing
-repeatedly exposed behaviour that was difficult or impossible to understand from Android
-documentation alone: carrier aggregation, modem handovers, unavailable neighbour identities, Timing
-Advance limitations, historical baselines and vendor-specific telephony reporting all required real
-hardware. Some changes were small; others needed migrations, regression tests or a new
-interpretation of historical evidence.
-
-I preferred to document and correct problems rather than hide them or leave known issues in the
-detector. v2.10.5 follows the same principle: it was better to fix the last known integrity bugs
-before Day 1 than to carry them through three months of data.
+There were many releases during development because real hardware kept exposing behaviour the
+Android documentation does not describe: carrier aggregation, modem handovers, missing neighbour
+identities, Timing Advance limits and vendor-specific reporting. I preferred to document and correct
+those problems rather than carry them into the data, which is also why v2.10.5, not v2.10.4, is
+Day 1. Thank you for your patience with the update rate.
 
 ICdetection is an Android userland cellular anomaly auditor, not definitive proof of an IMSI catcher
 or surveillance system. The goal of this stage is not to claim perfection, but to find out how well

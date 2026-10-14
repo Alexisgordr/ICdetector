@@ -94,7 +94,7 @@ class RestoreUnexpectedObjectsTest {
         val manual = doc("MANUAL.md")
         assertTrue(manual.contains("**triggers or views** is refused as damaged"))
         assertTrue(manual.contains("They do **not**\nauthenticate the backup: anyone who can edit the file can also recompute its checksum"))
-        assertTrue(doc("README.md").contains("Its checksum and\nintegrity check detect damage, not tampering"))
+        assertTrue(doc("README.md").contains("Its checksum detects damage, not tampering"))
         assertTrue(doc("CHANGELOG.md").contains("**Restore refuses databases with triggers or views.**"))
     }
 }

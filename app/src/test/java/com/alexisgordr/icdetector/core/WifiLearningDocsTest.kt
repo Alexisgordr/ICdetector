@@ -17,7 +17,7 @@ class WifiLearningDocsTest {
             "\"No failure recorded\" therefore does not mean \"every rule was evaluated\"",
             "The Wi-Fi state is not stored per row and cannot be reconstructed",
             "**limitation still to be measured**, not a quantified bias", "not a\ndemonstrated change in detection",
-            "No Wi-Fi column is added and these rows are not excluded"
+            "There is no Wi-Fi column and these rows are not excluded"
         ).forEach { assertTrue(it, wifi.contains(it)) }
         assertTrue(doc("README.md").contains("the Wi-Fi state is not stored per row"))
     }

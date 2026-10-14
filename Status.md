@@ -9,7 +9,7 @@ The current state of the project in one page. What changed in each release is in
 | | Version | Version code | DB schema | Where |
 |---|---|---|---|---|
 | **Stable release** | v2.10.10 | 38 | 19 | GitHub Releases · used by the field campaign |
-| **Development** | 3.0.0-beta4 | 39 | 23 | Branch `ICdetection-v3.0.0-beta` · draft PR #34 · source only, no APK published |
+| **Development** | 3.0.0-beta4 | 39 | 25 | Branch `ICdetection-v3.0.0-beta` · draft PR #34 · source only, no APK published |
 | **Campaign baseline** | v2.10.5 | 33 | 19 | Day 1 of the field dataset ([IMPORTANT.md](IMPORTANT.md)) |
 
 - **App identity:** `com.alexisgordr.icdetector`, *ICdetection*, for stable releases and betas
@@ -21,56 +21,55 @@ The current state of the project in one page. What changed in each release is in
 
 ## 3.0 roadmap — GitHub issue #27
 
-Every item is implemented. Weights and thresholds are unchanged; what changed is the data the rules
-receive and how evidence is confirmed.
+Every item is implemented. Score weights and the alarm threshold are unchanged; what changed is the
+data the rules receive and how evidence is confirmed.
 
 | Phase | Scope | Issues | State |
 |---|---|---|---|
-| 1 — Data foundations | Schema 20: UTC instant, evaluation coverage, GPS accuracy and app version per row; ordering by observation time; stale cycles never publish | #23 #29 #30 #25 #24 | Done |
+| 1 — Data foundations | UTC instant, evaluation coverage, GPS accuracy and app version per row; ordering by observation time; stale cycles never publish | #23 #29 #30 #25 #24 | Done |
 | 2 — Correct inputs | Full-identity handovers, neighbour placeholders, one frequency/PCI validator, complete LTE band table, Timing Advance per transmitter and per unit | #19 #11 #22 #32 #21 #33 | Done |
 | 3 — Confirmation and rules | Coverage gaps restart confirmation, same-eNodeB band changes, latency states, H1 pending, H14 on 5G SA | #20 #10 #26 #28 #8 | Done (H6 on NR stays `N/A`) |
 | 4 — Maintenance and docs | Maintenance backlog, validation limits of the campaign | #7 #31 | Done |
 
-**Latest fixes on the branch** (found during testing after the roadmap was complete): schema 20 migration
-creates missing tables; time, GPS and service state captured when the reading arrives (A03); a gap
-of more than 2 minutes without readings breaks continuity like a signal loss (#20); one constant for
-that gap, kept distinct from the 30 s stalled-modem gate and guarded by a test; the monitoring
-notification is always silent and the app warns when alarms are muted (#35); a location mode setting
-(continuous by default; smart and adaptive with bounded GPS attempts and retries of 2, 5 and 10
-minutes when reception is poor; in smart, a handover to a new cell opens a 60 s GPS window) with the
-mode stored per row (schema 21); the main-screen GPS
-indicator uses the same validated position as the analysis; backup and restore from Settings
-(validated, journaled and safe against interruptions; v2.10.x backups refused), a first-start
-question that blocks collection until answered, and no app data in Android's backup or
-phone-to-phone transfer; a local statistical profile in shadow mode (schemas 22–23, additive) with an
-experimental, display-only option in Settings, off by default.
+Beyond the roadmap, 3.0 adds a location-mode setting, backup and restore, and a local statistical
+profile in shadow mode, and it went through a review of the whole engine (rule inputs, scoring,
+confirmation, local learning, geometry, the analysis cycle and the queries the engine learns from).
+[CHANGELOG.md](CHANGELOG.md) describes every change.
 
 ## Dataset cuts in 3.0
 
-3.0 data is not comparable with the v2.10.x campaign for the rules below. Within 3.0, each row
-records the app version that observed it (`AppVersion`), so cuts can be applied per row. From 3.0
-`AppVersion` also carries the build commit (`3.0.0-beta4+6bb5ed3`), so builds of the same beta can
-be told apart.
+3.0 data is not comparable with the v2.10.x campaign for the rules below, and some of them also
+changed between 3.0 betas. Each row records the app version and build commit that observed it
+(`AppVersion`, for example `3.0.0-beta4+6bb5ed3`), so cuts can be applied per row.
 
-| Area | Issues | What changed |
-|---|---|---|
-| Ages and ordering | #23 | Exact UTC instant from 3.0; approximate before |
-| Context columns | A03 | Time, position and service state of the moment the reading arrived |
-| Location mode | — | Smart and adaptive rows can have fewer fresh positions (`LocationMode`); in every mode, fix age is measured with the monotonic clock and stream fixes pass the same accuracy and continuity checks |
-| Confirmation (all alarms) | #20 | Restarts after a signal loss or a gap of more than 2 min |
-| H1 | #20 #28 | Isolation streak restarts after a gap; `N/A` while pending |
-| H5 | #11 | LTE neighbour placeholders read as unavailable |
-| H6, `TAUnit` | #21 #33 | Timing Advance only from the same transmitter; stub-zero evidence per technology |
-| H10, handover rows | #19 | Handover = change of the full serving identity |
-| H12 | #26 | Evaluated only on a real measurement; learning state |
-| H14 | #32 #10 #8 #20 | Complete band table, same-eNodeB changes ignored, 5G SA, band context reset after a gap |
-| H15, local trust | #22 | EARFCN 0 learnt; impossible PCIs ignored |
+| Area | What changed |
+|---|---|
+| Ages and ordering | Exact UTC instant (#23); approximate before |
+| Context columns | Time, position and service state of the moment the reading arrived (A03) |
+| Location mode | Smart and adaptive rows can have fewer fresh positions (`LocationMode`); fix ages use the monotonic clock in every mode |
+| Neighbours | A secondary carrier published as unregistered is no longer a neighbour (H1–H5, H7, H11, H16, density factor, Stable-Site) |
+| Confirmation (all alarms) | Restarts after a signal loss or a gap of more than 2 min (#20); a held multi-signal episode no longer advances it; while H10 fails it counts on the set of ping-pong identities; without a modem timestamp only fresh deliveries count |
+| H1 | Isolation streak restarts after a gap; `N/A` while pending (#20 #28); unknown freshness token is not "repeated" |
+| H2, H7 | Power compared only with neighbours of the same technology |
+| H4 | Never subtracts points while not evaluated |
+| H5 | Placeholders read as unavailable (#11); TAC compared only with neighbours of the same technology and operator |
+| H6, `TAUnit` | Timing Advance only from the same transmitter, range-checked; stub-zero evidence per technology and per site (#21 #33); geometric branch removed |
+| H10, handover rows | Handover = change of the full serving identity (#19); a transient unreadable Cell ID is not a handover; H10 uses only a recent GPS speed |
+| H11 | Parser sentinels are not an RF difference; history chosen across days |
+| H12 | Evaluated only on a real measurement; learning state (#26) |
+| H14 | Complete band table, same-eNodeB changes ignored, 5G SA, band context reset after a gap (#32 #10 #8 #20) |
+| H15 | EARFCN 0 learnt, impossible PCIs ignored (#22); rows carrying the H15 reason stay in its history whatever else failed |
+| H16 | Own recent fix at each end; no route across a service gap; incoherent only with the phone in the previous cell's zone; zones sampled across days |
+| Anomaly confidence | Latency factor only when H12 fails; H6 in the RF-dominance group, damped by reputation |
+| Local learning | Local confidence validates PCI/ARFCN; Stable-Site learns only from clean cycles; local profile: one evaluation per observation (schema 24) |
 
 ## Known limitations and open items
 
 - **H9 (ciphering)** is always `N/A`: Android does not expose the modem's ciphering state to
   regular apps.
 - **H6 on 5G NR** stays `N/A`: Android's NR Timing Advance has no defensible distance conversion yet.
+- **H16 in Smart and Adaptive location modes** is mostly `N/A`: it needs a recent fix at both ends of
+  a handover.
 - **MediaTek modems** that fill neighbours with placeholder values are outside the supported set;
   3.0 reads those values as unavailable, but the devices remain less reliable.
 - **Stable-Site** runs in shadow mode only: it never changes a score or an alert.
@@ -78,6 +77,8 @@ be told apart.
   are uncalibrated, a transmitter present while it learns becomes normal and slow multi-day drift is
   only slowed. Widening its role needs the evidence listed in the
   [MANUAL](MANUAL.md#local-profile-shadow-mode-experimental).
+- **H3 or H15 alone** leave the score at 70, on the alarm boundary; whether that is right will be
+  reviewed with field data.
 - **No ground truth, no negative control, limited coverage** — see
   [README → What the field campaign can and cannot show](README.md#-what-the-field-campaign-can-and-cannot-show).
 
@@ -86,7 +87,8 @@ be told apart.
 Run on every push to the beta branch through draft PR #34:
 
 - JVM unit tests (`testDebugUnitTest`), Android lint and the release build.
-- Instrumented storage and migration tests on an emulator (schemas 15–19 → 20, 20 → 21, 21 → 22 and 22 → 23).
+- Instrumented storage, migration and backup tests on an emulator (schemas 15–19 → 20 and every
+  later step up to 25; backups from schemas 23 and 24 restored on 25).
 - `tools/check_export.py` regression tests, SQL affinity and query-plan checks, `when` exhaustiveness.
 
 ## Before the 3.0 release

@@ -81,10 +81,10 @@ is not supported. From 3.0 on, every version updates the previous one normally.
 > If you take part in the field-collection campaign, keep that phone on v2.10.x; see
 > [IMPORTANT.md](IMPORTANT.md).
 
-**First start (3.0).** A new install first asks *"Do you want to restore a backup?"* with two
+**First start.** A new install first asks *"Do you want to restore a backup?"* with two
 options, **Restore a backup** and **Start from scratch**. Nothing is recorded until you choose: the
 app does not start monitoring, and the monitoring service refuses to start by any other route.
-- *Restore a backup* checks the file (see [Backup and restore](#backup-and-restore-30)), restarts
+- *Restore a backup* checks the file (see [Backup and restore](#backup-and-restore)), restarts
   the app and restores it. If you cancel the file picker, or the restore fails, you are back at the
   question and nothing has been decided.
 - *Start from scratch* begins with empty data. The answer is stored only after checking that
@@ -94,8 +94,8 @@ app does not start monitoring, and the monitoring service refuses to start by an
   copied by a transfer tool), the question says so: starting from scratch deletes that data,
   restoring replaces it, and a failed restore keeps it intact.
 The answer is stored only after the restore has finished and been verified, or after the deletion
-has finished; an interruption brings the question back. Installs that already existed before this
-version are not asked.
+has finished; an interruption brings the question back. An install where the app was already used
+on this phone (it has its own settings, which never travel in backups or transfers) is not asked.
 
 ### Permissions
 
@@ -321,8 +321,7 @@ inverted or stretched, and a new trip can start. After a service or process rest
 resumes only if continuity can be shown: same device boot, its monotonic reference, at most fifteen
 minutes since it was last seen and no civil clock jump. Otherwise (reboot, restored backup, upgrade
 from an earlier build, longer gap) it closes as `ABANDONED` at its last observed time, without
-adding duration, and is committed only if already valid. Before this change (3.0 beta) these
-intervals used the civil clock; trips stored by earlier builds are not recalculated. Within a trip, the same
+adding duration, and is committed only if already valid. Within a trip, the same
 continuity rule as Topology applies: after a loss of service, a gap or a restart without
 continuity, the next cell is a new reference of the same trip and no edge links it to the previous
 one; after a restart in the same boot, the first edge needs at most two minutes since the last
@@ -336,10 +335,7 @@ service (the `[MOBILITY]` terminal line, `cellHistory=`) and Geometry (*Current 
 trips* and each node) use the same rule on the same data, so they show the same value. The
 **arrival** in the current trip is separate: the terminal line gives `arrival=priorTrips=n`, how
 many earlier trips used the connection just taken, or `arrival=none` when the trip has not changed
-cell. A cell can be known from earlier trips and still be reached by a new connection. Before this
-change (3.0 beta) the service only counted the edges of the current trip touching the cell, so on
-arrival it could almost never reach `KNOWN_ON_ROUTE` while Geometry did; terminal lines from earlier
-builds used that rule and are not recalculated.
+cell. A cell can be known from earlier trips and still be reached by a new connection.
 
 Geometry shows accumulated transitions and confirmed historical trips separately. During an open
 valid trip, an optional `n → n+1` preview never changes the confirmed count until the service closes
@@ -572,9 +568,8 @@ after a reset. On the same model they keep working but are as old as the backup.
 
 **Comparing results.** Schemas 22, 23, 24 and 25 only add tables, columns and indexes, so existing
 data is kept (schema 25 adds the last evaluated result and failure count of each handover route). Schema 24 adds the observation identity to new history rows and evaluations; rows and
-evaluations stored before it have none and are **not** rewritten: before this change a reading saved
-as two rows could be evaluated twice (the second time against a reference that already contained
-it), so evaluation counts from earlier builds may include such duplicates.
+evaluations stored before it have none and are **not** rewritten; evaluation counts from earlier
+builds may include a reading evaluated twice.
 Older rows have empty profile columns. Each reference carries a *generation* (new after a reset,
 staleness or algorithm change), so evaluations of different references are never confused. Compare
 evaluations only within the same `ProfileAlgorithm`; references from algorithm 1 are relearned
@@ -773,7 +768,7 @@ load balancing and operator policy make fixed tower-spacing thresholds unreliabl
 
 Each learned zone is built from up to 40 clean located samples of the last 30 days, spread across
 distinct days (each day gets a turn, and inside a day the samples are spaced along it), not the 40
-most recent. One long recent stay elsewhere therefore no longer moves the zone's centre on its own.
+most recent, so one long recent stay elsewhere does not move the zone's centre on its own.
 The geometry view uses exactly the same samples.
 
 ### Offline geometry view
@@ -812,9 +807,7 @@ readings, and by a restart of the service or the phone that cannot show continui
 the first cell is a **new reference**: H16 says `N/A` (service interrupted, new reference) and
 neither Topology nor the mobility trips get a route from the cell before the break. A valid serving
 cell without GPS does not break continuity: the change of cell was observed and is counted; only
-its geometry cannot be checked (H16 `N/A` for GPS, never learned). Before this change (3.0 beta) the
-first cell after a break was linked to the last one before it; those stored routes are kept as they
-are, because the data cannot tell which of them crossed a break, and they are not recalculated.
+its geometry cannot be checked (H16 `N/A` for GPS, never learned).
 
 **EXPORT TOPOLOGY** creates a ZIP with `cells.csv`, `transitions.csv`, `topology.graphml`,
 `metadata.json` and `SHA256SUMS.txt`. GraphML opens in tools such as Gephi or Cytoscape. The export
@@ -923,9 +916,8 @@ listed as a secondary carrier and shown in the Radio context, but it is not coun
 neighbour. The app does not assume that secondaries come from the same site as the primary; it only
 uses the role the modem declares. NR entries are not excluded for being NR, and entries in `NONE` or
 `UNKNOWN` state keep their previous treatment. The same list feeds H1–H5, H7, the H11 distance
-threshold, H16, the Bayesian density factor and Stable-Site learning. Before this change (3.0 beta,
-commit `6e99267`) such secondaries counted as neighbours; how many past rows that affected has not
-been measured, and stored rows are not recomputed (see *What your own data can and cannot show*).
+threshold, H16, the Bayesian density factor and Stable-Site learning (for rows from earlier builds,
+see *What your own data can and cannot show*).
 
 **Sudden signal changes (H2, H13).** An unusually large power increase can indicate a transmitter much
 closer or stronger than expected. Movement, handovers, line-of-sight changes and indoor propagation
@@ -939,8 +931,7 @@ technology and physical cell), never from another transmitter. Many modems omit 
 zero; that "always 0" behaviour is detected per technology and never read as a real distance of zero
 metres. TA on 5G NR is not converted to distance, so H6 is `N/A` there. Only values in range are
 used: LTE index 0–1282, GSM index 0–219 (also when converting older rows). LTE TA comes only from
-Android's getter; the app no longer reads it from the manufacturer's text, so some phones show less
-TA than before. NR TA comes from Android's public getter (Android 14+): despite its name it is the raw 3GPP
+Android's getter, never from the manufacturer's text, so some phones report little or no TA. NR TA comes from Android's public getter (Android 14+): despite its name it is the raw 3GPP
 T_A index (0–3846), not microseconds, and it is kept as raw context without a distance;
 a value read from text, only for NR, is marked `UNKNOWN`.
 
@@ -1012,8 +1003,7 @@ score or rule.
 | H13 and H15 | Same history pool of the cell (they learn only once the cell is established). | Different measurements (power versus PCI); a shared blind spot if the pool was learned in a contaminated period. |
 | Stable-Site and local cell confidence | Stable-Site site state. | None while Stable-Site stays in shadow mode (the `SITE_UNVERIFIED` path is disabled). |
 
-The two "possible double counting" rows are reported for a later, data-backed decision; no behaviour
-was changed in this phase.
+The two "possible double counting" rows are left for a later, data-backed decision.
 
 ---
 
@@ -1210,7 +1200,7 @@ versions and the dataset cuts the file crosses. It warns when a file joins sever
 Exports can contain precise locations, network identifiers, device information and security
 observations. Redact sensitive information before sharing publicly.
 
-### Text that a spreadsheet could read as a formula (3.0)
+### Text that a spreadsheet could read as a formula
 
 Some CSV fields come from the network or the modem, not from the app: the network name
 (`NetworkName`), the CSG name (`CsgName`), additional PLMNs, operator codes and cell identities. A
@@ -1269,7 +1259,7 @@ auditable chain of custody, trustworthy time evidence, corroboration and expert 
 Obtain appropriate legal and technical advice; the forensic export assists an investigation but does
 not satisfy legal requirements by itself.
 
-### Backup and restore (3.0)
+### Backup and restore
 
 **Settings → Backup** saves all ICdetection data in one `.icdbackup` file: history, antennas and
 their learned trust, incidents, forensic cases, Stable-Site, trips, and the language, location mode,
@@ -1380,12 +1370,11 @@ in that cycle. "No failure recorded" therefore does not mean "every rule was eva
 afterwards (a row listing H1, H2, H7, H12 and H13 as not evaluated suggests it, but those rules can
 also abstain for other reasons). Whether mixing Wi-Fi (idle) and mobile-data (connected) readings
 shifts those references is a **limitation still to be measured**, not a quantified bias, and not a
-demonstrated change in detection. No Wi-Fi column is added and these rows are not excluded in this
-phase.
+demonstrated change in detection. There is no Wi-Fi column and these rows are not excluded.
 
-Conclusion for this phase: H12 must keep abstaining. H1, H2, H7 and H13 should only be enabled on
+H12 must keep abstaining. H1, H2, H7 and H13 should only be enabled on
 Wi-Fi after a specific validation — for example, logging what each would have decided on Wi-Fi in
-shadow mode and comparing it with the same places on mobile data — so no rule is changed now.
+shadow mode and comparing it with the same places on mobile data — so no rule changes until then.
 
 ### What your own data can and cannot show
 
@@ -1406,6 +1395,11 @@ shadow mode and comparing it with the same places on mobile data — so no rule 
   threshold, H16, the Bayesian density factor and Stable-Site learning. Rows do not store the
   neighbour list, so the effect on past rows cannot be reconstructed and **has not been measured**;
   nothing is rewritten. Compare such rows by `AppVersion`.
+- **Rows from earlier 3.0 betas:** several rules and learned structures changed between betas
+  (trips used the civil clock, routes could cross a service gap, the service judged route familiarity
+  by the current trip only, among others). Stored rows, routes, trips and terminal lines are kept as
+  they were and not recalculated. Compare by `AppVersion`; [Status.md](Status.md) lists the cuts and
+  [CHANGELOG.md](CHANGELOG.md) describes each change.
 - **Stable-Site history:** an episode's *recorded in shadow* mark is cumulative (it stays set if any
   evaluation during the episode met the shadow conditions), while its reason, movement and site state
   belong only to its **last saved evaluation**. Topology routes are aggregates (counts, last state,
