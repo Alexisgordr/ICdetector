@@ -50,7 +50,7 @@ class ForensicExporterTest {
 
     @Test fun `contains every documented file in order`() {
         assertEquals(
-            listOf("case.json", "timeline.csv", "cells.csv", "heuristics.csv", "capabilities.json",
+            listOf("case.json", "timeline.csv", "cells.csv", "heuristics.csv", "trust_site.csv", "capabilities.json",
                 "terminal.log", "SHA256SUMS.txt"),
             files.keys.toList()
         )
@@ -72,9 +72,67 @@ class ForensicExporterTest {
         assertEquals(2, rows("heuristics.csv"))
     }
 
-    @Test fun `terminal log is de-duplicated in order`() {
+    @Test fun `terminal log joins overlapping windows in order`() {
         assertEquals(listOf("línea A", "línea B", "línea C"),
             files.getValue("terminal.log").decodeToString().lines().filter { it.isNotBlank() })
+    }
+
+    /** 3.0 (corte de campaña) — Solo se quita el solapamiento entre ventanas, no las repeticiones. */
+    @Test fun `repeated terminal lines are events and are kept`() {
+        val merge = ForensicExporter::mergeLogWindows
+        assertEquals(listOf("a", "b", "b", "c"), merge(listOf(listOf("a", "b", "b"), listOf("b", "b", "c"))))
+        assertEquals(listOf("a", "a", "a"), merge(listOf(listOf("a", "a"), listOf("a", "a", "a"))))
+        assertEquals("sin solapamiento, se añade entera", listOf("a", "b", "c", "d"), merge(listOf(listOf("a", "b"), listOf("c", "d"))))
+        assertEquals("ventana repetida, nada nuevo", listOf("a", "b"), merge(listOf(listOf("a", "b"), listOf("a", "b"))))
+    }
+
+    /**
+     * 3.0 (corte de campaña) — Todo lo que escribe ForensicRecorder lo lee ForensicExporter, y al revés.
+     * Antes localTrust, stableSite, heuristics, csgIndicator, bands y secondaryCarriers se guardaban
+     * y no se exportaban. `capabilities` se exporta como objeto entero.
+     */
+    @Test fun `every key the recorder writes is exported, and the exporter reads only recorded keys`() {
+        fun source(name: String) = listOf(java.io.File("src/main/java"), java.io.File("app/src/main/java")).first { it.exists() }
+            .resolve("com/alexisgordr/icdetector/forensics/$name").readText()
+        val payload = source("ForensicRecorder.kt").substringAfter("private fun payload(")
+        val capabilities = payload.substringAfter("put(\"capabilities\"").substringBefore("})")
+        val written = Regex("""put\("(\w+)"""").findAll(payload.replace(capabilities, "")).map { it.groupValues[1] }.toSet()
+        val exporter = source("ForensicExporter.kt").substringAfter("internal fun buildFiles(")
+        val read = (Regex("""(?:opt|get)\w*\("(\w+)"""").findAll(exporter) + Regex("""nullable\(\w+,\s*"(\w+)"\)""").findAll(exporter))
+            .map { it.groupValues[1] }.toSet()
+        assertTrue("guardado y no exportado: ${written - read}", read.containsAll(written))
+        assertTrue("leído y nunca guardado: ${read - written}", written.containsAll(read))
+    }
+
+    @Test fun `trust, site, data quality and rule states reach the export`() {
+        val payload = JSONObject().apply {
+            put("schemaVersion", 1); put("phase", 1); put("requiredPhases", 3); put("score", 70)
+            put("reason", ""); put("dataQualityReason", "Calidad de dato: EARFCN 4G fuera de la tabla 3GPP")
+            put("heuristics", "H1=NOT_EVALUATED(csg);H8=FAILED")
+            put("serving", JSONObject().apply {
+                put("identity", "214-07-1-100-LTE"); put("registered", true); put("csgIndicator", true)
+                put("bands", org.json.JSONArray().put(3).put(7)); put("secondaryCarriers", org.json.JSONArray().put("NR:632448:12"))
+            })
+            put("localTrust", JSONObject().apply {
+                put("state", "CHANGED"); put("confidencePercent", 64); put("contradictions", org.json.JSONArray().put("PCI").put("HANDOVER"))
+            })
+            put("stableSite", JSONObject().apply { put("featureState", "SHADOW"); put("novelty", "NEW_CELL"); put("reason", "NOVEL") })
+        }
+        val out = ForensicExporter.buildFiles(case, listOf(ForensicSample(1, 7, 1_790_000_000_000, 1, "TRUST_CONTRADICTION", payload.toString())), "t", 1)
+        fun table(name: String): Map<String, String> {
+            val lines = out.getValue(name).decodeToString().trimEnd().lines()
+            return lines.first().split(",").zip(lines[1].split("\",\"").map { it.trim('"') }).toMap()
+        }
+        assertEquals("CHANGED", table("trust_site.csv")["local_trust_state"])
+        assertEquals("PCI;HANDOVER", table("trust_site.csv")["local_trust_contradictions"])
+        assertEquals("NEW_CELL", table("trust_site.csv")["site_novelty"])
+        assertEquals("Calidad de dato: EARFCN 4G fuera de la tabla 3GPP", table("timeline.csv")["data_quality_reason"])
+        assertEquals("H1=NOT_EVALUATED(csg);H8=FAILED", table("timeline.csv")["heuristics"])
+        assertEquals("3", table("timeline.csv")["required_phases"])
+        assertEquals("3;7", table("cells.csv")["bands"])
+        assertEquals("true", table("cells.csv")["csg_indicator"])
+        assertEquals("NR:632448:12", table("cells.csv")["secondary_carriers"])
+        assertEquals(1, JSONObject(out.getValue("case.json").decodeToString()).getInt("sampleSchemaVersion"))
     }
 
     @Test fun `checksums match every other file`() {

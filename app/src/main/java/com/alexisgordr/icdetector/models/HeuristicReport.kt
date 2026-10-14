@@ -88,7 +88,14 @@ data class HeuristicReport(
             "H16" to transitionCoherence
         )
 
-    fun snapshot(): String = byId.joinToString(";") { (id, status) -> "$id=${status.name}" }
+    /**
+     * Estado de cada regla, `H1=PASSED;H2=FAILED;...`. 3.0 (corte de campaña): una regla que se
+     * abstuvo con motivo lo lleva entre paréntesis, igual que en el CSV (`H3=NOT_EVALUATED(roaming)`).
+     */
+    fun snapshot(): String = byId.joinToString(";") { (id, status) ->
+        val code = if (status == HeuristicStatus.NOT_EVALUATED) abstentionCode(id) else null
+        "$id=${status.name}" + (code?.let { "($it)" } ?: "")
+    }
 
     /**
      * 3.0 (#29) — Reglas que se abstuvieron en este ciclo, separadas por `;` (`H1;H6;H9`), o

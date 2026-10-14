@@ -455,6 +455,8 @@ class HeuristicsTest {
         }
         val ids = r.notEvaluatedIds().split(";")
         assertTrue(ids.containsAll(listOf("H1(csg)", "H2(csg)", "H5(csg)", "H6(csg)", "H7(csg)")))
+        // El estado completo (incidentes, caja negra) lleva los mismos motivos.
+        assertTrue(r.snapshot().split(";").containsAll(listOf("H1=NOT_EVALUATED(csg)", "H6=NOT_EVALUATED(csg)", "H4=PASSED")))
         assertNull(cell.suspiciousReason)
         assertEquals(100, cell.securityScore)
         // Las demás reglas siguen igual: H4 (MNC) se evalúa con las mismas vecinas.
