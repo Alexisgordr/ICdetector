@@ -608,6 +608,12 @@ screen off a ten-second low-power cadence. Handovers are delivered by Android as
 wait for those intervals. The modem may coalesce measurements, so repeated points can legitimately
 have the same value.
 
+**Telephony watchdog.** If more than 30 s pass without a cell list, whether from Android's events
+or as an answer to the app's own requests, the app restarts its telephony callbacks at the fourth
+request made during that silence. The terminal records each restart: *"Watchdog: telephony callbacks restarted; N s
+without cell deliveries."* An occasional restart is harmless; frequent ones point to a modem or a
+power-saving setting that is withholding cell data.
+
 **Dynamic states.** A rule may move from `N/A` to `PASS` once GPS, neighbour data, latency or an API
 result becomes available, and later to `FAIL` if a new measurement becomes inconsistent.
 
@@ -873,7 +879,8 @@ geographic consistency (H11), signal baseline (H13), RF identity stability (H15)
 coherence (H16) — fail in the same observation, two are enough. These checks are not fully
 independent (H11 and H16 share the GPS fix; see *Shared evidence* in section 8). Repeated delivery of
 the same modem sample never counts as another phase, and a continuity break (section 3) starts
-again from zero. An alarm episode closes after 60 s without alarm; a new alarm in the same cell
+again from zero. An alarm episode closes after 60 s without alarm, measured on the monotonic
+clock so that a change of the phone's time cannot shorten or extend it; a new alarm in the same cell
 afterwards is notified again.
 
 **Multi-signal episodes.** Weak failures from at least two different rule families (RF dominance, identity,
@@ -908,10 +915,14 @@ conditions look similar. H4 (MNC) and H5 (TAC) need neighbours that report their
 modems report only frequency, PCI and signal, so these rules can stay `N/A` permanently.
 
 **Femtocells (CSG).** When the serving cell declares a closed subscriber group, it is a femtocell:
-isolated, strong, a few metres away and on its own TAC by design. H1, H2, H5, H6 and H7 are then
-`N/A` (stored as `H1(csg)`, `H2(csg)`, `H5(csg)`, `H6(csg)`, `H7(csg)`) and every other rule runs as
-usual. The indicator comes
-from the cell itself, so a rogue cell could also declare it; the remaining rules still apply to it.
+isolated, strong, a few metres away and on its own TAC by design. The indicator is broadcast by the
+cell itself, so a rogue cell could declare it too. The exemption therefore also requires local
+history: the same full identity must already have at least 10 stored rows on at least 2 distinct
+days in the last 90 days, counted before the current reading. Then H1, H2, H5, H6 and H7 are `N/A`
+(stored as `H1(csg)`, `H2(csg)`, `H5(csg)`, `H6(csg)`, `H7(csg)`) and every other rule runs as usual.
+A CSG cell without that history is evaluated like any other cell, so a femtocell you have just
+installed, or one you meet for the first time, can fail those rules and alarm during its first day.
+The cost is accepted: a transmitter declaring CSG on its first appearance gets no exemption.
 
 **Comparable neighbours only (H2, H5, H7).** These rules compare the serving cell with neighbours of
 the **same technology** only. TAC (LTE), TAC (NR) and LAC (GSM/UMTS) are different identifier spaces,
@@ -984,7 +995,9 @@ and the rule list stay aligned. ICdetection does not claim null-cipher or IMSI-d
 
 **Ping-Pong (H10).** Three changes of the full serving identity (MCC, MNC, TAC, Cell ID or
 technology) within 10 s while the phone is not moving fast. Without a GPS speed it cannot tell
-whether you are stationary, so it reports `N/A`. H10 alone subtracts 25 (score 75) and is not a
+whether you are stationary, so it reports `N/A`. A serving change enters H10's history when the
+reading arrives, so the cycle that observes the third change already fails; a change stays in the
+history even if that cycle's analysis is discarded. H10 alone subtracts 25 (score 75) and is not a
 suspicion. While it fails, the temporal phases count on the set of identities in the ping-pong
 instead of the current cell, so a transmitter alternating between its own identities can still be
 confirmed when its cycles are suspicious; and changing between those identities does not notify the
@@ -1008,6 +1021,10 @@ comparison. It fails when at least two of those rows, and at least 30 %, are ano
 of this kind cannot tell a large cell seen for the first time at a second legitimate place from a
 cell appearing where it should not: there most earlier rows are far, H11 fails, and that row is not
 learned. That is by design, not a sampling issue.
+
+H11 uses the current position only if the GPS fix is 60 s old or less, measured on the monotonic
+clock. With an older fix, or one of unknown age, H11 is `N/A` (stored as `H11(fix_viejo)`): in a
+moving vehicle an old position can be kilometres from where the cell is seen.
 
 **Regional, latency and external correlation (H12 and others).** These depend on reliable location,
 tower-database results, network reachability and enough samples, and may legitimately remain `N/A`.
@@ -1067,6 +1084,11 @@ forensic case, discards pending writes and in-flight verifications, and restarts
 episode tracking from a clean state.
 
 Retention and the forensic-sample cap run when monitoring starts and then about once every 24 hours.
+Retention uses the phone's clock, so it first checks that the clock is plausible: it is skipped,
+and the terminal says why, when its cutoff is later than the newest stored observation or when it
+would delete more than 25 % of the history (from 200 rows on). A normal daily run deletes about
+1 %. After a pause of more than about 30 days the prune waits until new rows bring that share
+down, so nothing is lost if the phone starts with its date set forward.
 The History screen loads the 2,000 most recent rows to keep memory bounded; **EXPORT CSV** still
 streams the complete retained database. Export important information before clearing app data or
 uninstalling.
@@ -1187,7 +1209,8 @@ ServingConnection, BandwidthKHz, Bands, AdditionalPlmns, CsgIndicator, CsgIdenti
 SecondaryCarriers, ServiceState, NetworkOperator, SimOperator, NetworkRoaming,
 ObservedAtUtc, NotEvaluatedHeuristics, GpsAccuracyM, AppVersion, ExportDevice, ExportAndroid,
 LocationMode, ProfileMode, ProfileLevel, ProfileScore, ProfileCoverage, ProfileAbstainReason,
-ProfileAlgorithm, ProfileRevision, ProfileEvidence, ProfileLearned, ProfileHoldout
+ProfileAlgorithm, ProfileRevision, ProfileEvidence, ProfileLearned, ProfileHoldout, RowId,
+ObservationId
 ```
 
 - `Lat` / `Lon` are the phone's own GPS position at the time of the observation; `ApiLat` / `ApiLon`
@@ -1209,8 +1232,9 @@ ProfileAlgorithm, ProfileRevision, ProfileEvidence, ProfileLearned, ProfileHoldo
   a 0.5 % prior; the panel shows it amber from 10 and red from 30.
 - `NotEvaluatedHeuristics` lists the rules that could not be evaluated (`H1;H6;H9`), or `NONE`. A
   rule listed here neither passed nor failed. Some rules carry the reason in parentheses: H3
-  (`roaming`, `frontera`, `sin_sim`, `sin_servicestate`, `sin_mcc_servidora`) and, on a CSG cell,
-  H1, H2, H5, H6 and H7 (`csg`); for example `H1(csg);H3(roaming);H9`.
+  (`roaming`, `frontera`, `sin_sim`, `sin_servicestate`, `sin_mcc_servidora`); on a CSG cell with
+  local history, H1, H2, H5, H6 and H7 (`csg`); and H11 with a GPS fix older than 60 s or of unknown
+  age (`fix_viejo`). For example `H1(csg);H3(roaming);H9;H11(fix_viejo)`.
 - `GpsAccuracyM` is the accuracy of the row's fix in metres; filter large values before analysing
   geometry.
 - `AppVersion` is the version that recorded the row; use it to apply dataset cuts per row. From
@@ -1229,6 +1253,11 @@ ProfileAlgorithm, ProfileRevision, ProfileEvidence, ProfileLearned, ProfileHoldo
   `ProfileRevision`: reference used (`SIGNAL_DBM@g<generation>:<revision>`). `ProfileEvidence`: value,
   mean, spread and deviation per metric. `ProfileLearned` / `ProfileHoldout`: learned afterwards, or
   kept for evaluation only — analyse holdout rows separately, and never mix `ProfileAlgorithm` values.
+- `RowId` is the row's database id. It joins the export with the local profile's evaluations and
+  with a backup; within one export it is unique.
+- `ObservationId` identifies the reading the row came from. One reading can give two rows — the
+  periodic or handover row and the confirmed-alarm row — with the same `ObservationId`; group by it
+  to count observations rather than rows. It is empty for rows recorded before schema 24.
 
 Columns that did not exist when a row was recorded are empty — unknown, never an assumed value.
 
@@ -1242,7 +1271,8 @@ The validator checks the invariants the design guarantees, applies technology-sp
 ranges, and reports calendar coverage, how often each rule was evaluated and how often it failed
 when evaluated (with the reasons it was `N/A`), GPS accuracy, app versions and the dataset cuts the
 file crosses. On mostly benign field data, that failure rate estimates how often each rule fails
-without an attack. It warns when a file joins several phones.
+without an attack. It warns when a file joins several phones, reports readings with more than one
+row and checks that `RowId` is unique.
 
 Exports can contain precise locations, network identifiers, device information and security
 observations. Redact sensitive information before sharing publicly.
@@ -1480,6 +1510,10 @@ fail, whether the condition persists and whether local history stays consistent.
 
 **No forensic case appears.** A case starts at the first suspicious phase. Confirm that monitoring is
 running and check incident history; normal observations do not create cases.
+
+**The notification says *WRITE FAILED*.** Three history writes in a row failed: the database
+rejected the rows or could not be opened, usually because storage is full. Nothing is being saved.
+Free some space; the warning clears with the next successful write.
 
 **A case is `INTERRUPTED`.** The service stopped or restarted before capture completed. The partial
 case is kept honestly and is never relabelled as recovered.

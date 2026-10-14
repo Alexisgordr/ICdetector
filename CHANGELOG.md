@@ -11,9 +11,11 @@ GitHub pre-release of an earlier build was withdrawn.
 
 ### Campaign cut
 
-Made after collection had started, without a new version name: builds after commit `3e67f8e` include
-it. It is a **dataset cut** for H1, H2, H3, H5, H6, H7, H8 and the anomaly confidence; the alarm
-threshold is unchanged. [Status.md](Status.md) lists it in the dataset-cuts table.
+Made after collection had started, without a new version name, and completed before Day 1 of the
+campaign: builds after commit `3e67f8e` include the first part, and builds that include commit
+`8f94d0e` include all of it. It is a **dataset cut** for H1, H2, H3, H5, H6, H7, H8, H10, H11 and the
+anomaly confidence; the alarm threshold (70) and the likelihood ratios are unchanged.
+[Status.md](Status.md) lists it in the dataset-cuts table.
 
 - **H3 compares the serving cell with the SIM.** It used to fail whenever a neighbour had another
   MCC, which is what a phone sees near any border. It now compares the serving MCC with the SIM's,
@@ -44,6 +46,64 @@ threshold is unchanged. [Status.md](Status.md) lists it in the dataset-cuts tabl
 - **Scenario bench.** INCONSISTENT_NET (foreign neighbour plus a TAC mismatch) no longer alarms and
   leaves the adversarial bench; FOREIGN_PLMN_ISOLATED (foreign network, no roaming, no neighbours)
   joins it and alarms. A femtocell and an invalid channel at a border no longer alarm.
+
+#### Completing the cut before Day 1
+
+- **Femtocell exemption only with local history (dataset cut for H1, H2, H5, H6 and H7 on CSG
+  cells).** The CSG indicator is broadcast by the cell itself, so on its own it let any transmitter
+  switch off five rules with one bit. The exemption now also needs local history of that full
+  identity from before the current reading: at least 10 stored rows on at least 2 distinct days in
+  the last 90 days. The history is the cell's local reputation, which counts every stored row
+  whether clean or not and is read before the current row is written. Clean-row histories (H11,
+  Stable-Site) cannot serve, because a new femtocell fails H2, H5 or H7 and would never qualify. A
+  CSG cell without that history is evaluated like any other cell, so a legitimate femtocell can
+  alarm during its first day; once it has history it is `N/A` as before (`H1(csg)`, …).
+- **H11 needs a GPS fix of 60 s or less (dataset cut for H11).** In continuous location mode H11
+  used fixes up to 120 s old without checking their age; at 30 m/s that is 3.6 km, more than H11's
+  2 km threshold in dense areas. With an older fix, or one of unknown age, H11 is `N/A` and the reason is
+  stored as `H11(fix_viejo)`. The age comes from the monotonic clock. The other uses of the fix do
+  not change.
+- **H10 counts a serving change in the cycle that observes it (dataset cut for H10).** The change was
+  added to H10's 10-second history after the analysis, so the cycle with the third change did not
+  see it. It is now recorded when the reading arrives. A change seen in a cycle whose analysis is then
+  discarded stays in the history, because the modem did observe it, and discards happen precisely
+  during fast serving changes. A ping-pong fails H10 one cycle earlier; the 10 s window and the
+  three-change rule are unchanged.
+- **Scenario bench.** A new CSG femtocell without local history (FEMTOCELL_CSG_NEW) alarms; the
+  femtocell with history still does not. PINGPONG_EMITTER fails H10 from its second cycle instead of
+  the third. BORDER_PINGPONG fails H10 in one cycle more and still does not alarm. No other scenario
+  changes its result.
+
+#### Collection and storage fixes before Day 1
+
+None of these changes how a rule is evaluated; they are not dataset cuts.
+
+- **Local profile retention no longer empties the profile.** The prune compared
+  `COALESCE(last_evidence_ms, updated_at_ms)` with a cutoff bound as text. An expression without
+  type affinity compared with text is always smaller in SQLite, so every maintenance run (at start
+  and every 24 h) deleted every reference and the profile never matured. The cutoff is now compared
+  as a number; `tools/check_sql_affinity.py` covers the case.
+- **History CSV gains `RowId` and `ObservationId`**, after the last existing column. One reading
+  can give two rows (the periodic or handover row and the confirmed-alarm row) that share
+  `ObservationId`; `RowId` joins the export with the local profile's evaluations and with a backup.
+  `tools/check_export.py` reports readings with more than one row and checks that `RowId` is
+  unique.
+- **Retention refuses to run with a clock ahead of the data.** A phone that started with its date
+  set forward deleted, in one transaction, everything older than "wrong date − 120 days": the whole
+  campaign. The prune is now skipped, with a line in the terminal, when its cutoff is later than the
+  newest stored observation or when it would delete more than 25 % of the history (from 200 rows
+  on). A normal daily prune deletes about 1 %. Every table pruned by age is skipped together; the
+  forensic sample cap still applies.
+- **A history write that throws counts as a failed write.** When opening the database itself
+  failed (disk full, unreadable database), the exception bypassed collection health, so the
+  *write failed* warning never appeared. It now does, and the error is still logged.
+- **The telephony watchdog counts answers to polls.** It restarted the telephony callbacks after
+  30 s without a spontaneous cell delivery, even while every explicit request was answered, as
+  happens with the phone still in one cell. It now treats any non-empty answer as a delivery, and
+  each restart is written to the terminal with how long cells had been silent.
+- **The alarm episode gate uses the monotonic clock.** A change of the wall clock (network time,
+  time zone, manual change) could close an alarm episode early and notify the same alarm again, or
+  extend it and hide a new one.
 
 #### Fixes made together with the cut
 

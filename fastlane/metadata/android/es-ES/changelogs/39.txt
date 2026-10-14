@@ -6,4 +6,4 @@
 • H16 mira dónde está el móvil; H3 mira la SIM.
 • Copias, modos de ubicación, perfil local (sombra).
 
-H8 calidad de dato, H9 reservada, femtoceldas exentas, prior menor.
+H8 calidad de dato, H9 reservada, femtoceldas conocidas exentas, prior menor.

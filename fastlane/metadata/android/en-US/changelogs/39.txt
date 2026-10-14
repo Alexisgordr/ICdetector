@@ -6,4 +6,4 @@
 • H16 checks where the phone is; H3 checks the SIM.
 • Backup and restore, location modes, local profile (shadow).
 
-H8 data quality, H9 reserved, femtocells exempt, lower prior.
+H8 data quality, H9 reserved, known femtocells exempt, lower prior.

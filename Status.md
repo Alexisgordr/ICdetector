@@ -51,15 +51,15 @@ changed between 3.0 betas. Each row records the app version and build commit tha
 | Location mode | Smart and adaptive rows can have fewer fresh positions (`LocationMode`); fix ages use the monotonic clock in every mode |
 | Neighbours | A secondary carrier published as unregistered is no longer a neighbour (H1–H5, H7, H11, H16, density factor, Stable-Site) |
 | Confirmation (all alarms) | Restarts after a signal loss or a gap of more than 2 min (#20); a held multi-signal episode no longer advances it; while H10 fails it counts on the set of ping-pong identities; without a modem timestamp only fresh deliveries count |
-| H1 | Isolation streak restarts after a gap; `N/A` while pending (#20 #28); unknown freshness token is not "repeated"; `N/A` on a CSG cell (campaign cut) |
-| H2, H7 | Power compared only with neighbours of the same technology; `N/A` on a CSG cell (campaign cut) |
+| H1 | Isolation streak restarts after a gap; `N/A` while pending (#20 #28); unknown freshness token is not "repeated"; `N/A` on a CSG cell with local history (campaign cut) |
+| H2, H7 | Power compared only with neighbours of the same technology; `N/A` on a CSG cell with local history (campaign cut) |
 | H3 | Serving cell compared with the SIM, not with the neighbours; roaming and borders are `N/A` with a stored reason (campaign cut) |
 | H4 | Never subtracts points while not evaluated |
-| H5 | Placeholders read as unavailable (#11); TAC compared only with neighbours of the same technology and operator; `N/A` on a CSG cell (campaign cut) |
-| H6, `TAUnit` | Timing Advance only from the same transmitter, range-checked; stub-zero evidence per technology and per site (#21 #33); geometric branch removed; `N/A` on a CSG cell (campaign cut) |
+| H5 | Placeholders read as unavailable (#11); TAC compared only with neighbours of the same technology and operator; `N/A` on a CSG cell with local history (campaign cut) |
+| H6, `TAUnit` | Timing Advance only from the same transmitter, range-checked; stub-zero evidence per technology and per site (#21 #33); geometric branch removed; `N/A` on a CSG cell with local history (campaign cut) |
 | H8 | Data-quality flag: no points, no weight, not shown as a suspicion; its reason is still stored in the row (campaign cut) |
-| H10, handover rows | Handover = change of the full serving identity (#19); a transient unreadable Cell ID is not a handover; H10 uses only a recent GPS speed |
-| H11 | Parser sentinels are not an RF difference; history chosen across days |
+| H10, handover rows | Handover = change of the full serving identity (#19); a transient unreadable Cell ID is not a handover; H10 uses only a recent GPS speed; a serving change counts in the cycle that observes it (campaign cut) |
+| H11 | Parser sentinels are not an RF difference; history chosen across days; `N/A` with a GPS fix older than 60 s or of unknown age, stored as `H11(fix_viejo)` (campaign cut) |
 | H12 | Evaluated only on a real measurement; learning state (#26) |
 | H14 | Complete band table, same-eNodeB changes ignored, 5G SA, band context reset after a gap (#32 #10 #8 #20) |
 | H15 | EARFCN 0 learnt, impossible PCIs ignored (#22); rows carrying the H15 reason stay in its history whatever else failed |
@@ -67,10 +67,16 @@ changed between 3.0 betas. Each row records the app version and build commit tha
 | Anomaly confidence | Latency factor only when H12 fails; H6 in the RF-dominance group, damped by reputation; prior 0.5 % instead of 2 %, and no weight for H8 or H9 (campaign cut) |
 | Local learning | Local confidence validates PCI/ARFCN; Stable-Site learns only from clean cycles; local profile: one evaluation per observation (schema 24) |
 
-**Campaign cut.** Made on 3.0.0-beta4 after collection had started, without a new version name.
-Rows recorded by builds up to commit `3e67f8e` (the `AppVersion` commit is `3e67f8e` or one of its
-ancestors) are before it; rows from later builds are after it. The scenario bench results it changes
-are listed in [CHANGELOG.md](CHANGELOG.md).
+**Campaign cut.** Made on 3.0.0-beta4 without a new version name, in two parts. The first part
+(H1–H3, H5–H8, anomaly confidence) applies to rows from builds after commit `3e67f8e`. The second
+part (H10, H11 and the CSG condition of H1, H2, H5, H6 and H7) applies to rows from builds that
+include commit `8f94d0e`; it was completed before Day 1, so a campaign started on such a build has
+no rows before it. Rows from builds up to `0323822` have the first part only. The scenario bench
+results each part changes are listed in [CHANGELOG.md](CHANGELOG.md).
+
+The collection and storage fixes made with the second part (telephony watchdog, alarm-episode
+clock, local-profile retention, export identifiers, retention clock guard, write-failure health)
+change no rule and are not cuts.
 
 ## Known limitations and open items
 
@@ -90,15 +96,19 @@ are listed in [CHANGELOG.md](CHANGELOG.md).
   [MANUAL](MANUAL.md#local-profile-shadow-mode-experimental).
 - **H3 or H15 alone** leave the score at 70, on the alarm boundary; whether that is right will be
   reviewed with field data.
-- **Femtocells (CSG)** with H1, H2, H5, H6 and H7 abstaining have clean rows, so nothing stops one
-  from reaching `ESTABLISHED` or teaching Stable-Site as a serving cell. This is how it works today;
-  it will be reviewed with field data.
+- **Femtocells (CSG)** are exempt from H1, H2, H5, H6 and H7 only after 10 rows on 2 days of local
+  history, so a legitimate femtocell can alarm on its first day. After that its rows are clean, and
+  nothing stops it from reaching `ESTABLISHED` or teaching Stable-Site as a serving cell. Both will
+  be reviewed with field data.
 - **Android 12 or later** is required (minSdk 31): there is no fallback for the telephony callbacks
   on Android 10 and 11.
 - **One active SIM**; dual SIM is not supported. **Revoking the phone permission** while monitoring
   stops readings without a warning. See [MANUAL → Technical limitations](MANUAL.md#15-technical-limitations).
 - **Forensic storage** has only a sample cap (20,000); an age or size cap is left for after the
   campaign.
+- **Retention after a long pause.** When monitoring restarts after more than about 30 days, the
+  age-based prune would delete more than 25 % of the history and is skipped until new rows bring
+  the share down; the history can temporarily hold up to about four times the 120-day retention.
 - **No ground truth, no negative control, limited coverage** — see
   [README → What the field campaign can and cannot show](README.md#-what-the-field-campaign-can-and-cannot-show).
 

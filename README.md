@@ -60,21 +60,21 @@
 > Details: [Status.md](Status.md) · [CHANGELOG.md](CHANGELOG.md)
 
 > [!NOTE]
-> **A full audit of the app is complete, and updates pause here for now.**
+> **Third and final audit: the app is ready for the field.**
 >
-> I reviewed the whole app, part by part: the inputs of every rule, scoring, temporal confirmation,
-> local learning, geometry, the analysis cycle and the data the engine learns from. The resulting
-> fixes, and a final campaign cut, are in 3.0.0-beta4 ([CHANGELOG.md](CHANGELOG.md)). For now I am not
-> planning more updates:
-> the next step is to collect field data and let the evidence speak.
+> This is the third full audit of the app, and there will be no more. I reviewed the whole app, part
+> by part: the inputs of every rule, scoring, temporal confirmation, local learning, geometry, the
+> analysis cycle, storage and the data the engine learns from. The resulting fixes, and the final
+> campaign cut, are in 3.0.0-beta4 ([CHANGELOG.md](CHANGELOG.md)). From here on the plan is to
+> collect field data and let the evidence speak.
 >
-> **This last update is large.** Many rules changed how they are evaluated, and the earlier betas
-> already brought several dataset cuts ([Status.md](Status.md) lists them), so data recorded before
-> this update is not comparable with data recorded after it.
+> **Start from a clean install.** This last update changes how several rules are evaluated and,
+> together with the dataset cuts of the earlier betas ([Status.md](Status.md) lists them), data
+> recorded before it is not comparable with data recorded after it. Export anything you want to
+> keep, uninstall the app, install the new build and start collecting from scratch — and enjoy the
+> app. To keep your settings (such as the OpenCellID key), *History → Delete history* gives the same
+> clean start without uninstalling.
 >
-> - **What I recommend:** export anything you want to keep, then delete the database
->   (*History → Delete history*, which also clears everything the app has learned) and start
->   collecting field data from scratch.
 > - **You can also just update.** On an earlier 3.0 beta, the new build installs over it, migrates the
 >   database and keeps working. In that case, **note the date you updated**: rows recorded before it
 >   belong to an earlier dataset. Each row's `AppVersion` (version and build commit) lets you
@@ -251,8 +251,8 @@ Cell ID or technology) within 10 s while the phone is not moving fast. Without a
 
 #### Geographic Consistency Analysis (H11)
 Validates Cell IDs against a local GPS history built from the device's own clean observations, spread
-across days, revealing the same Cell ID appearing from physically inconsistent locations. It does not
-rely on public tower databases.
+across days, revealing the same Cell ID appearing from physically inconsistent locations. It uses
+only a GPS fix of 60 s or less, and does not rely on public tower databases.
 
 #### Latency Correlation (H12, optional)
 Compares network latency with this cell's own learned reference. Evaluated only on a real
@@ -377,7 +377,7 @@ without data for another reason shows **WAITING**.
 | **Secondary carriers** | Carrier-aggregation secondaries and the NR leg of 5G NSA, listed instead of analysed. |
 | **Bandwidth & bands** | Carrier bandwidth and the bands each cell declares. |
 | **Additional PLMNs** | Extra networks announced by the cell (e.g. network sharing). |
-| **CSG** | Closed subscriber group — a possible femtocell. Not an anomaly by itself; on a CSG cell H1, H2, H5, H6 and H7 are `N/A`, since a femtocell is isolated, strong and close by design. |
+| **CSG** | Closed subscriber group — a possible femtocell. Not an anomaly by itself. On a CSG cell already seen locally (10 rows on 2 days), H1, H2, H5, H6 and H7 are `N/A`, since a femtocell is isolated, strong and close by design; a CSG cell seen for the first time is evaluated like any other. |
 | **Service state** | In service, emergency only, out of service or radio off; data/voice registration, roaming, network PLMN and SIM PLMN. |
 
 The **RADIO** tab (History → RADIO) shows the live serving cell, its carriers, every visible cell and
@@ -766,17 +766,18 @@ Questions, corrections and bug reports are welcome — please
 **[open an issue](https://github.com/Alexisgordr/ICdetector/issues)**. Every report is reviewed and
 addressed where possible.
 
-> **Nota para los usuarios:** he hecho una auditoría completa de la aplicación y, por ahora, no
-> habrá más actualizaciones: toca reunir datos de campo. Esta última actualización es muy grande y,
-> sumada a los cortes del dataset de las betas anteriores, separa los datos de antes y de después.
-> **Lo que recomiendo** es exportar lo que queráis conservar, borrar la base de datos (*Historial →
-> Borrar historial*) y empezar a recoger datos desde cero. **También podéis simplemente actualizar**
-> desde una beta de la 3.0: la app migra la base y os seguirá funcionando, pero **apuntad la fecha
-> en que actualizasteis**, porque las filas anteriores pertenecen a otro dataset (la columna
-> `AppVersion` de cada fila permite separarlas). Desde v2.10.x, la 3.0 sigue necesitando una
-> instalación limpia. Gracias por vuestra paciencia con la frecuencia de actualizaciones durante el
-> desarrollo. Todos los detalles están en [Status.md](Status.md), [IMPORTANT.md](IMPORTANT.md) y
-> [CHANGELOG.md](CHANGELOG.md).
+> **Nota para los usuarios:** esta es la tercera auditoría completa de la aplicación y no habrá
+> más: a partir de aquí toca reunir datos de campo. Esta última actualización cambia cómo se evalúan
+> varias reglas y, sumada a los cortes del dataset de las betas anteriores, separa los datos de antes
+> y de después. **Lo que recomiendo** es empezar desde una instalación limpia: exportad lo que
+> queráis conservar, desinstalad la app, instalad la nueva versión y empezad a recoger datos desde
+> cero. Y a disfrutar de la app. Si queréis conservar los ajustes (como la clave de OpenCellID),
+> *Historial → Borrar historial* deja la base igual de limpia sin desinstalar. **También podéis
+> simplemente actualizar** desde una beta de la 3.0: la app migra la base y os seguirá funcionando,
+> pero **apuntad la fecha en que actualizasteis**, porque las filas anteriores pertenecen a otro
+> dataset (la columna `AppVersion` de cada fila permite separarlas). Desde v2.10.x, la 3.0 sigue
+> necesitando una instalación limpia. Todos los detalles están en [Status.md](Status.md),
+> [IMPORTANT.md](IMPORTANT.md) y [CHANGELOG.md](CHANGELOG.md).
 
 <div align="center">
 

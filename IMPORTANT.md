@@ -56,7 +56,8 @@ for everything else. No reset is needed.
 ### Dataset cuts during the campaign
 
 **The campaign cut on 3.0.0-beta4.** At the start of collection, H3, H8, H9, femtocell (CSG) cells and
-the anomaly-confidence prior were changed together. Unlike the bug fixes described above, this
+the anomaly-confidence prior were changed together; before Day 1 the cut was completed with H10,
+H11 and the condition for the femtocell exemption. Unlike the bug fixes described above, this
 changes how evidence is weighed; it was made once, early, so that the rest of the campaign runs on a
 single method. [Status.md](Status.md#dataset-cuts-in-30) lists what changed and how to tell rows from
 before and after it.
@@ -70,7 +71,8 @@ that observed it (`AppVersion`), so cuts can be applied per row.
 ## Recommended database reset
 
 For a clean dataset, start from a **fresh local database on a 3.0.0-beta4 build that includes the
-campaign cut**.
+whole campaign cut and the fixes made with it**: build from the latest commit of the
+`ICdetection-v3.0.0-beta` branch.
 
 > **How to reset:** export anything you want to keep, then open **History → Delete history** and
 > type `DELETE` (English interface) or `BORRAR` (Spanish interface) to confirm.
