@@ -20,6 +20,10 @@ object ThreatAnalyzer {
     /** Ventana de H10: cambios de celda considerados "rápidos". */
     internal const val PING_PONG_WINDOW_MS = PingPongRule.WINDOW_MS
 
+    /** 3.0.0-beta5 — Motivos de H8, aviso de calidad de dato (ver la regla 8 en analyzeThreats). */
+    const val H8_LTE_REASON = "Calidad de dato: EARFCN 4G fuera de la tabla 3GPP"
+    const val H8_NR_REASON = "Calidad de dato: NR-ARFCN 5G fuera de la tabla 3GPP"
+
 
     /**
      * ¿La señal venía degradándose de forma progresiva en los últimos ciclos?
@@ -359,22 +363,26 @@ object ThreatAnalyzer {
         // medido fuera de rango sigue fallando como antes. Corte de dataset solo para H8.
         //
         // 3.0 (#22) — Los rangos vienen de RadioChannels, el mismo validador que usa el
-        // aprendizaje. El NR-ARFCN 0 no lo usa ninguna banda: RadioChannels ya no lo acepta, así que H8
-        // lo sigue tratando como sospechoso y el aprendizaje no lo toma por una portadora legítima.
+        // aprendizaje. El NR-ARFCN 0 no lo usa ninguna banda: RadioChannels no lo acepta, así que H8
+        // lo marca y el aprendizaje no lo toma por una portadora legítima.
+        //
+        // 3.0.0-beta5 — H8 es un aviso de CALIDAD DE DATO, no evidencia de amenaza: un IMSI catcher
+        // necesita un canal válido para que el móvil se registre en él, así que un ARFCN fuera de la
+        // tabla 3GPP describe un módem que informa mal, no un ataque. Se sigue evaluando, publicando
+        // (informe, terminal, caja negra) y guardando en la fila con su motivo, pero no resta puntos,
+        // no entra en el bayesiano ni cuenta para los episodios. Corte de dataset para H8.
         active.arfcn?.takeUnless { it == ARFCN_UNAVAILABLE }?.let { arfcn ->
             if (active.radioTech == RadioTech.NR) {
                 eArfcn = true
                 if (!RadioChannels.isValidChannel(RadioTech.NR, arfcn)) {
                     hArfcn = false
-                    reasons.add("Frecuencia (ARFCN) 5G sospechosa")
-                    score -= 15
+                    reasons.add(H8_NR_REASON)
                 }
             } else if (active.radioTech == RadioTech.LTE) {
                 eArfcn = true
                 if (!RadioChannels.isValidChannel(RadioTech.LTE, arfcn)) {  // EARFCN 0 es válido (Banda 1, 2110 MHz)
                     hArfcn = false
-                    reasons.add("Frecuencia (EARFCN) 4G sospechosa")
-                    score -= 15
+                    reasons.add(H8_LTE_REASON)
                 }
             }
         }
@@ -648,7 +656,6 @@ object ThreatAnalyzer {
             if (!hTac) add("tacDev")
             if (!hTa) add("taDistance")
             if (!hGhost) add("ghostCells")
-            if (!hArfcn) add("arfcn")
             if (isHardwareCipheringAvailable && !isHardwareCipheringActive) add("ciphering")
             if (!hPingPong) add("pingPong")
             if (!hMobileCellId) add("h11")

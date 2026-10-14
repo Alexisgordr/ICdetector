@@ -64,8 +64,10 @@ object DiagnosticEngine {
                 explanation(r.taDistance, "N/A: el módem no entrega un Timing Advance convertible a metros.")),
             HeuristicDiagnostic(7, "Espectro de vecinos", r.ghostNeighbors,
                 explanation(r.ghostNeighbors, if (i.wifiActive) WIFI_NA else "N/A: no hay celdas vecinas de la misma tecnología para contrastar el espectro.")),
-            HeuristicDiagnostic(8, "Sanidad ARFCN", r.arfcnSanity,
-                explanation(r.arfcnSanity, "N/A: el módem no entrega ARFCN/EARFCN para esta tecnología.")),
+            // 3.0.0-beta5 — Aviso de calidad de dato: su fallo no es la condición de un ataque.
+            HeuristicDiagnostic(8, "Calidad de dato ARFCN", r.arfcnSanity,
+                if (r.arfcnSanity == HeuristicStatus.FAILED) H8_FAILED_EXPLANATION
+                else explanation(r.arfcnSanity, "N/A: el módem no entrega ARFCN/EARFCN para esta tecnología.")),
             HeuristicDiagnostic(9, "Cifrado hardware", r.hardwareCiphering,
                 explanation(r.hardwareCiphering, if (!i.cipheringAvailable) "N/A: Android o el fabricante no exponen el estado de cifrado a esta app." else "N/A: estado de cifrado no disponible.")),
             HeuristicDiagnostic(10, "Anti ping-pong", r.pingPong,
@@ -101,4 +103,7 @@ object DiagnosticEngine {
      * H2, H7 y H13 daban otro motivo aunque la causa fuera el Wi-Fi.
      */
     private const val WIFI_NA = "N/A: Wi-Fi activo; se evita atribuir el contexto de red al enlace celular."
+
+    /** 3.0.0-beta5 — H8 es un aviso de calidad de dato (ver ThreatAnalyzer, regla 8). */
+    const val H8_FAILED_EXPLANATION = "Calidad de dato: el módem informa un canal fuera de la tabla 3GPP. No es evidencia de ataque y no resta puntos."
 }

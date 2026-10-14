@@ -29,10 +29,19 @@ class HeuristicCatalogTest {
         }
     }
 
-    @Test fun `every scorer key has a weight and every weight belongs to a rule`() {
-        val keys = HeuristicCatalog.values().map { it.scorerKey }.toSet()
+    @Test fun `every evidence key has a weight and every weight belongs to a rule`() {
+        val keys = HeuristicCatalog.values().filter { it.isEvidence }.map { it.scorerKey }.toSet()
         assertEquals(keys, BayesianScorer.weightedKeys)
         assertTrue(keys.containsAll(BayesianScorer.groupedKeys))
+    }
+
+    @Test fun `H8 is a data-quality flag, not evidence`() {
+        val h8 = HeuristicCatalog.ARFCN_SANITY
+        assertEquals(false, h8.isEvidence)
+        assertEquals(ThreatEpisodeTracker.Family.DATA_QUALITY, h8.episodeFamily)
+        assertEquals(BayesianScorer.Group.NOT_SCORED, BayesianScorer.groupOf(h8.scorerKey))
+        assertTrue("sin LR", h8.scorerKey !in BayesianScorer.weightedKeys)
+        assertEquals("solo H8", listOf("H8"), HeuristicCatalog.entries.filter { !it.isEvidence }.map { it.id })
     }
 
     @Test fun `the analyzer emits only catalogued keys`() {
@@ -41,9 +50,10 @@ class HeuristicCatalogTest {
             File("app/src/main/java/com/alexisgordr/icdetector/core/ThreatAnalyzer.kt")
         ).first { it.exists() }.readText()
         val emitted = Regex("""\) add\("([A-Za-z0-9]+)"\)""").findAll(analyzer).map { it.groupValues[1] }.toSet()
-        val keys = HeuristicCatalog.values().map { it.scorerKey }.toSet()
+        val keys = HeuristicCatalog.values().filter { it.isEvidence }.map { it.scorerKey }.toSet()
         assertTrue("sin catalogar: ${emitted - keys}", keys.containsAll(emitted))
         assertTrue("latency la aporta el monitor de latencia", (keys - emitted) == setOf("latency"))
+        assertTrue("H8 no se entrega al bayesiano", "arfcn" !in emitted)
     }
 
     @Test fun `every episode family has at least one rule`() {
@@ -62,6 +72,7 @@ class HeuristicCatalogTest {
         ThreatEpisodeTracker.Family.MOBILITY -> g == BayesianScorer.Group.MOBILITY
         ThreatEpisodeTracker.Family.IDENTITY -> g == BayesianScorer.Group.WEAK_IDENTITY || g == BayesianScorer.Group.INDEPENDENT
         ThreatEpisodeTracker.Family.CROSS_LAYER -> g == BayesianScorer.Group.INDEPENDENT
+        ThreatEpisodeTracker.Family.DATA_QUALITY -> g == BayesianScorer.Group.NOT_SCORED
     }
 
     @Test fun `family and scorer group differ only in the three documented rules`() {

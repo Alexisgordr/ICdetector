@@ -187,6 +187,12 @@ private val replacements = linkedMapOf(
     "Validación Regional TAC" to "Regional TAC validation",
     "Cifrado Nulo" to "Null ciphering",
     "Sanidad ARFCN" to "ARFCN sanity",
+    // 3.0.0-beta5 — H8 es un aviso de calidad de dato.
+    "Calidad de dato ARFCN" to "ARFCN data quality",
+    "Calidad de dato: EARFCN 4G fuera de la tabla 3GPP" to "Data quality: 4G EARFCN outside the 3GPP table",
+    "Calidad de dato: NR-ARFCN 5G fuera de la tabla 3GPP" to "Data quality: 5G NR-ARFCN outside the 3GPP table",
+    "Calidad de dato: el módem informa un canal fuera de la tabla 3GPP. No es evidencia de ataque y no resta puntos." to
+        "Data quality: the modem reports a channel outside the 3GPP table. It is not evidence of an attack and subtracts no points.",
     "Integridad PCI" to "PCI integrity",
     "Consistencia Geográfica" to "Geographic consistency",
     "Correlación Latency + RF" to "Latency + RF correlation",

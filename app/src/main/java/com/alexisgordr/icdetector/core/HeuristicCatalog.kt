@@ -47,7 +47,8 @@ enum class HeuristicCatalog(
     TA_DISTANCE("H6", "taDistance", Family.MOBILITY, G.RF_DOMINANCE,
         "Proximidad: para el scorer es la misma señal dominante que H2/H7; para el episodio, movilidad.", { it.taDistance }),
     GHOST_NEIGHBORS("H7", "ghostCells", Family.RF_DOMINANCE, G.RF_DOMINANCE, null, { it.ghostNeighbors }),
-    ARFCN_SANITY("H8", "arfcn", Family.IDENTITY, G.INDEPENDENT, null, { it.arfcnSanity }),
+    // 3.0.0-beta5 — Aviso de calidad de dato: ni peso en el scorer ni familia de episodio.
+    ARFCN_SANITY("H8", "arfcn", Family.DATA_QUALITY, G.NOT_SCORED, null, { it.arfcnSanity }),
     HARDWARE_CIPHERING("H9", "ciphering", Family.CROSS_LAYER, G.INDEPENDENT, null, { it.hardwareCiphering }),
     PING_PONG("H10", "pingPong", Family.MOBILITY, G.MOBILITY, null, { it.pingPong }),
     MOBILE_CELL_ID("H11", "h11", Family.MOBILITY, G.MOBILITY, null, { it.mobileCellId }),
@@ -60,4 +61,7 @@ enum class HeuristicCatalog(
     TRANSITION_COHERENCE("H16", "transitionCoherence", Family.MOBILITY, G.MOBILITY, null, { it.transitionCoherence });
 
     fun status(report: HeuristicReport): HeuristicStatus = statusOf(report)
+
+    /** 3.0.0-beta5 — ¿Su fallo es evidencia de amenaza? No para los avisos de calidad de dato (H8). */
+    val isEvidence: Boolean get() = scorerGroup != G.NOT_SCORED
 }

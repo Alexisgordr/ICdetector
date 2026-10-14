@@ -179,7 +179,7 @@ class BayesianScorerTest {
     fun `toda heuristica que ThreatAnalyzer puede emitir tiene peso`() {
         val emitted = listOf(
             "isolated", "powerJump", "mccMismatch", "mncCount", "tacDev", "taDistance",
-            "ghostCells", "arfcn", "ciphering", "pingPong", "h11", "signalBaseline",
+            "ghostCells", "ciphering", "pingPong", "h11", "signalBaseline",
             "bandDowngrade", "rfStability", "transitionCoherence"
         )
         val prior = BayesianScorer.calculate(emptyList(), "PENDING", false)
@@ -189,6 +189,16 @@ class BayesianScorerTest {
         }
         // La latencia no va en la lista: entra por su propio parámetro, y también debe pesar.
         assertTrue(BayesianScorer.calculate(emptyList(), "PENDING", true) > prior)
+    }
+
+    @Test
+    fun `H8 is a data-quality flag and never moves the posterior`() {
+        val prior = BayesianScorer.calculate(emptyList(), "PENDING", false)
+        assertEquals(prior, BayesianScorer.calculate(listOf("arfcn"), "PENDING", false), 0f)
+        assertEquals(
+            BayesianScorer.calculate(listOf("mccMismatch"), "PENDING", false),
+            BayesianScorer.calculate(listOf("mccMismatch", "arfcn"), "PENDING", false), 0f
+        )
     }
 
     // ── 3.0 (fase 4) — H6 en dominancia RF, amortiguada por reputación ──────────────────────

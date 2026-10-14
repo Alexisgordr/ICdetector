@@ -3,6 +3,7 @@ package com.alexisgordr.icdetector.core
 import com.alexisgordr.icdetector.models.CellData
 import com.alexisgordr.icdetector.models.CellRfStability
 import com.alexisgordr.icdetector.models.HeuristicStatus
+import com.alexisgordr.icdetector.models.RadioTech
 import com.alexisgordr.icdetector.models.TimingAdvanceUnit
 import com.alexisgordr.icdetector.models.VerificationStatus
 import com.alexisgordr.icdetector.models.identityKey
@@ -275,6 +276,19 @@ class ScenarioTest {
         )
     }
 
+    /**
+     * 3.0.0-beta5 — Módem que informa un EARFCN fuera de la tabla 3GPP en una zona de frontera
+     * (una vecina extranjera: H3 sola, score 70). H8 es un aviso de calidad de dato: antes restaba
+     * 15 (score 55) y este escenario confirmaba 3 alarmas; ahora no alarma.
+     */
+    private fun invalidChannelAtBorder() = (1..5).map {
+        Cycle(
+            // H8 solo se evalúa con la tecnología declarada (LTE aquí).
+            cell(dbm = -85, arfcn = 300_000).copy(radioTech = RadioTech.LTE),
+            neighbors = listOf(neighbor(-95), neighbor(-99, cid = "3000", mnc = "01", mcc = "208", tac = "500"))
+        )
+    }
+
     // ------------------------------------------------------------------ escenarios adversarios
 
     /**
@@ -365,6 +379,15 @@ class ScenarioTest {
     @Test fun `escenario benigno - TA de unidad desconocida`() { expectNoAlarm("TA_SCRAPED", scrapedTimingAdvance()) }
     @Test fun `escenario benigno - sospecha intermitente sin 3 ciclos seguidos`() { expectNoAlarm("INTERMITTENT", intermittentSuspicion()) }
     @Test fun `una sola vecina extranjera ya no cuenta dos veces (H3 sin H5)`() { expectNoAlarm("FOREIGN_NEIGHBOUR_ONLY", foreignNeighbourOnly()) }
+    @Test fun `escenario benigno - canal invalido del modem en frontera (H8 solo calidad de dato)`() {
+        expectNoAlarm("INVALID_CHANNEL_BORDER", invalidChannelAtBorder())
+        val first = ThreatAnalyzer.analyzeThreats(
+            active = invalidChannelAtBorder().first().active, neighbors = invalidChannelAtBorder().first().neighbors,
+            isHardwareCipheringActive = true, cellChangeHistory = emptyList(), currentLocation = null
+        )
+        assertEquals("H8 se evalúa y falla", HeuristicStatus.FAILED, first.heuristicReport.arfcnSanity)
+        assertEquals("H3 sola: frontera, sin H8 en los puntos", 70, first.securityScore)
+    }
     @Test fun `escenario benigno - ping-pong de frontera en parado`() {
         expectNoAlarm("BORDER_PINGPONG", borderPingPong())
         assertTrue("H10 tiene que fallar para que el escenario pruebe algo", run(borderPingPong()).pingPongFailures >= 3)
@@ -392,7 +415,8 @@ class ScenarioTest {
             "BORDER_AREA" to borderArea(),
             "TA_SCRAPED" to scrapedTimingAdvance(),
             "INTERMITTENT" to intermittentSuspicion(),
-            "BORDER_PINGPONG" to borderPingPong()
+            "BORDER_PINGPONG" to borderPingPong(),
+            "INVALID_CHANNEL_BORDER" to invalidChannelAtBorder()
         )
         var totalCycles = 0
         var totalAlarms = 0

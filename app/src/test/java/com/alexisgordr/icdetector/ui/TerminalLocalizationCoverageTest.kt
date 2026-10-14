@@ -21,6 +21,11 @@ class TerminalLocalizationCoverageTest {
     )
 
     private val lines = listOf(
+        // 3.0.0-beta5 — H8, aviso de calidad de dato.
+        "[HEUR] 8. Calidad de dato ARFCN: FAILED",
+        "[sub-umbral] Calidad de dato: EARFCN 4G fuera de la tabla 3GPP",
+        "[sub-umbral] Calidad de dato: NR-ARFCN 5G fuera de la tabla 3GPP",
+        "Calidad de dato: el módem informa un canal fuera de la tabla 3GPP. No es evidencia de ataque y no resta puntos.",
         // 3.0 — H16: posición respecto a las zonas aprendidas.
         "N/A: falta la posición del fix de la celda nueva.",
         "N/A: la posición está fuera de las zonas aprendidas de ambas celdas; entre dos celdas grandes ese salto puede ser normal.",

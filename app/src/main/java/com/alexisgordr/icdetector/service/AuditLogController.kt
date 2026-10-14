@@ -56,7 +56,7 @@ internal class AuditLogController(
             "5. Validación Regional TAC" to report.tacDeviation,
             "6. Proximidad por Timing Advance" to report.taDistance,
             "7. Espectro Fantasma" to report.ghostNeighbors,
-            "8. Sanidad ARFCN" to report.arfcnSanity,
+            "8. Calidad de dato ARFCN" to report.arfcnSanity,
             "9. Cifrado Hardware" to report.hardwareCiphering,
             "10. Anti Ping-Pong" to report.pingPong,
             "11. Consistencia Geográfica (Cell ID móvil)" to report.mobileCellId,

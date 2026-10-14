@@ -36,7 +36,8 @@ class ThreatEpisodeTracker(
      */
     private val nowMs: () -> Long = { System.nanoTime() / 1_000_000L }
 ) {
-    enum class Family { RF_DOMINANCE, IDENTITY, MOBILITY, CROSS_LAYER }
+    /** 3.0.0-beta5 — DATA_QUALITY (H8) no es evidencia: el tracker no la cuenta como familia. */
+    enum class Family { RF_DOMINANCE, IDENTITY, MOBILITY, CROSS_LAYER, DATA_QUALITY }
 
     data class Evaluation(
         val cell: CellData,
@@ -153,7 +154,7 @@ class ThreatEpisodeTracker(
     // 3.0 (#7, O2) — Las familias salen de la lista canónica de reglas (HeuristicCatalog).
     private fun familiesOf(cell: CellData): Set<Family> =
         HeuristicCatalog.values()
-            .filter { it.status(cell.heuristicReport) == HeuristicStatus.FAILED }
+            .filter { it.isEvidence && it.status(cell.heuristicReport) == HeuristicStatus.FAILED }
             .mapTo(linkedSetOf()) { it.episodeFamily }
 
     private companion object {

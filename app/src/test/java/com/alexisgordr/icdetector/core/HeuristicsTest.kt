@@ -1,6 +1,7 @@
 package com.alexisgordr.icdetector.core
 
 import com.alexisgordr.icdetector.models.CellData
+import com.alexisgordr.icdetector.models.HeuristicReport
 import com.alexisgordr.icdetector.models.HeuristicStatus
 import com.alexisgordr.icdetector.models.VerificationStatus
 import com.alexisgordr.icdetector.models.RadioTech
@@ -401,6 +402,35 @@ class HeuristicsTest {
         assertEquals(HeuristicStatus.PASSED, analyze(active().copy(radioTech = RadioTech.LTE, arfcn = 0)).arfcnSanity)
         assertEquals(HeuristicStatus.PASSED, analyze(active().copy(radioTech = RadioTech.LTE, arfcn = 1301)).arfcnSanity)
         assertEquals(HeuristicStatus.PASSED, analyze(active().copy(radioTech = RadioTech.NR, arfcn = 632_628)).arfcnSanity)
+    }
+    // ---------- H8: aviso de calidad de dato (3.0.0-beta5) ----------
+    @Test fun `H8 failing is kept in the row but subtracts no points and adds no confidence`() {
+        fun run(arfcn: Int) = ThreatAnalyzer.analyzeThreats(
+            active = active().copy(radioTech = RadioTech.LTE, arfcn = arfcn), neighbors = emptyList(),
+            isHardwareCipheringActive = true, cellChangeHistory = emptyList(), currentLocation = null
+        )
+        val valid = run(1301)
+        val invalid = run(262_144)
+        assertEquals(HeuristicStatus.FAILED, invalid.heuristicReport.arfcnSanity)
+        assertEquals("sin puntos", valid.securityScore, invalid.securityScore)
+        assertEquals("sin LR", valid.anomalyConfidence, invalid.anomalyConfidence, 0f)
+        assertTrue("motivo guardado en la fila", invalid.suspiciousReason!!.contains(ThreatAnalyzer.H8_LTE_REASON))
+        val nr = ThreatAnalyzer.analyzeThreats(
+            active = active().copy(radioTech = RadioTech.NR, arfcn = 3_279_166), neighbors = emptyList(),
+            isHardwareCipheringActive = true, cellChangeHistory = emptyList(), currentLocation = null
+        )
+        assertTrue(nr.suspiciousReason!!.contains(ThreatAnalyzer.H8_NR_REASON))
+    }
+    @Test fun `H8 alone never opens a multi-signal episode family`() {
+        val report = HeuristicReport(arfcnSanity = HeuristicStatus.FAILED, tacDeviation = HeuristicStatus.FAILED)
+        var now = 0L
+        val tracker = ThreatEpisodeTracker { now }
+        val cell = active().copy(heuristicReport = report)
+        tracker.apply(cell, 1L)
+        now += 5_000
+        val second = tracker.apply(cell, 2L)
+        assertEquals("solo IDENTITY (H5); H8 no es familia", setOf(ThreatEpisodeTracker.Family.IDENTITY), second.families)
+        assertFalse(second.promoted)
     }
     @Test fun `H8 no disponible no resta puntos`() {
         val unavailable = ThreatAnalyzer.analyzeThreats(
