@@ -17,7 +17,7 @@ class WifiCoverageTest {
     private val neighbour = CellData(isRegistered = false, networkType = "4G LTE", radioTech = RadioTech.LTE, cellId = "2000", mnc = "01", tac = "100", dbm = -115, mcc = "214")
 
     private fun report(wifi: Boolean) = ThreatAnalyzer.analyzeThreats(
-        active = active, neighbors = listOf(neighbour), isHardwareCipheringActive = true, cellChangeHistory = emptyList(),
+        active = active, neighbors = listOf(neighbour), cellChangeHistory = emptyList(),
         currentLocation = null, isWifiActive = wifi, isNetworkLatencyAnomalous = true, isNetworkLatencyAvailable = true
     ).heuristicReport
 
@@ -33,10 +33,9 @@ class WifiCoverageTest {
     }
 
     @Test fun `their N-A reason names Wi-Fi`() {
-        val cell = ThreatAnalyzer.analyzeThreats(active = active, neighbors = listOf(neighbour), isHardwareCipheringActive = true,
-            cellChangeHistory = emptyList(), currentLocation = null, isWifiActive = true)
+        val cell = ThreatAnalyzer.analyzeThreats(active = active, neighbors = listOf(neighbour), cellChangeHistory = emptyList(), currentLocation = null, isWifiActive = true)
         val inputs = DiagnosticEngine.Inputs(neighborCount = 1, wifiActive = true, locationAvailable = false, historyWithLocation = 0,
-            latencyAvailable = true, cipheringAvailable = false, previousBandAvailable = false, signalBaseline = null,
+            latencyAvailable = true, previousBandAvailable = false, signalBaseline = null,
             rfFingerprint = null, rfStability = null, reputation = null)
         val byId = DiagnosticEngine.explain(cell, inputs).associateBy { it.id }
         listOf(1, 2, 7, 12, 13).forEach { id ->

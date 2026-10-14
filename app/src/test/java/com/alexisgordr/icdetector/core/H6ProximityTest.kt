@@ -23,8 +23,7 @@ class H6ProximityTest {
     private val neighbour = CellData(isRegistered = false, networkType = "4G LTE", cellId = "2000",
         mnc = "01", tac = "100", dbm = -95, mcc = "214")
     private fun h6(c: CellData) = ThreatAnalyzer.analyzeThreats(
-        active = c, neighbors = listOf(neighbour), isHardwareCipheringActive = true,
-        cellChangeHistory = emptyList(), currentLocation = null
+        active = c, neighbors = listOf(neighbour), cellChangeHistory = emptyList(), currentLocation = null
     ).heuristicReport.taDistance
 
     @Test fun `proximity branch is unchanged`() {

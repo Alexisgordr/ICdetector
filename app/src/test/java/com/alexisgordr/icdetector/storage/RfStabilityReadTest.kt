@@ -50,12 +50,11 @@ class RfStabilityReadTest {
     @Test fun `a failed read makes only H15 abstain and names the cause`() {
         val cell = CellData(isRegistered = true, networkType = "4G LTE", radioTech = RadioTech.LTE, cellId = "1000",
             mnc = "07", tac = "1", dbm = -90, mcc = "214", arfcn = 1300, pci = 100)
-        val analyzed = ThreatAnalyzer.analyzeThreats(active = cell, neighbors = emptyList(), isHardwareCipheringActive = true,
-            cellChangeHistory = emptyList(), currentLocation = null, rfStability = null)
+        val analyzed = ThreatAnalyzer.analyzeThreats(active = cell, neighbors = emptyList(), cellChangeHistory = emptyList(), currentLocation = null, rfStability = null)
         assertEquals(HeuristicStatus.NOT_EVALUATED, analyzed.heuristicReport.rfStability)
         assertEquals("las demás reglas siguen", HeuristicStatus.PASSED, analyzed.heuristicReport.arfcnSanity)
         val inputs = DiagnosticEngine.Inputs(neighborCount = 0, wifiActive = false, locationAvailable = false, historyWithLocation = 0,
-            latencyAvailable = false, cipheringAvailable = false, previousBandAvailable = false, signalBaseline = null,
+            latencyAvailable = false, previousBandAvailable = false, signalBaseline = null,
             rfFingerprint = null, rfStability = null, rfStabilityReadFailed = true, reputation = null)
         val h15 = DiagnosticEngine.explain(analyzed, inputs).first { it.id == 15 }
         assertEquals("N/A: no se pudo leer el historial RF en este ciclo.", h15.explanation)

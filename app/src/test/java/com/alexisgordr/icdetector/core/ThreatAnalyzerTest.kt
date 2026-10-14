@@ -35,7 +35,6 @@ class ThreatAnalyzerTest {
         ThreatAnalyzer.analyzeThreats(
             active = active,
             neighbors = emptyList(),
-            isHardwareCipheringActive = false,
             cellChangeHistory = emptyList(),
             currentLocation = null,          // null => no se ejecuta ninguna API de Android
             isWifiActive = wifi,

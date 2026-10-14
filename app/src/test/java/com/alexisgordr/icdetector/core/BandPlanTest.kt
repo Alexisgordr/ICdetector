@@ -144,8 +144,7 @@ class BandPlanTest {
             mcc = "214", radioTech = com.alexisgordr.icdetector.models.RadioTech.LTE, arfcn = 6_300
         )
         val report = ThreatAnalyzer.analyzeThreats(
-            active = b66, neighbors = emptyList(), isHardwareCipheringActive = false,
-            cellChangeHistory = emptyList(), currentLocation = null,
+            active = b66, neighbors = emptyList(), cellChangeHistory = emptyList(), currentLocation = null,
             previousBand = BandPlan.earfcnToBandLte(66_500), previousDbm = -80, recentRegisteredDbm = emptyList()
         ).heuristicReport
         assertEquals(com.alexisgordr.icdetector.models.HeuristicStatus.FAILED, report.bandDowngrade)

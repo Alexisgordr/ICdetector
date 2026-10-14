@@ -36,15 +36,13 @@ class LocalProfileClarificationsTest {
 
     @Test fun `the real engine writes them and the H13 view recognises what it wrote`() {
         // Potencia: +25 dB sobre un historial plano.
-        val power = ThreatAnalyzer.analyzeThreats(active = cell, neighbors = emptyList(), isHardwareCipheringActive = true,
-            cellChangeHistory = emptyList(), currentLocation = null,
+        val power = ThreatAnalyzer.analyzeThreats(active = cell, neighbors = emptyList(), cellChangeHistory = emptyList(), currentLocation = null,
             signalBaseline = SignalBaseline(sampleCount = 10, meanDbm = -85.0, stdDevDbm = 3.0, minDbm = -90, maxDbm = -80))
         assertEquals(HeuristicStatus.FAILED, power.heuristicReport.signalBaseline)
         assertTrue(power.suspiciousReason.orEmpty(), power.suspiciousReason.orEmpty().contains("Potencia anómala vs historial (+25dB)"))
         assertEquals(H13History.FAILED, H13History.of(observation(power.suspiciousReason)))
         // Huella RF: RSRQ y SINR muy desviados, sin exceso de potencia.
-        val rf = ThreatAnalyzer.analyzeThreats(active = cell.copy(dbm = -85), neighbors = emptyList(), isHardwareCipheringActive = true,
-            cellChangeHistory = emptyList(), currentLocation = null,
+        val rf = ThreatAnalyzer.analyzeThreats(active = cell.copy(dbm = -85), neighbors = emptyList(), cellChangeHistory = emptyList(), currentLocation = null,
             rfFingerprint = CellRfFingerprint(sampleCount = 30, rsrqMean = -15.0, rsrqStd = 1.0, sinrMean = 0.0, sinrStd = 1.0))
         assertEquals(HeuristicStatus.FAILED, rf.heuristicReport.signalBaseline)
         assertTrue(rf.suspiciousReason.orEmpty().contains("Huella RF incoherente con el historial (RSRQ/SINR muy desviados)"))

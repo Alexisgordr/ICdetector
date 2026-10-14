@@ -21,8 +21,7 @@ class LatencyBayesCoherenceTest {
 
     private fun run(dbm: Int = -60, rsrq: Int? = -18, sinr: Int? = null, anomalous: Boolean, available: Boolean = true, wifi: Boolean = false) =
         ThreatAnalyzer.analyzeThreats(
-            active = cell(dbm, rsrq, sinr), neighbors = listOf(neighbour), isHardwareCipheringActive = true,
-            cellChangeHistory = emptyList(), currentLocation = null, isWifiActive = wifi,
+            active = cell(dbm, rsrq, sinr), neighbors = listOf(neighbour), cellChangeHistory = emptyList(), currentLocation = null, isWifiActive = wifi,
             isNetworkLatencyAnomalous = anomalous, isNetworkLatencyAvailable = available, nowMs = 1_700_000_000_000L
         )
 

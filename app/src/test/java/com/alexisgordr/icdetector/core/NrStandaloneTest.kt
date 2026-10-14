@@ -24,8 +24,7 @@ class NrStandaloneTest {
     private fun analyze(cell: CellData, previousNrArfcn: Int? = null, previousDbm: Int? = null, previousBand: Int? = null,
                         recent: List<Int> = emptyList()) =
         ThreatAnalyzer.analyzeThreats(
-            active = cell, neighbors = emptyList(), isHardwareCipheringActive = true,
-            cellChangeHistory = emptyList(), currentLocation = null,
+            active = cell, neighbors = emptyList(), cellChangeHistory = emptyList(), currentLocation = null,
             previousBand = previousBand, previousDbm = previousDbm, previousNrArfcn = previousNrArfcn,
             recentRegisteredDbm = recent
         ).heuristicReport

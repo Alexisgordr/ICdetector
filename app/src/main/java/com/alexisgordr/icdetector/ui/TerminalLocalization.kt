@@ -345,8 +345,8 @@ private val replacements = linkedMapOf(
     "el módem no entrega un Timing Advance convertible a metros" to "the modem does not provide Timing Advance convertible to meters",
     "no hay celdas vecinas disponibles para contrastar el espectro" to "no neighbor cells are available for spectrum comparison",
     "el módem no entrega ARFCN/EARFCN para esta tecnología" to "the modem does not provide ARFCN/EARFCN for this technology",
-    "Android o el fabricante no exponen el estado de cifrado a esta app" to "Android or the manufacturer does not expose ciphering status to this app",
-    "estado de cifrado no disponible" to "ciphering status unavailable",
+    // 3.0.0-beta5 — H9 reservada.
+    "Android no expone el estado de cifrado a aplicaciones sin privilegios; regla reservada" to "Android does not expose ciphering status to unprivileged apps; reserved rule",
     "todavía no existe una secuencia temporal utilizable" to "no usable temporal sequence exists yet",
     "falta una posición GPS reciente" to "a recent GPS position is unavailable",
     "aún no hay observaciones previas geolocalizadas de esta celda" to "this cell has no previous geolocated observations yet",

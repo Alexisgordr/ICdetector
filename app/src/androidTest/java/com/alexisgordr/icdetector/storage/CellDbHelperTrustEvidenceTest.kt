@@ -204,7 +204,6 @@ class CellDbHelperTrustEvidenceTest {
         ThreatAnalyzer.analyzeThreats(
             active = cell(pci = 48, arfcn = 2850).copy(cellId = CID_H15),
             neighbors = emptyList(),
-            isHardwareCipheringActive = true,
             cellChangeHistory = emptyList(),
             currentLocation = null,
             rfStability = evidence

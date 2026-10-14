@@ -83,8 +83,7 @@ class H11RfComparisonTest {
 
     @Test fun `H8 still fails a measured out-of-range channel and stays N-A without one`() {
         fun h8(radio: RadioTech, arfcn: Int?) = ThreatAnalyzer.analyzeThreats(
-            active = active(radio, pci = null, arfcn = arfcn), neighbors = emptyList(), isHardwareCipheringActive = true,
-            cellChangeHistory = emptyList(), currentLocation = null).heuristicReport.arfcnSanity
+            active = active(radio, pci = null, arfcn = arfcn), neighbors = emptyList(), cellChangeHistory = emptyList(), currentLocation = null).heuristicReport.arfcnSanity
         assertEquals(HeuristicStatus.FAILED, h8(RadioTech.LTE, 300_000))
         assertEquals(HeuristicStatus.FAILED, h8(RadioTech.NR, 3_279_166))
         assertEquals(HeuristicStatus.PASSED, h8(RadioTech.LTE, 1300))

@@ -36,8 +36,11 @@ class ThreatEpisodeTracker(
      */
     private val nowMs: () -> Long = { System.nanoTime() / 1_000_000L }
 ) {
-    /** 3.0.0-beta5 — DATA_QUALITY (H8) no es evidencia: el tracker no la cuenta como familia. */
-    enum class Family { RF_DOMINANCE, IDENTITY, MOBILITY, CROSS_LAYER, DATA_QUALITY }
+    /**
+     * 3.0.0-beta5 — DATA_QUALITY (H8) y UNAVAILABLE (H9, no evaluable desde una app) no son
+     * evidencia: el tracker no las cuenta como familia.
+     */
+    enum class Family { RF_DOMINANCE, IDENTITY, MOBILITY, CROSS_LAYER, DATA_QUALITY, UNAVAILABLE }
 
     data class Evaluation(
         val cell: CellData,

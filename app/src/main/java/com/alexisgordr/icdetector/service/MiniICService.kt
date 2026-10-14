@@ -240,11 +240,6 @@ class MiniICService : Service() {
     // así que @Volatile basta para la visibilidad; el bucle también se para al cancelar el scope.
     @Volatile private var isServiceRunning = false
     
-    // v2.10.9 — Android no expone a una app normal el estado de cifrado del módem: no hay fuente
-    // que rellene estos valores, así que H9 queda siempre N/A (nunca "superada" por suposición).
-    // Antes se registraba un callback de telefonía vacío que aparentaba lo contrario; se retira.
-    private var isHardwareCipheringActive = false
-    private var isHardwareCipheringAvailable = false
     private var lastGpsTriggerTime = 0L
 
     // v2.1: la confirmación temporal vive en core/TemporalConfidence para poder testearla de
@@ -1552,8 +1547,6 @@ class MiniICService : Service() {
                         val analyzed = ThreatAnalyzer.analyzeThreats(
                             active = cell.copy(verified = knownVerified),
                             neighbors = neighbors,
-                            isHardwareCipheringActive = isHardwareCipheringActive,
-                            isHardwareCipheringAvailable = isHardwareCipheringAvailable,
                             cellChangeHistory = cellChangeHistory,
                             currentLocation = currentLocation,
                             preloadedHistory = preloadedHistory,
@@ -1741,7 +1734,6 @@ class MiniICService : Service() {
                             historyWithLocation = preloadedHistory.count { it.lat != null && it.lon != null },
                             latencyAvailable = NetworkLatencyMonitor.isMeasured(networkLatencyState.value),
                             latencyLearning = networkLatencyState.value == NetworkLatencyMonitor.STATE_LEARNING,
-                            cipheringAvailable = isHardwareCipheringAvailable,
                             previousBandAvailable = (prevBand != null || prevNrArfcn != null) && prevRegisteredDbm != null,
                             signalBaseline = signalBaseline,
                             rfFingerprint = rfFingerprint,

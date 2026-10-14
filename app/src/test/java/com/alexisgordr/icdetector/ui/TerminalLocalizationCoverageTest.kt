@@ -26,6 +26,8 @@ class TerminalLocalizationCoverageTest {
         "[sub-umbral] Calidad de dato: EARFCN 4G fuera de la tabla 3GPP",
         "[sub-umbral] Calidad de dato: NR-ARFCN 5G fuera de la tabla 3GPP",
         "Calidad de dato: el módem informa un canal fuera de la tabla 3GPP. No es evidencia de ataque y no resta puntos.",
+        // 3.0.0-beta5 — H9 reservada.
+        "N/A: Android no expone el estado de cifrado a aplicaciones sin privilegios; regla reservada.",
         // 3.0.0-beta5 — H3: servidora frente a SIM (motivo, abstenciones, diagnóstico).
         "Inconsistencia MCC: servidora 208 ≠ SIM 214, sin roaming ni vecinas con ese MCC",
         "[sub-umbral] Inconsistencia MCC",

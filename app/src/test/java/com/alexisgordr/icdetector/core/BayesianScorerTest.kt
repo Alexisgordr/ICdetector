@@ -27,9 +27,9 @@ class BayesianScorerTest {
 
     @Test
     fun `una heuristica fuerte sola sube el posterior`() {
-        // ciphering (H9) es independiente, LR = 12 -> ~5.7% con prior 0.005
-        val result = BayesianScorer.calculate(listOf("ciphering"), "PENDING", false)
-        assertTrue("esperado ~5.7%, fue $result", result in 5.5f..5.9f)
+        // mccMismatch (H3) es independiente, LR = 9 -> ~4.3% con prior 0.005
+        val result = BayesianScorer.calculate(listOf("mccMismatch"), "PENDING", false)
+        assertTrue("esperado ~4.3%, fue $result", result in 4.2f..4.5f)
     }
 
     @Test
@@ -63,7 +63,7 @@ class BayesianScorerTest {
     @Test
     fun `el posterior se satura al 95 por ciento (honestidad epistemica)`() {
         val result = BayesianScorer.calculate(
-            listOf("ciphering", "arfcn", "mccMismatch", "taDistance", "tacDev", "powerJump"),
+            listOf("mccMismatch", "taDistance", "tacDev", "powerJump", "h11", "rfStability"),
             "NOT_FOUND", true
         )
         assertEquals(95.0f, result, 0.01f)
@@ -72,7 +72,7 @@ class BayesianScorerTest {
     @Test
     fun `nunca supera el 95 por ciento ni baja de 0`() {
         val alto = BayesianScorer.calculate(
-            listOf("ciphering", "arfcn", "mccMismatch"), "NOT_FOUND", true
+            listOf("mccMismatch", "tacDev", "h11"), "NOT_FOUND", true
         )
         assertTrue(alto <= 95.0f)
         val bajo = BayesianScorer.calculate(emptyList(), "VERIFIED", false)
@@ -134,13 +134,6 @@ class BayesianScorerTest {
         assertEquals("MCC no debe depender de la densidad", denso, disperso, 0.001f)
     }
 
-    @Test
-    fun `el cifrado A5_0 NO se suaviza por densidad`() {
-        val denso = BayesianScorer.calculate(listOf("ciphering"), "PENDING", false, neighborCount = 12)
-        val disperso = BayesianScorer.calculate(listOf("ciphering"), "PENDING", false, neighborCount = 0)
-        assertEquals("el cifrado anulado vale igual en cualquier entorno", denso, disperso, 0.001f)
-    }
-
     // --- Reputación (trustScore) ---
 
     @Test
@@ -165,11 +158,14 @@ class BayesianScorerTest {
         assertEquals("MCC no depende de la reputación", nueva, probada, 0.001f)
     }
 
+    /** 3.0.0-beta5 — H9 está reservada: una app no puede ver el cifrado, así que no tiene LR. */
     @Test
-    fun `el cifrado A5_0 NO se amortigua por reputacion`() {
-        val nueva = BayesianScorer.calculate(listOf("ciphering"), "PENDING", false, trustScore = -1)
-        val probada = BayesianScorer.calculate(listOf("ciphering"), "PENDING", false, trustScore = 100)
-        assertEquals("el cifrado anulado vale igual aunque la celda sea de confianza", nueva, probada, 0.001f)
+    fun `H9 is reserved and never moves the posterior`() {
+        val prior = BayesianScorer.calculate(emptyList(), "PENDING", false)
+        assertEquals(prior, BayesianScorer.calculate(listOf("ciphering"), "PENDING", false), 0f)
+        assertTrue("ciphering" in BayesianScorer.UNAVAILABLE_KEYS)
+        assertTrue("arfcn" in BayesianScorer.DATA_QUALITY_KEYS)
+        assertEquals(BayesianScorer.Group.NOT_SCORED, BayesianScorer.groupOf("ciphering"))
     }
 
     /**
@@ -181,7 +177,7 @@ class BayesianScorerTest {
     fun `toda heuristica que ThreatAnalyzer puede emitir tiene peso`() {
         val emitted = listOf(
             "isolated", "powerJump", "mccMismatch", "mncCount", "tacDev", "taDistance",
-            "ghostCells", "ciphering", "pingPong", "h11", "signalBaseline",
+            "ghostCells", "pingPong", "h11", "signalBaseline",
             "bandDowngrade", "rfStability", "transitionCoherence"
         )
         val prior = BayesianScorer.calculate(emptyList(), "PENDING", false)

@@ -186,7 +186,7 @@ class DiagnosticsTest {
         val inputs = DiagnosticEngine.Inputs(
             neighborCount = 0, wifiActive = false, locationAvailable = false,
             historyWithLocation = 0, latencyAvailable = false,
-            cipheringAvailable = false, previousBandAvailable = false,
+            previousBandAvailable = false,
             signalBaseline = null, rfFingerprint = null, rfStability = null, reputation = null
         )
         val diagnostic = DiagnosticEngine.explain(cell(), inputs).first { it.id == 6 }
@@ -199,7 +199,7 @@ class DiagnosticsTest {
         val inputs = DiagnosticEngine.Inputs(
             neighborCount = 2, wifiActive = false, locationAvailable = false,
             historyWithLocation = 0, latencyAvailable = false,
-            cipheringAvailable = false, previousBandAvailable = false,
+            previousBandAvailable = false,
             signalBaseline = null, rfFingerprint = null, rfStability = null, reputation = null
         )
         fun h3(report: HeuristicReport) = DiagnosticEngine.explain(cell(report), inputs).first { it.id == 3 }.explanation
@@ -210,14 +210,17 @@ class DiagnosticsTest {
             h3(HeuristicReport(mccAbstention = MccAbstention.BORDER))
         )
         assertEquals("N/A: ${DiagnosticEngine.H3_UNKNOWN_ABSTENTION}.", h3(HeuristicReport()))
+        // 3.0.0-beta5 — H9 reservada: siempre la misma explicación.
+        val h9 = DiagnosticEngine.explain(cell(HeuristicReport()), inputs).first { it.id == 9 }
+        assertEquals(HeuristicStatus.NOT_EVALUATED, h9.status)
+        assertEquals(DiagnosticEngine.H9_NA_EXPLANATION, h9.explanation)
     }
 
     @Test
     fun `maturity reflects actual analyzer thresholds`() {
         val inputs = DiagnosticEngine.Inputs(
             neighborCount = 1, wifiActive = false, locationAvailable = true,
-            historyWithLocation = 1, latencyAvailable = true, cipheringAvailable = true,
-            previousBandAvailable = true,
+            historyWithLocation = 1, latencyAvailable = true, previousBandAvailable = true,
             signalBaseline = SignalBaseline(20, -90.0, 3.0, -100, -80),
             rfFingerprint = CellRfFingerprint(30, -10.0, 1.0, 12.0, 2.0),
             rfStability = CellRfStability(4, emptyList(), emptyList()),
@@ -237,7 +240,7 @@ class DiagnosticsTest {
         fun inputs(gate: Boolean?) = DiagnosticEngine.Inputs(
             neighborCount = 0, wifiActive = false, locationAvailable = false,
             historyWithLocation = 0, latencyAvailable = false,
-            cipheringAvailable = false, previousBandAvailable = false,
+            previousBandAvailable = false,
             signalBaseline = null, rfFingerprint = null, rfStability = null, reputation = null,
             trustGateMet = gate
         )

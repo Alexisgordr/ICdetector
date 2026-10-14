@@ -80,8 +80,6 @@ class HeuristicsTest {
     private fun analyze(
         active: CellData,
         neighbors: List<CellData> = emptyList(),
-        isHardwareCipheringActive: Boolean = true,
-        isHardwareCipheringAvailable: Boolean = false,
         cellChangeHistory: List<Pair<String, Long>> = emptyList(),
         isWifiActive: Boolean = false,
         isNetworkLatencyAnomalous: Boolean = false,
@@ -90,8 +88,6 @@ class HeuristicsTest {
     ) = ThreatAnalyzer.analyzeThreats(
         active = active,
         neighbors = neighbors,
-        isHardwareCipheringActive = isHardwareCipheringActive,
-        isHardwareCipheringAvailable = isHardwareCipheringAvailable,
         cellChangeHistory = cellChangeHistory,
         currentLocation = null,
         isWifiActive = isWifiActive,
@@ -111,8 +107,7 @@ class HeuristicsTest {
     // ---------- 3.0 (#28): H1 pendiente de confirmar ----------
     private fun analyzeIsolation(dbm: Int, confirmed: Boolean, neighbors: List<CellData> = emptyList(), wifi: Boolean = false) =
         ThreatAnalyzer.analyzeThreats(
-            active = active(dbm = dbm), neighbors = neighbors, isHardwareCipheringActive = true,
-            cellChangeHistory = emptyList(), currentLocation = null, isWifiActive = wifi,
+            active = active(dbm = dbm), neighbors = neighbors, cellChangeHistory = emptyList(), currentLocation = null, isWifiActive = wifi,
             isolatedCellConfirmed = confirmed, nowMs = NOW
         ).heuristicReport.isolatedCell
 
@@ -138,13 +133,12 @@ class HeuristicsTest {
         val confidence = IsolatedCellConfidence()
         confidence.observe("214-01-100-1000-LTE", candidate = true, observationToken = 1L)
         val report = ThreatAnalyzer.analyzeThreats(
-            active = active(dbm = -70), neighbors = emptyList(), isHardwareCipheringActive = true,
-            cellChangeHistory = emptyList(), currentLocation = null, isolatedCellConfirmed = false, nowMs = NOW
+            active = active(dbm = -70), neighbors = emptyList(), cellChangeHistory = emptyList(), currentLocation = null, isolatedCellConfirmed = false, nowMs = NOW
         )
         val diagnostics = DiagnosticEngine.explain(report, DiagnosticEngine.Inputs(
             neighborCount = 0, wifiActive = false, locationAvailable = false, historyWithLocation = 0,
             latencyAvailable = false, isolationProgress = confidence.progress to confidence.required,
-            cipheringAvailable = false, previousBandAvailable = false, signalBaseline = null,
+            previousBandAvailable = false, signalBaseline = null,
             rfFingerprint = null, rfStability = null, reputation = null
         ))
         val h1 = diagnostics.first { it.id == 1 }
@@ -185,7 +179,6 @@ class HeuristicsTest {
         val result = ThreatAnalyzer.analyzeThreats(
             active = active(dbm = -65, rsrq = -18),
             neighbors = listOf(neighbor(-75)),
-            isHardwareCipheringActive = true,
             cellChangeHistory = emptyList(),
             currentLocation = null,
             isNetworkLatencyAnomalous = true,
@@ -227,8 +220,7 @@ class HeuristicsTest {
 
     private fun analyzeMcc(active: CellData, neighbors: List<CellData>, service: ServiceStateSnapshot?) =
         ThreatAnalyzer.analyzeThreats(
-            active = active, neighbors = neighbors, isHardwareCipheringActive = true,
-            cellChangeHistory = emptyList(), currentLocation = null, nowMs = NOW, serviceState = service
+            active = active, neighbors = neighbors, cellChangeHistory = emptyList(), currentLocation = null, nowMs = NOW, serviceState = service
         )
 
     @Test fun `H3 pasa si la servidora tiene el MCC de la SIM, aunque las vecinas sean de otro pais`() {
@@ -445,15 +437,15 @@ class HeuristicsTest {
         assertTrue(analyze(active(networkType = "4G LTE", arfcn = 1500)).arfcnSanityPassed)
     }
 
-    // ---------- H9: Cifrado de hardware (estado indicado por el sistema) ----------
-    @Test fun `H9 dispara cuando el cifrado esta disponible pero inactivo`() {
-        val r = analyze(active(), isHardwareCipheringActive = false, isHardwareCipheringAvailable = true)
-        assertFalse(r.hardwareCipheringPassed)
-    }
-    @Test fun `H9 no marca fallo si el dato de cifrado no esta disponible`() {
-        // No disponible -> no se penaliza; hardwareCipheringPassed refleja el estado activo (true)
-        val r = analyze(active(), isHardwareCipheringActive = true, isHardwareCipheringAvailable = false)
-        assertTrue(r.hardwareCipheringPassed)
+    // ---------- H9: reservada (3.0.0-beta5) ----------
+    @Test fun `H9 es siempre N-A y no resta puntos`() {
+        val cell = ThreatAnalyzer.analyzeThreats(
+            active = active(), neighbors = listOf(neighbor(-95)),
+            cellChangeHistory = emptyList(), currentLocation = null, nowMs = NOW
+        )
+        assertEquals(HeuristicStatus.NOT_EVALUATED, cell.heuristicReport.hardwareCiphering)
+        assertFalse(cell.heuristicReport.hardwareCipheringAvailable)
+        assertTrue(cell.heuristicReport.notEvaluatedIds().split(";").contains("H9"))
     }
 
     // ---------- H8: ARFCN (v2.10.10) ----------
@@ -476,7 +468,7 @@ class HeuristicsTest {
     @Test fun `H8 failing is kept in the row but subtracts no points and adds no confidence`() {
         fun run(arfcn: Int) = ThreatAnalyzer.analyzeThreats(
             active = active().copy(radioTech = RadioTech.LTE, arfcn = arfcn), neighbors = emptyList(),
-            isHardwareCipheringActive = true, cellChangeHistory = emptyList(), currentLocation = null
+            cellChangeHistory = emptyList(), currentLocation = null
         )
         val valid = run(1301)
         val invalid = run(262_144)
@@ -486,7 +478,7 @@ class HeuristicsTest {
         assertTrue("motivo guardado en la fila", invalid.suspiciousReason!!.contains(ThreatAnalyzer.H8_LTE_REASON))
         val nr = ThreatAnalyzer.analyzeThreats(
             active = active().copy(radioTech = RadioTech.NR, arfcn = 3_279_166), neighbors = emptyList(),
-            isHardwareCipheringActive = true, cellChangeHistory = emptyList(), currentLocation = null
+            cellChangeHistory = emptyList(), currentLocation = null
         )
         assertTrue(nr.suspiciousReason!!.contains(ThreatAnalyzer.H8_NR_REASON))
     }
@@ -504,11 +496,11 @@ class HeuristicsTest {
     @Test fun `H8 no disponible no resta puntos`() {
         val unavailable = ThreatAnalyzer.analyzeThreats(
             active = active().copy(radioTech = RadioTech.LTE, arfcn = Int.MAX_VALUE), neighbors = emptyList(),
-            isHardwareCipheringActive = true, cellChangeHistory = emptyList(), currentLocation = null
+            cellChangeHistory = emptyList(), currentLocation = null
         )
         val valid = ThreatAnalyzer.analyzeThreats(
             active = active().copy(radioTech = RadioTech.LTE, arfcn = 1301), neighbors = emptyList(),
-            isHardwareCipheringActive = true, cellChangeHistory = emptyList(), currentLocation = null
+            cellChangeHistory = emptyList(), currentLocation = null
         )
         assertEquals(valid.securityScore, unavailable.securityScore)
     }
@@ -548,7 +540,6 @@ class HeuristicsTest {
         val withAnomaly = ThreatAnalyzer.analyzeThreats(
             active = active(dbm = -60, rsrq = -18),
             neighbors = listOf(neighbor(-95)), // evita H1/H7 con una vecina de señal media
-            isHardwareCipheringActive = true,
             cellChangeHistory = emptyList(),
             currentLocation = null,
             isNetworkLatencyAnomalous = true
@@ -556,7 +547,6 @@ class HeuristicsTest {
         val withoutAnomaly = ThreatAnalyzer.analyzeThreats(
             active = active(dbm = -60, rsrq = -18),
             neighbors = listOf(neighbor(-95)),
-            isHardwareCipheringActive = true,
             cellChangeHistory = emptyList(),
             currentLocation = null,
             isNetworkLatencyAnomalous = false
@@ -568,7 +558,6 @@ class HeuristicsTest {
         val withAnomaly = ThreatAnalyzer.analyzeThreats(
             active = active(dbm = -60, rsrq = -8, sinr = 15),
             neighbors = listOf(neighbor(-95)),
-            isHardwareCipheringActive = true,
             cellChangeHistory = emptyList(),
             currentLocation = null,
             isNetworkLatencyAnomalous = true
@@ -576,7 +565,6 @@ class HeuristicsTest {
         val withoutAnomaly = ThreatAnalyzer.analyzeThreats(
             active = active(dbm = -60, rsrq = -8, sinr = 15),
             neighbors = listOf(neighbor(-95)),
-            isHardwareCipheringActive = true,
             cellChangeHistory = emptyList(),
             currentLocation = null,
             isNetworkLatencyAnomalous = false
@@ -589,7 +577,6 @@ class HeuristicsTest {
         ThreatAnalyzer.analyzeThreats(
             active = active(dbm = -90),
             neighbors = listOf(neighbor(-95)),
-            isHardwareCipheringActive = true,
             cellChangeHistory = emptyList(),
             currentLocation = null,
             rfStability = rf
@@ -839,7 +826,6 @@ class HeuristicsTest {
     ) = ThreatAnalyzer.analyzeThreats(
         active = active(dbm = -90, rsrq = rsrq, sinr = sinr),
         neighbors = listOf(neighbor(-95)),
-        isHardwareCipheringActive = true,
         cellChangeHistory = emptyList(),
         currentLocation = null,
         rfFingerprint = fp

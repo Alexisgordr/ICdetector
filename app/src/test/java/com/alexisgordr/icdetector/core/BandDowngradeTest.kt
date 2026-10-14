@@ -42,7 +42,6 @@ class BandDowngradeTest {
         previousBandSite = previousBandSite,
         active = active,
         neighbors = emptyList(),
-        isHardwareCipheringActive = false,
         cellChangeHistory = emptyList(),
         currentLocation = null,
         previousBand = previousBand,

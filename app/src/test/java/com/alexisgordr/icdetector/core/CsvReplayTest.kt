@@ -144,8 +144,6 @@ class CsvReplayTest {
                 val analyzed = ThreatAnalyzer.analyzeThreats(
                     active = cell,
                     neighbors = emptyList(),
-                    isHardwareCipheringActive = true,
-                    isHardwareCipheringAvailable = false,
                     cellChangeHistory = emptyList(),
                     currentLocation = null
                 )

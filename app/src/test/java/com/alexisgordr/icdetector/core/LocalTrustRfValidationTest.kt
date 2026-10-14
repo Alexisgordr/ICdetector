@@ -59,7 +59,7 @@ class LocalTrustRfValidationTest {
         assertEquals(Int.MAX_VALUE, out.pci)
         assertEquals(262_144, out.arfcn)
         val h8 = ThreatAnalyzer.analyzeThreats(active = cell(10, 262_144), neighbors = emptyList(),
-            isHardwareCipheringActive = false, cellChangeHistory = emptyList(), currentLocation = null)
+            cellChangeHistory = emptyList(), currentLocation = null)
         assertEquals(HeuristicStatus.FAILED, h8.heuristicReport.arfcnSanity)
     }
 

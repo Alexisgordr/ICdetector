@@ -85,8 +85,6 @@ class ScenarioTest {
             val analyzed = ThreatAnalyzer.analyzeThreats(
                 active = c.active,
                 neighbors = c.neighbors,
-                isHardwareCipheringActive = true,
-                isHardwareCipheringAvailable = false,
                 cellChangeHistory = changes.toList(),
                 currentLocation = null,
                 rfStability = c.rfStability,
@@ -144,8 +142,7 @@ class ScenarioTest {
     /** Analiza solo el primer ciclo, con su ServiceState, fuera de la confirmación temporal. */
     private fun analyzeFirst(cycles: List<Cycle>) = cycles.first().let { c ->
         ThreatAnalyzer.analyzeThreats(
-            active = c.active, neighbors = c.neighbors, isHardwareCipheringActive = true,
-            cellChangeHistory = emptyList(), currentLocation = null, nowMs = START_MS, serviceState = c.service
+            active = c.active, neighbors = c.neighbors, cellChangeHistory = emptyList(), currentLocation = null, nowMs = START_MS, serviceState = c.service
         )
     }
 

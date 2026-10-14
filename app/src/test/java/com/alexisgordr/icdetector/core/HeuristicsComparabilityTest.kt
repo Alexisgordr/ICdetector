@@ -24,8 +24,7 @@ class HeuristicsComparabilityTest {
     )
 
     private fun analyze(active: CellData, neighbours: List<CellData>) = ThreatAnalyzer.analyzeThreats(
-        active = active, neighbors = neighbours, isHardwareCipheringActive = true,
-        cellChangeHistory = emptyList(), currentLocation = null, isNetworkLatencyAvailable = false
+        active = active, neighbors = neighbours, cellChangeHistory = emptyList(), currentLocation = null, isNetworkLatencyAvailable = false
     )
 
     // ── H4 ──────────────────────────────────────────────────────────────────────────────────
@@ -114,7 +113,7 @@ class HeuristicsComparabilityTest {
         )
         val border = ThreatAnalyzer.analyzeThreats(
             active = serving(tac = "31601"), neighbors = listOf(foreign(mcc = "208", mnc = "10")),
-            isHardwareCipheringActive = true, cellChangeHistory = emptyList(), currentLocation = null,
+            cellChangeHistory = emptyList(), currentLocation = null,
             isNetworkLatencyAvailable = false, serviceState = homeSim
         )
         assertEquals(HeuristicStatus.PASSED, border.heuristicReport.mccConsistency)

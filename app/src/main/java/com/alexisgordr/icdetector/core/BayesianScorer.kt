@@ -65,8 +65,10 @@ object BayesianScorer {
         // Expert-derived LR estimate — not directly reported by source paper
         // 3.0.0-beta5 — "arfcn" (H8) ya no está: un ARFCN fuera de la tabla 3GPP no es evidencia de
         // ataque (un IMSI catcher necesita un canal válido para que el móvil se registre), sino un
-        // módem que informa mal. H8 es un aviso de calidad de dato ([NOT_SCORED_KEYS]).
-        "ciphering"   to 12.0f, // H9: el sistema indica cifrado no activo (la app no ve el algoritmo)
+        // módem que informa mal. H8 es un aviso de calidad de dato ([DATA_QUALITY_KEYS]).
+        // 3.0.0-beta5 — "ciphering" (H9) tampoco: Android no expone el estado de cifrado a una app sin
+        // privilegios, H9 nunca se evalúa y una LR de 12 para una regla que no mide nada no es
+        // honesta. Queda reservada ([UNAVAILABLE_KEYS]).
         "latency"     to 1.8f   // Experimental — demasiadas variables confundentes
     )
 
@@ -126,7 +128,7 @@ object BayesianScorer {
     // Heurísticas de DOMINANCIA RF que dan falsos positivos en entornos dispersos (rural,
     // macroceldas): una sola antena dominando sin vecinas es ANÓMALO en ciudad pero NORMAL en
     // el campo. Suavizamos SOLO estas según la densidad del entorno (nº de vecinas visibles).
-    // NO se tocan las físicamente sólidas en cualquier contexto (MCC, cifrado, H11,
+    // NO se tocan las físicamente sólidas en cualquier contexto (MCC, H11,
     // H13/signalBaseline, H14/bandDowngrade, H15): esas valen igual en ciudad o campo.
     private val ENV_SENSITIVE = setOf("isolated", "powerJump", "ghostCells")
 
@@ -160,12 +162,19 @@ object BayesianScorer {
 
     /**
      * 3.0 (fase 4) — Grupo de correlación del scorer; INDEPENDENT = actualiza por su cuenta.
-     * 3.0.0-beta5 — NOT_SCORED: la regla se evalúa y se publica, pero no es evidencia (H8).
+     * 3.0.0-beta5 — NOT_SCORED: la regla no es evidencia y no tiene LR: H8 (se evalúa y se publica
+     * como calidad de dato) y H9 (reservada: no se puede evaluar desde una app).
      */
     enum class Group { RF_DOMINANCE, MOBILITY, WEAK_IDENTITY, INDEPENDENT, NOT_SCORED }
 
     /** 3.0.0-beta5 — Claves de reglas que son avisos de calidad de dato, sin LR: H8. */
-    internal val NOT_SCORED_KEYS = setOf("arfcn")
+    internal val DATA_QUALITY_KEYS = setOf("arfcn")
+
+    /** 3.0.0-beta5 — Claves de reglas que una app no puede evaluar, sin LR: H9 (cifrado). */
+    internal val UNAVAILABLE_KEYS = setOf("ciphering")
+
+    /** Claves sin LR: ni calidad de dato ni reglas reservadas son evidencia. */
+    internal val NOT_SCORED_KEYS = DATA_QUALITY_KEYS + UNAVAILABLE_KEYS
 
     /** Grupo de una clave, para declararlo y comprobarlo en HeuristicCatalog. */
     internal fun groupOf(key: String): Group = when (key) {

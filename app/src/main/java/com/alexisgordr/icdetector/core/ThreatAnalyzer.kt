@@ -150,8 +150,6 @@ object ThreatAnalyzer {
     fun analyzeThreats(
         active: CellData,
         neighbors: List<CellData>,
-        isHardwareCipheringActive: Boolean,
-        isHardwareCipheringAvailable: Boolean = false,
         cellChangeHistory: List<Pair<String, Long>>,
         currentLocation: Location?,
         preloadedHistory: List<HistoryRecord> = emptyList(),
@@ -219,7 +217,6 @@ object ThreatAnalyzer {
         var eTa = false
         var eGhost = false
         var eArfcn = false
-        val eCiphering = isHardwareCipheringAvailable
         var ePingPong = true
         var eMobileCellId = false
         var eLatencyCorrelation = false
@@ -394,14 +391,9 @@ object ThreatAnalyzer {
             }
         }
 
-        // 9. Hardware Ciphering Check (Android 14+)
-        // La app solo puede recibir del sistema un "cifrado activo sí/no"; no observa qué algoritmo
-        // se negocia (A5/x en GSM, EEA en LTE). El motivo no nombra ninguno. Hoy el servicio nunca
-        // marca el dato como disponible, así que H9 queda N/A.
-        if (isHardwareCipheringAvailable && !isHardwareCipheringActive) {
-            reasons.add("Cifrado de red no activo según el sistema")
-            score -= 50
-        }
+        // 9. Cifrado — 3.0.0-beta5: regla reservada. Android no expone a una app sin privilegios
+        // el estado de cifrado del módem, así que no hay nada que evaluar: H9 es siempre N/A, sin
+        // puntos ni LR. Conserva su id y su posición en el informe (CSV y numeración).
 
         // 10. Ping-Pong Effect
         // v2.10.9 — La decisión vive en PingPongRule (probada sin Android). Solo cuentan los
@@ -663,7 +655,6 @@ object ThreatAnalyzer {
             if (!hTac) add("tacDev")
             if (!hTa) add("taDistance")
             if (!hGhost) add("ghostCells")
-            if (isHardwareCipheringAvailable && !isHardwareCipheringActive) add("ciphering")
             if (!hPingPong) add("pingPong")
             if (!hMobileCellId) add("h11")
             if (!hSignalBaseline) add("signalBaseline")
@@ -734,7 +725,7 @@ object ThreatAnalyzer {
             taDistance = status(eTa, hTa),
             ghostNeighbors = status(eGhost, hGhost),
             arfcnSanity = status(eArfcn, hArfcn),
-            hardwareCiphering = status(eCiphering, isHardwareCipheringActive),
+            hardwareCiphering = HeuristicStatus.NOT_EVALUATED,
             pingPong = status(ePingPong, hPingPong),
             mobileCellId = status(eMobileCellId, hMobileCellId),
             latencyCorrelation = status(eLatencyCorrelation, hLatencyCorrelation),

@@ -73,7 +73,6 @@ class NeighbourSelectionTest {
         val result = ThreatAnalyzer.analyzeThreats(
             active = ordered.first(),
             neighbors = neighbours,
-            isHardwareCipheringActive = false,
             cellChangeHistory = emptyList(),
             currentLocation = null,
             isWifiActive = false,

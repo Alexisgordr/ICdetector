@@ -17,7 +17,6 @@ object DiagnosticEngine {
         val isolationProgress: Pair<Int, Int>? = null,
         /** 3.0 (#26) — La sonda mide, pero aún aprende la referencia de esta celda. */
         val latencyLearning: Boolean = false,
-        val cipheringAvailable: Boolean,
         val previousBandAvailable: Boolean,
         val signalBaseline: SignalBaseline?,
         val rfFingerprint: CellRfFingerprint?,
@@ -73,7 +72,7 @@ object DiagnosticEngine {
                 if (r.arfcnSanity == HeuristicStatus.FAILED) H8_FAILED_EXPLANATION
                 else explanation(r.arfcnSanity, "N/A: el módem no entrega ARFCN/EARFCN para esta tecnología.")),
             HeuristicDiagnostic(9, "Cifrado hardware", r.hardwareCiphering,
-                explanation(r.hardwareCiphering, if (!i.cipheringAvailable) "N/A: Android o el fabricante no exponen el estado de cifrado a esta app." else "N/A: estado de cifrado no disponible.")),
+                H9_NA_EXPLANATION),
             HeuristicDiagnostic(10, "Anti ping-pong", r.pingPong,
                 explanation(r.pingPong, "N/A: hay cambios rápidos de celda, pero sin velocidad GPS no se puede saber si estás parado.")),
             HeuristicDiagnostic(11, "Consistencia geográfica", r.mobileCellId,
@@ -109,6 +108,8 @@ object DiagnosticEngine {
     private const val WIFI_NA = "N/A: Wi-Fi activo; se evita atribuir el contexto de red al enlace celular."
 
     /** 3.0.0-beta5 — H8 es un aviso de calidad de dato (ver ThreatAnalyzer, regla 8). */
+    /** 3.0.0-beta5 — H9 está reservada: nunca se evalúa. */
+    const val H9_NA_EXPLANATION = "N/A: Android no expone el estado de cifrado a aplicaciones sin privilegios; regla reservada."
     /** 3.0.0-beta5 — Explicaciones de H3 (servidora frente a SIM). */
     const val H3_PASSED_EXPLANATION = "El MCC de la servidora coincide con el de la SIM."
     const val H3_FAILED_EXPLANATION = "El MCC de la servidora no es el de la SIM, sin roaming y sin vecinas con ese MCC."

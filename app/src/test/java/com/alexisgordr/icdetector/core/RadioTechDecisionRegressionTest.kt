@@ -24,7 +24,6 @@ class RadioTechDecisionRegressionTest {
         ThreatAnalyzer.analyzeThreats(
             active = cell,
             neighbors = emptyList(),
-            isHardwareCipheringActive = true,
             cellChangeHistory = emptyList(),
             currentLocation = null,
             previousBand = previousBand,

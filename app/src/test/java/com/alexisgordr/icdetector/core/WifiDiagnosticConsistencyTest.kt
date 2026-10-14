@@ -19,14 +19,14 @@ class WifiDiagnosticConsistencyTest {
 
     private fun inputs(wifi: Boolean) = DiagnosticEngine.Inputs(
         neighborCount = 0, wifiActive = wifi, locationAvailable = false, historyWithLocation = 0,
-        latencyAvailable = false, cipheringAvailable = false, previousBandAvailable = false,
+        latencyAvailable = false, previousBandAvailable = false,
         signalBaseline = null, rfFingerprint = null, rfStability = null, reputation = null
     )
 
     @Test fun `a result analysed on wifi is explained as a wifi abstention`() {
         val wifiAtAnalysis = true
         val analysed = ThreatAnalyzer.analyzeThreats(active = cell, neighbors = emptyList(),
-            isHardwareCipheringActive = false, cellChangeHistory = emptyList(), currentLocation = null,
+            cellChangeHistory = emptyList(), currentLocation = null,
             isWifiActive = wifiAtAnalysis, isolatedCellConfirmed = true)
         assertEquals(HeuristicStatus.NOT_EVALUATED, analysed.heuristicReport.powerJump)
 

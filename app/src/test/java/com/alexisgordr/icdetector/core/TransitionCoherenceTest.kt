@@ -111,8 +111,7 @@ class TransitionCoherenceTest {
             tac = "1", dbm = -90, mcc = "214"
         )
         val analyzed = ThreatAnalyzer.analyzeThreats(
-            active = cell, neighbors = emptyList(), isHardwareCipheringActive = true,
-            cellChangeHistory = emptyList(), currentLocation = null,
+            active = cell, neighbors = emptyList(), cellChangeHistory = emptyList(), currentLocation = null,
             transitionCoherence = TransitionCoherenceResult(
                 status = HeuristicStatus.FAILED, explanation = "test",
                 fromIdentity = "A", toIdentity = "B"

@@ -51,7 +51,9 @@ enum class HeuristicCatalog(
     GHOST_NEIGHBORS("H7", "ghostCells", Family.RF_DOMINANCE, G.RF_DOMINANCE, null, { it.ghostNeighbors }),
     // 3.0.0-beta5 — Aviso de calidad de dato: ni peso en el scorer ni familia de episodio.
     ARFCN_SANITY("H8", "arfcn", Family.DATA_QUALITY, G.NOT_SCORED, null, { it.arfcnSanity }),
-    HARDWARE_CIPHERING("H9", "ciphering", Family.CROSS_LAYER, G.INDEPENDENT, null, { it.hardwareCiphering }),
+    // 3.0.0-beta5 — Reservada: Android no expone el estado de cifrado a una app sin privilegios,
+    // así que H9 es siempre N/A. Conserva id y posición (CSV, numeración), sin peso ni familia.
+    HARDWARE_CIPHERING("H9", "ciphering", Family.UNAVAILABLE, G.NOT_SCORED, null, { it.hardwareCiphering }),
     PING_PONG("H10", "pingPong", Family.MOBILITY, G.MOBILITY, null, { it.pingPong }),
     MOBILE_CELL_ID("H11", "h11", Family.MOBILITY, G.MOBILITY, null, { it.mobileCellId }),
     LATENCY_CORRELATION("H12", "latency", Family.CROSS_LAYER, G.INDEPENDENT, null, { it.latencyCorrelation }),
