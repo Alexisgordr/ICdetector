@@ -30,8 +30,8 @@ internal class TelephonyCollectionController(
     private var displayCallback: TelephonyCallback? = null
     private var serviceStateCallback: TelephonyCallback? = null
     private var lastDisplayInfo: TelephonyDisplayInfo? = null
-    private var lastRegisteredCallbackAt = 0L
-    private var retryCount = 0
+    // 3.0 — Ver CallbackWatchdog: cuenta también las respuestas a requestCellInfoUpdate.
+    private val watchdog = com.alexisgordr.icdetector.core.CallbackWatchdog { android.os.SystemClock.elapsedRealtime() }
 
     fun start() {
         if (!hasPhonePermission()) return
@@ -49,6 +49,8 @@ internal class TelephonyCollectionController(
                 context.mainExecutor,
                 object : TelephonyManager.CellInfoCallback() {
                     override fun onCellInfo(cellInfo: MutableList<CellInfo>) {
+                        // 3.0 — Una respuesta con celdas demuestra que el módem contesta.
+                        if (cellInfo.isNotEmpty()) watchdog.onDelivery()
                         deliver(cellInfo, true, false)
                     }
 
@@ -198,10 +200,7 @@ internal class TelephonyCollectionController(
         try {
             val callback = object : TelephonyCallback(), TelephonyCallback.CellInfoListener {
                 override fun onCellInfoChanged(cellInfo: MutableList<CellInfo>) {
-                    if (cellInfo.isNotEmpty()) {
-                        lastRegisteredCallbackAt = System.currentTimeMillis()
-                        retryCount = 0
-                    }
+                    if (cellInfo.isNotEmpty()) watchdog.onDelivery()
                     deliver(cellInfo, true, true)
                 }
             }
@@ -215,7 +214,7 @@ internal class TelephonyCollectionController(
         try {
             val callback = object : TelephonyCallback(), TelephonyCallback.DisplayInfoListener {
                 override fun onDisplayInfoChanged(displayInfo: TelephonyDisplayInfo) {
-                    lastRegisteredCallbackAt = System.currentTimeMillis()
+                    watchdog.onDelivery()
                     lastDisplayInfo = displayInfo
                     requestFreshCellInfo()
                 }
@@ -226,10 +225,9 @@ internal class TelephonyCollectionController(
     }
 
     private fun recoverCallbacksIfStale() {
-        if (System.currentTimeMillis() - lastRegisteredCallbackAt <= CALLBACK_TIMEOUT_MS) return
-        retryCount++
-        if (retryCount < MAX_RETRIES) return
-        retryCount = 0
+        val silentMs = watchdog.onRefreshRequested() ?: return
+        // 3.0 — Cada reinicio queda en el terminal: antes no dejaba rastro.
+        log("Watchdog: callbacks de telefonía reiniciados; ${silentMs / 1_000} s sin entregas de celdas.")
         destroy()
         manager = context.getSystemService(TelephonyManager::class.java)
         start()
@@ -242,9 +240,4 @@ internal class TelephonyCollectionController(
     private fun hasLocationPermission() = ContextCompat.checkSelfPermission(
         context, Manifest.permission.ACCESS_FINE_LOCATION
     ) == PackageManager.PERMISSION_GRANTED
-
-    private companion object {
-        const val CALLBACK_TIMEOUT_MS = 30_000L
-        const val MAX_RETRIES = 4
-    }
 }
