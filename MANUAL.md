@@ -78,7 +78,7 @@ OpenCellID key start empty. Installing 3.0 over v2.10.x would still upgrade the 
 (old rows keep the new fields empty), but mixing data from both sides of the 3.0 methodology changes
 is not supported. From 3.0 on, every version updates the previous one normally.
 
-> If you take part in the field-collection campaign, keep that phone on v2.10.x; see
+> The field-collection campaign runs on 3.0.0-beta4 from a fresh database; see
 > [IMPORTANT.md](IMPORTANT.md).
 
 **First start.** A new install first asks *"Do you want to restore a backup?"* with two
@@ -1297,7 +1297,7 @@ geometry, Stable-Site): they are read-only and meant for analysis and archiving.
    database version not newer than the app. Backups made with an older 3.0 version are migrated when
    restored (for example schema 24 to 25); a backup made with this version (schema 25) cannot be
    restored by an older APK, which refuses it as a newer database. Backups from v2.10.x are refused even though they could
-   be migrated: 3.0 data is not mixed with the field-campaign data. A database that contains
+   be migrated: 3.0 data is not mixed with v2.10.x data. A database that contains
    **triggers or views** is refused as damaged (no version of the app creates them, and a trigger
    would run while the backup is opened and migrated). This is checked with a read-only query
    before the app opens the backup to migrate it, and again after the migration, before installing

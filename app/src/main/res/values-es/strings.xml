@@ -340,7 +340,7 @@
     <string name="restore_rejected_not_icdetection">Esta copia la hizo otra app.</string>
     <string name="restore_rejected_unknown_format">Esta copia usa un formato que esta versión no conoce. Actualiza ICdetection y vuelve a intentarlo.</string>
     <string name="restore_rejected_missing_version">Esta copia no indica qué versión la hizo, así que no se puede comprobar.</string>
-    <string name="restore_rejected_campaign">Esta copia es de la v2.10.x. Los datos de la 3.0 no se mezclan con los de la campaña, así que no se puede restaurar aquí.</string>
+    <string name="restore_rejected_campaign">Esta copia es de la v2.10.x. Los datos de la 3.0 no se mezclan con los de la v2.10.x, así que no se puede restaurar aquí.</string>
     <string name="restore_rejected_future">Esta copia la hizo una versión más nueva de ICdetection. Actualiza la app y vuelve a intentarlo.</string>
     <string name="restore_rejected_damaged">Esta copia está dañada o incompleta. No se ha cambiado nada.</string>
     <string name="restore_result_title">Restauración</string>

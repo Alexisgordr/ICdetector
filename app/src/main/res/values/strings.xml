@@ -340,7 +340,7 @@
     <string name="restore_rejected_not_icdetection">This backup was made by another app.</string>
     <string name="restore_rejected_unknown_format">This backup uses a format this version does not know. Update ICdetection and try again.</string>
     <string name="restore_rejected_missing_version">This backup does not say which version made it, so it cannot be checked.</string>
-    <string name="restore_rejected_campaign">This backup is from v2.10.x. 3.0 data is not mixed with the field-campaign data, so it cannot be restored here.</string>
+    <string name="restore_rejected_campaign">This backup is from v2.10.x. 3.0 data is not mixed with v2.10.x data, so it cannot be restored here.</string>
     <string name="restore_rejected_future">This backup was made by a newer version of ICdetection. Update the app and try again.</string>
     <string name="restore_rejected_damaged">This backup is damaged or incomplete. Nothing was changed.</string>
     <string name="restore_result_title">Restore</string>

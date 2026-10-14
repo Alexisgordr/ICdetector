@@ -50,13 +50,12 @@
 > [!IMPORTANT]
 > **Project status**
 >
-> - **Stable — v2.10.10.** Used by the ongoing field-collection campaign (dataset baseline v2.10.5).
->   Bug fixes only; see [IMPORTANT.md](IMPORTANT.md).
-> - **In development — 3.0.0-beta4.** More accurate rule inputs, stricter confirmation, a reviewed
->   engine, backup and restore. No APK is published; it is available as source on the
->   [`ICdetection-v3.0.0-beta`](https://github.com/Alexisgordr/ICdetector/tree/ICdetection-v3.0.0-beta)
+> - **Stable — v2.10.10.** The latest published release; bug fixes only.
+> - **Field campaign — 3.0.0-beta4.** More accurate rule inputs, stricter confirmation, a fully
+>   audited engine, backup and restore. The field-collection campaign now runs on this build, from a
+>   fresh database ([IMPORTANT.md](IMPORTANT.md)). No APK is published; it is available as source on
+>   the [`ICdetection-v3.0.0-beta`](https://github.com/Alexisgordr/ICdetector/tree/ICdetection-v3.0.0-beta)
 >   branch ([build it yourself](#-getting-started)). **3.0 needs a clean install** from v2.10.x.
->   Do not install it on a phone that collects campaign data.
 >
 > Details: [Status.md](Status.md) · [CHANGELOG.md](CHANGELOG.md)
 
@@ -177,7 +176,7 @@ imposed by Android.
 
    3.0 changes the database and the methodology, so it needs a clean install: export what you want
    to keep and uninstall v2.10.x first (a build signed with your own key cannot update the published
-   APK anyway). Do not use the phone that collects campaign data.
+   APK anyway).
 3. **Grant location permission.** Android only shares cell identities with apps that have location
    access, and GPS enables the geographic checks.
 4. **Exclude the app from battery optimisation** for long sessions:
@@ -696,7 +695,7 @@ These limitations are inherent to Android userland restrictions.
 | [MANUAL.md](MANUAL.md) | How to install and use the app: screens, rules, phases, exports and troubleshooting |
 | [CHANGELOG.md](CHANGELOG.md) | Every release in detail, including each dataset cut |
 | [Status.md](Status.md) | Current versions, the 3.0 roadmap, dataset cuts in 3.0 and open items |
-| [IMPORTANT.md](IMPORTANT.md) | The field-collection campaign: baseline, dataset cuts and recommended reset |
+| [IMPORTANT.md](IMPORTANT.md) | The field-collection campaign on 3.0: Day 1, dataset cuts, recommended reset and the earlier v2.10.x stage |
 | [docs/history/](docs/history/) | Archived per-release status notes, including the v2.1 field notes |
 
 ---

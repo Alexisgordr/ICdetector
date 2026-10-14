@@ -8,9 +8,10 @@ The current state of the project in one page. What changed in each release is in
 
 | | Version | Version code | DB schema | Where |
 |---|---|---|---|---|
-| **Stable release** | v2.10.10 | 38 | 19 | GitHub Releases · used by the field campaign |
+| **Stable release** | v2.10.10 | 38 | 19 | GitHub Releases |
 | **Development** | 3.0.0-beta4 | 39 | 25 | Branch `ICdetection-v3.0.0-beta` · draft PR #34 · source only, no APK published |
-| **Campaign baseline** | v2.10.5 | 33 | 19 | Day 1 of the field dataset ([IMPORTANT.md](IMPORTANT.md)) |
+| **Field campaign** | 3.0.0-beta4 | 39 | 25 | Day 1 = a fresh database on this build ([IMPORTANT.md](IMPORTANT.md)) |
+| **Previous campaign stage** | v2.10.5 | 33 | 19 | Baseline of the v2.10.x stage, closed |
 
 - **App identity:** `com.alexisgordr.icdetector`, *ICdetection*, for stable releases and betas
   alike, so a beta updates to the release.
@@ -38,7 +39,7 @@ confirmation, local learning, geometry, the analysis cycle and the queries the e
 
 ## Dataset cuts in 3.0
 
-3.0 data is not comparable with the v2.10.x campaign for the rules below, and some of them also
+3.0 data is not comparable with v2.10.x data for the rules below, and some of them also
 changed between 3.0 betas. Each row records the app version and build commit that observed it
 (`AppVersion`, for example `3.0.0-beta4+6bb5ed3`), so cuts can be applied per row.
 
@@ -93,7 +94,7 @@ Run on every push to the beta branch through draft PR #34:
 
 ## Before the 3.0 release
 
-1. Test the beta on real devices; keep the campaign phone on v2.10.x.
+1. Collect field data with the beta (it is the campaign build) and test it on more devices.
 2. Change `versionName` from `3.0.0-beta4` to `3.0.0` (the version code stays 39).
 3. Add a `## 3.0.0` section on top of [CHANGELOG.md](CHANGELOG.md).
 4. Update the version rows of this page and the badges and status box at the top of

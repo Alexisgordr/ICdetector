@@ -3,7 +3,7 @@ package com.alexisgordr.icdetector.backup
 /**
  * 3.0 — Qué copias de seguridad se aceptan. Sin dependencias de Android, para probarlo en la JVM.
  *
- * Regla metodológica, no técnica: los datos de la 3.0 no se mezclan con los de la campaña v2.10.x
+ * Regla metodológica, no técnica: los datos de la 3.0 no se mezclan con los de la v2.10.x (la etapa anterior de la campaña)
  * (ver IMPORTANT.md y los cortes de dataset de Status.md). Por eso una copia hecha por la v2.10.x
  * se rechaza aunque su base de datos se pudiera migrar. Se identifica por la versión de origen
  * del índice y por el formato de la copia, además del esquema.

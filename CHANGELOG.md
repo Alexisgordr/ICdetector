@@ -526,6 +526,11 @@ learns from). The fixes are grouped by area, newest first within each group. Ent
 
 #### Exports, statistics and documentation
 
+- **The field campaign moves to 3.0.0-beta4.** After the full audit, collection restarts on this
+  build from a fresh database (schema 25); updating over an earlier 3.0 beta also works, noting the
+  update date. The v2.10.x stage (baseline v2.10.5) is closed and kept in IMPORTANT.md as the previous
+  stage. README, Status, MANUAL and the restore refusal for v2.10.x backups no longer say the campaign
+  runs on v2.10.x.
 - **Statistics without loading the whole history.** The RF intelligence summary read every history
   row (`getRecords()` without a limit) and grouped them in Compose. It now runs aggregate SQL queries
   in IO (`IntelStatsQuery`, no window functions for Android 10's SQLite) with loading, error and
