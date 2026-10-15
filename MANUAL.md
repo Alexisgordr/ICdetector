@@ -70,11 +70,10 @@ is presentation context; an NSA icon cannot make its LTE anchor behave like a ph
 ICdetection requires **Android 12 or later**: it collects cells, service state and the 5G display
 state through callbacks that exist from Android 12 on.
 
-Stable versions are published as an APK on the project's GitHub Releases page. The 3.0 beta is
-published there as a pre-release APK ([`v3.0.0-Prerelease`](https://github.com/Alexisgordr/ICdetector/releases/tag/v3.0.0-Prerelease)), and can also be built
-from its branch with `./gradlew assembleDebug`. Every version is the
-same app (`com.alexisgordr.icdetector`, *ICdetection*), so a newer release installs over an older one
-and keeps its data; a build signed with your own key cannot update the published APK, so uninstall
+Releases are published as an APK on the project's GitHub Releases page, and can also be built
+from source with `./gradlew assembleDebug`. Every version is the same app
+(`com.alexisgordr.icdetector`, *ICdetection*), so a newer release installs over an older one and
+keeps its data; a build signed with your own key cannot update the published APK, so uninstall
 first.
 
 **Moving from v2.10.x to 3.0 requires a clean install.** Export anything you want to keep (history
@@ -83,7 +82,7 @@ OpenCellID key start empty. Installing 3.0 over v2.10.x would still upgrade the 
 (old rows keep the new fields empty), but mixing data from both sides of the 3.0 methodology changes
 is not supported. From 3.0 on, every version updates the previous one normally.
 
-> The field-collection campaign runs on 3.0.0-beta4 from a fresh database; see
+> The field-collection campaign runs on 3.0.0 from a fresh database; see
 > [IMPORTANT.md](IMPORTANT.md).
 
 **First start.** A new install first asks *"Do you want to restore a backup?"* with two
@@ -1049,7 +1048,7 @@ power), since it only reads PCI, channel and time.
 ### Shared evidence: when two results are not independent
 
 Some modules read the same inputs or learn from the same history rows. When they agree, that is one
-fact seen twice, not two confirmations. This beta only documents the overlaps; it changes no weight,
+fact seen twice, not two confirmations. 3.0 only documents the overlaps; it changes no weight,
 score or rule.
 
 | Modules | What they share | Effect today |
@@ -1239,10 +1238,11 @@ ObservationId
 - `GpsAccuracyM` is the accuracy of the row's fix in metres; filter large values before analysing
   geometry.
 - `AppVersion` is the version that recorded the row; use it to apply dataset cuts per row. From
-  3.0 it also names the build: `versionName+commit`, for example `3.0.0-beta4+6bb5ed3`, so rows
-  from different builds of the same beta can be separated. `-dirty` means the build had
-  uncommitted changes; `nogit` means the commit could not be known (built without git and not from
-  a `git archive` ZIP). The part after `+` does not change the version.
+  3.0 it also names the build: `versionName+commit`, for example `3.0.0+6bb5ed3`, so rows from
+  different builds of the same version (such as the many builds of each 3.0 beta) can be separated.
+  `-dirty` means the build had uncommitted changes; `nogit` means the commit could not be known
+  (built without git and not from a `git archive` ZIP). The part after `+` does not change the
+  version.
 - `ExportDevice` and `ExportAndroid` describe the phone that made the export (manufacturer, model,
   Android version), with no personal or hardware identifier.
 - `LocationMode` is `CONTINUOUS`, `INTELLIGENT` or `ADAPTIVE`: the location mode the row was observed with.
@@ -1480,7 +1480,7 @@ shadow mode and comparing it with the same places on mobile data — so no rule 
   threshold, H16, the Bayesian density factor and Stable-Site learning. Rows do not store the
   neighbour list, so the effect on past rows cannot be reconstructed and **has not been measured**;
   nothing is rewritten. Compare such rows by `AppVersion`.
-- **Rows from earlier 3.0 betas:** several rules and learned structures changed between betas
+- **Rows from the 3.0 betas:** several rules and learned structures changed between betas
   (trips used the civil clock, routes could cross a service gap, the service judged route familiarity
   by the current trip only, among others). Stored rows, routes, trips and terminal lines are kept as
   they were and not recalculated. Compare by `AppVersion`; [Status.md](Status.md) lists the cuts and

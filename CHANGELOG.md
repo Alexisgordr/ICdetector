@@ -4,17 +4,28 @@ Every notable change to ICdetection, newest first. Releases inside the field-col
 fix bugs; a fix that changes how a rule is evaluated is marked as a **dataset cut** for that rule.
 Version numbers follow the app's `versionName`; the Android `versionCode` is given where it matters.
 
-## 3.0.0-beta4 (development beta, pre-release APK)
+## 3.0.0
 
-Published as a pre-release APK ([`v3.0.0-Prerelease`](https://github.com/Alexisgordr/ICdetector/releases/tag/v3.0.0-Prerelease) on GitHub Releases) and as
-source on the `ICdetection-v3.0.0-beta` branch. A short-lived GitHub pre-release of an earlier build
-was withdrawn.
+Published on GitHub Releases, version code 39 (the 3.0 betas used the same code). 3.0
+needs a clean install from v2.10.x. This section covers the last beta, 3.0.0-beta4, which was also
+available as the `v3.0.0-Prerelease` GitHub pre-release, and the changes made for the release. A
+short-lived GitHub pre-release of an earlier beta build was withdrawn.
+
+### Changes for the release
+
+- **Without an OpenCellID token, the public database check is shown as off.** Reported by the
+  F-Droid reviewer. Without a token no query is made and the cell keeps its default *pending*
+  status, but the status card said "Querying public database…", the notification said *PENDING*
+  and the terminal called the audit provisional. They now say the public database check is off
+  (no token). Verification logic and stored values are unchanged; history rows show the status
+  stored with each row, as before.
+- **Version name 3.0.0** (was 3.0.0-beta4); the version code stays 39.
 
 ### Campaign cut
 
-Made after collection had started, without a new version name, and completed before Day 1 of the
-campaign: builds after commit `3e67f8e` include the first part, and builds that include commit
-`8f94d0e` include all of it. It is a **dataset cut** for H1, H2, H3, H5, H6, H7, H8, H10, H11 and the
+Made on 3.0.0-beta4 after collection had started, without a new version name, and completed before
+Day 1 of the campaign: builds after commit `3e67f8e` include the first part, builds that include
+commit `8f94d0e` include all of it, and so does every 3.0.0 build. It is a **dataset cut** for H1, H2, H3, H5, H6, H7, H8, H10, H11 and the
 anomaly confidence; the alarm threshold (70) and the likelihood ratios are unchanged.
 [Status.md](Status.md) lists it in the dataset-cuts table.
 

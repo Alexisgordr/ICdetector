@@ -50,13 +50,11 @@
 > [!IMPORTANT]
 > **Project status**
 >
-> - **Stable — v2.10.10.** The latest published release; bug fixes only.
-> - **Field campaign — 3.0.0-beta4.** More accurate rule inputs, stricter confirmation, a fully
->   audited engine, backup and restore. The field-collection campaign runs on this build, with its
->   campaign cut, from a fresh database ([IMPORTANT.md](IMPORTANT.md)). The APK is published as a
->   [pre-release](https://github.com/Alexisgordr/ICdetector/releases/tag/v3.0.0-Prerelease), and the source is on the
->   [`ICdetection-v3.0.0-beta`](https://github.com/Alexisgordr/ICdetector/tree/ICdetection-v3.0.0-beta)
->   branch ([build it yourself](#-getting-started)). **3.0 needs a clean install** from v2.10.x.
+> - **Stable — 3.0.0.** Published on [GitHub Releases](https://github.com/Alexisgordr/ICdetector/releases).
+>   More accurate rule inputs, stricter confirmation, a fully audited engine, backup and restore. The
+>   field-collection campaign runs on this release, with its campaign cut, from a fresh database
+>   ([IMPORTANT.md](IMPORTANT.md)). **3.0 needs a clean install** from v2.10.x.
+> - **Previous release — v2.10.10.** Still on GitHub Releases; 3.0.0 replaces it.
 >
 > Details: [Status.md](Status.md) · [CHANGELOG.md](CHANGELOG.md)
 
@@ -66,18 +64,17 @@
 > This is the third full audit of the app, and there will be no more. I reviewed the whole app, part
 > by part: the inputs of every rule, scoring, temporal confirmation, local learning, geometry, the
 > analysis cycle, storage and the data the engine learns from. The resulting fixes, and the final
-> campaign cut, are in 3.0.0-beta4 ([CHANGELOG.md](CHANGELOG.md)). From here on the plan is to
+> campaign cut, are in 3.0.0 ([CHANGELOG.md](CHANGELOG.md)). From here on the plan is to
 > collect field data and let the evidence speak.
 >
 > **Start from a clean install.** This last update changes how several rules are evaluated and,
-> together with the dataset cuts of the earlier betas ([Status.md](Status.md) lists them), data
+> together with the dataset cuts of the 3.0 betas ([Status.md](Status.md) lists them), data
 > recorded before it is not comparable with data recorded after it. Export anything you want to
-> keep, uninstall the app, install the new build and start collecting from scratch — and enjoy the
-> app. To keep your settings (such as the OpenCellID key), *History → Delete history* gives the same
+> keep, uninstall the app, install 3.0.0 and start collecting from scratch — and enjoy the app. To keep your settings (such as the OpenCellID key), *History → Delete history* gives the same
 > clean start without uninstalling.
 >
-> - **You can also just update.** On an earlier 3.0 beta, the new build installs over it, migrates the
->   database and keeps working. In that case, **note the date you updated**: rows recorded before it
+> - **You can also just update.** On a 3.0 beta, 3.0.0 installs over it, migrates the database and
+>   keeps working. In that case, **note the date you updated**: rows recorded before it
 >   belong to an earlier dataset. Each row's `AppVersion` (version and build commit) lets you
 >   separate them later.
 >
@@ -165,21 +162,20 @@ imposed by Android.
 
 ## 🚀 Getting started
 
-1. **Download** the stable APK from [GitHub Releases](https://github.com/Alexisgordr/ICdetector/releases).
+1. **Download** 3.0.0 from [GitHub Releases](https://github.com/Alexisgordr/ICdetector/releases).
    Every release is the same app (`com.alexisgordr.icdetector`), so a newer version installs over an
    older one and keeps its data.
-2. **Trying the 3.0 beta?** Download the APK from the [`v3.0.0-Prerelease`](https://github.com/Alexisgordr/ICdetector/releases/tag/v3.0.0-Prerelease)
-   pre-release, or build it from the beta branch:
+2. **Coming from v2.10.x?** 3.0 changes the database and the methodology, so it needs a clean
+   install: export what you want to keep and uninstall v2.10.x first.
+   To build it yourself instead:
 
    ```bash
-   git clone -b ICdetection-v3.0.0-beta https://github.com/Alexisgordr/ICdetector.git
+   git clone -b v3.0.0 https://github.com/Alexisgordr/ICdetector.git
    cd ICdetector
    ./gradlew assembleDebug    # APK in app/build/outputs/apk/debug/
    ```
 
-   3.0 changes the database and the methodology, so it needs a clean install: export what you want
-   to keep and uninstall v2.10.x first (a build signed with your own key cannot update the published
-   APK anyway).
+   A build signed with your own key cannot update the published APK, so uninstall first.
 3. **Grant location permission.** Android only shares cell identities with apps that have location
    access, and GPS enables the geographic checks.
 4. **Exclude the app from battery optimisation** for long sessions:
@@ -770,10 +766,10 @@ addressed where possible.
 
 > **Nota para los usuarios:** esta es la tercera auditoría completa de la aplicación y no habrá
 > más: a partir de aquí toca reunir datos de campo. Esta última actualización cambia cómo se evalúan
-> varias reglas y, sumada a los cortes del dataset de las betas anteriores, separa los datos de antes
+> varias reglas y, sumada a los cortes del dataset de las betas de la 3.0, separa los datos de antes
 > y de después. **Lo que recomiendo** es empezar desde una instalación limpia: exportad lo que
-> queráis conservar, desinstalad la app, instalad la nueva versión y empezad a recoger datos desde
-> cero. Y a disfrutar de la app. Si queréis conservar los ajustes (como la clave de OpenCellID),
+> queráis conservar, desinstalad la app, instalad la 3.0.0 (GitHub Releases) y empezad a
+> recoger datos desde cero. Y a disfrutar de la app. Si queréis conservar los ajustes (como la clave de OpenCellID),
 > *Historial → Borrar historial* deja la base igual de limpia sin desinstalar. **También podéis
 > simplemente actualizar** desde una beta de la 3.0: la app migra la base y os seguirá funcionando,
 > pero **apuntad la fecha en que actualizasteis**, porque las filas anteriores pertenecen a otro

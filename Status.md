@@ -8,17 +8,17 @@ The current state of the project in one page. What changed in each release is in
 
 | | Version | Version code | DB schema | Where |
 |---|---|---|---|---|
-| **Stable release** | v2.10.10 | 38 | 19 | GitHub Releases |
-| **Development** | 3.0.0-beta4 | 39 | 25 | Branch `ICdetection-v3.0.0-beta` · draft PR #34 · APK as the [`v3.0.0-Prerelease`](https://github.com/Alexisgordr/ICdetector/releases/tag/v3.0.0-Prerelease) pre-release |
-| **Field campaign** | 3.0.0-beta4 | 39 | 25 | Day 1 = a fresh database on a build with the campaign cut ([IMPORTANT.md](IMPORTANT.md)) |
+| **Stable release** | 3.0.0 | 39 | 25 | GitHub Releases |
+| **Field campaign** | 3.0.0 | 39 | 25 | Day 1 = a fresh database on 3.0.0 ([IMPORTANT.md](IMPORTANT.md)) |
+| **Previous stable release** | v2.10.10 | 38 | 19 | GitHub Releases |
 | **Previous campaign stage** | v2.10.5 | 33 | 19 | Baseline of the v2.10.x stage, closed |
 
-- **App identity:** `com.alexisgordr.icdetector`, *ICdetection*, for stable releases and betas
-  alike, so a beta updates to the release.
+- **App identity:** `com.alexisgordr.icdetector`, *ICdetection*, for every release, so a newer
+  version installs over an older one.
 - **3.0 needs a clean install** from v2.10.x (export, uninstall, install). From 3.0 on, every version
   updates the previous one.
-- **Betas share version code 39**, the next after v2.10.10. The 3.0 release keeps it; only the
-  `versionName` changes.
+- **Version code 39** is 3.0.0. The 3.0 betas used it too, with `versionName` 3.0.0-beta1 to
+  3.0.0-beta4.
 
 ## 3.0 roadmap — GitHub issue #27
 
@@ -42,7 +42,8 @@ confirmation, local learning, geometry, the analysis cycle and the queries the e
 
 3.0 data is not comparable with v2.10.x data for the rules below, and some of them also
 changed between 3.0 betas. Each row records the app version and build commit that observed it
-(`AppVersion`, for example `3.0.0-beta4+6bb5ed3`), so cuts can be applied per row.
+(`AppVersion`, for example `3.0.0+6bb5ed3`), so cuts can be applied per row. Every row recorded by
+3.0.0 includes all of the changes below.
 
 | Area | What changed |
 |---|---|
@@ -71,8 +72,8 @@ changed between 3.0 betas. Each row records the app version and build commit tha
 (H1–H3, H5–H8, anomaly confidence) applies to rows from builds after commit `3e67f8e`. The second
 part (H10, H11 and the CSG condition of H1, H2, H5, H6 and H7) applies to rows from builds that
 include commit `8f94d0e`; it was completed before Day 1, so a campaign started on such a build has
-no rows before it. Rows from builds up to `0323822` have the first part only. The scenario bench
-results each part changes are listed in [CHANGELOG.md](CHANGELOG.md).
+no rows before it. Rows from builds up to `0323822` have the first part only; every 3.0.0 row has
+both. The scenario bench results each part changes are listed in [CHANGELOG.md](CHANGELOG.md).
 
 The collection and storage fixes made with the second part (telephony watchdog, alarm-episode
 clock, local-profile retention, export identifiers, retention clock guard, write-failure health)
@@ -114,18 +115,16 @@ change no rule and are not cuts.
 
 ## Quality checks
 
-Run on every push to the beta branch through draft PR #34:
+Run by CI on pull requests to `main`, on `main` and on release tags:
 
 - JVM unit tests (`testDebugUnitTest`), Android lint and the release build.
 - Instrumented storage, migration and backup tests on an emulator (schemas 15–19 → 20 and every
   later step up to 25; backups from schemas 23 and 24 restored on 25).
 - `tools/check_export.py` regression tests, SQL affinity and query-plan checks, `when` exhaustiveness.
 
-## Before the 3.0 release
+## Publishing 3.0.0
 
-1. Collect field data with the beta (it is the campaign build) and test it on more devices.
-2. Change `versionName` from `3.0.0-beta4` to `3.0.0` (the version code stays 39).
-3. Add a `## 3.0.0` section on top of [CHANGELOG.md](CHANGELOG.md).
-4. Update the version rows of this page and the badges and status box at the top of
-   [README.md](README.md).
-5. Mark PR #34 ready, merge it into `main`, tag `v3.0.0` and attach the signed APK to the release.
+1. Merge PR #34 into `main`, tag `v3.0.0` and attach the signed APK to the GitHub release.
+2. F-Droid is reviewing version code 39 (3.0.0); its release notes are
+   `fastlane/metadata/android/*/changelogs/39.txt`.
+3. Collect field data on 3.0.0 and test it on more devices.

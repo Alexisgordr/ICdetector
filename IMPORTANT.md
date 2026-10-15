@@ -4,14 +4,14 @@
 >
 > | | |
 > |---|---|
-> | **Campaign build** | 3.0.0-beta4 (version code 39) with the campaign cut: the [`v3.0.0-Prerelease`](https://github.com/Alexisgordr/ICdetector/releases/tag/v3.0.0-Prerelease) APK, or built from the `ICdetection-v3.0.0-beta` branch |
-> | **Day 1** | A fresh database on that build |
+> | **Campaign build** | 3.0.0 (version code 39), from GitHub Releases; it includes the whole campaign cut |
+> | **Day 1** | A fresh database on 3.0.0 |
 > | **Database schema** | 25 |
 > | **Duration** | Approximately three months |
 > | **Previous stage** | v2.10.x, dataset baseline v2.10.5, schema 19 (closed; see [below](#previous-stage-the-v210x-campaign)) |
 >
-> **The campaign moves to 3.0.** After a full audit of the app, collection restarts on 3.0.0-beta4.
-> That build changes how many rules are evaluated, and the earlier betas brought several dataset cuts
+> **The campaign moves to 3.0.** After a full audit of the app, collection restarts on 3.0.0.
+> That release changes how many rules are evaluated, and the 3.0 betas brought several dataset cuts
 > of their own, so data from before it is not comparable with data from after it.
 
 ICdetection is in a **three-month field-collection and stabilization period**. The priority is no
@@ -55,9 +55,9 @@ for everything else. No reset is needed.
 
 ### Dataset cuts during the campaign
 
-**The campaign cut on 3.0.0-beta4.** At the start of collection, H3, H8, H9, femtocell (CSG) cells and
-the anomaly-confidence prior were changed together; before Day 1 the cut was completed with H10,
-H11 and the condition for the femtocell exemption. Unlike the bug fixes described above, this
+**The campaign cut.** Made on the last 3.0 beta (3.0.0-beta4) and included in 3.0.0: at the start of
+collection, H3, H8, H9, femtocell (CSG) cells and the anomaly-confidence prior were changed together;
+before Day 1 the cut was completed with H10, H11 and the condition for the femtocell exemption. Unlike the bug fixes described above, this
 changes how evidence is weighed; it was made once, early, so that the rest of the campaign runs on a
 single method. [Status.md](Status.md#dataset-cuts-in-30) lists what changed and how to tell rows from
 before and after it.
@@ -70,9 +70,8 @@ that observed it (`AppVersion`), so cuts can be applied per row.
 
 ## Recommended database reset
 
-For a clean dataset, start from a **fresh local database on a 3.0.0-beta4 build that includes the
-whole campaign cut and the fixes made with it**: the [`v3.0.0-Prerelease`](https://github.com/Alexisgordr/ICdetector/releases/tag/v3.0.0-Prerelease)
-APK, or a build from the latest commit of the `ICdetection-v3.0.0-beta` branch.
+For a clean dataset, start from a **fresh local database on 3.0.0** (GitHub Releases). It
+includes the whole campaign cut and the fixes made with it.
 
 > **How to reset:** export anything you want to keep, then open **History → Delete history** and
 > type `DELETE` (English interface) or `BORRAR` (Spanish interface) to confirm.
@@ -84,13 +83,12 @@ APK, or a build from the latest commit of the `ICdetection-v3.0.0-beta` branch.
 > Uninstalling and reinstalling (or *Settings → Apps → ICdetection → Storage → Clear data*) remains a
 > valid alternative, but it also removes app settings such as your OpenCellID API key.
 
-**Updating without a reset also works.** Installing 3.0.0-beta4 over an earlier 3.0 beta migrates
-the database and the app keeps working. In that case, **note the date you updated**: rows recorded
+**Updating without a reset also works.** Installing 3.0.0 over a 3.0 beta migrates the database and
+the app keeps working. In that case, **note the date you updated**: rows recorded
 before it belong to an earlier dataset and can be separated by `AppVersion`. Coming from v2.10.x,
 3.0 needs a clean install anyway.
 
-> **Day 1 = 3.0.0-beta4 with the campaign cut, schema 25, a fresh database and the audited detection
-> baseline.**
+> **Day 1 = 3.0.0, schema 25, a fresh database and the audited detection baseline.**
 
 ---
 
