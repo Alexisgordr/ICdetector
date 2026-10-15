@@ -222,6 +222,9 @@ fun MainScreenContent(dbHelper: CellDbHelper, service: MiniICService?) {
     val rsrqHistory by rsrqFlow.collectAsStateWithLifecycle()
     val geoHistory by geoFlow.collectAsStateWithLifecycle()
     val serviceState by serviceStateFlow.collectAsStateWithLifecycle()
+    // 3.0 — Token de OpenCellID configurado (sin servicio: no se consulta nada).
+    val publicDbCheckEnabledFlow = remember(service) { service?.publicDbCheckEnabled ?: MutableStateFlow(false) }
+    val publicDbCheckEnabled by publicDbCheckEnabledFlow.collectAsStateWithLifecycle()
     
     var refreshing by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
@@ -322,12 +325,14 @@ fun MainScreenContent(dbHelper: CellDbHelper, service: MiniICService?) {
                     // Contexto, no veredicto: qué contestó OpenCellID. Que una celda no
                     // esté en una base pública no la hace sospechosa —las bases están incompletas
                     // y las celdas nuevas tardan meses en aparecer—, sólo la deja sin respaldo.
-                    val verificationNote = when (active?.verified) {
-                        VerificationStatus.VERIFIED -> stringResource(R.string.public_db_registered)
-                        VerificationStatus.NOT_FOUND -> stringResource(R.string.public_db_not_found)
-                        VerificationStatus.REJECTED -> stringResource(R.string.public_db_rejected)
-                        VerificationStatus.PENDING -> stringResource(R.string.public_db_pending)
-                        VerificationStatus.ERROR -> stringResource(R.string.public_db_error)
+                    // 3.0 — Sin token no se consulta nada: la tarjeta lo dice (PublicDbNote).
+                    val verificationNote = when (active?.verified?.let { com.alexisgordr.icdetector.core.PublicDbNote.of(it, publicDbCheckEnabled) }) {
+                        com.alexisgordr.icdetector.core.PublicDbNote.REGISTERED -> stringResource(R.string.public_db_registered)
+                        com.alexisgordr.icdetector.core.PublicDbNote.NOT_FOUND -> stringResource(R.string.public_db_not_found)
+                        com.alexisgordr.icdetector.core.PublicDbNote.REJECTED -> stringResource(R.string.public_db_rejected)
+                        com.alexisgordr.icdetector.core.PublicDbNote.QUERYING -> stringResource(R.string.public_db_pending)
+                        com.alexisgordr.icdetector.core.PublicDbNote.ERROR -> stringResource(R.string.public_db_error)
+                        com.alexisgordr.icdetector.core.PublicDbNote.CHECK_OFF_NO_TOKEN -> stringResource(R.string.public_db_off_no_token)
                         null -> null
                     }
 

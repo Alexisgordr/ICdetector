@@ -51,6 +51,25 @@ class StringResourcesTest {
         }
     }
 
+    @Test fun `without a token the status card does not say the public database is being queried`() {
+        // 3.0 — Revisión de F-Droid: sin token no se consulta nada.
+        assertEquals("Public database check off (no token)", en.getValue("public_db_off_no_token"))
+        assertEquals("Comprobación de base pública desactivada (sin token)", es.getValue("public_db_off_no_token"))
+        listOf(en, es).forEach { lang ->
+            listOf("public_db_off_no_token", "public_db_off_label").forEach { key ->
+                val text = lang.getValue(key)
+                assertFalse("$key: $text", text.contains("Querying") || text.contains("Consultando"))
+                assertFalse("$key: $text", text.contains("PENDING") || text.contains("PENDIENTE"))
+            }
+        }
+        val main = module("src/main/java/com/alexisgordr/icdetector/ui/MainScreen.kt").readText()
+        assertTrue(main.contains("PublicDbNote.CHECK_OFF_NO_TOKEN -> stringResource(R.string.public_db_off_no_token)"))
+        assertFalse("public_db_pending solo para QUERYING", main.contains("VerificationStatus.PENDING -> stringResource(R.string.public_db_pending)"))
+        val service = module("src/main/java/com/alexisgordr/icdetector/service/MiniICService.kt").readText()
+        assertTrue(service.contains("PublicDbNote.CHECK_OFF_NO_TOKEN -> getString(R.string.public_db_off_label)"))
+        assertFalse(service.contains("VerificationStatus.PENDING -> getString(R.string.pending_label)"))
+    }
+
     @Test fun `history and geometry screens do not hard-code the confirmation word`() {
         listOf("HistoryScreen.kt", "GeometryScreen.kt").forEach { name ->
             val source = module("src/main/java/com/alexisgordr/icdetector/ui/$name").readText()

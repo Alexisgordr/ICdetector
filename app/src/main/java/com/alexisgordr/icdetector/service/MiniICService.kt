@@ -308,12 +308,20 @@ class MiniICService : Service() {
     /** Proxy de OpenCellID activo (lectura de la configuración vigente). */
     val isProxyEnabled: Boolean get() = verificationConfig.current().proxyEnabled
 
+    /**
+     * 3.0 — Hay token de OpenCellID. Sin él no se consulta la base pública y la pantalla, la
+     * notificación y el terminal lo dicen (ver PublicDbNote) en vez de "consultando".
+     */
+    private val _publicDbCheckEnabled = MutableStateFlow(false)
+    val publicDbCheckEnabled: StateFlow<Boolean> = _publicDbCheckEnabled
+
     /** 3.0 (V4) — Ajustes guardados: clave y ruta se publican juntas. */
     fun updateVerificationSettings(apiKey: String, proxyEnabled: Boolean) {
         val change = verificationConfig.update(apiKey, proxyEnabled) {
             // 3.0 (V4) — Dentro del candado de escritura de la configuración.
             if (::verificationController.isInitialized) verificationController.onConfigChanged()
         }
+        _publicDbCheckEnabled.value = verificationConfig.current().hasCredentials
         if (change != com.alexisgordr.icdetector.core.VerificationConfigHolder.Change.NONE) {
             appendLog("[API]", "Configuración de OpenCellID actualizada; las consultas anteriores se descartan.")
         }
@@ -530,7 +538,8 @@ class MiniICService : Service() {
         auditController = AuditLogController(
             log = ::appendLog,
             publishStatus = { _auditStatus.value = it },
-            zeroOnlyCellCount = { taSanity.zeroOnlyCellCount }
+            zeroOnlyCellCount = { taSanity.zeroOnlyCellCount },
+            hasCredentials = { verificationConfig.current().hasCredentials }
         )
         verificationController = ExternalVerificationController(
             scope = scope,
@@ -655,6 +664,7 @@ class MiniICService : Service() {
         collectionHealthController.restore()?.let { appendLog("[SYS]", it) }
         // 3.0 (V4) — Clave y proxy se cargan juntos.
         verificationConfig.update((prefs.getString("opencellid_key", "") ?: "").trim(), prefs.getBoolean("proxy_enabled", false))
+        _publicDbCheckEnabled.value = verificationConfig.current().hasCredentials
         isLatencyDetectionEnabled = prefs.getBoolean("latency_detection_enabled", false)
         locationMode = com.alexisgordr.icdetector.core.LocationMode.fromStored(
             prefs.getString(com.alexisgordr.icdetector.core.LocationMode.PREF_KEY, null)
@@ -2346,15 +2356,17 @@ class MiniICService : Service() {
     }
 
     private fun updateNotification(cell: CellData, force: Boolean = false) {
-        val vStatus = when (cell.verified) {
-            VerificationStatus.VERIFIED -> getString(R.string.verified_label)
+        // 3.0 — Sin token no hay nada pendiente: la comprobación está desactivada (PublicDbNote).
+        val vStatus = when (com.alexisgordr.icdetector.core.PublicDbNote.of(cell.verified, verificationConfig.current().hasCredentials)) {
+            com.alexisgordr.icdetector.core.PublicDbNote.REGISTERED -> getString(R.string.verified_label)
             // El aspa roja sobraba: que una base colaborativa no conozca una antena no es un fallo
             // de la antena ni un indicio de nada, y desde v2.1 tampoco resta puntos. La
             // notificación lo dice como lo que es, un dato de contexto.
-            VerificationStatus.NOT_FOUND -> getString(R.string.not_found_label)
-            VerificationStatus.REJECTED -> getString(R.string.rejected_label)
-            VerificationStatus.ERROR -> getString(R.string.api_error_label)
-            VerificationStatus.PENDING -> getString(R.string.pending_label)
+            com.alexisgordr.icdetector.core.PublicDbNote.NOT_FOUND -> getString(R.string.not_found_label)
+            com.alexisgordr.icdetector.core.PublicDbNote.REJECTED -> getString(R.string.rejected_label)
+            com.alexisgordr.icdetector.core.PublicDbNote.ERROR -> getString(R.string.api_error_label)
+            com.alexisgordr.icdetector.core.PublicDbNote.QUERYING -> getString(R.string.pending_label)
+            com.alexisgordr.icdetector.core.PublicDbNote.CHECK_OFF_NO_TOKEN -> getString(R.string.public_db_off_label)
         }
         val content = "$vStatus | ${cell.networkType} | CID: ${cell.cellId} | ${cell.dbm} dBm"
         updateNotificationText(content, force)

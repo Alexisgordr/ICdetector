@@ -10,7 +10,9 @@ import com.alexisgordr.icdetector.models.identityKey
 internal class AuditLogController(
     private val log: (String, String) -> Unit,
     private val publishStatus: (String) -> Unit,
-    private val zeroOnlyCellCount: () -> Int
+    private val zeroOnlyCellCount: () -> Int,
+    /** 3.0 — Hay token de OpenCellID; sin él la base pública no se consulta (ver PublicDbNote). */
+    private val hasCredentials: () -> Boolean = { true }
 ) {
     private var auditedIdentity: String? = null
     private var auditedVerification: VerificationStatus? = null
@@ -34,7 +36,8 @@ internal class AuditLogController(
             VerificationStatus.NOT_FOUND -> "sin registro en OpenCellID; no resta puntos porque esa base es incompleta"
             VerificationStatus.REJECTED -> "respuesta descartada o no creíble; no concluye nada sobre la antena"
             VerificationStatus.ERROR -> "las bases públicas no han contestado"
-            VerificationStatus.PENDING -> "pendiente de verificar"
+            VerificationStatus.PENDING ->
+                if (hasCredentials()) "pendiente de verificar" else PUBLIC_DB_OFF
         }
         val report = cell.heuristicReport
         log("[AUDIT]", "Celda ${cell.cellId} — índice heurístico: ${cell.securityScore}% " +
@@ -80,7 +83,9 @@ internal class AuditLogController(
         }
         logTimingAdvance(cell)
 
-        val pending = cell.verified == VerificationStatus.PENDING
+        // 3.0 — Sin token no falta ninguna respuesta: la base pública no se consulta.
+        val noToken = cell.verified == VerificationStatus.PENDING && !hasCredentials()
+        val pending = cell.verified == VerificationStatus.PENDING && !noToken
         val title = if (pending) "Resultado provisional (falta la verificación)" else "Resultado Global"
         log("[AUDIT]", "$title: índice heurístico ${cell.securityScore}% sobre " +
             "${report.evaluatedCount}/${report.totalCount} reglas evaluadas; " +
@@ -90,6 +95,7 @@ internal class AuditLogController(
             cell.suspiciousReason != null -> log("[SYS]", "Sin alarma, pero con observaciones: ${cell.suspiciousReason}")
             pending -> log("[SYS]", "${report.evaluatedCount}/${report.totalCount} reglas evaluadas sin fallos; " +
                 "${report.totalCount - report.evaluatedCount} sin datos. Falta la respuesta de las bases públicas.")
+            noToken -> log("[SYS]", "✅ Sin anomalías en las reglas que pudieron evaluarse. $NO_TOKEN_NOTE")
             else -> log("[SYS]", "✅ Sin anomalías en las reglas que pudieron evaluarse.")
         }
         publishStatus("Auditoría completada")
@@ -114,5 +120,11 @@ internal class AuditLogController(
                 else log("[TA]", "TA=$ta (${cell.timingAdvanceUnit.name}) — sin conversión defendible; no se usa para geometría.")
             }
         }
+    }
+
+    companion object {
+        /** 3.0 — Texto del terminal para una celda sin consulta por falta de token. */
+        const val PUBLIC_DB_OFF = "comprobación de base pública desactivada (sin token)"
+        const val NO_TOKEN_NOTE = "Sin token de OpenCellID: la base pública no se consulta."
     }
 }

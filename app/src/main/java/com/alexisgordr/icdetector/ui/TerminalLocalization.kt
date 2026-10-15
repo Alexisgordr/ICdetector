@@ -392,6 +392,9 @@ private val replacements = linkedMapOf(
     "sin registro en OpenCellID; no resta puntos porque esa base es incompleta" to "not in OpenCellID; no points deducted because that database is incomplete",
     "respuesta descartada o no creíble; no concluye nada sobre la antena" to "response discarded or not credible; nothing is concluded about the antenna",
     "pendiente de verificar" to "pending verification",
+    // 3.0 — Sin token de OpenCellID (AuditLogController.PUBLIC_DB_OFF / NO_TOKEN_NOTE).
+    "comprobación de base pública desactivada (sin token)" to "public database check off (no token)",
+    "Sin token de OpenCellID: la base pública no se consulta." to "No OpenCellID token: the public database is not queried.",
     "CICLO DE AUDITORÍA" to "AUDIT CYCLE",
     "7. Espectro Fantasma" to "7. Ghost Spectrum",
     "9. Cifrado Hardware" to "9. Hardware Ciphering",

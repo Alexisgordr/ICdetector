@@ -100,13 +100,13 @@
     <string name="site_warning">Sectors grouped under this eNodeB appear far apart. This may indicate reused or anomalous identity, but also a distributed network; review it with the remaining evidence.</string>
     <string name="route_distance_format">centres %1$d m · unexplained %2$d m</string>
     <string name="monitoring_active">Monitoring active</string>
-    <string name="verified_label">✅ REGISTERED</string><string name="not_found_label">➖ NOT REGISTERED</string><string name="rejected_label">⚠️ RESPONSE REJECTED</string><string name="api_error_label">⚠️ API ERROR</string><string name="pending_label">⏳ PENDING</string>
+    <string name="verified_label">✅ REGISTERED</string><string name="not_found_label">➖ NOT REGISTERED</string><string name="rejected_label">⚠️ RESPONSE REJECTED</string><string name="api_error_label">⚠️ API ERROR</string><string name="pending_label">⏳ PENDING</string><string name="public_db_off_label">⏸ PUBLIC DB OFF</string>
     <string name="security_alerts_channel">Security alerts</string><string name="stop">Stop</string>
     <string name="permissions_required">Android will ask you for these permissions next. This is what each one is used for.</string>
     <string name="monitor">MONITOR</string><string name="history">HISTORY</string>
     <string name="searching_signal">SEARCHING FOR SIGNAL…</string><string name="network_anomaly_confirmed">NETWORK ANOMALY CONFIRMED</string><string name="no_anomalies">NO ANOMALIES DETECTED</string>
     <string name="observing_score">OBSERVING — %1$d%%</string><string name="unconfirmed_anomaly_score">UNCONFIRMED ANOMALY — %1$d%%</string>
-    <string name="public_db_registered">Registered in public database (does not prove legitimacy)</string><string name="public_db_not_found">Not registered in public database (does not imply a threat)</string><string name="public_db_rejected">Public-database response rejected; retry pending</string><string name="public_db_pending">Querying public database…</string><string name="public_db_error">Public database did not respond</string>
+    <string name="public_db_registered">Registered in public database (does not prove legitimacy)</string><string name="public_db_not_found">Not registered in public database (does not imply a threat)</string><string name="public_db_rejected">Public-database response rejected; retry pending</string><string name="public_db_pending">Querying public database…</string><string name="public_db_off_no_token">Public database check off (no token)</string><string name="public_db_error">Public database did not respond</string>
     <string name="csv_exported_format">✅ CSV exported: %1$d rows</string>
     <string name="incident_observing">OBSERVING</string><string name="incident_confirmed">CONFIRMED</string><string name="incident_recovered">RECOVERED</string><string name="incident_interrupted">INTERRUPTED</string>
     <string name="critical_battery_gps_paused">Critical battery: continuous GPS paused</string><string name="no_signal_airplane">No signal / Airplane mode</string><string name="searching_network">Searching for network…</string>
