@@ -59,7 +59,7 @@ android {
 
         versionCode = 39
         buildConfigField("String", "BUILD_COMMIT", "\"$buildCommit\"")
-        versionName = "3.0.0-beta4"
+        versionName = "3.0.0"
 
         // 3.0 — Las betas usan el mismo identificador y nombre que la versión final, para poder
         // actualizar de beta a release. La 3.0 requiere instalación limpia (ver README/IMPORTANT);
