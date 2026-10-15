@@ -21,3 +21,5 @@ Permissions:
 • Phone state: required to inspect cellular network and cell information.
 • Internet: used only for the optional OpenCellID verification and the optional latency detection described above.
 • Foreground service and notifications: keep persistent monitoring visible and controllable.
+
+The amount and quality of telemetry depend on the phone, modem, firmware and Android version.

@@ -1,9 +1,8 @@
-3.0.0 — clean install required from 2.10.x.
+3.0.0 — clean install required from 2.10.x: export, uninstall, install.
 
-• Per row: exact UTC time, GPS accuracy, app version and unevaluated rules.
-• More accurate rule inputs: full cell identity, same-technology neighbours, TA per transmitter, all LTE bands, 5G SA.
-• Stricter confirmation: restarts after gaps; episodes need fresh evidence.
-• H16 checks where the phone is; H3 checks the SIM.
+• Each row stores its UTC time, GPS accuracy, app version and the rules not evaluated.
+• More accurate rule inputs and stricter confirmation; fully audited engine.
+• H3 checks the SIM; H8 is a data-quality flag; known femtocells exempt.
 • Backup and restore, location modes, local profile (shadow).
-
-H8 data quality, H9 reserved, known femtocells exempt, lower prior.
+• Without an OpenCellID token, the public database check shows as off.
+• Requires Android 12 or later.
