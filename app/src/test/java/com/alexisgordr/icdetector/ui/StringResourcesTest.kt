@@ -51,6 +51,25 @@ class StringResourcesTest {
         }
     }
 
+    @Test fun `without a token the status card does not say the public database is being queried`() {
+        // 3.0 — Revisión de F-Droid: sin token no se consulta nada.
+        assertEquals("Public database check off (no token)", en.getValue("public_db_off_no_token"))
+        assertEquals("Comprobación de base pública desactivada (sin token)", es.getValue("public_db_off_no_token"))
+        listOf(en, es).forEach { lang ->
+            listOf("public_db_off_no_token", "public_db_off_label").forEach { key ->
+                val text = lang.getValue(key)
+                assertFalse("$key: $text", text.contains("Querying") || text.contains("Consultando"))
+                assertFalse("$key: $text", text.contains("PENDING") || text.contains("PENDIENTE"))
+            }
+        }
+        val main = module("src/main/java/com/alexisgordr/icdetector/ui/MainScreen.kt").readText()
+        assertTrue(main.contains("PublicDbNote.CHECK_OFF_NO_TOKEN -> stringResource(R.string.public_db_off_no_token)"))
+        assertFalse("public_db_pending solo para QUERYING", main.contains("VerificationStatus.PENDING -> stringResource(R.string.public_db_pending)"))
+        val service = module("src/main/java/com/alexisgordr/icdetector/service/MiniICService.kt").readText()
+        assertTrue(service.contains("PublicDbNote.CHECK_OFF_NO_TOKEN -> getString(R.string.public_db_off_label)"))
+        assertFalse(service.contains("VerificationStatus.PENDING -> getString(R.string.pending_label)"))
+    }
+
     @Test fun `history and geometry screens do not hard-code the confirmation word`() {
         listOf("HistoryScreen.kt", "GeometryScreen.kt").forEach { name ->
             val source = module("src/main/java/com/alexisgordr/icdetector/ui/$name").readText()
@@ -151,7 +170,7 @@ class StringResourcesTest {
     // v2.10.8 — Las notificaciones salían en castellano con la interfaz en inglés.
     @Test fun `notification texts exist in both languages and are not hard-coded`() {
         listOf(
-            "notif_monitoring_title", "notif_legacy_network_title", "notif_open_settings",
+            "notif_monitoring_title", "notif_legacy_network_title", "notif_legacy_change_title", "notif_legacy_network_body", "notif_open_airplane_settings",
             "channel_monitoring_name", "channel_alerts_description", "notif_latency_title",
             "collection_interrupted_format", "write_failure_notification", "audit_starting",
             "alarm_notification_title", "alarm_notification_body_format"
@@ -183,8 +202,8 @@ class StringResourcesTest {
     // v2.10.8 — Una alarma confirmada publica un aviso visible, una vez por episodio.
     @Test fun `confirmed alarm posts a notification once per episode`() {
         val alerts = module("src/main/java/com/alexisgordr/icdetector/service/SecurityAlertController.kt").readText()
-        val episode = alerts.substringAfter("if (confirmed && alarmEpisodes.onConfirmedAlarm(cell.identityKey)) {").substringBefore("}")
-        assertTrue(episode.contains("persistConfirmedAlarm(cell)"))
+        val episode = alerts.substringAfter("if (confirmed && alarmEpisodes.onConfirmedAlarm(episodeKey)) {").substringBefore("}")
+        assertTrue(episode.contains("persistConfirmedAlarm(cell, context)"))
         assertTrue(episode.contains("notifyConfirmedAlarm(cell)"))
         val notifications = module("src/main/java/com/alexisgordr/icdetector/service/ServiceNotificationController.kt").readText()
         assertTrue(notifications.contains("fun showConfirmedAlarm"))

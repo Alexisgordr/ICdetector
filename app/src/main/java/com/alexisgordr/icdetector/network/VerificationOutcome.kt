@@ -7,7 +7,11 @@ import org.json.JSONObject
 enum class VerificationSource { OPENCELLID }
 
 /** Motivo técnico que puede requerir una política de reintento específica. */
-enum class VerificationFailure { NONE, RATE_LIMITED }
+enum class VerificationFailure {
+    NONE,
+    /** 3.0 (V4) — La configuración cambió durante la consulta: el resultado no se aplica. */
+    CONFIG_CHANGED
+}
 
 /**
  * Resultado de consultar a una base pública.
@@ -25,7 +29,8 @@ enum class VerificationFailure { NONE, RATE_LIMITED }
  * @property record respuesta cruda cuando hay verificación, para sacar la coordenada.
  * @property reason motivo en texto llano para el terminal, cuando no hay verificación.
  * @property failure fallo estructurado que el servicio debe gestionar sin analizar [reason].
- * @property retryAfterMillis pausa solicitada por la fuente, si la respuesta la proporciona.
+ * @property externalFailure 3.0 (V1) — clase del fallo según los códigos documentados; decide la pausa.
+ * @property retryAfterMillis pausa solicitada por la fuente (Retry-After válido), si la hay.
  * @property queriedAt cuándo se preguntó. Lo necesita el TTL de las verificaciones.
  */
 data class VerificationOutcome(
@@ -34,6 +39,7 @@ data class VerificationOutcome(
     val record: JSONObject? = null,
     val reason: String? = null,
     val failure: VerificationFailure = VerificationFailure.NONE,
+    val externalFailure: com.alexisgordr.icdetector.core.ExternalFailure = com.alexisgordr.icdetector.core.ExternalFailure.NONE,
     val retryAfterMillis: Long? = null,
     val queriedAt: Long = System.currentTimeMillis()
 )

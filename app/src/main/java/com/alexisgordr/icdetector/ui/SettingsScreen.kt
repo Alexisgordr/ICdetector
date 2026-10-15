@@ -24,22 +24,45 @@ import android.app.Activity
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.border
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Favorite
 import com.alexisgordr.icdetector.service.MiniICService
 import com.alexisgordr.icdetector.R
 import com.alexisgordr.icdetector.util.LocaleController
+import com.alexisgordr.icdetector.core.LegacyNetworkAlertMode
+import com.alexisgordr.icdetector.core.StableSiteNotices
+import com.alexisgordr.icdetector.core.LocationMode
+import com.alexisgordr.icdetector.core.LatencyProxyChoice
 import kotlin.time.Duration.Companion.milliseconds
 
 @Composable
-fun SettingsPanel(service: MiniICService?, onSave: () -> Unit) {
+fun SettingsPanel(
+    service: MiniICService?,
+    /** 3.0 — «Ver evaluaciones»: abre Historial con la pestaña Perfil local. */
+    onOpenProfileEvaluations: () -> Unit = {},
+    /** 3.0 — Flecha de volver: cierra Ajustes sin guardar, como el botón «atrás» del sistema. */
+    onBack: () -> Unit = {},
+    onSave: () -> Unit
+) {
     val context = LocalContext.current
     val prefs = remember { context.getSharedPreferences("miniic_prefs", Context.MODE_PRIVATE) }
     var token by remember { mutableStateOf(prefs.getString("opencellid_key", "") ?: "") }
     var proxyEnabled by remember { mutableStateOf(prefs.getBoolean("proxy_enabled", false)) }
+    var askLatencyOverTor by remember { mutableStateOf(false) }
     var latencyDetectionEnabled by remember {
         mutableStateOf(prefs.getBoolean("latency_detection_enabled", false))
     }
     var selectedLanguage by remember { mutableStateOf(LocaleController.selectedLanguage(context)) }
+    var selectedLocationMode by remember {
+        mutableStateOf(LocationMode.fromStored(prefs.getString(LocationMode.PREF_KEY, null)))
+    }
+    var selectedLegacyAlertMode by remember {
+        mutableStateOf(LegacyNetworkAlertMode.fromStored(prefs.getString(LegacyNetworkAlertMode.PREF_KEY, null)))
+    }
+    // 3.0 — Avisos silenciosos de Stable-Site: activados por defecto; si se apagan, siguen apagados.
+    var stableSiteNotices by remember {
+        mutableStateOf(prefs.getBoolean(StableSiteNotices.PREF_ENABLED, StableSiteNotices.DEFAULT_ENABLED))
+    }
 
     val scrollState = rememberScrollState()
 
@@ -54,7 +77,12 @@ fun SettingsPanel(service: MiniICService?, onSave: () -> Unit) {
                 .verticalScroll(scrollState),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            Text(stringResource(R.string.settings_title), color = Color(0xFF666666), fontFamily = FontFamily.Monospace, fontSize = 12.sp)
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                IconButton(onClick = onBack) {
+                    Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.back), tint = Color.White)
+                }
+                Text(stringResource(R.string.settings_title), color = Color(0xFF666666), fontFamily = FontFamily.Monospace, fontSize = 12.sp)
+            }
             Text(stringResource(R.string.settings_language), color = Color.White, fontSize = 14.sp, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Bold)
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -93,6 +121,9 @@ fun SettingsPanel(service: MiniICService?, onSave: () -> Unit) {
                     cursorColor = Color.White
                 )
             )
+            // 3.0 (V2) — Qué sale en cada consulta y qué protege (y qué no) el proxy.
+            Text(stringResource(R.string.opencellid_privacy), color = Color(0xFF666666), fontSize = 10.sp,
+                fontFamily = FontFamily.Monospace, lineHeight = 13.sp)
             HorizontalDivider(color = Color(0xFF222222), modifier = Modifier.padding(vertical = 4.dp))
 
             // Leer estado WiFi de forma reactiva
@@ -203,11 +234,14 @@ fun SettingsPanel(service: MiniICService?, onSave: () -> Unit) {
                     enabled = !latencyBlocked || latencyDetectionEnabled,
                     onCheckedChange = { requested ->
                         // Encender exige que no haya Wi-Fi/VPN. Apagar siempre se permite.
-                        if (!requested) {
-                            latencyDetectionEnabled = false
-                        } else if (!latencyBlocked) {
-                            latencyDetectionEnabled = true
-                            proxyEnabled = false
+                        // 3.0 (V2) — Con Tor seleccionado se pregunta antes de quitar el proxy.
+                        val form = LatencyProxyChoice.Form(latencyDetectionEnabled, proxyEnabled)
+                        when (LatencyProxyChoice.onLatencyToggle(form, requested, latencyBlocked)) {
+                            LatencyProxyChoice.Action.APPLY -> LatencyProxyChoice.apply(form, requested).let {
+                                latencyDetectionEnabled = it.latencyEnabled; proxyEnabled = it.proxyEnabled
+                            }
+                            LatencyProxyChoice.Action.ASK -> askLatencyOverTor = true
+                            LatencyProxyChoice.Action.IGNORE -> Unit
                         }
                     },
                     colors = SwitchDefaults.colors(
@@ -219,9 +253,105 @@ fun SettingsPanel(service: MiniICService?, onSave: () -> Unit) {
                 )
             }
 
+            // 3.0 (V2) — Elección explícita: activar la latencia desactiva el proxy de OpenCellID.
+            // Cancelar deja el formulario como estaba; nada se aplica hasta «Guardar ajustes».
+            if (askLatencyOverTor) {
+                AlertDialog(
+                    onDismissRequest = { askLatencyOverTor = false },
+                    title = { Text(stringResource(R.string.latency_tor_dialog_title)) },
+                    text = { Text(stringResource(R.string.latency_tor_dialog_body)) },
+                    confirmButton = {
+                        TextButton(onClick = {
+                            LatencyProxyChoice.apply(LatencyProxyChoice.Form(latencyDetectionEnabled, proxyEnabled), true).let {
+                                latencyDetectionEnabled = it.latencyEnabled; proxyEnabled = it.proxyEnabled
+                            }
+                            askLatencyOverTor = false
+                        }) { Text(stringResource(R.string.latency_tor_dialog_confirm)) }
+                    },
+                    dismissButton = {
+                        TextButton(onClick = { askLatencyOverTor = false }) { Text(stringResource(R.string.latency_tor_dialog_cancel)) }
+                    }
+                )
+            }
+
+            HorizontalDivider(color = Color(0xFF222222), modifier = Modifier.padding(vertical = 4.dp))
+
+            Text(stringResource(R.string.location_mode_title), color = Color.White,
+                fontSize = 14.sp, fontFamily = FontFamily.Monospace)
+            LocationMode.entries.forEach { mode ->
+                val label = when (mode) {
+                    LocationMode.CONTINUOUS -> R.string.location_mode_continuous
+                    LocationMode.INTELLIGENT -> R.string.location_mode_intelligent
+                    LocationMode.ADAPTIVE -> R.string.location_mode_adaptive
+                }
+                Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                    RadioButton(selected = selectedLocationMode == mode,
+                        onClick = { selectedLocationMode = mode })
+                    TextButton(onClick = { selectedLocationMode = mode }) {
+                        Text(stringResource(label), color = Color.White, fontFamily = FontFamily.Monospace)
+                    }
+                }
+            }
+            val modeDescription = when (selectedLocationMode) {
+                LocationMode.CONTINUOUS -> R.string.location_adaptive_off
+                LocationMode.INTELLIGENT -> R.string.location_intelligent_description
+                LocationMode.ADAPTIVE -> R.string.location_adaptive_on
+            }
+            Text(stringResource(modeDescription), color = Color(0xFF888888), fontSize = 11.sp,
+                fontFamily = FontFamily.Monospace, lineHeight = 15.sp)
+
+            HorizontalDivider(color = Color(0xFF222222), modifier = Modifier.padding(vertical = 4.dp))
+
+            // 3.0 — Avisos de red 2G/3G: uno por episodio; el sonido solo si se elige.
+            Text(stringResource(R.string.legacy_alert_title), color = Color.White,
+                fontSize = 14.sp, fontFamily = FontFamily.Monospace)
+            LegacyNetworkAlertMode.entries.forEach { mode ->
+                val label = when (mode) {
+                    LegacyNetworkAlertMode.OFF -> R.string.legacy_alert_off
+                    LegacyNetworkAlertMode.NOTIFY -> R.string.legacy_alert_notify
+                    LegacyNetworkAlertMode.NOTIFY_SOUND -> R.string.legacy_alert_notify_sound
+                }
+                Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                    RadioButton(selected = selectedLegacyAlertMode == mode,
+                        onClick = { selectedLegacyAlertMode = mode })
+                    TextButton(onClick = { selectedLegacyAlertMode = mode }) {
+                        Text(stringResource(label), color = Color.White, fontFamily = FontFamily.Monospace)
+                    }
+                }
+            }
+            Text(stringResource(R.string.legacy_alert_description), color = Color(0xFF888888), fontSize = 11.sp,
+                fontFamily = FontFamily.Monospace, lineHeight = 15.sp)
+
+            HorizontalDivider(color = Color(0xFF222222), modifier = Modifier.padding(vertical = 4.dp))
+
+            // 3.0 — Avisos silenciosos de Stable-Site (StableSiteNotices). Sin alarmas ni sonido.
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(stringResource(R.string.stable_site_notices_title), color = Color.White,
+                        fontSize = 14.sp, fontFamily = FontFamily.Monospace)
+                    Text(stringResource(R.string.stable_site_notices_description), color = Color(0xFF888888),
+                        fontSize = 11.sp, fontFamily = FontFamily.Monospace, lineHeight = 15.sp)
+                }
+                Spacer(Modifier.width(8.dp))
+                Switch(
+                    checked = stableSiteNotices,
+                    onCheckedChange = { stableSiteNotices = it },
+                    colors = SwitchDefaults.colors(
+                        checkedThumbColor = Color.White,
+                        checkedTrackColor = Color(0xFF4CAF50)
+                    )
+                )
+            }
+
             Button(
                 onClick = {
                     val cleanToken = token.trim()
+                    val selectedMode = selectedLocationMode
+                    val legacyMode = selectedLegacyAlertMode
                     prefs.edit {
                         putString("opencellid_key", cleanToken)
                         remove("wigle_api_name")
@@ -229,10 +359,15 @@ fun SettingsPanel(service: MiniICService?, onSave: () -> Unit) {
                         remove("wigle_rate_limited_until")
                         putBoolean("proxy_enabled", proxyEnabled)
                         putBoolean("latency_detection_enabled", latencyDetectionEnabled)
+                        putString(LocationMode.PREF_KEY, selectedMode.storedValue)
+                        putString(LegacyNetworkAlertMode.PREF_KEY, legacyMode.storedValue)
+                        putBoolean(StableSiteNotices.PREF_ENABLED, stableSiteNotices)
                     }
-                    service?.openCellIdKey = cleanToken
-                    service?.isProxyEnabled = proxyEnabled
+                    // 3.0 (V4) — Clave y proxy, juntos.
+                    service?.updateVerificationSettings(cleanToken, proxyEnabled)
                     service?.isLatencyDetectionEnabled = latencyDetectionEnabled
+                    service?.locationMode = selectedMode
+                    service?.legacyNetworkAlertMode = legacyMode
                     onSave()
                 },
                 modifier = Modifier.fillMaxWidth(),
@@ -241,6 +376,16 @@ fun SettingsPanel(service: MiniICService?, onSave: () -> Unit) {
             ) {
                 Text(stringResource(R.string.save_settings), color = Color.White, fontFamily = FontFamily.Monospace)
             }
+
+            HorizontalDivider(color = Color(0xFF1A1A1A), modifier = Modifier.padding(vertical = 4.dp))
+
+            // 3.0 — Perfil local: opción experimental, solo visualización.
+            LocalProfileSection(onViewEvaluations = onOpenProfileEvaluations)
+
+            HorizontalDivider(color = Color(0xFF1A1A1A), modifier = Modifier.padding(vertical = 4.dp))
+
+            // 3.0 — Copia de seguridad: exportar y restaurar todos los datos.
+            BackupSection()
 
             HorizontalDivider(color = Color(0xFF1A1A1A), modifier = Modifier.padding(vertical = 4.dp))
 

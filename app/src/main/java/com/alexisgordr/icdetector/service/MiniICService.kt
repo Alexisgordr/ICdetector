@@ -38,7 +38,6 @@ import java.text.SimpleDateFormat
 import java.util.*
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.CopyOnWriteArrayList
-import java.util.concurrent.atomic.AtomicLong
 import java.util.concurrent.TimeUnit
 
 class MiniICService : Service() {
@@ -54,6 +53,11 @@ class MiniICService : Service() {
     
     private val _cellFlow = MutableStateFlow<List<CellData>>(emptyList())
     val cellFlow: StateFlow<List<CellData>> = _cellFlow
+
+    // 3.0 — Salud del ciclo de análisis (ver AnalysisHealth). Solo se toca en el hilo principal.
+    private val analysisHealthTracker = com.alexisgordr.icdetector.core.AnalysisHealth()
+    private val _analysisHealth = MutableStateFlow(com.alexisgordr.icdetector.core.AnalysisHealth.State())
+    val analysisHealth: StateFlow<com.alexisgordr.icdetector.core.AnalysisHealth.State> = _analysisHealth
 
     private val _liveLogs = MutableStateFlow(listOf("[SYS] ICdetector Engine Iniciado...", "[SYS] Esperando hooks del módem..."))
     val liveLogs: StateFlow<List<String>> = _liveLogs
@@ -94,7 +98,7 @@ class MiniICService : Service() {
             _serviceState.value = snapshot
         }
         if (!::dbHelper.isInitialized) return
-        scope.launch(serviceStateDispatcher) {
+        writeGate.launch(scope, serviceStateDispatcher) {
             serviceStatePersistence.persist(
                 snapshot = snapshot,
                 insert = dbHelper::insertServiceStateEvent
@@ -141,6 +145,42 @@ class MiniICService : Service() {
         appendLog("[RADIO]", "Primaria declarada sin señal utilizable: ciclo en abstención.")
     }
 
+    /**
+     * 3.0 (G3) — Reloj de los viajes: civil para fechas, monotónico para intervalos y el número de
+     * arranque, para no comparar nunca tiempos monotónicos de arranques distintos.
+     */
+    private fun mobilityClock() = com.alexisgordr.icdetector.core.MobilityClock(
+        civilMs = System.currentTimeMillis(),
+        elapsedMs = SystemClock.elapsedRealtime(),
+        bootId = bootCount
+    )
+
+    private val bootCount: String? by lazy {
+        Settings.Global.getInt(contentResolver, Settings.Global.BOOT_COUNT, -1).takeIf { it >= 0 }?.toString()
+    }
+
+    /** 3.0 (G3) — Ancla monotónica del viaje abierto: preferencia interna, no viaja en la copia. */
+    private fun mobilityAnchorStore() = object : com.alexisgordr.icdetector.core.MobilityAnchorStore {
+        private val prefs = getSharedPreferences(com.alexisgordr.icdetector.backup.BackupSettings.PREFS_FILE, MODE_PRIVATE)
+        override fun load() = com.alexisgordr.icdetector.core.MobilityTripAnchor.parse(prefs.getString(com.alexisgordr.icdetector.core.MobilityTripAnchor.PREF_KEY, null))
+        override fun save(anchor: com.alexisgordr.icdetector.core.MobilityTripAnchor?) {
+            prefs.edit().apply { if (anchor == null) remove(com.alexisgordr.icdetector.core.MobilityTripAnchor.PREF_KEY) else putString(com.alexisgordr.icdetector.core.MobilityTripAnchor.PREF_KEY, anchor.serialize()) }.apply()
+        }
+    }
+
+    /**
+     * 3.0 (V1) — Pausa de OpenCellID: preferencia interna (no está en BackupSettings.KEYS, no viaja en
+     * la copia). Guarda la huella truncada de la credencial, nunca la clave.
+     */
+    private fun verificationPauseStore() = object : com.alexisgordr.icdetector.core.VerificationPauseStore {
+        private val prefs = getSharedPreferences(com.alexisgordr.icdetector.backup.BackupSettings.PREFS_FILE, MODE_PRIVATE)
+        private val k = com.alexisgordr.icdetector.core.VerificationPauseGate.PREF_KEY
+        override fun load() = com.alexisgordr.icdetector.core.VerificationPauseState.parse(prefs.getString(k, null))
+        override fun save(state: com.alexisgordr.icdetector.core.VerificationPauseState?) {
+            prefs.edit().apply { if (state == null) remove(k) else putString(k, state.serialize()) }.apply()
+        }
+    }
+
     private fun appendLog(type: String, message: String) {
         val timestamp = SimpleDateFormat("HH:mm:ss.SSS", Locale.getDefault()).format(Date())
         val newLog = "[$timestamp] $type $message"
@@ -148,21 +188,23 @@ class MiniICService : Service() {
     }
 
     private lateinit var dbHelper: CellDbHelper
+    private lateinit var localProfile: LocalProfileController
     private lateinit var mobilityFamiliarity: com.alexisgordr.icdetector.core.MobilityFamiliarityEngine
     private var lastMobilityLog: String? = null
     private lateinit var forensicRecorder: ForensicRecorder
     private val trustContradictionTransitions = TrustContradictionTransitionTracker()
     private val stableSiteMotion = com.alexisgordr.icdetector.core.MotionClassifier()
-    @Volatile private var latestMotionEvidence = com.alexisgordr.icdetector.core.MotionEvidence(
-        com.alexisgordr.icdetector.core.MotionState.UNKNOWN,
-        reason = com.alexisgordr.icdetector.core.MotionReason.NO_RECENT_FIX
-    )
     private var stableSitePreviousIdentity: String? = null
     private var lastStableSiteLog: String? = null
     private var stableSiteIntensiveActive = false
     private val forensicDispatcher = Dispatchers.IO.limitedParallelism(1)
     /** v2.10.10 — Escrituras del historial en orden, en una sola cola. */
     private val historyWriteDispatcher = Dispatchers.IO.limitedParallelism(1)
+    /**
+     * 3.0 — Todas las escrituras (y los ciclos de análisis que escriben) pasan por aquí, para poder
+     * terminarlas antes de una restauración: ver [quiesceForRestore].
+     */
+    private val writeGate = com.alexisgordr.icdetector.core.WriteGate()
     /** v2.10.10 — Cambia con cada "Borrar historial"; ver [clearHistory] y [HistoryEpoch]. */
     private val historyEpoch = com.alexisgordr.icdetector.core.HistoryEpoch()
     private lateinit var notificationController: ServiceNotificationController
@@ -185,29 +227,39 @@ class MiniICService : Service() {
     /** v2.10.7 — Última promoción multiseñal escrita en el terminal (evita repetirla en cada ciclo). */
     private var lastLoggedPromotion: String? = null
     private var screenReceiver: BroadcastReceiver? = null
-    private var isScreenOn = true
+    /** Estado real de la pantalla; se lee de PowerManager al registrar el receptor (ver allí). */
+    @Volatile private var isScreenOn = true
     @Volatile private var isUiVisible = false
-    private var collectionPausedForCriticalBattery = false
-    private var isServiceRunning = false
+    @Volatile private var collectionPausedForCriticalBattery = false
+    // 3.0 — Se escribe en el hilo principal (onCreate/onDestroy) y lo lee el bucle periódico en
+    // Dispatchers.Default. Es un indicador simple (una escritura, lecturas sin operación compuesta),
+    // así que @Volatile basta para la visibilidad; el bucle también se para al cancelar el scope.
+    @Volatile private var isServiceRunning = false
     
-    // v2.10.9 — Android no expone a una app normal el estado de cifrado del módem: no hay fuente
-    // que rellene estos valores, así que H9 queda siempre N/A (nunca "superada" por suposición).
-    // Antes se registraba un callback de telefonía vacío que aparentaba lo contrario; se retira.
-    private var isHardwareCipheringActive = false
-    private var isHardwareCipheringAvailable = false
     private var lastGpsTriggerTime = 0L
 
     // v2.1: la confirmación temporal vive en core/TemporalConfidence para poder testearla de
     // extremo a extremo (ver ScenarioTest). El servicio solo la usa.
-    private val temporalConfidence = com.alexisgordr.icdetector.core.TemporalConfidence(CONFIRMATION_CYCLES)
-    private val threatEpisodeTracker = com.alexisgordr.icdetector.core.ThreatEpisodeTracker()
+    // 3.0 (#20) — Reloj que cuenta el tiempo dormido: un hueco en Doze no puede parecer de 0 s.
+    private val temporalConfidence = com.alexisgordr.icdetector.core.TemporalConfidence(
+        CONFIRMATION_CYCLES,
+        elapsedRealtimeMs = SystemClock::elapsedRealtime
+    )
+    // 3.0 — Mismo reloj que la confirmación temporal: elapsedRealtime cuenta el sueño profundo, así
+    // que tras dormir la evidencia (90 s) y la promoción (30 s) caducan por el tiempo real. El reloj
+    // por defecto (System.nanoTime) se detiene en sueño profundo y las alargaba.
+    private val threatEpisodeTracker = com.alexisgordr.icdetector.core.ThreatEpisodeTracker(
+        nowMs = SystemClock::elapsedRealtime
+    )
     private val isolatedCellConfidence = com.alexisgordr.icdetector.core.IsolatedCellConfidence()
+    @Volatile private var loggedStuckObservationToken = false
     @Volatile private var intensiveMonitoringUntilMs = 0L
     private var intensiveMonitoringStartedAtMs = 0L
     // Todas las lecturas comparten cachés, transición y confirmación temporal. Serializarlas evita
     // que dos callbacks publiquen la firma de una celda con el historial calculado para otra.
     private val cellProcessingMutex = Mutex()
-    private val enqueuedCellProcessing = AtomicLong(0L)
+    /** 3.0 (#24) — Entregas, pérdidas de señal y ciclos en curso. Ver CollectionGeneration. */
+    private val collectionGeneration = com.alexisgordr.icdetector.core.CollectionGeneration()
     private var lastIncidentIdentity: String? = null
     // v2.1 — ¿el TA de este módem es una medida o un campo sin rellenar? Ver TimingAdvanceSanity.
     private val taSanity = com.alexisgordr.icdetector.core.TimingAdvanceSanity()
@@ -223,6 +275,8 @@ class MiniICService : Service() {
     private var cachedHistory: List<HistoryRecord> = emptyList()
     private var cachedBaseline: SignalBaseline? = null
     private var cachedRfStability: CellRfStability? = null
+    /** 3.0 — La última lectura del historial RF (H15) falló; se avisa una vez por racha. */
+    @Volatile private var rfStabilityReadFailing = false
     private var cachedReputation: CellReputation? = null
     private var cachedFingerprint: CellRfFingerprint? = null
     private var cachedTrustGate: Boolean? = null
@@ -245,8 +299,35 @@ class MiniICService : Service() {
     private var cacheTimestamp = 0L
     private val CELL_CACHE_TTL = 60_000L
 
+    /**
+     * 3.0 (V4) — Clave de OpenCellID y proxy, juntos e inmutables (ver VerificationConfigHolder). Se
+     * cambian a la vez con [updateVerificationSettings]; un cambio de ruta cancela lo que esté en curso.
+     */
+    private val verificationConfig = com.alexisgordr.icdetector.core.VerificationConfigHolder()
+
+    /** Proxy de OpenCellID activo (lectura de la configuración vigente). */
+    val isProxyEnabled: Boolean get() = verificationConfig.current().proxyEnabled
+
+    /**
+     * 3.0 — Hay token de OpenCellID. Sin él no se consulta la base pública y la pantalla, la
+     * notificación y el terminal lo dicen (ver PublicDbNote) en vez de "consultando".
+     */
+    private val _publicDbCheckEnabled = MutableStateFlow(false)
+    val publicDbCheckEnabled: StateFlow<Boolean> = _publicDbCheckEnabled
+
+    /** 3.0 (V4) — Ajustes guardados: clave y ruta se publican juntas. */
+    fun updateVerificationSettings(apiKey: String, proxyEnabled: Boolean) {
+        val change = verificationConfig.update(apiKey, proxyEnabled) {
+            // 3.0 (V4) — Dentro del candado de escritura de la configuración.
+            if (::verificationController.isInitialized) verificationController.onConfigChanged()
+        }
+        _publicDbCheckEnabled.value = verificationConfig.current().hasCredentials
+        if (change != com.alexisgordr.icdetector.core.VerificationConfigHolder.Change.NONE) {
+            appendLog("[API]", "Configuración de OpenCellID actualizada; las consultas anteriores se descartan.")
+        }
+    }
+
     // Latency anomaly detection
-    var openCellIdKey: String = ""
     private val client = OkHttpClient.Builder()
         .connectTimeout(10, TimeUnit.SECONDS)
         .readTimeout(10, TimeUnit.SECONDS)
@@ -279,26 +360,60 @@ class MiniICService : Service() {
 
     var alarmThreshold = -50f
     var isStrongSignalAlarmEnabled = true
-    var is3gAirplaneModeEnabled = true
-    var isProxyEnabled = false
+    /** 3.0 — Avisos de red 2G/3G (Ajustes). Predeterminado: solo notificación. */
+    @Volatile var legacyNetworkAlertMode: com.alexisgordr.icdetector.core.LegacyNetworkAlertMode =
+        com.alexisgordr.icdetector.core.LegacyNetworkAlertMode.DEFAULT
     var isLatencyDetectionEnabled: Boolean = false
+    /** 3.0 — Modo de ubicación (Ajustes). Continuo por defecto; adaptativo ahorra batería. */
+    @Volatile var locationMode: com.alexisgordr.icdetector.core.LocationMode =
+        com.alexisgordr.icdetector.core.LocationMode.CONTINUOUS
+    /**
+     * Último modo anotado en el terminal, para dejar constancia de cada cambio. 3.0 — Solo se toca
+     * desde [applyLocationMode], que se ejecuta siempre en el hilo principal (onCreate, receptor de
+     * pantalla y, desde el bucle periódico, con withContext(Main)). Comparar y asignar es una
+     * operación compuesta: @Volatile no la haría atómica; confinarla a un hilo, sí.
+     */
+    private var loggedLocationMode: com.alexisgordr.icdetector.core.LocationMode? = null
 
-    private var prevCid: String? = null
+    /** 3.0 (#19) — Identidad completa de la última servidora; ver ServingIdentityChange. */
+    private var prevServingIdentity: com.alexisgordr.icdetector.core.ServingIdentityChange.Identity? = null
     // Fix #1: guarda el cellId cuya alarma ya se ha persistido en el episodio actual, para no
     // registrar la misma evidencia en cada ciclo. Se resetea en cada cambio de celda (handover).
     // Estado para heurística 14 (band downgrade intra-LTE). Guardan la última celda
     // REGISTRADA analizada; el buffer de tendencia sobrevive al handover para detectar si
     // la señal venía degradándose progresivamente (excepción del garaje/sótano).
     private var prevBand: Int? = null
+    /** 3.0 (#10) — eNodeB de la celda en la que se midió [prevBand]. */
+    private var prevBandSite: String? = null
+    /** 3.0 (#8) — NR-ARFCN de la servidora anterior si era NR (H14 en 5G SA). */
+    private var prevNrArfcn: Int? = null
+    /** 3.0 (#20) — Continuidad de cobertura: pérdidas de señal y huecos sin lecturas. */
+    private val coverageContinuity = com.alexisgordr.icdetector.core.CoverageContinuity()
     private var prevRegisteredDbm: Int? = null
     private val recentRegisteredDbmTrend = CopyOnWriteArrayList<Int>()
-    private val cellChangeHistory = CopyOnWriteArrayList<Pair<String, Long>>()
+    // 3.0 (corte de campaña) — Cambios de servidora para H10, registrados al recibir cada lectura (ver CellChangeHistory).
+    private val cellChanges = com.alexisgordr.icdetector.core.CellChangeHistory(ThreatAnalyzer.PING_PONG_WINDOW_MS)
 
     inner class LocalBinder : Binder() {
         fun getService(): MiniICService = this@MiniICService
     }
 
+    /**
+     * 3.0 (#20, #26) — Pérdida de la servidora utilizable: invalida los ciclos en curso, rompe la
+     * continuidad de la confirmación y deja la latencia en "no medida" (una medición de antes del
+     * hueco ya no describe la celda a la que se vuelva).
+     */
+    private fun onSignalLost() {
+        collectionGeneration.lose()
+        latencyMonitor.reset()
+        // 3.0 — Sin celda activa no hay 4G/5G continuo: reinicia la cuenta de cierre del episodio 2G/3G.
+        if (::securityAlerts.isInitialized) securityAlerts.onServiceInterrupted()
+    }
+
     fun forceRefresh() {
+        // 3.0 (#24) — La pantalla se vacía: un ciclo en curso no puede volver a pintarla. No es una
+        // pérdida de señal (#20): la confirmación en curso no vuelve a empezar.
+        collectionGeneration.lose(signalLost = false)
         _cellFlow.value = emptyList()
         requestFreshCellInfo()
     }
@@ -334,22 +449,38 @@ class MiniICService : Service() {
         notificationController.createChannels()
         val serving = _cellFlow.value.firstOrNull { it.isRegistered }
         if (serving != null) {
-            lastNotificationTime = 0L
-            updateNotification(serving)
+            updateNotification(serving, force = true)
         } else {
             updateNotificationText(getString(R.string.monitoring_active), force = true)
         }
     }
 
+    /**
+     * 3.0 — True si el servicio se arrancó con la pregunta de la primera apertura pendiente o con una
+     * restauración a medias: no ha abierto la base ni recoge nada, y se detiene.
+     */
+    @Volatile var collectionBlocked = false
+        private set
+
     override fun onCreate() {
         super.onCreate()
+        // 3.0 — Antes de abrir la base o registrar nada. Cubre cualquier vía de arranque (la
+        // pantalla, un reinicio START_STICKY, otra app): sin decisión inicial, nada se recoge.
+        if (!com.alexisgordr.icdetector.backup.FirstRun.allowsCollection(this)) {
+            collectionBlocked = true
+            Log.w("MiniIC", "Monitorización bloqueada: falta la decisión inicial o hay una restauración pendiente.")
+            stopSelf()
+            return
+        }
         isServiceRunning = true
         getSharedPreferences(LocaleController.PREFS, MODE_PRIVATE)
             .registerOnSharedPreferenceChangeListener(languageListener)
         dbHelper = CellDbHelper.getInstance(this)
-        mobilityFamiliarity = com.alexisgordr.icdetector.core.MobilityFamiliarityEngine(dbHelper)
-        scope.launch(Dispatchers.IO) {
-            val recovery = mobilityFamiliarity.recover(System.currentTimeMillis())
+        mobilityFamiliarity = com.alexisgordr.icdetector.core.MobilityFamiliarityEngine(
+            dbHelper, anchors = mobilityAnchorStore()
+        )
+        writeGate.launch(scope, Dispatchers.IO) {
+            val recovery = mobilityFamiliarity.recover(mobilityClock())
             recovery.event?.let { appendLog("[MOBILITY]", "$it id=${recovery.tripId}") }
         }
         // v2.8.0 — La escritura forense avisa cuando se rompe. Tres inserts fallidos seguidos
@@ -362,7 +493,7 @@ class MiniICService : Service() {
                 appendLog("[SYS]", "Captura forense restablecida.")
             }
         }
-        notificationController = ServiceNotificationController(this, MiniICService::class.java)
+        notificationController = ServiceNotificationController(this, MiniICService::class.java) { locationMode }
         databaseMaintenance = DatabaseMaintenance(dbHelper) { appendLog("[SYS]", it) }
         latencyMonitor = NetworkLatencyMonitor(
             client = latencyClient,
@@ -371,10 +502,8 @@ class MiniICService : Service() {
             onPersistentAnomaly = { showLatencyAlert() }
         )
         legacyNetworkProtection = LegacyNetworkProtection(
-            context = this,
             notifications = notificationController,
-            log = { appendLog("[SEC]", it) },
-            playWarningTone = { toneGenerator?.startTone(ToneGenerator.TONE_PROP_BEEP2, 500) }
+            log = { appendLog("[SEC]", it) }
         )
         transitionTracker = ServingTransitionTracker(dbHelper) { appendLog("[H16]", it) }
         collectionPower = CollectionPowerController(this)
@@ -389,7 +518,8 @@ class MiniICService : Service() {
             onPreciseFixAccepted = { location ->
                 observeMotionFix(location)
                 persistPreciseLocation(location)
-            }
+            },
+            locationMode = { locationMode }
         )
         apiCoordinateValidator = ApiCoordinateValidator(
             db = dbHelper,
@@ -408,15 +538,15 @@ class MiniICService : Service() {
         auditController = AuditLogController(
             log = ::appendLog,
             publishStatus = { _auditStatus.value = it },
-            zeroOnlyCellCount = { taSanity.zeroOnlyCellCount }
+            zeroOnlyCellCount = { taSanity.zeroOnlyCellCount },
+            hasCredentials = { verificationConfig.current().hasCredentials }
         )
         verificationController = ExternalVerificationController(
             scope = scope,
             db = dbHelper,
             client = client,
             coordinateValidator = apiCoordinateValidator,
-            apiKey = { openCellIdKey },
-            proxyEnabled = { isProxyEnabled },
+            config = verificationConfig,
             currentLocation = { getCurrentLocation() },
             cache = verificationCache,
             errorTimes = lastVerificationErrorTime,
@@ -427,20 +557,55 @@ class MiniICService : Service() {
             cacheApiLocation = { key, lat, lon -> apiLocationCache[key] = lat to lon },
             onVerified = { auditController.logVerificationOutcome(it) },
             requestFreshCellInfo = ::requestFreshCellInfo,
-            historyEpoch = historyEpoch
+            historyEpoch = historyEpoch,
+            pauseGate = com.alexisgordr.icdetector.core.VerificationPauseGate(verificationPauseStore()),
+            clock = ::mobilityClock
         )
+        // 3.0 — `versionName+commit`: separa en los datos las filas de compilaciones distintas.
+        val appVersion = com.alexisgordr.icdetector.core.AppBuildId.current(
+            runCatching { packageManager.getPackageInfo(packageName, 0).versionName }.getOrNull()
+        )
+        // 3.0 — Perfil local en sombra: después de cada fila, en la misma cola; no toca el motor.
+        val profilePrefs = getSharedPreferences("miniic_prefs", MODE_PRIVATE)
+        localProfile = LocalProfileController(
+            dbHelper = dbHelper,
+            prefs = profilePrefs,
+            deviceModel = com.alexisgordr.icdetector.core.profile.ProfileCompatibility.deviceModel(
+                android.os.Build.MANUFACTURER, android.os.Build.MODEL
+            ),
+            // Opción experimental (Ajustes): solo cambia el modo guardado en cada evaluación.
+            mode = {
+                com.alexisgordr.icdetector.core.profile.LocalProfileOption.mode(profilePrefs.getBoolean(
+                    com.alexisgordr.icdetector.core.profile.LocalProfileOption.PREF_KEY,
+                    com.alexisgordr.icdetector.core.profile.LocalProfileOption.DEFAULT_ENABLED
+                ))
+            },
+            appVersion = appVersion
+        )
+        writeGate.launch(scope, historyWriteDispatcher) {
+            runCatching { localProfile.logSwitchOffByRestore() }
+                .onFailure { e -> runCatching { localProfile.recordFailure("restore", e) } }
+            runCatching { localProfile.bootstrapIfNeeded() }
+                .onFailure { e -> runCatching { localProfile.recordFailure("bootstrap", e) } }
+        }
         observationPersistence = ObservationPersistenceController(
             scope = scope,
-            db = dbHelper,
-            location = { getCurrentLocation() },
+            insert = { row -> dbHelper.logObservation(row, appVersion) },
+            location = { getCurrentLocation()?.toObservedFix() },
             serviceState = { _serviceState.value },
             onWrite = ::noteWriteResult,
-            onPeriodicMissingLocation = { timestamp ->
-                locationController.markCoordinatesPending(timestamp)
+            onPeriodicMissingLocation = { _ ->
+                locationController.markCoordinatesPending()
                 requestHighAccuracyFix()
             },
             writeDispatcher = historyWriteDispatcher,
-            historyGeneration = { historyEpoch.current() }
+            writeGate = writeGate,
+            historyGeneration = { historyEpoch.current() },
+            locationMode = { locationMode.storedValue },
+            afterWrite = localProfile::onRowWritten,
+            onAfterWriteError = { e -> localProfile.recordFailure("evaluation", e) },
+            // 3.0 — La fila cuenta como fallida (noteWriteResult avisa); el error queda en logcat.
+            onInsertError = { e -> Log.e("MiniIC", "Escritura del historial fallida: ${e.javaClass.simpleName}", e) }
         )
         securityAlerts = SecurityAlertController(
             tone = { toneGenerator },
@@ -453,7 +618,7 @@ class MiniICService : Service() {
             },
             strongSignalEnabled = { isStrongSignalAlarmEnabled },
             strongSignalThreshold = { alarmThreshold },
-            legacyProtectionEnabled = { is3gAirplaneModeEnabled }
+            legacyAlertMode = { legacyNetworkAlertMode }
         )
         telemetryHistory = TelemetryHistoryController(_dbmHistory, _rsrqHistory, _geoHistory)
 
@@ -469,13 +634,13 @@ class MiniICService : Service() {
         // y se encola antes de que llegue ningún ciclo: así se ejecuta siempre ANTES de la primera
         // muestra nueva. Antes iba por su cuenta en IO y, si se retrasaba, podía marcar como
         // interrumpido un caso que el servicio nuevo acababa de abrir.
-        scope.launch(forensicDispatcher) {
+        writeGate.launch(scope, forensicDispatcher) {
             try {
                 dbHelper.closeOpenIncidents(activeIdentity = null, interrupted = true)
                 dbHelper.interruptOpenForensicCases()
             } catch (_: Exception) {}
         }
-        scope.launch(Dispatchers.IO) { databaseMaintenance.run() }
+        writeGate.launch(scope, Dispatchers.IO) { databaseMaintenance.run() }
         
         val prefs = getSharedPreferences("miniic_prefs", MODE_PRIVATE)
         collectionHealthController = CollectionHealthController(
@@ -485,7 +650,6 @@ class MiniICService : Service() {
             },
             writeFailureText = { getString(R.string.write_failure_notification) }
         )
-        openCellIdKey = (prefs.getString("opencellid_key", "") ?: "").trim()
         // WiGLE ya no participa en la verificación. Elimina secretos y estado heredados.
         prefs.edit()
             .remove("wigle_api_name")
@@ -498,8 +662,16 @@ class MiniICService : Service() {
         // deja escrito, para que una interrupción sea un hecho observable y no una sorpresa en
         // diciembre al ver un agujero en el CSV.
         collectionHealthController.restore()?.let { appendLog("[SYS]", it) }
-        isProxyEnabled = prefs.getBoolean("proxy_enabled", false)
+        // 3.0 (V4) — Clave y proxy se cargan juntos.
+        verificationConfig.update((prefs.getString("opencellid_key", "") ?: "").trim(), prefs.getBoolean("proxy_enabled", false))
+        _publicDbCheckEnabled.value = verificationConfig.current().hasCredentials
         isLatencyDetectionEnabled = prefs.getBoolean("latency_detection_enabled", false)
+        locationMode = com.alexisgordr.icdetector.core.LocationMode.fromStored(
+            prefs.getString(com.alexisgordr.icdetector.core.LocationMode.PREF_KEY, null)
+        )
+        legacyNetworkAlertMode = com.alexisgordr.icdetector.core.LegacyNetworkAlertMode.fromStored(
+            prefs.getString(com.alexisgordr.icdetector.core.LegacyNetworkAlertMode.PREF_KEY, null)
+        )
         restoreTaSanityEvidence()            // evidencia de TA superviviente a reinicios (v2.5)
 
         try {
@@ -529,7 +701,10 @@ class MiniICService : Service() {
             return
         }
 
-        appendLog("[SYS]", "Ubicación continua activa (24/7). Consumo de batería elevado por diseño: las coordenadas son necesarias para H11, H13 y H16.")
+        // 3.0 — Solo en modo continuo; el adaptativo lo anota applyLocationMode().
+        if (locationMode == com.alexisgordr.icdetector.core.LocationMode.CONTINUOUS) {
+            appendLog("[SYS]", "Ubicación continua activa (24/7). Consumo de batería elevado por diseño: las coordenadas son necesarias para H11, H13 y H16.")
+        }
 
         registerTelephonyCallback()
         registerDisplayInfoCallback()
@@ -537,10 +712,11 @@ class MiniICService : Service() {
 
         collectionPausedForCriticalBattery = isBatteryCritical()
         if (collectionPausedForCriticalBattery) {
+            locationController.updateCollection(isScreenOn, enabled = false)
             appendLog("[SYS]", "⚠ Batería crítica (<${CollectionPowerController.CRITICAL_PERCENT} %): ubicación continua en pausa hasta conectar el cargador.")
         } else {
             ensureCollectionWakeLock()
-            locationController.startContinuousUpdates()
+            applyLocationMode()
         }
 
         scope.launch(Dispatchers.Default) {
@@ -556,7 +732,7 @@ class MiniICService : Service() {
                 try {
                     val batteryCritical = isBatteryCritical()
                     if (batteryCritical) {
-                        locationController.stopContinuousUpdates()
+                        locationController.updateCollection(isScreenOn, enabled = false)
                         releaseCollectionWakeLock()
                         if (!collectionPausedForCriticalBattery) {
                             collectionPausedForCriticalBattery = true
@@ -565,11 +741,14 @@ class MiniICService : Service() {
                         }
                     } else {
                         ensureCollectionWakeLock()
-                        locationController.startContinuousUpdates()
                         if (collectionPausedForCriticalBattery) {
                             collectionPausedForCriticalBattery = false
                             appendLog("[SYS]", "Alimentación recuperada: ubicación continua y recolección 24/7 reanudadas.")
                         }
+                        // GPS y reintentos limitados según modo, pantalla y recepción. 3.0 — En el
+                        // hilo principal, como el resto de llamadas: loggedLocationMode y el
+                        // controlador de ubicación quedan en un solo hilo. Es una llamada ligera.
+                        withContext(Dispatchers.Main) { applyLocationMode() }
                     }
 
                     val isAirplaneModeOn = Settings.Global.getInt(
@@ -578,8 +757,16 @@ class MiniICService : Service() {
                     ) != 0
 
                     if (isAirplaneModeOn) {
-                        _cellFlow.value = emptyList()
-                        updateNotificationText(getString(R.string.no_signal_airplane))
+                        // 3.0 (#24) — Modo avión: invalida el ciclo que siga analizando. En el hilo
+                        // principal, como la publicación de cada ciclo: así no puede intercalarse
+                        // con un ciclo que ya pasó mayPublish (o lo invalida antes, o vacía después
+                        // de que termine de publicar). Solo esto; la lectura del ajuste y el resto
+                        // del bucle siguen fuera del hilo principal.
+                        withContext(Dispatchers.Main) {
+                            onSignalLost()
+                            _cellFlow.value = emptyList()
+                            updateNotificationText(getString(R.string.no_signal_airplane), kind = com.alexisgordr.icdetector.core.MonitoringNotificationText.TextKind.NO_SIGNAL)
+                        }
                         appendLog("[SYS]", "⚠️ Modo Avión activo. Suspendiendo escaneo.")
                         wasAirplaneModeOn = true
                     } else {
@@ -625,7 +812,7 @@ class MiniICService : Service() {
     /** Aplica retención y límite forense también en servicios que permanecen vivos durante meses. */
     private fun scheduleDailyDatabaseMaintenance() {
         if (databaseMaintenance.claimRun()) {
-            scope.launch(Dispatchers.IO) { databaseMaintenance.run() }
+            writeGate.launch(scope, Dispatchers.IO) { databaseMaintenance.run() }
         }
     }
 
@@ -719,11 +906,15 @@ class MiniICService : Service() {
         lastIncidentIdentity = null
         lastLoggedPromotion = null
         securityAlerts.resetAlarmEpisode()
-        cellChangeHistory.clear()
+        cellChanges.clear()
     }
 
     /** Identidad completa de la celda para la que vale el estado de latencia publicado. */
-    private var latencyCellIdentity: String? = null
+    /**
+     * 3.0 — Identidad de la celda cuya latencia se mide. Sigue la misma regla que los handovers
+     * (ServingIdentityChange.step): un CID «N/A» transitorio no reinicia el estado de latencia.
+     */
+    private var latencyServingIdentity: com.alexisgordr.icdetector.core.ServingIdentityChange.Identity? = null
 
     /**
      * v2.10.9 — El reset comparaba solo el CID: si cambiaba MCC, MNC, TAC o la tecnología con el
@@ -733,10 +924,18 @@ class MiniICService : Service() {
      */
     @Synchronized
     private fun resetLatencyIfCellChanged(cell: CellData) {
-        val identity = cell.identityKey
-        if (identity == latencyCellIdentity) return
-        latencyCellIdentity = identity
-        latencyMonitor.onCellChanged(identity, idleLatencyState())
+        val previousKey = latencyServingIdentity?.key
+        val step = com.alexisgordr.icdetector.core.ServingIdentityChange.step(
+            latencyServingIdentity, com.alexisgordr.icdetector.core.ServingIdentityChange.of(cell))
+        latencyServingIdentity = step.next
+        val nextKey = step.next?.key ?: return
+        if (step.handover) {
+            // 3.0 (#26) — Celda nueva: todavía no medida. Antes se mostraba "OK" sin medir nada.
+            latencyMonitor.onCellChanged(nextKey, NetworkLatencyMonitor.STATE_NOT_MEASURED)
+        } else if (previousKey != null && nextKey != previousKey) {
+            // Misma celda; un campo que faltaba se ha rellenado y su clave cambia. Sin reiniciar.
+            latencyMonitor.renameActiveCell(previousKey, nextKey)
+        }
     }
 
     private fun checkLatencyAnomaly() {
@@ -744,9 +943,17 @@ class MiniICService : Service() {
             latencyMonitor.reset()
             return
         }
+        // 3.0 (#26) — La caducidad corre en cada vuelta del ciclo periódico, aunque no se pueda
+        // medir (sin celda registrada): un OK/ANOMALA no sobrevive más de 90 s sin medición nueva.
+        latencyMonitor.expireIfStale()
         // v2.10.9 — Identidad completa: dos celdas con el mismo CID en otra red o tecnología no
         // comparten la media de latencia.
-        val activeCellKey = _cellFlow.value.firstOrNull { it.isRegistered }?.identityKey ?: return
+        // 3.0 — La medición se atribuye a la identidad estable (la de resetLatencyIfCellChanged), y
+        // solo si la lectura actual trae un CID legible: con «N/A» no se sabe de qué celda es.
+        val active = _cellFlow.value.firstOrNull { it.isRegistered } ?: return
+        if (!com.alexisgordr.icdetector.core.ServingIdentityChange.hasReadableCellId(
+                com.alexisgordr.icdetector.core.ServingIdentityChange.of(active))) return
+        val activeCellKey = latencyServingIdentity?.key ?: return
         if (!latencyMonitor.isDue()) return
         scope.launch(Dispatchers.IO) { latencyMonitor.check(activeCellKey) }
     }
@@ -766,6 +973,11 @@ class MiniICService : Service() {
         }
     }
     private fun registerScreenReceiver() {
+        // 3.0 — Bug found during testing: isScreenOn empezaba siempre en true. Si Android
+        // reiniciaba el servicio con la pantalla apagada, el modo adaptativo encendía el GPS
+        // continuo hasta el siguiente evento de apagado. Se lee el estado real antes de aplicar el
+        // modo de ubicación; los eventos de pantalla lo mantienen al día desde aquí.
+        isScreenOn = getSystemService(PowerManager::class.java)?.isInteractive ?: true
         val filter = IntentFilter().apply {
             addAction(Intent.ACTION_SCREEN_ON)
             addAction(Intent.ACTION_SCREEN_OFF)
@@ -773,8 +985,21 @@ class MiniICService : Service() {
         screenReceiver = object : BroadcastReceiver() {
             override fun onReceive(context: Context?, intent: Intent?) {
                 when (intent?.action) {
-                    Intent.ACTION_SCREEN_ON -> isScreenOn = true
-                    Intent.ACTION_SCREEN_OFF -> isScreenOn = false
+                    Intent.ACTION_SCREEN_ON -> {
+                        isScreenOn = true
+                        // 3.0 — En adaptativo, al volver a usar el móvil se pide una ubicación
+                        // fresca y vuelve el GPS continuo mientras la pantalla siga encendida.
+                        if (locationMode != com.alexisgordr.icdetector.core.LocationMode.CONTINUOUS &&
+                            !collectionPausedForCriticalBattery
+                        ) {
+                            applyLocationMode()
+                            requestHighAccuracyFix()
+                        }
+                    }
+                    Intent.ACTION_SCREEN_OFF -> {
+                        isScreenOn = false
+                        if (!collectionPausedForCriticalBattery) applyLocationMode()
+                    }
                 }
             }
         }
@@ -794,17 +1019,41 @@ class MiniICService : Service() {
     /** Solo protege frente al apagado inminente; cargando nunca se pausa la recolección. */
     private fun isBatteryCritical(): Boolean = collectionPower.isBatteryCritical()
 
+    /**
+     * 3.0 — Enciende o apaga el GPS continuo según el modo de ubicación y la pantalla, y deja una
+     * línea en el terminal cada vez que cambia el modo (para que la caja negra lo registre).
+     */
+    private fun applyLocationMode() {
+        val mode = locationMode
+        locationController.updateCollection(isScreenOn, enabled = !collectionPausedForCriticalBattery)
+        if (mode != loggedLocationMode) {
+            loggedLocationMode = mode
+            appendLog(
+                "[GPS]",
+                when (mode) {
+                    com.alexisgordr.icdetector.core.LocationMode.ADAPTIVE ->
+                        "Modo de ubicación adaptativo: GPS continuo solo con la pantalla encendida."
+                    com.alexisgordr.icdetector.core.LocationMode.INTELLIGENT ->
+                        "Modo de ubicación inteligente: intentos GPS breves cada 45 s cuando hay recepción."
+                    com.alexisgordr.icdetector.core.LocationMode.CONTINUOUS ->
+                        "Modo de ubicación continuo: GPS activo también con la pantalla apagada."
+                }
+            )
+        }
+    }
+
     private fun requestHighAccuracyFix(force: Boolean = false) {
         locationController.requestPreciseFix(force)
     }
 
     private fun persistPreciseLocation(location: Location) {
         val cell = _cellFlow.value.firstOrNull { it.isRegistered } ?: return
-        scope.launch(Dispatchers.IO) {
+        writeGate.launch(scope, Dispatchers.IO) {
             val updated = dbHelper.updateNullCoordinates(
                 cell.cellId, cell.mnc, cell.tac, cell.mcc, cell.radioTech,
                 location.latitude, location.longitude,
-                fixTimeMs = location.time
+                fixTimeMs = location.time,
+                accuracyM = location.takeIf { it.hasAccuracy() }?.accuracy
             )
             appendLog(
                 "[GPS]",
@@ -827,6 +1076,10 @@ class MiniICService : Service() {
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        if (collectionBlocked) {
+            stopSelf()
+            return START_NOT_STICKY
+        }
         if (intent?.action == ACTION_STOP) {
             stopSelf()
             return START_NOT_STICKY
@@ -836,8 +1089,19 @@ class MiniICService : Service() {
 
     override fun onBind(intent: Intent?): IBinder = binder
 
+    /**
+     * 3.0 — Antes de restaurar: no se aceptan escrituras nuevas y se espera a que terminen todas las
+     * que ya estaban en cola o en marcha. False si no terminan a tiempo: entonces no se restaura.
+     */
+    suspend fun quiesceForRestore(timeoutMs: Long = 30_000L): Boolean = writeGate.closeAndDrain(timeoutMs)
+
+    /** 3.0 — La restauración se canceló antes de reemplazar nada: se vuelve a escribir. */
+    fun resumeWritesAfterCancelledRestore() = writeGate.reopen()
+
     override fun onDestroy() {
         super.onDestroy()
+        // Bloqueado en onCreate: no se inicializó nada que haya que cerrar.
+        if (collectionBlocked) return
         isServiceRunning = false
         getSharedPreferences(LocaleController.PREFS, MODE_PRIVATE)
             .unregisterOnSharedPreferenceChangeListener(languageListener)
@@ -856,6 +1120,8 @@ class MiniICService : Service() {
         isFreshDelivery: Boolean = true,
         fromRegisteredCallback: Boolean = false
     ) {
+        // 3.0 — Ticket de esta entrega, en cuanto exista: un fallo después de abrirla debe cerrarla.
+        var deliveredTicket: com.alexisgordr.icdetector.core.CollectionGeneration.Ticket? = null
         try {
             // v2.10.4 — Sondeo del ServiceState en cada entrega de celdas. El tracker descarta las
             // repeticiones, así que solo un cambio real produce línea de terminal y evento.
@@ -871,7 +1137,9 @@ class MiniICService : Service() {
                 } else if (info is CellInfoLte) {
                     "4G LTE"
                 } else if (info is CellInfoNr) {
-                    "5G NR (SA)"
+                    // 3.0 — Que exista un CellInfoNr no demuestra 5G SA (en NSA también aparece la
+                    // portadora NR). Sin más evidencia, solo 5G NR (las filas anteriores dicen 5G NR (SA)).
+                    "5G NR"
                 } else if (info is CellInfoWcdma) {
                     "3G WCDMA"
                 } else if (info is CellInfoGsm) {
@@ -892,20 +1160,17 @@ class MiniICService : Service() {
                     // reloj con el ancla LTE.
                     parsedTokens.add(
                         if (parsed.isRegistered) {
-                            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-                                info.timestampMillis
-                            } else {
-                                @Suppress("DEPRECATION")
-                                TimeUnit.NANOSECONDS.toMillis(info.timeStamp)
-                            }
+                            info.timestampMillis
                         } else null
                     )
                 }
             }
 
             if (list.isEmpty()) {
+                // 3.0 (#24) — Una pérdida de señal invalida el ciclo que aún esté analizando.
+                onSignalLost()
                 _cellFlow.value = emptyList()
-                updateNotificationText(getString(R.string.no_signal_airplane))
+                updateNotificationText(getString(R.string.no_signal_airplane), kind = com.alexisgordr.icdetector.core.MonitoringNotificationText.TextKind.NO_SIGNAL)
                 return
             }
 
@@ -920,9 +1185,10 @@ class MiniICService : Service() {
                 // Si el módem declaró una primaria pero no proporcionó una señal utilizable,
                 // abstenerse: una secundaria nunca puede heredar el historial de la primaria.
                 val declaredPrimary = com.alexisgordr.icdetector.core.ServingCellSelection.hasDeclaredPrimary(list)
+                onSignalLost()
                 _cellFlow.value = com.alexisgordr.icdetector.core.ServingCellSelection.abstentionPublication()
                 if (declaredPrimary) logUnusablePrimaryAbstention()
-                updateNotificationText(getString(R.string.searching_network))
+                updateNotificationText(getString(R.string.searching_network), kind = com.alexisgordr.icdetector.core.MonitoringNotificationText.TextKind.NO_SIGNAL)
                 return
             }
             activeObservationToken = parsedTokens.getOrNull(servingIndex)
@@ -935,17 +1201,30 @@ class MiniICService : Service() {
             list.addAll(servingFirst)
             logRadioContext(list.firstOrNull()?.takeIf { it.isRegistered }, list.count { it.isRegistered })
 
-            // Solo una entrega con trabajo real puede invalidar otra que esté esperando el mutex.
-            // Un callback vacío ya no crea una secuencia fantasma que haga perder el ciclo válido.
-            val processingSequence = enqueuedCellProcessing.incrementAndGet()
+            // Una entrega con trabajo real invalida a otra que esté esperando el mutex. 3.0 (#24):
+            // la lista vacía y la abstención también invalidan, pero solo a la hora de PUBLICAR
+            // (ver collectionGeneration.lose() arriba): un ciclo en curso no puede pintar ni
+            // alertar sobre una celda que ya se perdió.
+            val cycleTicket = collectionGeneration.deliver(
+                list.firstOrNull { it.isRegistered }?.identityKey ?: "N/A"
+            )
+            deliveredTicket = cycleTicket
+            // 3.0 (A03) — Hora, posición y estado de servicio de ESTA lectura, fijados al recibirla.
+            // El análisis puede tardar; la fila del historial y el propio análisis usan este
+            // contexto, no el del momento en que termine. El estado de servicio ya se ha
+            // sondeado al principio de esta entrega.
+            val deliveryLocation = getCurrentLocation()
+            val observationContext = observationPersistence.capture(deliveryLocation?.toObservedFix())
+            // 3.0 (#20) — Instante monotónico de la entrega, para medir huecos sin lecturas.
+            val deliveredAtElapsedMs = SystemClock.elapsedRealtime()
 
             // v2.1 — EL TIMING ADVANCE NO SE COMPARTE ENTRE CELDAS.
             //
             // Antes se cogía el PRIMER TA disponible de toda la lista (vecinas incluidas) y se le
             // estampaba a la celda registrada si ella no tenía. Un TA es la distancia de ida y
             // vuelta a UNA antena concreta: atribuírselo a otra es inventar una geometría. Y esa
-            // geometría alimenta H6, que penaliza -40 (lo máximo del sistema) por "Suplantación
-            // TA" — es decir, la señal más cara del motor podía estar midiendo otra antena.
+            // geometría alimenta H6 (en 3.0, la proximidad por TA; la rama "Suplantación TA" de -40
+            // se retiró por no tener datos en producción): la regla podía estar midiendo otra antena.
             //
             // Se mantiene el único caso legítimo que esto cubría: que la MISMA celda aparezca
             // duplicada en la lista (pasa con NSA y con algunos módems) y solo una de las entradas
@@ -953,15 +1232,10 @@ class MiniICService : Service() {
             val activeIndex = list.indexOfFirst { it.isRegistered }
             if (activeIndex >= 0) {
                 val activeCell = list[activeIndex]
-                if (activeCell.timingAdvance == null && activeCell.cellId != "N/A") {
-                    val sameCellWithTa = list.firstOrNull { c ->
-                        !c.isRegistered &&
-                            c.timingAdvance != null && c.timingAdvance >= 0 &&
-                            c.cellId == activeCell.cellId &&
-                            (c.mnc == activeCell.mnc || c.mnc == "N/A") &&
-                            c.tac == activeCell.tac &&
-                            (c.mcc == activeCell.mcc || c.mcc == "N/A")
-                    }
+                // 3.0 (#21) — Solo de la MISMA celda duplicada: misma tecnología y mismo emisor
+                // físico (PCI/frecuencia). Ver TimingAdvanceBorrowing.
+                run {
+                    val sameCellWithTa = com.alexisgordr.icdetector.core.TimingAdvanceBorrowing.source(activeCell, list)
                     if (sameCellWithTa != null) {
                         list[activeIndex] = activeCell.copy(
                             timingAdvance = sameCellWithTa.timingAdvance,
@@ -977,64 +1251,124 @@ class MiniICService : Service() {
                 // esto, cualquier celda fuerte sin verificar arrastraría un -15 perpetuo por
                 // "Proximidad anómala (TA)" originado en el firmware, no en la red.
                 val current = list[activeIndex]
-                val taKey = current.identityKey
+                // 3.0 — Clave por emplazamiento (eNodeB en LTE), no por identidad completa; con el CID
+                // ilegible un cero no cuenta (ver TimingAdvanceSanity.evidenceKey).
+                val taKey = com.alexisgordr.icdetector.core.TimingAdvanceSanity.evidenceKey(current)
                 // v2.5 — La evidencia sobrevive a los reinicios del servicio; sin esto, la misma
                 // lectura de TA=0 se etiquetaba LTE_INDEX o STUB_ZERO según cuánto llevara vivo el
                 // proceso, y el historial dejaba de ser autoconsistente (medido: 319 vs 394 filas).
-                if (taSanity.observe(taKey, current.timingAdvance)) persistTaSanityEvidence()
+                // 3.0 (#33) — Evidencia por unidad: un LTE que reporta no oculta un GSM/NR a cero.
+                if (taSanity.observe(current.timingAdvanceUnit, taKey, current.timingAdvance)) persistTaSanityEvidence()
                 val effectiveUnit = taSanity.effectiveUnit(current.timingAdvanceUnit, current.timingAdvance)
                 if (effectiveUnit != current.timingAdvanceUnit) {
                     list[activeIndex] = current.copy(timingAdvanceUnit = effectiveUnit)
                 }
             }
 
-            val neighbors = list.filter { !it.isRegistered }
+            // 3.0 — Vecinas para el análisis (H1-H5, H7, H11, H16, densidad bayesiana, Stable-Site
+            // y diagnóstico): sin las portadoras SECONDARY_SERVING que el módem publica sin
+            // isRegistered. La caja negra conserva el contexto completo, secundarias incluidas.
+            val neighbors = com.alexisgordr.icdetector.core.ServingCellSelection.neighbours(list)
+            val nonServingContext = com.alexisgordr.icdetector.core.ServingCellSelection.nonServingEntries(list)
             val activeRaw = list.firstOrNull { it.isRegistered }
             // Milisegundos desde el arranque de la celda registrada aceptada por el parser.
-            val observationToken = activeObservationToken ?: 0L
+            // 3.0 — Sin marca de tiempo (o 0), desconocido: IsolatedCellConfidence lo trata como fresco.
+            val observationToken = activeObservationToken?.takeIf { it > 0L }
 
             // Reset del estado de latencia ANTES del análisis si la celda ha cambiado.
             // Esto evita que la heurística 12 lea el veredicto "ANOMALA" de la celda vieja
             // en el primer ciclo de la nueva, antes de que tenga su propio baseline.
             if (activeRaw != null && activeRaw.cellId != "N/A") resetLatencyIfCellChanged(activeRaw)
+            // 3.0 — Lista sin celda registrada: tampoco hay servicio continuo (ver onSignalLost).
+            if (activeRaw == null && ::securityAlerts.isInitialized) securityAlerts.onServiceInterrupted()
 
-            scope.launch(Dispatchers.IO) {
+            // 3.0 (corte de campaña) — H10: el cambio de servidora se registra AQUÍ, al recibir la lectura y antes
+            // de su análisis, para que el ciclo que lo observa ya lo cuente. Antes se guardaba al
+            // publicar (checkAlerts, después de ThreatAnalyzer) y el tercer cambio se detectaba un
+            // ciclo tarde. Se hace en el hilo principal, que recibe las entregas en orden.
+            // Un ciclo que después se descarta (isLatest/mayPublish) DEJA su cambio en el historial, a
+            // propósito: el módem sí informó de esa servidora, y los descartes ocurren justo cuando la
+            // servidora cambia mientras se analiza; quitarlos ocultaría los cambios rápidos que H10
+            // busca. Igual que la transición de H16 y el viaje de movilidad, es una observación del
+            // ciclo, no un resultado publicado. La copia es la de este instante: una lectura posterior
+            // no entra en el análisis de esta.
+            val changeTimeMs = System.currentTimeMillis()
+            if (activeRaw != null) {
+                cellChanges.observe(com.alexisgordr.icdetector.core.ServingIdentityChange.of(activeRaw), changeTimeMs)
+            }
+            val cellChangeHistory = cellChanges.snapshot()
+
+            writeGate.launchSource(scope, Dispatchers.IO) {
                 cellProcessingMutex.withLock {
-                if (processingSequence < enqueuedCellProcessing.get()) return@withLock
-                val currentLocation = getCurrentLocation()
+                if (!collectionGeneration.isLatest(cycleTicket)) return@withLock
+                // 3.0 — Límite del ciclo: un fallo interno no deja el último resultado como si fuera
+                // actual ni genera alarmas. Sin reintentos: lo que el ciclo ya hizo (ver la nota en
+                // onAnalysisFailed) queda hecho una sola vez. La cancelación se relanza.
+                com.alexisgordr.icdetector.core.AnalysisHealth.guard(onFailure = { errorType ->
+                    withContext(Dispatchers.Main) { onAnalysisFailed(cycleTicket, errorType) }
+                }) {
+                // 3.0 (#20) — Tras una pérdida de señal, el contexto de banda de antes del hueco no
+                // sirve para comparar: H14 queda N/A hasta tener una banda previa nueva.
+                val signalLosses = collectionGeneration.losses
+                // También un hueco de más de 2 min sin lecturas, aunque no llegara una lista vacía.
+                val continuityBreak = coverageContinuity.check(signalLosses, deliveredAtElapsedMs)
+                val continuityBroken = continuityBreak != com.alexisgordr.icdetector.core.CoverageContinuity.Break.NONE
+                if (continuityBroken) {
+                    // 3.0 (#20) — La racha de "sin vecinas" de H1 tampoco cruza el hueco: dos
+                    // muestras antes y una después no confirman el aislamiento.
+                    isolatedCellConfidence.reset()
+                    prevBand = null
+                    prevBandSite = null
+                    prevNrArfcn = null
+                    prevRegisteredDbm = null
+                    recentRegisteredDbmTrend.clear()
+                }
+                val currentLocation = deliveryLocation
                 // Cellular polling only reads motion. New evidence enters from real Location
                 // callbacks, so a repeated lastKnownLocation cannot manufacture static time.
-                val motionEvidence = stableSiteMotion.current(System.currentTimeMillis()).also {
-                    latestMotionEvidence = it
-                }
+                // 3.0 — Reloj monotónico, el mismo con que se sellan los fixes (no la hora civil).
+                val motionEvidence = stableSiteMotion.current(SystemClock.elapsedRealtime())
                 // Mobility is contextual metadata only. Its result is deliberately not passed to
                 // ThreatAnalyzer, LocalCellTrust, Stable-Site, alerts or forensics.
+                // 3.0 — Como la racha de aislamiento de H1 (más abajo), es un efecto del ANÁLISIS,
+                // no de la publicación: un ciclo descartado en mayPublish ya lo ha observado. Es una
+                // observación real y su token de frescura evita contarla dos veces.
                 val mobility = if (activeRaw != null && activeRaw.cellId != "N/A") {
-                    mobilityFamiliarity.observe(activeRaw.identityKey, motionEvidence, System.currentTimeMillis())
+                    // 3.0 (G4) — Tras una pérdida de servicio o un hueco no hay arista desde la celda anterior.
+                    mobilityFamiliarity.observe(activeRaw.identityKey, motionEvidence, mobilityClock(), serviceContinuous = !continuityBroken)
                 } else com.alexisgordr.icdetector.core.MobilityObservation(
                     com.alexisgordr.icdetector.core.MobilityFamiliarity.UNKNOWN_ON_ROUTE
                 )
-                val mobilityLog = "${mobility.tripId}|${mobility.familiarity}|${mobility.goodEdges}|${mobility.event}"
+                val mobilityLog = "${mobility.tripId}|${mobility.familiarity}|${mobility.goodEdges}|${mobility.arrivalPriorTrips}|${mobility.event}"
                 if (mobilityLog != lastMobilityLog) {
                     lastMobilityLog = mobilityLog
                     appendLog(
                         "[MOBILITY]",
-                        "familiarity=${mobility.familiarity} trip=${mobility.tripId ?: "none"} " +
-                            "priorTrips=${mobility.priorTrips} goodEdges=${mobility.goodEdges}" +
+                        // 3.0 (G2) — Dos conceptos: la celda en viajes anteriores y la llegada en este viaje.
+                        "cellHistory=${mobility.familiarity} goodEdges=${mobility.goodEdges} trip=${mobility.tripId ?: "none"} " +
+                            "arrival=${mobility.arrivalPriorTrips?.let { "priorTrips=$it" } ?: "none"}" +
                             (mobility.event?.let { " event=$it" } ?: "")
                     )
                 }
                 val siteKeys = currentLocation?.takeIf { it.accuracy <= 50f }?.let {
                     com.alexisgordr.icdetector.core.StableSiteKey.candidates(it.latitude, it.longitude)
                 }.orEmpty()
-                if (activeRaw != null && activeRaw.cellId != "N/A") {
-                    dbHelper.observeStableSiteEpisode(activeRaw.identityKey, stableSitePreviousIdentity)
-                }
+                // 3.0 — El sitio se evalúa ANTES de registrar el cambio de servidora, para saber si el
+                // episodio que se abre en este ciclo empieza con el sitio ya maduro (avisos
+                // silenciosos). La evaluación no lee los episodios, así que el orden no la cambia.
                 val stableSiteCandidate = if (activeRaw != null && activeRaw.cellId != "N/A" && siteKeys.isNotEmpty()) {
                     com.alexisgordr.icdetector.core.StableSiteCandidateSelector.select(
                         siteKeys.map { key -> dbHelper.evaluateStableSiteCandidate(key, activeRaw, stableSitePreviousIdentity, motionEvidence) }
                     )!!
                 } else com.alexisgordr.icdetector.core.StableSiteDecision(reason = "NO_SERVING_CELL")
+                // Episodios de Stable-Site: registran el cambio de servidora observado y su decisión
+                // entra en el análisis (LocalCellTrustEngine), así que van antes de mayPublish, como
+                // el viaje de movilidad. No enseñan nada al sitio: eso es recordStableSiteContext,
+                // que solo corre con un ciclo publicado.
+                if (activeRaw != null && activeRaw.cellId != "N/A") {
+                    val episodeObservation = dbHelper.observeStableSiteEpisodeStart(activeRaw.identityKey, stableSitePreviousIdentity)
+                    recordStableSiteEpisodeStart(episodeObservation, stableSiteCandidate)
+                }
                 val stableSiteDecision = if (activeRaw != null && activeRaw.cellId != "N/A") {
                     dbHelper.applyStableSiteDecision(stableSiteCandidate, activeRaw, siteKeys)
                 } else stableSiteCandidate
@@ -1043,8 +1377,13 @@ class MiniICService : Service() {
                 // H16 se prepara antes de analizar la celda: aquí todavía conservamos la última
                 // servidora. El resultado se retiene 20 s para que los tres ciclos temporales
                 // puedan observar el mismo handover, sin convertirlo en un fallo permanente.
+                // 3.0 — Escribe cell_transitions YA, antes de mayPublish (ver ServingTransitionTracker).
+                // Es una de las escrituras que observan un hecho real del ciclo y no dependen de que
+                // se publique: el viaje de movilidad, los episodios de Stable-Site (arriba; su
+                // decisión la usa el propio análisis) y esta transición. Lo que se aprende o se
+                // muestra (historial, incidentes, caja negra, contexto de Stable-Site) va después.
                 val transitionCoherence = if (activeRaw != null && activeRaw.cellId != "N/A") {
-                    transitionTracker.evaluate(activeRaw, currentLocation, neighbors)
+                    transitionTracker.evaluate(activeRaw, currentLocation, neighbors, serviceContinuous = !continuityBroken)
                 } else TransitionCoherenceResult()
 
                 val canQuery = activeRaw != null && activeRaw.cellId != "N/A" && currentLocation != null
@@ -1112,9 +1451,23 @@ class MiniICService : Service() {
                         )
                         if (apiLocation != null) apiLocationCache[rfSig] = apiLocation
                         else apiLocationCache.remove(rfSig)
-                        cachedRfSignature = rfSig
-                        cachedRfStability = st
-                        cachedRfTimestamp = nowRf
+                        // 3.0 — Lectura fallida de H15: null (H15 se abstiene este ciclo) y sin caché, para
+                        // reintentar en el siguiente. Una línea al empezar la racha y otra al recuperarse;
+                        // sin identificadores ni ubicación.
+                        if (st == null) {
+                            if (!rfStabilityReadFailing) {
+                                rfStabilityReadFailing = true
+                                appendLog("[H15]", "Lectura del historial RF fallida: H15 no se evalúa hasta que vuelva a leerse.")
+                            }
+                        } else {
+                            if (rfStabilityReadFailing) {
+                                rfStabilityReadFailing = false
+                                appendLog("[H15]", "Lectura del historial RF restablecida.")
+                            }
+                            cachedRfSignature = rfSig
+                            cachedRfStability = st
+                            cachedRfTimestamp = nowRf
+                        }
                         st
                     }
                 }
@@ -1186,6 +1539,7 @@ class MiniICService : Service() {
                 // The modem can briefly publish an empty neighbour list even in ordinary
                 // coverage. Do not let one such snapshot become H1 evidence that an episode can
                 // retain: require three fresh consecutive deliveries for the same serving cell.
+                // 3.0 — Una sola lectura por observación: la usan el análisis y su explicación.
                 val wifiActive = isWifiConnected()
                 val isolatedCellConfirmed = activeRaw?.let { active ->
                     isolatedCellConfidence.observe(
@@ -1194,41 +1548,55 @@ class MiniICService : Service() {
                         observationToken = observationToken
                     )
                 } ?: false
+                // 3.0 — Un módem que repite siempre la misma marca de tiempo deja H1 en N/A: decirlo una vez.
+                if (isolatedCellConfidence.stuckOnRepeatedToken) {
+                    if (!loggedStuckObservationToken) {
+                        loggedStuckObservationToken = true
+                        appendLog("[RADIO]", ISOLATED_TOKEN_STUCK_LOG)
+                    }
+                } else loggedStuckObservationToken = false
 
                 // v2.10.4 — Solo se analiza la servidora (posición 0). Las demás entradas
                 // registradas son portadoras secundarias: se muestran, no se juzgan con el
                 // historial de otra celda.
                 val analyzedList = list.mapIndexed { index, cell ->
                     if (index == 0 && cell.isRegistered) {
-                        // FIX (coherencia de score): resolver el estado de verificación conocido
-                        // (caché) ANTES de analizar, para que el bonus de VERIFIED / la penalización
-                        // de NOT_FOUND y las heurísticas que dependen de `verified` (p.ej. la supresión
-                        // de "Proximidad anómala TA") se apliquen en el MISMO ciclo. Antes se aplicaba
-                        // después, así que el securityScore registrado no reflejaba la verificación y
-                        // una celda VERIFIED podía perder hasta +15 y quedar marcada sospechosa sin
-                        // serlo. Una celda nueva sigue siendo PENDING aquí (aún no verificada): correcto.
+                        // El estado de verificación conocido (caché) se resuelve ANTES de analizar
+                        // solo para que la fila y el CSV lleven la etiqueta correcta del mismo ciclo.
+                        // Desde v2.1 no puntúa: no hay bonus por VERIFIED, ni penalización por
+                        // NOT_FOUND, ni ninguna heurística que lea `verified` (la antigua excepción de
+                        // H6 se quitó), y sus razones en el bayesiano son neutras (1.0). Una celda
+                        // nueva sigue siendo PENDING aquí (aún no verificada).
                         val knownCk = cell.identityKey
                         val knownVerified = verificationCache[knownCk] ?: VerificationStatus.PENDING
                         val analyzed = ThreatAnalyzer.analyzeThreats(
                             active = cell.copy(verified = knownVerified),
                             neighbors = neighbors,
-                            isHardwareCipheringActive = isHardwareCipheringActive,
-                            isHardwareCipheringAvailable = isHardwareCipheringAvailable,
                             cellChangeHistory = cellChangeHistory,
                             currentLocation = currentLocation,
                             preloadedHistory = preloadedHistory,
                             isWifiActive = wifiActive,
-                            isNetworkLatencyAnomalous = networkLatencyState.value == "ANOMALA",
-                            isNetworkLatencyAvailable = networkLatencyState.value != "N/A",
+                            isNetworkLatencyAnomalous = networkLatencyState.value == NetworkLatencyMonitor.STATE_ANOMALOUS,
+                            // 3.0 (#26) — Solo una medición contra la referencia (OK/ANOMALA) cuenta.
+                            isNetworkLatencyAvailable = NetworkLatencyMonitor.isMeasured(networkLatencyState.value),
                             signalBaseline = signalBaseline,
                             previousBand = prevBand,
                             previousDbm = prevRegisteredDbm,
+                            previousBandSite = prevBandSite,
+                            previousNrArfcn = prevNrArfcn,
                             recentRegisteredDbm = recentRegisteredDbmTrend.toList(),
                             rfStability = rfStability,
                             reputation = reputation,
                             rfFingerprint = rfFingerprint,
                             transitionCoherence = transitionCoherence,
-                            isolatedCellConfirmed = isolatedCellConfirmed
+                            isolatedCellConfirmed = isolatedCellConfirmed,
+                            // 3.0 — La velocidad de H10 solo vale con un fix reciente; sin marca monotónica, vieja.
+                            // Edad en la ENTREGA, no tras esperar al mutex del análisis.
+                            locationFixAgeMs = currentLocation?.elapsedRealtimeNanos?.takeIf { it > 0 }
+                                ?.let { deliveredAtElapsedMs - it / 1_000_000L },
+                            // 3.0 (corte de campaña) — H3 (servidora frente a SIM) usa el ServiceState de ESTA
+                            // lectura, el mismo que se guarda en la fila.
+                            serviceState = observationContext.service
                         ).copy(distanceToTowerMeters = towerDistance)
                         com.alexisgordr.icdetector.core.LocalCellTrustEngine.apply(
                             analyzed,
@@ -1241,25 +1609,29 @@ class MiniICService : Service() {
                     }
                 }
 
-                // v2.10.10 — Escritura de Stable-Site fuera del hilo principal. Se hacía dentro del
-                // bloque Main: hasta cuatro transacciones SQLite por ciclo que, con la base ocupada
-                // (poda, borrado), congelaban la interfaz. Sigue dentro del mutex de ciclos, así que
-                // el orden de las escrituras no cambia, y escribe exactamente lo mismo.
-                analyzedList.firstOrNull()?.takeIf { it.isRegistered }?.let { servingForSite ->
-                    siteKeys.forEach { key ->
-                        dbHelper.recordStableSiteContext(
-                            // One aggregate contribution per identity and minute. The PK also
-                            // makes retries/restarts idempotent without retaining raw snapshots.
-                            eventKey = "${System.currentTimeMillis() / 60_000L}:$key",
-                            siteKey = key,
-                            serving = activeRaw ?: servingForSite,
-                            neighbours = neighbors,
-                            motion = motionEvidence
+                val published = withContext(Dispatchers.Main) {
+                    // 3.0 (#24) — Tras analizar: si mientras tanto se perdió la señal o cambió la
+                    // servidora, este resultado ya no describe el presente. No se publica, no
+                    // alerta, no se guarda en historial/incidentes/caja negra, no enseña a
+                    // Stable-Site ni alimenta los contadores de confirmación. Las entregas llegan
+                    // por el hilo principal, así que nada puede cambiar entre esta comprobación y
+                    // el resto del bloque.
+                    if (!collectionGeneration.mayPublish(cycleTicket)) return@withContext false
+                    // 3.0 (#20) — La confirmación temporal y los episodios empiezan de nuevo después
+                    // de un hueco de cobertura. La línea del terminal deja constancia en la caja negra.
+                    coverageContinuity.acknowledge(signalLosses, deliveredAtElapsedMs)
+                    if (continuityBroken) {
+                        temporalConfidence.interrupt()
+                        threatEpisodeTracker.interrupt()
+                        appendLog(
+                            "[SEC]",
+                            if (continuityBreak == com.alexisgordr.icdetector.core.CoverageContinuity.Break.GAP) {
+                                "Continuidad interrumpida por un hueco sin lecturas: la confirmación vuelve a empezar."
+                            } else {
+                                "Continuidad interrumpida por pérdida de señal: la confirmación vuelve a empezar."
+                            }
                         )
                     }
-                }
-
-                withContext(Dispatchers.Main) {
                     // v2.10.4 — La servidora va siempre primero; nunca se reordena por potencia.
                     val analyzedServing = analyzedList.firstOrNull()?.takeIf { it.isRegistered }
                     val sorted = listOfNotNull(analyzedServing) +
@@ -1288,6 +1660,9 @@ class MiniICService : Service() {
                                     "aplicación=${when { stableSiteDecision.enforced -> "SITE_UNVERIFIED"; stableSiteDecision.wouldTrigger -> "SOMBRA: aplicaría SITE_UNVERIFIED"; else -> "NO ACTIVA" }}"
                             )
                         }
+                        // 3.0 — Aviso silencioso de Stable-Site: solo desde un ciclo que se publica
+                        // (ya pasó mayPublish), nunca desde un análisis descartado.
+                        maybeNotifyStableSite(stableSiteDecision)
                         // Observe the trust result immediately after LocalCellTrustEngine. This is
                         // a one-way evidence signal and cannot alter the detector input below.
                         // Always feed the RF contradiction tracker. A real contradiction has
@@ -1303,7 +1678,7 @@ class MiniICService : Service() {
                         // Aplicar confirmación temporal antes de alertas
                         val episode = threatEpisodeTracker.apply(
                             active,
-                            observationToken.takeIf { it > 0L },
+                            observationToken,
                             isFreshDelivery = isFreshDelivery
                         )
                         if (episode.startedWatching) {
@@ -1325,10 +1700,22 @@ class MiniICService : Service() {
                         }
                         lastLoggedPromotion = promotionLogKey
 
+                        // 3.0 — Durante un ping-pong (H10 fallida) la racha se acumula sobre el
+                        // conjunto de identidades, no sobre la celda actual: alternar entre ellas
+                        // es justo lo sospechoso y no debe reiniciarla. Mismo reloj que el
+                        // historial de cambios.
+                        val confirmationKey = com.alexisgordr.icdetector.core.PingPongRule.confirmationKey(
+                            currentIdentity = episode.cell.identityKey,
+                            history = cellChangeHistory,
+                            nowMs = System.currentTimeMillis(),
+                            pingPongFailed = episode.cell.heuristicReport.pingPong == HeuristicStatus.FAILED
+                        )
                         val temporalActive = temporalConfidence.apply(
                             episode.cell,
-                            observationToken.takeIf { it > 0L },
-                            isFreshDelivery = isFreshDelivery
+                            observationToken,
+                            isFreshDelivery = isFreshDelivery,
+                            heldWithoutEvidence = episode.heldWithoutEvidence,
+                            confirmationKey = confirmationKey
                         )
                         updateIntensiveMonitoring(
                             watching = episode.watching || stableSiteDecision.enforced,
@@ -1337,15 +1724,20 @@ class MiniICService : Service() {
                         )
                         val diagnosticInputs = com.alexisgordr.icdetector.core.DiagnosticEngine.Inputs(
                             neighborCount = neighbors.size,
-                            wifiActive = isWifiConnected(),
+                            // 3.0 — El Wi-Fi capturado para ESTE análisis: volver a consultarlo al
+                            // publicar podía explicar el resultado con otro estado (p. ej. "faltan
+                            // vecinas" para una regla que se abstuvo por Wi-Fi).
+                            wifiActive = wifiActive,
+                            isolationProgress = isolatedCellConfidence.progress to isolatedCellConfidence.required,
                             locationAvailable = currentLocation != null,
                             historyWithLocation = preloadedHistory.count { it.lat != null && it.lon != null },
-                            latencyAvailable = networkLatencyState.value != "N/A",
-                            cipheringAvailable = isHardwareCipheringAvailable,
-                            previousBandAvailable = prevBand != null && prevRegisteredDbm != null,
+                            latencyAvailable = NetworkLatencyMonitor.isMeasured(networkLatencyState.value),
+                            latencyLearning = networkLatencyState.value == NetworkLatencyMonitor.STATE_LEARNING,
+                            previousBandAvailable = (prevBand != null || prevNrArfcn != null) && prevRegisteredDbm != null,
                             signalBaseline = signalBaseline,
                             rfFingerprint = rfFingerprint,
                             rfStability = rfStability,
+                            rfStabilityReadFailed = rfStabilityReadFailing && rfStability == null,
                             reputation = reputation,
                             transitionCoherence = transitionCoherence,
                             trustGateMet = cachedTrustGate.takeIf { activeRaw != null && activeRaw.cellId != "N/A" }
@@ -1356,75 +1748,289 @@ class MiniICService : Service() {
                             ),
                             baselineMaturity = com.alexisgordr.icdetector.core.DiagnosticEngine.maturity(diagnosticInputs)
                         )
-                        // Caja negra: se actualiza fuera del hilo de UI. Registra desde 1/3 y
-                        // cierra el episodio al recuperarse o al cambiar de identidad.
-                        val previousIncidentIdentity = lastIncidentIdentity
-                        lastIncidentIdentity = if (confirmedActive.temporalProgress.active) cacheKey else null
-                        scope.launch(forensicDispatcher) {
-                            if (previousIncidentIdentity != null && previousIncidentIdentity != cacheKey) {
-                                dbHelper.closeOpenIncidents(previousIncidentIdentity, interrupted = true)
-                            }
-                            if (confirmedActive.temporalProgress.active) {
-                                dbHelper.recordIncidentPhase(confirmedActive)
-                            } else {
-                                dbHelper.closeOpenIncidents(cacheKey, interrupted = false)
-                            }
+                        // 3.0 — Orden de la publicación: primero lo que hace el ciclo visible y válido
+                        // (verificación lanzada, contexto del próximo ciclo, pantalla y salud) y
+                        // después sus efectos (incidentes, caja negra, historial y alertas). Antes las
+                        // alertas y escrituras iban delante: un fallo en la cola dejaba una alarma
+                        // enviada con la pantalla vieja y «análisis no disponible».
+
+                        // 1. Verificación externa: dispara trabajo aparte y no forma parte de los
+                        // invariantes del ciclo; un fallo suyo no puede tirar la publicación. Va antes
+                        // de leer finalStatus porque marca la celda como pendiente al instante.
+                        try {
+                            verificationController.verify(active)
+                        } catch (e: CancellationException) {
+                            throw e
+                        } catch (e: Exception) {
+                            Log.w("MiniIC", "No se pudo lanzar la verificación externa (${e.javaClass.simpleName}).")
                         }
 
-                        // Captura forense pasiva. Recibe una copia del ciclo ya resuelto, jamás
-                        // devuelve datos al detector y por tanto no puede alterar su veredicto.
-                        //
-                        // v2.8.0 — Va por [forensicDispatcher], igual que los incidentes. Con
-                        // Dispatchers.IO (64 hilos) dos ciclos seguidos podían entrar a la vez: el
-                        // mutex interno del grabador los ordena, pero no garantiza EN QUÉ orden, y
-                        // un caso cuyo prebúfer se vuelca detrás de la muestra que lo disparó deja
-                        // de ser una línea de tiempo. Un solo hilo serializa la escritura de verdad.
-                        scope.launch(forensicDispatcher) {
-                            forensicRecorder.observe(
-                                active = confirmedActive.copy(verified = knownStatus),
-                                neighbors = neighbors,
-                                location = currentLocation,
-                                latencyState = networkLatencyState.value,
-                                logs = liveLogs.value,
-                                trustContradictionTransition = trustContradictionTransition
-                            )
-                        }
-
-                        // 2. Lanzar alertas y registro con el estado actual
-                        checkAlerts(confirmedActive.copy(verified = knownStatus), confirmed = true)
-
-                        // 3. Iniciar proceso de verificación (solo si es necesario)
-                        verificationController.verify(active)
-                        
                         val finalStatus = verificationCache[cacheKey] ?: knownStatus
-                        
-                        _cellFlow.value = sorted.mapIndexed { index, cell ->
-                            if (index == 0) confirmedActive.copy(verified = finalStatus) else cell
-                        }
-                        
-                        updateNotification(confirmedActive.copy(verified = finalStatus))
 
-                        // Actualizar estado de banda para la heurística 14 (tras el análisis,
-                        // de modo que el PRÓXIMO ciclo compare contra estos valores).
+                        // 2. Contexto de banda para la heurística 14 (tras el análisis, de modo que el
+                        // PRÓXIMO ciclo compare contra estos valores).
                         val isLteActive = active.radioTech == RadioTech.LTE
                         prevBand = if (isLteActive) {
                             active.band ?: active.arfcn?.let { com.alexisgordr.icdetector.core.BandPlan.earfcnToBandLte(it) }
                         } else null
+                        prevBandSite = com.alexisgordr.icdetector.core.LteSite.key(active)
+                        prevNrArfcn = active.arfcn.takeIf { active.radioTech == RadioTech.NR }
                         prevRegisteredDbm = active.dbm
                         if (active.dbm != Int.MAX_VALUE && active.dbm != -999) {
                             recentRegisteredDbmTrend.add(active.dbm)
                             while (recentRegisteredDbmTrend.size > 6) recentRegisteredDbmTrend.removeAt(0)
                         }
+
+                        // 3. El resultado visible y su fecha de validez se publican juntos, sin nada
+                        // entre medias que pueda fallar: la pantalla nunca enseña un resultado nuevo
+                        // con la salud del anterior.
+                        _cellFlow.value = sorted.mapIndexed { index, cell ->
+                            if (index == 0) confirmedActive.copy(verified = finalStatus) else cell
+                        }
+                        val recovered = onAnalysisPublished(cycleTicket)
+                        // La notificación es presentación: si falla, no es un fallo del análisis.
+                        // Al recuperarse se fuerza, para que el aviso no quede por el límite de 2 s.
+                        publishNotification { updateNotification(confirmedActive.copy(verified = finalStatus), force = recovered) }
+
+                        // 4. Efectos del ciclo ya publicado. Si fallan, el resultado en pantalla sigue
+                        // siendo válido: no se marca «no disponible»; una línea [SYS] por racha dice
+                        // que puede faltar esa parte (ver publicationTail).
+                        publicationTail {
+                            // Caja negra: se actualiza fuera del hilo de UI. Registra desde 1/3 y
+                            // cierra el episodio al recuperarse o al cambiar de identidad.
+                            val previousIncidentIdentity = lastIncidentIdentity
+                            lastIncidentIdentity = if (confirmedActive.temporalProgress.active) cacheKey else null
+                            writeGate.launch(scope, forensicDispatcher) {
+                                if (previousIncidentIdentity != null && previousIncidentIdentity != cacheKey) {
+                                    dbHelper.closeOpenIncidents(previousIncidentIdentity, interrupted = true)
+                                }
+                                if (confirmedActive.temporalProgress.active) {
+                                    dbHelper.recordIncidentPhase(confirmedActive)
+                                } else {
+                                    dbHelper.closeOpenIncidents(cacheKey, interrupted = false)
+                                }
+                            }
+
+                            // Captura forense pasiva. Recibe una copia del ciclo ya resuelto, jamás
+                            // devuelve datos al detector y por tanto no puede alterar su veredicto.
+                            //
+                            // v2.8.0 — Va por [forensicDispatcher], igual que los incidentes. Con
+                            // Dispatchers.IO (64 hilos) dos ciclos seguidos podían entrar a la vez: el
+                            // mutex interno del grabador los ordena, pero no garantiza EN QUÉ orden, y
+                            // un caso cuyo prebúfer se vuelca detrás de la muestra que lo disparó deja
+                            // de ser una línea de tiempo. Un solo hilo serializa la escritura de verdad.
+                            writeGate.launch(scope, forensicDispatcher) {
+                                forensicRecorder.observe(
+                                    active = confirmedActive.copy(verified = knownStatus),
+                                    neighbors = nonServingContext,
+                                    location = currentLocation,
+                                    latencyState = networkLatencyState.value,
+                                    logs = liveLogs.value,
+                                    trustContradictionTransition = trustContradictionTransition
+                                )
+                            }
+
+                            // Alertas y registro (fila de historial) con el estado de esta entrega.
+                            checkAlerts(
+                                confirmedActive.copy(verified = knownStatus),
+                                confirmed = true,
+                                context = observationContext,
+                                episodeKey = confirmationKey
+                            )
+                        }
                     } else {
                         stableSiteIntensiveActive = false
                         _cellFlow.value = emptyList()
-                        updateNotificationText(getString(R.string.searching_network))
+                        val recovered = onAnalysisPublished(cycleTicket)
+                        publishNotification {
+                            updateNotificationText(getString(R.string.searching_network), force = recovered, kind = com.alexisgordr.icdetector.core.MonitoringNotificationText.TextKind.NO_SIGNAL)
+                        }
                     }
+                    true
+                }
+
+                // v2.10.10 — Escritura de Stable-Site fuera del hilo principal. Se hacía dentro del
+                // bloque Main: hasta cuatro transacciones SQLite por ciclo que, con la base ocupada
+                // (poda, borrado), congelaban la interfaz. Sigue dentro del mutex de ciclos.
+                // 3.0 — Solo un ciclo limpio, sin racha de confirmación ni episodio abierto, enseña
+                // a Stable-Site (ver StableSiteContextPolicy).
+                // 3.0 (corte de campaña) — Y solo un ciclo PUBLICADO: antes se escribía antes de
+                // mayPublish, así que un análisis descartado (la servidora cambió mientras tanto) no
+                // se mostraba ni alertaba, pero enseñaba al sitio. Ahora va detrás de la publicación,
+                // y la confirmación y el episodio que lee son los de ESTE ciclo, ya actualizados.
+                if (published) analyzedList.firstOrNull()?.takeIf { it.isRegistered }?.takeIf { servingForSite ->
+                    com.alexisgordr.icdetector.core.StableSiteContextPolicy.mayLearn(
+                        servingForSite,
+                        inConfirmation = temporalConfidence.inConfirmation,
+                        episodeOpen = threatEpisodeTracker.hasOpenEpisode()
+                    )
+                }?.let { servingForSite ->
+                    siteKeys.forEach { key ->
+                        dbHelper.recordStableSiteContext(
+                            // One aggregate contribution per identity and minute. The PK also
+                            // makes retries/restarts idempotent without retaining raw snapshots.
+                            eventKey = "${System.currentTimeMillis() / 60_000L}:$key",
+                            siteKey = key,
+                            serving = activeRaw ?: servingForSite,
+                            neighbours = neighbors,
+                            motion = motionEvidence
+                        )
+                    }
+                }
                 }
                 }
             }
         } catch (e: Exception) {
-            e.printStackTrace()
+            // 3.0 — Antes solo printStackTrace: la entrega se perdía sin línea de terminal ni cambio
+            // de salud, y la pantalla seguía enseñando el último resultado como actual. Si el fallo
+            // llega después de deliver(), esa generación nueva ya invalidó al ciclo anterior en curso
+            // y ninguno publicará. Mismo contrato que el análisis: el tipo, nunca el mensaje.
+            onDeliveryFailed(deliveredTicket, e.javaClass.simpleName)
+        }
+    }
+
+    /**
+     * 3.0 — Fallo de una entrega en el hilo principal, antes de lanzar su ciclo. Con ticket, es el
+     * fallo de ese ciclo (onAnalysisFailed); sin él, la salud se marca igual, sin generación.
+     */
+    private fun onDeliveryFailed(ticket: com.alexisgordr.icdetector.core.CollectionGeneration.Ticket?, errorType: String) {
+        if (ticket != null) {
+            onAnalysisFailed(ticket, errorType)
+            return
+        }
+        val change = analysisHealthTracker.onDeliveryFailed()
+        _analysisHealth.value = analysisHealthTracker.state
+        if (change == com.alexisgordr.icdetector.core.AnalysisHealth.Change.BECAME_UNAVAILABLE) {
+            appendLog("[SYS]", "${com.alexisgordr.icdetector.core.AnalysisHealth.FAILURE_LOG} [$errorType]")
+            publishNotification { updateNotificationText(getString(R.string.analysis_unavailable), force = true) }
+        }
+    }
+
+    /**
+     * 3.0 — Fallo de un ciclo de análisis, en el hilo principal. Solo cambia la salud si el ciclo
+     * aún podía publicar (ver AnalysisHealth); un ciclo ya descartado no afecta a la generación nueva.
+     * No publica nada, no alerta y no reintenta.
+     *
+     * Límites (efectos parciales): lo que el ciclo hizo antes de fallar se queda, una sola vez. En
+     * segundo plano: trayecto de movilidad, episodio y decisión de Stable-Site, contexto de sitio por
+     * minuto, cachés de lecturas, racha de aislamiento de H1 y la transición de H16 (cell_transitions).
+     * Al publicar, si el fallo llega antes de la pantalla: episodio y confirmación temporal pueden
+     * haber avanzado, pero aún no se ha escrito la fila del historial, el incidente ni la muestra
+     * forense, ni se ha lanzado ninguna alerta: todo eso va después de publicar (publicationTail).
+     * No es una transacción global; no se deshace ni se repite nada. La siguiente entrega es una
+     * observación nueva, no un reintento.
+     */
+    /**
+     * 3.0 — Ciclo de análisis (IO, bajo cellProcessingMutex): si este ciclo abrió un episodio,
+     * anota si empezó con el sitio maduro (ver StableSiteNotices.pendingAfterObservation). commit():
+     * el pendiente debe estar en disco antes de que el ciclo pueda avisar.
+     */
+    private fun recordStableSiteEpisodeStart(
+        observation: com.alexisgordr.icdetector.core.StableSiteEpisodeObservation,
+        siteAtStart: com.alexisgordr.icdetector.core.StableSiteDecision
+    ) {
+        val notices = com.alexisgordr.icdetector.core.StableSiteNotices
+        val prefs = getSharedPreferences(com.alexisgordr.icdetector.backup.BackupSettings.PREFS_FILE, MODE_PRIVATE)
+        val pending = prefs.getString(notices.PREF_PENDING_EPISODE, null)
+        val next = notices.pendingAfterObservation(pending, observation, siteAtStart)
+        if (next == pending) return
+        prefs.edit().apply { if (next == null) remove(notices.PREF_PENDING_EPISODE) else putString(notices.PREF_PENDING_EPISODE, next) }.commit()
+    }
+
+    /**
+     * 3.0 — Aviso silencioso de Stable-Site (ver StableSiteNotices). Se llama en el hilo principal,
+     * dentro del bloque de publicación y después de collectionGeneration.mayPublish: un análisis
+     * descartado nunca avisa y su pendiente se conserva para el siguiente ciclo válido.
+     * Solo informa: no toca la puntuación, la confianza temporal ni las alarmas. El episodio ya
+     * está guardado; si la notificación falla o Android la bloquea, el análisis sigue igual.
+     */
+    private fun maybeNotifyStableSite(decision: com.alexisgordr.icdetector.core.StableSiteDecision) {
+        val notices = com.alexisgordr.icdetector.core.StableSiteNotices
+        val prefs = getSharedPreferences(com.alexisgordr.icdetector.backup.BackupSettings.PREFS_FILE, MODE_PRIVATE)
+        val enabled = prefs.getBoolean(notices.PREF_ENABLED, notices.DEFAULT_ENABLED)
+        val pending = prefs.getString(notices.PREF_PENDING_EPISODE, null)
+        val action = notices.decide(decision, enabled, pending)
+        if (action == com.alexisgordr.icdetector.core.StableSiteNotices.Action.NONE) return
+        val episodeId = decision.episodeId ?: return
+        // Se consume ANTES de intentar publicar (commit síncrono): como mucho un aviso por episodio,
+        // aunque el proceso muera justo después.
+        prefs.edit().remove(notices.PREF_PENDING_EPISODE).commit()
+        if (action == com.alexisgordr.icdetector.core.StableSiteNotices.Action.CONSUME_SILENTLY) {
+            appendLog("[SITE]", notices.LOG_DISABLED)
+            return
+        }
+        val posted = try {
+            notificationController.showStableSiteNotice(episodeId)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            Log.w("MiniIC", "Stable-Site notice failed (${e.javaClass.simpleName})")
+            null
+        }
+        appendLog("[SITE]", when (posted) {
+            true -> notices.LOG_POSTED
+            false -> notices.LOG_BLOCKED
+            null -> notices.LOG_FAILED
+        })
+    }
+
+    private fun onAnalysisFailed(ticket: com.alexisgordr.icdetector.core.CollectionGeneration.Ticket, errorType: String) {
+        val change = analysisHealthTracker.onCycleFailed(ticket.generation, collectionGeneration.mayPublish(ticket))
+        _analysisHealth.value = analysisHealthTracker.state
+        if (change == com.alexisgordr.icdetector.core.AnalysisHealth.Change.BECAME_UNAVAILABLE) {
+            appendLog("[SYS]", "${com.alexisgordr.icdetector.core.AnalysisHealth.FAILURE_LOG} [$errorType]")
+            publishNotification { updateNotificationText(getString(R.string.analysis_unavailable), force = true) }
+        }
+    }
+
+    /**
+     * 3.0 — El resultado de un ciclo válido acaba de publicarse en pantalla (hilo principal): su fecha
+     * de validez pasa a ser ahora. Devuelve true si cierra una racha de fallos, para forzar el
+     * repintado de la notificación.
+     */
+    private fun onAnalysisPublished(ticket: com.alexisgordr.icdetector.core.CollectionGeneration.Ticket): Boolean {
+        val change = analysisHealthTracker.onCyclePublished(ticket.generation, System.currentTimeMillis())
+        _analysisHealth.value = analysisHealthTracker.state
+        if (change == com.alexisgordr.icdetector.core.AnalysisHealth.Change.RECOVERED) {
+            appendLog("[SYS]", com.alexisgordr.icdetector.core.AnalysisHealth.RECOVERY_LOG)
+            return true
+        }
+        return false
+    }
+
+    private var publicationTailFailing = false
+
+    /**
+     * 3.0 — Efectos de un ciclo YA publicado (incidentes, caja negra, historial, alertas). Un fallo
+     * aquí no es un fallo del análisis: el resultado en pantalla es válido y no se marca «no
+     * disponible». Una línea [SYS] al empezar una racha, con el tipo de error, nunca el mensaje; lo
+     * que llegó a hacerse antes del fallo se queda, sin repetirlo.
+     */
+    private inline fun publicationTail(block: () -> Unit) {
+        try {
+            block()
+            publicationTailFailing = false
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Throwable) {
+            if (!publicationTailFailing) {
+                publicationTailFailing = true
+                appendLog("[SYS]", "${com.alexisgordr.icdetector.core.AnalysisHealth.TAIL_FAILURE_LOG} [${e.javaClass.simpleName}]")
+            }
+        }
+    }
+
+    /**
+     * 3.0 — Actualizar la notificación sin que un fallo suyo pase por fallo del análisis: el resultado
+     * ya está publicado y es válido. Solo se anota en el registro del sistema, con el tipo de error.
+     */
+    private inline fun publishNotification(block: () -> Unit) {
+        try {
+            block()
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            Log.w("MiniIC", "No se pudo actualizar la notificación de monitorización (${e.javaClass.simpleName}).")
         }
     }
 
@@ -1439,11 +2045,15 @@ class MiniICService : Service() {
     private fun restoreTaSanityEvidence() {
         try {
             val p = getSharedPreferences("miniic_prefs", MODE_PRIVATE)
-            val seenReal = p.getBoolean(KEY_TA_SEEN_REAL, false)
-            val cells = p.getStringSet(KEY_TA_ZERO_CELLS, emptySet()).orEmpty()
-            if (!seenReal && cells.isEmpty()) return
-            taSanity.restore(seenReal, cells)
-            if (taSanity.isStub) {
+            // 3.0 (#33) — Una clave por unidad. Las claves globales de versiones anteriores
+            // (ta_seen_real_value, ta_zero_only_cells) no dicen de qué tecnología vinieron y NO se
+            // leen: cada unidad empieza vacía y se rederiva en unos minutos de uso.
+            com.alexisgordr.icdetector.core.TimingAdvanceSanity.EVIDENCE_UNITS.forEach { unit ->
+                val seenReal = p.getBoolean(KEY_TA_SEEN_REAL_PREFIX + unit.name, false)
+                val cells = p.getStringSet(KEY_TA_ZERO_CELLS_PREFIX + unit.name, emptySet()).orEmpty()
+                if (seenReal || cells.isNotEmpty()) taSanity.restore(unit, seenReal, cells)
+            }
+            if (taSanity.anyStub) {
                 appendLog(
                     "[TA]",
                     "Diagnóstico de TA recuperado del arranque anterior: el módem no rellena el campo " +
@@ -1456,26 +2066,42 @@ class MiniICService : Service() {
     /** Guarda la evidencia de TA. Se llama solo cuando [TimingAdvanceSanity.observe] dice que cambió. */
     private fun persistTaSanityEvidence() {
         try {
-            getSharedPreferences("miniic_prefs", MODE_PRIVATE).edit()
-                .putBoolean(KEY_TA_SEEN_REAL, taSanity.hasSeenRealValue)
-                .putStringSet(KEY_TA_ZERO_CELLS, taSanity.zeroOnlyCellKeys)
-                .apply()
+            val editor = getSharedPreferences("miniic_prefs", MODE_PRIVATE).edit()
+            com.alexisgordr.icdetector.core.TimingAdvanceSanity.EVIDENCE_UNITS.forEach { unit ->
+                editor.putBoolean(KEY_TA_SEEN_REAL_PREFIX + unit.name, taSanity.hasSeenRealValue(unit))
+                    .putStringSet(KEY_TA_ZERO_CELLS_PREFIX + unit.name, taSanity.zeroOnlyCellKeys(unit))
+            }
+            editor.apply()
         } catch (_: Exception) {}
     }
+
+    /** Same position checks as analysis, plus GPS availability; never starts acquisition. */
+    fun hasUsableGpsFix(): Boolean =
+        ::locationController.isInitialized && locationController.hasUsableGpsFix()
 
     private fun getCurrentLocation(): Location? {
         return locationController.currentLocation()
     }
 
+    /** 3.0 (A03) — Posición de una observación, sin depender de Android a partir de aquí. */
+    private fun Location.toObservedFix() = com.alexisgordr.icdetector.core.ObservedFix(
+        latitude = latitude,
+        longitude = longitude,
+        accuracyM = if (hasAccuracy()) accuracy else null
+    )
+
     private fun observeMotionFix(location: Location) {
-        latestMotionEvidence = stableSiteMotion.observe(
+        // 3.0 — Orden, frescura y duración con el reloj monotónico del fix (elapsedRealtimeNanos),
+        // comparado con SystemClock.elapsedRealtime. location.time (hora del GPS/civil) ya no entra.
+        stableSiteMotion.observe(
             com.alexisgordr.icdetector.core.MotionFix(
                 location.latitude,
                 location.longitude,
-                location.time,
+                location.elapsedRealtimeNanos / 1_000_000L,
                 location.accuracy,
                 if (location.hasSpeed()) location.speed else null
-            )
+            ),
+            SystemClock.elapsedRealtime()
         )
     }
 
@@ -1534,9 +2160,6 @@ class MiniICService : Service() {
     private fun isLatencyProbeActive(): Boolean =
         isLatencyDetectionEnabled && !isWifiConnected() && !isVpnActive() && !isProxyEnabled
 
-    // Estado "idle" del indicador tras un handover: "OK" solo si la sonda puede medir;
-    // si no, "N/A" para no afirmar un estado de red sin verificación.
-    private fun idleLatencyState(): String = if (isLatencyProbeActive()) "OK" else "N/A"
 
     private fun onGpsAvailable() {
         val now = System.currentTimeMillis()
@@ -1574,7 +2197,7 @@ class MiniICService : Service() {
             val coordAgeMs = System.currentTimeMillis() - loc.time
             if (coordAgeMs < 15000L) {
                 locationController.resolvePendingCoordinates()
-                scope.launch(Dispatchers.IO) {
+                writeGate.launch(scope, Dispatchers.IO) {
                     val updated = dbHelper.updateNullCoordinates(
                         currentCell.cellId,
                         currentCell.mnc,
@@ -1583,7 +2206,8 @@ class MiniICService : Service() {
                         currentCell.radioTech,
                         loc.latitude,
                         loc.longitude,
-                        fixTimeMs = loc.time
+                        fixTimeMs = loc.time,
+                        accuracyM = loc.takeIf { it.hasAccuracy() }?.accuracy
                     )
                     if (updated > 0) {
                         appendLog("[GPS]", "Coordenadas frescas rellenadas en $updated registro(s)")
@@ -1652,7 +2276,12 @@ class MiniICService : Service() {
         }
     }
 
-    private fun checkAlerts(cell: CellData, confirmed: Boolean = false) {
+    private fun checkAlerts(
+        cell: CellData,
+        confirmed: Boolean,
+        context: com.alexisgordr.icdetector.core.ObservationContext,
+        episodeKey: String = cell.identityKey
+    ) {
         val cid = cell.cellId
         val dbm = cell.dbm
         val net = cell.networkType
@@ -1666,20 +2295,26 @@ class MiniICService : Service() {
         // nueva volverá a "OK"/"ANOMALA" según sus propias mediciones una vez aprenda su baseline.
         resetLatencyIfCellChanged(cell)
 
-        if (cid != prevCid) {
+        // 3.0 (#19) — Handover = cambia la identidad completa (MCC, MNC, TAC, CID o tecnología),
+        // no solo el CID. Un campo desconocido en un lado no cuenta como cambio.
+        // 3.0 — Un CID ilegible («N/A») no abre handover ni reinicia el episodio de alarma; la
+        // identidad anterior solo completa sus campos desconocidos (ServingIdentityChange.step).
+        val servingIdentity = com.alexisgordr.icdetector.core.ServingIdentityChange.of(cell)
+        val identityStep = com.alexisgordr.icdetector.core.ServingIdentityChange.step(prevServingIdentity, servingIdentity)
+        if (identityStep.handover) {
             telemetryHistory.onHandover()
-            securityAlerts.resetAlarmEpisode()
+            // 3.0 — Cierra el episodio de alarma, salvo el de un ping-pong (ver AlarmEpisodeGate).
+            securityAlerts.onHandover()
             appendLog("[RADIO]", "Handover celular completado -> Nueva celda CID: $cid ($net)")
             // Esta celda queda pendiente de coordenadas frescas hasta que un fix las rellene.
             locationController.markCoordinatesPending()
-            // El stream GPS permanece activo 24/7. Este listener puntual da prioridad al handover
-            // si todavía no existe un fix contemporáneo; conserva el debounce y single-flight.
-            requestHighAccuracyFix()
+            // Inteligente: una antena nueva abre o alarga una ventana de GPS de 60 s (con mala
+            // recepción, un intento corto); una antena reciente no encadena ventanas.
+            locationController.onHandover(servingIdentity.key, prevServingIdentity?.key)
             auditController.generate(cell)
 
-            val currentTime = System.currentTimeMillis()
-            cellChangeHistory.add(Pair(cid, currentTime))
-            cellChangeHistory.removeAll { currentTime - it.second > ThreatAnalyzer.PING_PONG_WINDOW_MS }
+            // 3.0 (corte de campaña) — El cambio ya está en el historial de H10 desde que llegó la lectura
+            // (cellChanges.observe, antes del análisis).
 
             // El informe de heurísticas es la observación cruda del ciclo. No debe producir un
             // tono aquí: TemporalConfidence necesita tres ciclos antes de convertirla en alarma.
@@ -1689,7 +2324,7 @@ class MiniICService : Service() {
                 // Evidencia para la campaña, sin alerta: el informe sigue siendo crudo y todavía
                 // no ha superado los tres ciclos de TemporalConfidence.
                 appendLog("[RADIO]", "Ping-Pong observado (sin confirmar; sin tono).")
-            } else if (cellChangeHistory.size >= 3) {
+            } else if (cellChanges.size >= 3) {
                 // v2.10.7 — Antes afirmaba que la alerta se descartaba, pero esta rama no decide nada: H10 se
                 // evalúa en ThreatAnalyzer y puede confirmarse en los ciclos siguientes. Texto
                 // neutro; la lógica no cambia.
@@ -1702,34 +2337,39 @@ class MiniICService : Service() {
                 }
             }
 
-            observationPersistence.recordHandover(cell)
+            observationPersistence.recordHandover(cell, context)
 
-            prevCid = cid
-        } else if (confirmed) {
+            prevServingIdentity = identityStep.next
+        } else {
+            prevServingIdentity = identityStep.next
+        }
+        if (!identityStep.handover && confirmed) {
             // Misma celda que en el ciclo anterior: muestreo periódico (ver más abajo). Solo en la
             // ruta del bucle principal (confirmed = true), nunca en la de re-análisis tras la API,
             // para no duplicar filas por el mismo instante.
-            observationPersistence.recordPeriodicIfDue(cell, isScreenOn)
+            observationPersistence.recordPeriodicIfDue(cell, isScreenOn, context)
         }
 
         telemetryHistory.record(cell)
 
-        securityAlerts.evaluate(cell, confirmed)
+        securityAlerts.evaluate(cell, confirmed, context, episodeKey)
     }
 
-    private fun updateNotification(cell: CellData) {
-        val vStatus = when (cell.verified) {
-            VerificationStatus.VERIFIED -> getString(R.string.verified_label)
+    private fun updateNotification(cell: CellData, force: Boolean = false) {
+        // 3.0 — Sin token no hay nada pendiente: la comprobación está desactivada (PublicDbNote).
+        val vStatus = when (com.alexisgordr.icdetector.core.PublicDbNote.of(cell.verified, verificationConfig.current().hasCredentials)) {
+            com.alexisgordr.icdetector.core.PublicDbNote.REGISTERED -> getString(R.string.verified_label)
             // El aspa roja sobraba: que una base colaborativa no conozca una antena no es un fallo
             // de la antena ni un indicio de nada, y desde v2.1 tampoco resta puntos. La
             // notificación lo dice como lo que es, un dato de contexto.
-            VerificationStatus.NOT_FOUND -> getString(R.string.not_found_label)
-            VerificationStatus.REJECTED -> getString(R.string.rejected_label)
-            VerificationStatus.ERROR -> getString(R.string.api_error_label)
-            VerificationStatus.PENDING -> getString(R.string.pending_label)
+            com.alexisgordr.icdetector.core.PublicDbNote.NOT_FOUND -> getString(R.string.not_found_label)
+            com.alexisgordr.icdetector.core.PublicDbNote.REJECTED -> getString(R.string.rejected_label)
+            com.alexisgordr.icdetector.core.PublicDbNote.ERROR -> getString(R.string.api_error_label)
+            com.alexisgordr.icdetector.core.PublicDbNote.QUERYING -> getString(R.string.pending_label)
+            com.alexisgordr.icdetector.core.PublicDbNote.CHECK_OFF_NO_TOKEN -> getString(R.string.public_db_off_label)
         }
         val content = "$vStatus | ${cell.networkType} | CID: ${cell.cellId} | ${cell.dbm} dBm"
-        updateNotificationText(content)
+        updateNotificationText(content, force)
     }
 
     /**
@@ -1753,20 +2393,34 @@ class MiniICService : Service() {
         }
     }
 
-    private var lastNotificationTime = 0L
+    /** 3.0 — Prioridad y límite de repintado de la notificación (ver MonitoringNotificationText). */
+    private val monitoringNotificationText = com.alexisgordr.icdetector.core.MonitoringNotificationText()
+
     @Synchronized
-    private fun updateNotificationText(text: String, force: Boolean = false) {
+    private fun updateNotificationText(
+        text: String,
+        force: Boolean = false,
+        kind: com.alexisgordr.icdetector.core.MonitoringNotificationText.TextKind =
+            com.alexisgordr.icdetector.core.MonitoringNotificationText.TextKind.OTHER
+    ) {
         // Throttle: no repintar la notificación más de una vez cada 2 s. El callback de telefonía
         // puede dispararse muchas veces por segundo en zonas de transición; repintar cada vez satura
         // el System Server (IPC + batería) y Android acaba silenciando con "rate limit exceeded".
         // Los datos (BD, logs y el TONO de alarma) van en tiempo real por su cuenta: esto solo
         // limita el DIBUJO visual de la notificación, no la detección ni el registro.
+        // 3.0 — El texto se resuelve con el estado de salud en CADA actualización: mientras el
+        // análisis no esté disponible, ningún otro texto (salvo falta de señal) lo sustituye. Se lee
+        // del StateFlow, seguro desde cualquier hilo.
         val now = System.currentTimeMillis()
-        if (!force && now - lastNotificationTime < 2000L) return
-        lastNotificationTime = now
+        val resolved = monitoringNotificationText.next(
+            requested = text, kind = kind, force = force,
+            analysisUnavailable = _analysisHealth.value.unavailable,
+            unavailableText = getString(R.string.analysis_unavailable),
+            nowMs = now
+        ) ?: return
         // Un fallo de escritura tapa cualquier otro texto: es la única condición en la que la app
         // parece funcionar y no está recogiendo nada.
-        val visible = collectionHealthController.visibleNotification(text, now)
+        val visible = collectionHealthController.visibleNotification(resolved, now)
         notificationController.notifyForeground(visible)
     }
 
@@ -1782,18 +2436,10 @@ class MiniICService : Service() {
         return telephonyController.displayNetworkType()
     }
 
-    /**
-     * Escribe en el terminal el resultado de una celda **después** de que las bases públicas
-     * contesten, y solo si esa celda es la que tiene la auditoría escrita y su estado ha cambiado
-     * desde entonces.
-     *
-     * Existe porque el terminal miente por omisión: la auditoría se genera en el handover, con la
-     * celda todavía PENDING, y ahí puede leerse "100% — entorno SEGURO". La verificación llega
-     * después y cambia la etiqueta de la celda, pero nadie reescribía nada:
-     * quedaban a la vista dos cifras distintas —la del terminal y la de la cabecera— sin ninguna
-     * pista de que una era historia y la otra el presente.
-     */
     companion object {
+        /** 3.0 — Ver IsolatedCellConfidence.stuckOnRepeatedToken. */
+        const val ISOLATED_TOKEN_STUCK_LOG =
+            "H1 en N/A: el módem repite la misma marca de tiempo en sus lecturas, así que no se puede confirmar una celda aislada."
         const val CHANNEL_ID = ServiceNotificationController.CHANNEL_ID
         const val ALERT_CHANNEL_ID = ServiceNotificationController.ALERT_CHANNEL_ID
         const val NOTIFICATION_ID = ServiceNotificationController.NOTIFICATION_ID
@@ -1804,8 +2450,9 @@ class MiniICService : Service() {
         const val MAX_TRACKED_CELLS = 500
         // v2.5 — Evidencia del diagnóstico de Timing Advance, superviviente a reinicios del
         // servicio. Ver TimingAdvanceSanity: se guarda la evidencia, nunca el veredicto.
-        private const val KEY_TA_SEEN_REAL = "ta_seen_real_value"
-        private const val KEY_TA_ZERO_CELLS = "ta_zero_only_cells"
+        // 3.0 (#33) — Por unidad: ta_seen_real_LTE_INDEX, ta_zero_cells_GSM_INDEX, …
+        private const val KEY_TA_SEEN_REAL_PREFIX = "ta_seen_real_"
+        private const val KEY_TA_ZERO_CELLS_PREFIX = "ta_zero_cells_"
         // Ciclos consecutivos de sospecha necesarios para confirmar una alarma.
         private const val CONFIRMATION_CYCLES = 3
         private const val INTENSIVE_MONITORING_TAIL_MS = 60_000L
@@ -1813,5 +2460,6 @@ class MiniICService : Service() {
         private const val UI_VISIBLE_SCAN_INTERVAL_MS = 1_000L
         private const val SCREEN_ON_SCAN_INTERVAL_MS = 3_000L
         private const val SCREEN_OFF_SCAN_INTERVAL_MS = 10_000L
+
     }
 }

@@ -1,0 +1,8 @@
+3.0.0 — instalación limpia desde 2.10.x: exportar, desinstalar, instalar.
+
+• Cada fila guarda hora UTC, precisión GPS, versión y reglas no evaluadas.
+• Entradas de las reglas más fiables y confirmación más estricta; motor auditado.
+• H3 mira la SIM; H8 es calidad de dato; femtoceldas conocidas exentas.
+• Copias de seguridad, modos de ubicación, perfil local (sombra).
+• Sin token de OpenCellID, la comprobación de base pública aparece desactivada.
+• Requiere Android 12 o posterior.

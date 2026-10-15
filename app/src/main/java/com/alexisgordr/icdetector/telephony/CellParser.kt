@@ -2,13 +2,15 @@ package com.alexisgordr.icdetector.telephony
 
 import android.os.Build
 import android.telephony.*
-import androidx.annotation.RequiresApi
 import com.alexisgordr.icdetector.models.CellConnectionState
 import com.alexisgordr.icdetector.models.CellData
 import com.alexisgordr.icdetector.models.CsgInfo
 import com.alexisgordr.icdetector.models.RadioTech
 import com.alexisgordr.icdetector.models.TimingAdvanceUnit
 import com.alexisgordr.icdetector.core.BandPlan
+import com.alexisgordr.icdetector.core.NeighbourPlaceholders
+import com.alexisgordr.icdetector.core.RadioChannels
+import com.alexisgordr.icdetector.core.TimingAdvanceInput
 
 object CellParser {
 
@@ -38,6 +40,9 @@ object CellParser {
     // OpenCellID pidiendo radio=UMTS. Hay un test por cada una de las cuatro clases.
 
 
+    // 3.0 — PCI, PSC y canales: solo `CellInfo.UNAVAILABLE` (Int.MAX_VALUE) pasa a null
+    // (RadioChannels.unavailableToNull). Un valor medido fuera de rango se guarda tal cual: H8 lo
+    // juzga. Antes el centinela llegaba como 2147483647 al historial y a H11.
     fun parseCell(info: CellInfo, networkTypeString: String, mcc: String, mnc: String): CellData? {
         val reg = info.isRegistered
 
@@ -51,69 +56,46 @@ object CellParser {
                     .let { if (it == Int.MAX_VALUE) null else it }
                 val sinr = info.cellSignalStrength.rssnr
                     .let { if (it == Int.MAX_VALUE) null else it }
-                // TA de LTE: SIEMPRE un índice (1 unidad ≈ 78 m), tanto por el getter como por el
-                // raspado de reserva, que lee el mismo campo impreso de CellSignalStrengthLte.
-                var ta = info.cellSignalStrength.timingAdvance.let { if (it == Int.MAX_VALUE) null else it }
-                if (ta == null) {
-                    try {
-                        val rawString = info.cellSignalStrength.toString()
-                        val taMatch = TA_REGEX.find(rawString)
-                        if (taMatch != null) {
-                            val extracted = taMatch.groupValues[1].toIntOrNull()
-                            if (extracted != null && extracted != Int.MAX_VALUE) ta = extracted
-                        }
-                    } catch (_: Exception) {}
-                }
-                CellData(reg, networkTypeString, id.ci.valOrNa(), cellMnc, id.tac.valOrNa(), dbm, cellMcc, timingAdvance = ta, timingAdvanceUnit = TimingAdvanceUnit.LTE_INDEX, radioTech = radioTechOf(info), arfcn = id.earfcn, pci = id.pci, rsrq = rsrq, sinr = sinr, band = BandPlan.earfcnToBandLte(id.earfcn))
-                    .withRadioContext(connectionOf(info), validBandwidth(id.bandwidth), extrasLte(id))
+                // TA de LTE: índice 0..1282, SOLO del getter. 3.0 — Ya no se raspa toString(): el
+                // texto del fabricante no se convierte en LTE_INDEX (la regex aceptaba `data=0` o
+                // `delta=0` como TA 0). Sin valor válido del getter, no hay TA.
+                val ta = TimingAdvanceInput.lte(info.cellSignalStrength.timingAdvance)
+                val extras = extrasLte(id)
+                // 3.0 (#11) — En vecinas LTE, TAC 65535 y Cell ID 268435455 son relleno: N/A.
+                // 3.0 (#32) — Banda: el EARFCN si está en la tabla; si no, la que declare el módem.
+                CellData(reg, networkTypeString, NeighbourPlaceholders.lteCellId(id.ci, reg), cellMnc, NeighbourPlaceholders.lteTac(id.tac, reg), dbm, cellMcc, timingAdvance = ta, timingAdvanceUnit = TimingAdvanceUnit.LTE_INDEX, radioTech = radioTechOf(info), arfcn = RadioChannels.unavailableToNull(id.earfcn), pci = RadioChannels.unavailableToNull(id.pci), rsrq = rsrq, sinr = sinr, band = BandPlan.resolveLteBand(id.earfcn.takeIf { it != Int.MAX_VALUE }, extras.bands))
+                    .withRadioContext(connectionOf(info), validBandwidth(id.bandwidth), extras)
             }
             is CellInfoNr -> {
                 val id = info.cellIdentity as CellIdentityNr
                 val strength = info.cellSignalStrength as CellSignalStrengthNr
-                // ssRsrp puede ser Int.MAX_VALUE (no disponible). Si lo es, caemos al dbm
-                // normalizado del framework para no inyectar un valor absurdo (2147483647)
-                // que dispararía en falso todas las heurísticas de potencia.
+                // ssRsrp puede ser Int.MAX_VALUE (no disponible). Si lo es, se intenta getDbm(), pero
+                // NO es una medida alternativa garantizada: según la versión de Android puede ser el
+                // mismo SS-RSRP o también "no disponible", y en ese caso la entrada se filtra aguas
+                // abajo como sin señal utilizable. No se sustituye por CSI-RSRP, que mide otra cosa
+                // (ni aquí, ni en el motor, ni en los perfiles).
                 val dbm = strength.ssRsrp.let { if (it == Int.MAX_VALUE) strength.dbm else it }
                 val cellMcc = identityOrFallback(id.mccString, reg, mcc)
                 val cellMnc = identityOrFallback(id.mncString, reg, mnc)
-                // TA de NR. Dos rutas con unidades DISTINTAS, y por eso la unidad viaja con el
-                // valor (ver TimingAdvanceUnit):
-                //  - getTimingAdvanceMicros() devuelve microsegundos de ida y vuelta -> NR_RAW.
-                //  - el raspado de toString() devuelve lo que imprima el fabricante, que puede ser
-                //    un índice o microsegundos. No es determinable -> UNKNOWN, y H6 se abstiene de
-                //    deducir distancia. Se conserva el valor porque sigue sirviendo para mostrarlo,
-                //    pero no se usa para geometría: es preferible no juzgar a juzgar con la unidad
-                //    equivocada, que en el peor caso erraba por un factor cercano a 2.
+                // TA de NR. Dos rutas, y la unidad viaja con el valor (ver TimingAdvanceUnit):
+                //  - API pública getTimingAdvanceMicros() (API 34+) -> NR_RAW. No se deduce distancia
+                //    ni se cambia su semántica por el nombre del método.
+                //  - Si no da un valor válido, el toString() del fabricante, solo como contexto ->
+                //    UNKNOWN, con el nombre del campo delimitado y el número completo.
                 var ta: Int? = null
                 var taUnit = TimingAdvanceUnit.UNKNOWN
-                if (Build.VERSION.SDK_INT >= 34) {
-                    try {
-                        val method = strength.javaClass.getMethod("getTimingAdvanceMicros")
-                        val res = method.invoke(strength) as Int
-                        if ((res != Int.MAX_VALUE) && (res != -1)) {
-                            ta = res
-                            taUnit = TimingAdvanceUnit.NR_RAW
-                        }
-                    } catch (_: Exception) { }
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+                    ta = try { TimingAdvanceInput.nr(strength.timingAdvanceMicros) } catch (_: Exception) { null }
+                    if (ta != null) taUnit = TimingAdvanceUnit.NR_RAW
                 }
                 if (ta == null) {
-                    try {
-                        val rawString = info.toString()
-                        val taMatch = TA_REGEX.find(rawString) ?: TA_LONG_REGEX.find(rawString)
-                        if (taMatch != null) {
-                            val extracted = taMatch.groupValues[1].toIntOrNull()
-                            if (extracted != null && extracted != Int.MAX_VALUE) {
-                                ta = extracted
-                                taUnit = TimingAdvanceUnit.UNKNOWN
-                            }
-                        }
-                    } catch (_: Exception) {}
+                    ta = try { TimingAdvanceInput.scrapedNr(info.toString()) } catch (_: Exception) { null }
                 }
                 val rsrq = strength.ssRsrq
                     .let { if (it == Int.MAX_VALUE) null else it }
                 val sinr = strength.ssSinr
                     .let { if (it == Int.MAX_VALUE) null else it }
-                CellData(reg, networkTypeString, id.nci.valOrNa(), cellMnc, id.tac.valOrNa(), dbm, cellMcc, timingAdvance = ta, timingAdvanceUnit = taUnit, radioTech = radioTechOf(info), arfcn = id.nrarfcn, pci = id.pci, rsrq = rsrq, sinr = sinr)
+                CellData(reg, networkTypeString, id.nci.valOrNa(), cellMnc, id.tac.valOrNa(), dbm, cellMcc, timingAdvance = ta, timingAdvanceUnit = taUnit, radioTech = radioTechOf(info), arfcn = RadioChannels.unavailableToNull(id.nrarfcn), pci = RadioChannels.unavailableToNull(id.pci), rsrq = rsrq, sinr = sinr)
                     .withRadioContext(connectionOf(info), null, extrasNr(id))
             }
             is CellInfoWcdma -> {
@@ -122,7 +104,7 @@ object CellParser {
                 val cellMcc = identityOrFallback(id.mccString, reg, mcc)
                 val cellMnc = identityOrFallback(id.mncString, reg, mnc)
                 // Sin Timing Advance: CellSignalStrengthWcdma no lo expone en la API pública.
-                CellData(reg, networkTypeString, id.cid.valOrNa(), cellMnc, id.lac.valOrNa(), dbm, cellMcc, radioTech = radioTechOf(info), arfcn = id.uarfcn, pci = id.psc)
+                CellData(reg, networkTypeString, id.cid.valOrNa(), cellMnc, id.lac.valOrNa(), dbm, cellMcc, radioTech = radioTechOf(info), arfcn = RadioChannels.unavailableToNull(id.uarfcn), pci = RadioChannels.unavailableToNull(id.psc))
                     .withRadioContext(connectionOf(info), null, extrasWcdma(id))
             }
             is CellInfoGsm -> {
@@ -130,18 +112,14 @@ object CellParser {
                 val dbm = info.cellSignalStrength.dbm
                 val cellMcc = identityOrFallback(id.mccString, reg, mcc)
                 val cellMnc = identityOrFallback(id.mncString, reg, mnc)
-                val ta = info.cellSignalStrength.timingAdvance.let { if (it == Int.MAX_VALUE) null else it }
-                CellData(reg, networkTypeString, id.cid.valOrNa(), cellMnc, id.lac.valOrNa(), dbm, cellMcc, timingAdvance = ta, timingAdvanceUnit = TimingAdvanceUnit.GSM_INDEX, radioTech = radioTechOf(info), arfcn = id.arfcn)
+                // Índice 0..219; centinelas y fuera de rango, sin TA.
+                val ta = TimingAdvanceInput.gsm(info.cellSignalStrength.timingAdvance)
+                CellData(reg, networkTypeString, id.cid.valOrNa(), cellMnc, id.lac.valOrNa(), dbm, cellMcc, timingAdvance = ta, timingAdvanceUnit = TimingAdvanceUnit.GSM_INDEX, radioTech = radioTechOf(info), arfcn = RadioChannels.unavailableToNull(id.arfcn))
                     .withRadioContext(connectionOf(info), null, extrasGsm(id))
             }
             else -> null
         }
     }
-
-    // Regex compiladas una sola vez (antes se construían en cada lectura de cada celda, varias
-    // veces por segundo en zonas de transición).
-    private val TA_REGEX = Regex("ta=([0-9]+)")
-    private val TA_LONG_REGEX = Regex("timingAdvance=([0-9]+)")
 
     // ── v2.10.4 — Contexto de radio (solo recolección) ─────────────────────────────────────
     //
@@ -187,41 +165,32 @@ object CellParser {
     internal fun validBandwidth(value: Int): Int? = value.takeIf { it in 1 until Int.MAX_VALUE }
 
     private fun extrasLte(id: CellIdentityLte): IdentityExtras =
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-            try {
-                IdentityExtras(
-                    bands = id.bands.toList(),
-                    additionalPlmns = id.additionalPlmns.sorted(),
-                    csg = id.closedSubscriberGroupInfo?.let { csgOf(it) }
-                )
-            } catch (_: Exception) { IdentityExtras() }
-        } else IdentityExtras()
+        try {
+            IdentityExtras(
+                bands = id.bands.toList(),
+                additionalPlmns = id.additionalPlmns.sorted(),
+                csg = id.closedSubscriberGroupInfo?.let { csgOf(it) }
+            )
+        } catch (_: Exception) { IdentityExtras() }
 
     private fun extrasNr(id: CellIdentityNr): IdentityExtras =
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-            try {
-                IdentityExtras(bands = id.bands.toList(), additionalPlmns = id.additionalPlmns.sorted())
-            } catch (_: Exception) { IdentityExtras() }
-        } else IdentityExtras()
+        try {
+            IdentityExtras(bands = id.bands.toList(), additionalPlmns = id.additionalPlmns.sorted())
+        } catch (_: Exception) { IdentityExtras() }
 
     private fun extrasWcdma(id: CellIdentityWcdma): IdentityExtras =
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-            try {
-                IdentityExtras(
-                    additionalPlmns = id.additionalPlmns.sorted(),
-                    csg = id.closedSubscriberGroupInfo?.let { csgOf(it) }
-                )
-            } catch (_: Exception) { IdentityExtras() }
-        } else IdentityExtras()
+        try {
+            IdentityExtras(
+                additionalPlmns = id.additionalPlmns.sorted(),
+                csg = id.closedSubscriberGroupInfo?.let { csgOf(it) }
+            )
+        } catch (_: Exception) { IdentityExtras() }
 
     private fun extrasGsm(id: CellIdentityGsm): IdentityExtras =
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-            try {
-                IdentityExtras(additionalPlmns = id.additionalPlmns.sorted())
-            } catch (_: Exception) { IdentityExtras() }
-        } else IdentityExtras()
+        try {
+            IdentityExtras(additionalPlmns = id.additionalPlmns.sorted())
+        } catch (_: Exception) { IdentityExtras() }
 
-    @RequiresApi(Build.VERSION_CODES.R)
     private fun csgOf(info: ClosedSubscriberGroupInfo): CsgInfo = CsgInfo(
         indicator = info.csgIndicator,
         identity = info.csgIdentity.takeIf { it in 0 until Int.MAX_VALUE },

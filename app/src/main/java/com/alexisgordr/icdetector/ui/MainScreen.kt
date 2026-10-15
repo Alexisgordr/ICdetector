@@ -3,7 +3,6 @@ package com.alexisgordr.icdetector.ui
 import android.Manifest
 import android.content.Context
 import android.content.pm.PackageManager
-import android.location.LocationManager
 import android.os.Build
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -19,7 +18,13 @@ import androidx.compose.material.pullrefresh.pullRefresh
 import androidx.compose.material.pullrefresh.rememberPullRefreshState
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.compose.LifecycleResumeEffect
+import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.repeatOnLifecycle
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -30,11 +35,11 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import com.alexisgordr.icdetector.MainActivity
 import com.alexisgordr.icdetector.R
 import com.alexisgordr.icdetector.models.*
+import com.alexisgordr.icdetector.models.HeuristicStatus
 import com.alexisgordr.icdetector.service.MiniICService
 import com.alexisgordr.icdetector.storage.CellDbHelper
 import kotlinx.coroutines.delay
@@ -50,7 +55,8 @@ import kotlinx.coroutines.launch
  * y el panel de auditoría llegaban a conclusiones distintas sobre la misma celda.
  */
 private const val SCORE_SAFE = 90
-private const val SCORE_WATCH = 70
+/** Por debajo, color de sospecha: el mismo umbral que el motor (UI3). */
+private const val SCORE_WATCH = com.alexisgordr.icdetector.core.ScoreThreshold.SUSPICIOUS_BELOW
 
 /**
  * Color de un score de seguridad. **Único** criterio de color de toda la pantalla: si algo muestra
@@ -216,6 +222,9 @@ fun MainScreenContent(dbHelper: CellDbHelper, service: MiniICService?) {
     val rsrqHistory by rsrqFlow.collectAsStateWithLifecycle()
     val geoHistory by geoFlow.collectAsStateWithLifecycle()
     val serviceState by serviceStateFlow.collectAsStateWithLifecycle()
+    // 3.0 — Token de OpenCellID configurado (sin servicio: no se consulta nada).
+    val publicDbCheckEnabledFlow = remember(service) { service?.publicDbCheckEnabled ?: MutableStateFlow(false) }
+    val publicDbCheckEnabled by publicDbCheckEnabledFlow.collectAsStateWithLifecycle()
     
     var refreshing by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
@@ -226,6 +235,16 @@ fun MainScreenContent(dbHelper: CellDbHelper, service: MiniICService?) {
     val active = cellList.firstOrNull { it.isRegistered }
     var showHistory by remember { mutableStateOf(false) }
     var showSettings by remember { mutableStateOf(false) }
+    // 3.0 — Episodio de un aviso silencioso de Stable-Site: se enseña encima de lo demás.
+    val noticeEpisodeId by StableSiteNoticeTarget.episodeId.collectAsStateWithLifecycle()
+    // 3.0 — Pestaña con que se abre Historial ("profile" desde Ajustes → Ver evaluaciones).
+    var historyTab by remember { mutableStateOf<String?>(null) }
+    // 3.0 — El botón/gesto «atrás» del sistema cierra Ajustes o Historial y vuelve a la pantalla
+    // principal, en vez de salir de la app.
+    androidx.activity.compose.BackHandler(enabled = showSettings || showHistory) {
+        showSettings = false
+        showHistory = false
+    }
 
     LaunchedEffect(service) {
         if (service != null) {
@@ -262,7 +281,7 @@ fun MainScreenContent(dbHelper: CellDbHelper, service: MiniICService?) {
                     Icon(Icons.Default.Settings, contentDescription = stringResource(R.string.settings_accessibility), tint = if (showSettings) Color.White else Color(0xFF888888))
                 }
                 TextButton(
-                    onClick = { showHistory = !showHistory; showSettings = false },
+                    onClick = { showHistory = !showHistory; showSettings = false; historyTab = null },
                     colors = ButtonDefaults.textButtonColors(contentColor = Color(0xFF888888))
                 ) {
                     Text(if (showHistory) stringResource(R.string.monitor) else stringResource(R.string.history), fontFamily = FontFamily.Monospace, fontSize = 12.sp)
@@ -270,10 +289,17 @@ fun MainScreenContent(dbHelper: CellDbHelper, service: MiniICService?) {
             }
         }
 
-        if (showSettings) {
-            SettingsPanel(service) { showSettings = false }
+        val noticeEpisode = noticeEpisodeId
+        if (noticeEpisode != null) {
+            StableSiteEpisodeFocus(dbHelper, noticeEpisode, Modifier.fillMaxSize()) { StableSiteNoticeTarget.clear() }
+        } else if (showSettings) {
+            SettingsPanel(
+                service,
+                onOpenProfileEvaluations = { showSettings = false; historyTab = "profile"; showHistory = true },
+                onBack = { showSettings = false }
+            ) { showSettings = false }
         } else if (showHistory) {
-            HistoryPanel(dbHelper = dbHelper, service = service) { showHistory = false }
+            HistoryPanel(dbHelper = dbHelper, service = service, initialTab = historyTab) { showHistory = false }
         } else {
             Box(modifier = Modifier.fillMaxSize().pullRefresh(pullRefreshState)) {
                 Column(modifier = Modifier.fillMaxSize()) {
@@ -299,14 +325,21 @@ fun MainScreenContent(dbHelper: CellDbHelper, service: MiniICService?) {
                     // Contexto, no veredicto: qué contestó OpenCellID. Que una celda no
                     // esté en una base pública no la hace sospechosa —las bases están incompletas
                     // y las celdas nuevas tardan meses en aparecer—, sólo la deja sin respaldo.
-                    val verificationNote = when (active?.verified) {
-                        VerificationStatus.VERIFIED -> stringResource(R.string.public_db_registered)
-                        VerificationStatus.NOT_FOUND -> stringResource(R.string.public_db_not_found)
-                        VerificationStatus.REJECTED -> stringResource(R.string.public_db_rejected)
-                        VerificationStatus.PENDING -> stringResource(R.string.public_db_pending)
-                        VerificationStatus.ERROR -> stringResource(R.string.public_db_error)
+                    // 3.0 — Sin token no se consulta nada: la tarjeta lo dice (PublicDbNote).
+                    val verificationNote = when (active?.verified?.let { com.alexisgordr.icdetector.core.PublicDbNote.of(it, publicDbCheckEnabled) }) {
+                        com.alexisgordr.icdetector.core.PublicDbNote.REGISTERED -> stringResource(R.string.public_db_registered)
+                        com.alexisgordr.icdetector.core.PublicDbNote.NOT_FOUND -> stringResource(R.string.public_db_not_found)
+                        com.alexisgordr.icdetector.core.PublicDbNote.REJECTED -> stringResource(R.string.public_db_rejected)
+                        com.alexisgordr.icdetector.core.PublicDbNote.QUERYING -> stringResource(R.string.public_db_pending)
+                        com.alexisgordr.icdetector.core.PublicDbNote.ERROR -> stringResource(R.string.public_db_error)
+                        com.alexisgordr.icdetector.core.PublicDbNote.CHECK_OFF_NO_TOKEN -> stringResource(R.string.public_db_off_no_token)
                         null -> null
                     }
+
+                    // 3.0 (#35) — Si las alarmas están silenciadas, decirlo antes que nada.
+                    AlarmMutedWarning()
+                    // 3.0 — Fallo interno del análisis: el resultado de abajo es el anterior.
+                    AnalysisUnavailableNotice(service)
 
                     // STICKY: Card de estado
                     Card(
@@ -463,7 +496,8 @@ fun MainScreenContent(dbHelper: CellDbHelper, service: MiniICService?) {
                                     BandIndicator(
                                         arfcn = active?.arfcn,
                                         networkType = active?.networkType ?: "",
-                                        suspicious = active != null && !active.heuristicReport.bandDowngradePassed
+                                        suspicious = active != null && !active.heuristicReport.bandDowngradePassed,
+                                        radioTech = active?.radioTech ?: com.alexisgordr.icdetector.models.RadioTech.UNKNOWN
                                     )
                                     MiniRsrqGraph(rsrqHistory, active?.rsrq)
                                 }
@@ -587,19 +621,20 @@ fun MainScreenContent(dbHelper: CellDbHelper, service: MiniICService?) {
                                         )
                                         Spacer(Modifier.height(4.dp))
                                         
-                                        // 1. Evaluamos dinámicamente si la heurística de sanidad del ARFCN ha fallado
-                                        val esArfcnFalso = active?.heuristicReport?.arfcnSanityPassed == false
-                                        
-                                        // 2. Asignamos el color: si es falso, usamos el rojo de alerta del proyecto (0xFFCF6679)
-                                        val arfcnColor = if (esArfcnFalso) Color(0xFFCF6679) else Color.White
-                                        
+                                        // 3.0 (corte de campaña) — H8 es un aviso de CALIDAD DE DATO, no una sospecha:
+                                        // un canal fuera de la tabla 3GPP se muestra en el gris de "dato dudoso"
+                                        // (el mismo de Components.kt), con peso normal, nunca en el rojo de alerta.
+                                        val arfcnOutOfTable = active?.heuristicReport?.arfcnSanity == HeuristicStatus.FAILED
+                                        val arfcnNote = stringResource(R.string.arfcn_out_of_table)
                                         Text(
                                             text = active?.arfcn?.toString() ?: "N/A",
-                                            color = arfcnColor,
+                                            color = if (arfcnOutOfTable) Color(0xFF888888) else Color.White,
                                             fontFamily = FontFamily.Monospace,
                                             fontSize = 13.sp,
-                                            // Si es falso, aumentamos el grosor a ExtraBold para que resalte todavía más
-                                            fontWeight = if (esArfcnFalso) FontWeight.ExtraBold else FontWeight.Bold
+                                            fontWeight = if (arfcnOutOfTable) FontWeight.Normal else FontWeight.Bold,
+                                            modifier = if (arfcnOutOfTable) {
+                                                Modifier.semantics { contentDescription = arfcnNote }
+                                            } else Modifier
                                         )
                                     }
                                 }
@@ -611,7 +646,7 @@ fun MainScreenContent(dbHelper: CellDbHelper, service: MiniICService?) {
                         }
 
                         if (active != null) {
-                            SignalVisualizer(active, cellList.filter { !it.isRegistered })
+                            SignalVisualizer(active, com.alexisgordr.icdetector.core.ServingCellSelection.nonServingEntries(cellList))
                         }
 
                         // v2.10.4 — Contexto de radio: servidora según el módem, portadoras
@@ -647,26 +682,18 @@ fun SecurityScorePanel(active: CellData, dbmHistory: List<Int>, geoHistory: List
     val context = LocalContext.current
     val englishUi = androidx.compose.ui.platform.LocalConfiguration.current.locales[0].language != "es"
 
-    // GPS status — lee el valor cacheado, sin activar hardware
-    var hasGps by remember { mutableStateOf(false) }
-    LaunchedEffect(active.identityKey) {
-        while (true) {
-            hasGps = withContext(Dispatchers.IO) {
-                try {
-                    val lm = context.getSystemService(Context.LOCATION_SERVICE) as LocationManager
-                    if (ActivityCompat.checkSelfPermission(
-                            context, Manifest.permission.ACCESS_FINE_LOCATION
-                        ) == PackageManager.PERMISSION_GRANTED) {
-                        val now = System.currentTimeMillis()
-                        val maxAge = 120000L
-                        val maxAccuracy = 100f
-                        // GPS-only: coherente con el servicio y fuera de la composición.
-                        val gpsLoc = lm.getLastKnownLocation(LocationManager.GPS_PROVIDER)
-                        gpsLoc?.let { it.accuracy < maxAccuracy && (now - it.time) < maxAge } ?: false
-                    } else false
-                } catch (_: Exception) { false }
+    // El servicio valida edad monotónica, precisión y coherencia. Leerlo no activa el GPS.
+    // Se consulta solo mientras esta pantalla está visible.
+    val lifecycleOwner = LocalLifecycleOwner.current
+    var hasGps by remember(service) { mutableStateOf(false) }
+    LaunchedEffect(service, lifecycleOwner) {
+        lifecycleOwner.lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) {
+            while (true) {
+                hasGps = withContext(Dispatchers.IO) {
+                    service?.hasUsableGpsFix() == true
+                }
+                delay(5_000L)
             }
-            delay(30_000L)
         }
     }
     
@@ -727,10 +754,10 @@ fun SecurityScorePanel(active: CellData, dbmHistory: List<Int>, geoHistory: List
                         fontSize = 9.sp
                     )
 
-                    // Probabilidad Bayesiana de amenaza
-                    val threatColor = when {
-                        active.anomalyConfidence >= 50f -> Color(0xFFCF6679)
-                        active.anomalyConfidence >= 20f -> Color(0xFFFFA000)
+                    // Probabilidad Bayesiana de amenaza: color según [anomalyConfidenceTier].
+                    val threatColor = when (anomalyConfidenceTier(active.anomalyConfidence)) {
+                        2 -> Color(0xFFCF6679)
+                        1 -> Color(0xFFFFA000)
                         else -> Color(0xFF555555)
                     }
                     // v2.1 — "Amenaza estimada" sugería una probabilidad estadística validada.
@@ -799,13 +826,17 @@ fun SecurityScorePanel(active: CellData, dbmHistory: List<Int>, geoHistory: List
                 val latencyFlow = remember(service) { service?.networkLatencyState ?: MutableStateFlow("N/A") }
                 val netState by latencyFlow.collectAsStateWithLifecycle()
 
-                // Tres estados: OK (verde) / ANÓMALA (rojo) / N/A (gris, sin medir:
-                // latencia desactivada, o WiFi/VPN/Tor activos). El gris evita afirmar
-                // un "OK" que ninguna medición respalda.
+                // Cuatro estados: OK (verde) / ANÓMALA (rojo) / APRENDIENDO (ámbar: mide, pero
+                // aún sin referencia de esta celda) / N/A (gris, sin medir: latencia desactivada,
+                // WiFi/VPN/Tor, celda recién cambiada o resultado caducado). 3.0 (#26).
                 val (netText, netColor) = when (netState) {
-                    "OK" -> "● RED OK" to Color(0xFF4CAF50)
-                    "ANOMALA" -> "● RED ANÓMALA" to Color(0xFFCF6679)
-                    else -> "● RED N/A" to Color(0xFF888888)
+                    com.alexisgordr.icdetector.service.NetworkLatencyMonitor.STATE_OK ->
+                        stringResource(R.string.latency_state_ok) to Color(0xFF4CAF50)
+                    com.alexisgordr.icdetector.service.NetworkLatencyMonitor.STATE_ANOMALOUS ->
+                        stringResource(R.string.latency_state_anomalous) to Color(0xFFCF6679)
+                    com.alexisgordr.icdetector.service.NetworkLatencyMonitor.STATE_LEARNING ->
+                        stringResource(R.string.latency_state_learning) to Color(0xFFFFB74D)
+                    else -> stringResource(R.string.latency_state_not_measured) to Color(0xFF888888)
                 }
                 Text(
                     text = netText,
@@ -834,7 +865,7 @@ fun SecurityScorePanel(active: CellData, dbmHistory: List<Int>, geoHistory: List
 
                 // Indicador GPS — derecha
                 Text(
-                    text = if (hasGps) "● GPS OK" else "● SIN GPS",
+                    text = stringResource(if (hasGps) R.string.gps_state_ok else R.string.gps_state_unavailable),
                     color = if (hasGps) Color(0xFF4CAF50) else Color(0xFFCF6679),
                     fontSize = 9.sp,
                     fontFamily = FontFamily.Monospace
@@ -906,5 +937,91 @@ private fun BaselineMaturityRow(
             stringResource(R.string.samples_format, level.name, samples)
         }
         Text(value, color = color, fontFamily = FontFamily.Monospace, fontSize = 9.sp)
+    }
+}
+
+/**
+ * 3.0 (#35) — Aviso cuando una alarma confirmada no sonaría: notificaciones de la app desactivadas o
+ * canal de alertas silenciado. La app no puede reactivar el sonido; abre los ajustes del canal. Se
+ * vuelve a comprobar cada vez que la pantalla vuelve al primer plano.
+ */
+/**
+ * 3.0 — Aviso mientras el ciclo de análisis falla (ver AnalysisHealth): el resultado visible es el
+ * último válido, no uno actualizado. No es una alarma ni dice nada de la red.
+ */
+@Composable
+private fun AnalysisUnavailableNotice(service: MiniICService?) {
+    val flow = remember(service) {
+        service?.analysisHealth ?: MutableStateFlow(com.alexisgordr.icdetector.core.AnalysisHealth.State())
+    }
+    val health by flow.collectAsStateWithLifecycle()
+    if (!health.unavailable) return
+    val color = Color(0xFFB0BEC5)
+    Card(
+        modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
+        colors = CardDefaults.cardColors(containerColor = color.copy(alpha = 0.08f)),
+        border = BorderStroke(1.dp, color.copy(alpha = 0.4f)),
+        shape = RoundedCornerShape(4.dp)
+    ) {
+        Column(modifier = Modifier.padding(12.dp)) {
+            Text(
+                stringResource(R.string.analysis_unavailable),
+                color = color, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Bold, fontSize = 12.sp
+            )
+            val last = health.lastValidAtMs
+            Text(
+                if (last != null) stringResource(
+                    R.string.analysis_previous_result_format,
+                    java.text.DateFormat.getTimeInstance(java.text.DateFormat.MEDIUM).format(java.util.Date(last))
+                ) else stringResource(R.string.analysis_no_previous_result),
+                color = Color(0xFFBBBBBB), fontFamily = FontFamily.Monospace, fontSize = 11.sp
+            )
+        }
+    }
+}
+
+@Composable
+private fun AlarmMutedWarning() {
+    val context = LocalContext.current
+    var state by remember {
+        mutableStateOf(com.alexisgordr.icdetector.service.ServiceNotificationController.alarmAudibility(context))
+    }
+    LifecycleResumeEffect(Unit) {
+        state = com.alexisgordr.icdetector.service.ServiceNotificationController.alarmAudibility(context)
+        onPauseOrDispose { }
+    }
+    if (state == com.alexisgordr.icdetector.core.AlarmAudibility.AlarmSound.AUDIBLE) return
+    val warning = Color(0xFFFFB74D)
+    Card(
+        modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
+        colors = CardDefaults.cardColors(containerColor = warning.copy(alpha = 0.08f)),
+        border = BorderStroke(1.dp, warning.copy(alpha = 0.4f)),
+        shape = RoundedCornerShape(4.dp)
+    ) {
+        Column(modifier = Modifier.padding(12.dp)) {
+            Text(
+                stringResource(R.string.alarm_muted_title),
+                color = warning, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Bold, fontSize = 12.sp
+            )
+            Text(
+                stringResource(
+                    if (state == com.alexisgordr.icdetector.core.AlarmAudibility.AlarmSound.BLOCKED) R.string.alarm_muted_body_blocked
+                    else R.string.alarm_muted_body_silenced
+                ),
+                color = Color(0xFFBBBBBB), fontFamily = FontFamily.Monospace, fontSize = 11.sp
+            )
+            TextButton(
+                onClick = {
+                    runCatching {
+                        context.startActivity(
+                            com.alexisgordr.icdetector.service.ServiceNotificationController.alarmSettingsIntent(context)
+                        )
+                    }
+                },
+                colors = ButtonDefaults.textButtonColors(contentColor = warning)
+            ) {
+                Text(stringResource(R.string.alarm_muted_action), fontFamily = FontFamily.Monospace, fontSize = 11.sp)
+            }
+        }
     }
 }

@@ -21,10 +21,46 @@ class TerminalLocalizationCoverageTest {
     )
 
     private val lines = listOf(
+        // 3.0 (corte de campaña) — H8, aviso de calidad de dato.
+        "[HEUR] 8. Calidad de dato ARFCN: FAILED",
+        "Calidad de dato: EARFCN 4G fuera de la tabla 3GPP",
+        "[sub-umbral] Inconsistencia MCC | Calidad de dato: NR-ARFCN 5G fuera de la tabla 3GPP",
+        "Calidad de dato: el módem informa un canal fuera de la tabla 3GPP. No es evidencia de ataque y no resta puntos.",
+        // 3.0 — Sin token de OpenCellID.
+        "[AUDIT] Celda 1234 — índice heurístico: 100% (10/16 reglas evaluadas; 6 sin datos), comprobación de base pública desactivada (sin token)",
+        "[SYS] ✅ Sin anomalías en las reglas que pudieron evaluarse. Sin token de OpenCellID: la base pública no se consulta.",
+        // 3.0 — Poda omitida por la guardia del reloj.
+        "[SYS] ⚠️ Poda de histórico omitida: el reloj del teléfono va por delante de la última observación guardada; no se ha borrado nada.",
+        "[SYS] ⚠️ Poda de histórico omitida: borraría 900 registros (de 1000; más del 25 %); ¿reloj adelantado? No se ha borrado nada.",
+        // 3.0 — Watchdog de callbacks.
+        "[SYS] Watchdog: callbacks de telefonía reiniciados; 45 s sin entregas de celdas.",
+        // 3.0 (corte de campaña) — Celda CSG.
+        "N/A: celda CSG (femtocelda): las reglas de dominancia, proximidad e identidad local no aplican a una celda diseñada para ser aislada.",
+        "[HEUR] 1. Celda Aislada: N/A (celda CSG (femtocelda))",
+        "[HEUR] 7. Espectro Fantasma: N/A (celda CSG (femtocelda))",
+        // 3.0 (corte de campaña) — H9 reservada.
+        "N/A: Android no expone el estado de cifrado a aplicaciones sin privilegios; regla reservada.",
+        // 3.0 (corte de campaña) — H3: servidora frente a SIM (motivo, abstenciones, diagnóstico).
+        "Inconsistencia MCC: servidora 208 ≠ SIM 214, sin roaming ni vecinas con ese MCC",
+        "[sub-umbral] Inconsistencia MCC",
+        "[HEUR] 3. Consistencia MCC: N/A (sin ServiceState, no se sabe si hay roaming)",
+        "[HEUR] 3. Consistencia MCC: N/A (sin MCC de la SIM)",
+        "[HEUR] 3. Consistencia MCC: N/A (sin MCC de la servidora)",
+        "[HEUR] 3. Consistencia MCC: N/A (MCC distinto del de la SIM con roaming declarado)",
+        "[HEUR] 3. Consistencia MCC: N/A (PLMN extranjero con vecinas coherentes (frontera))",
+        "El MCC de la servidora coincide con el de la SIM.",
+        "El MCC de la servidora no es el de la SIM, sin roaming y sin vecinas con ese MCC.",
+        "N/A: faltan datos de la SIM o de la servidora.",
+        // 3.0 — H16: posición respecto a las zonas aprendidas.
+        "N/A: falta la posición del fix de la celda nueva.",
+        "N/A: la posición está fuera de las zonas aprendidas de ambas celdas; entre dos celdas grandes ese salto puede ser normal.",
+        "N/A: la posición está en la zona aprendida de la celda nueva, no en la de la anterior.",
+        "N/A: la zona aprendida de la celda nueva no queda lo bastante lejos de la posición.",
         "[AUDIT] Celda 1234 — índice heurístico: 0% (10/16 reglas evaluadas; 6 sin datos) · sin registro en OpenCellID; no resta puntos porque esa base es incompleta",
         "[AUDIT] Celda 1234 — índice heurístico: 0% (10/16 reglas evaluadas; 6 sin datos) · respuesta descartada o no creíble; no concluye nada sobre la antena",
         "[AUDIT] Celda 1234 — índice heurístico: 0% (10/16 reglas evaluadas; 6 sin datos) · pendiente de verificar",
         "[AUDIT] --- CICLO DE AUDITORÍA (16 REGLAS) · Celda 1234 (214-7-2801) ---",
+        "[AUDIT] 6. Proximidad por Timing Advance: NO EVALUADA",
         "[AUDIT] 7. Espectro Fantasma: SUPERADA",
         "[AUDIT] 9. Cifrado Hardware: NO EVALUADA",
         "[AUDIT] 11. Consistencia Geográfica (Cell ID móvil): SUPERADA",
@@ -54,6 +90,20 @@ class TerminalLocalizationCoverageTest {
         "[RADIO] Ping-Pong detectado a 42.0 km/h. Ignorando alerta.",
         "[RADIO] Cambios rápidos de celda observados a 0,0 km/h.",
         "🚨 Efecto Ping-Pong confirmado por TemporalConfidence.",
+        "[SYS] ⚠️ Poda de histórico fallida (SQLiteDiskIOException): no se ha borrado nada; se reintentará en el próximo mantenimiento.",
+        "[SYS] Poda de histórico: 12 registros de más de 120 días eliminados.",
+        "[H15] Lectura del historial RF fallida: H15 no se evalúa hasta que vuelva a leerse.",
+        "[SITE] Aviso silencioso publicado: cambio inusual de celda en este lugar con el teléfono quieto. No confirma un ataque.",
+        "[SITE] Aviso silencioso no mostrado: las notificaciones de la app o su canal están desactivadas. El episodio queda guardado.",
+        "[SITE] Aviso silencioso no publicado por un fallo al notificar. El episodio queda guardado.",
+        "[SITE] Aviso silencioso omitido: desactivado en Ajustes. El episodio queda guardado.",
+        "[H15] Lectura del historial RF restablecida.",
+        "[SYS] Análisis temporalmente no disponible por un fallo interno (no es falta de señal ni una anomalía de red): se mantiene el último resultado válido, no actualizado. [SQLiteException]",
+        "[SYS] Análisis restablecido: resultado actualizado.",
+        "[SYS] Resultado publicado, pero falló el registro o el aviso de este ciclo (historial, incidentes, caja negra o alerta): puede faltar esa parte. [SQLiteException]",
+        "N/A: no se pudo leer el historial RF en este ciclo.",
+        "Red 2G/3G en uso: cambio desde 4G/5G · última señal anterior observada: -72 dBm · aviso NOTIFY. Puede deberse a cobertura o a llamadas sin VoLTE; no es un ataque confirmado.",
+        "Red 2G/3G en uso · señal previa desconocida · aviso OFF. Puede deberse a cobertura o a llamadas sin VoLTE; no es un ataque confirmado.",
         "N/A: sin handover reciente; esperando el siguiente para comprobar la movilidad.",
         "N/A: hay cambios rápidos de celda, pero sin velocidad GPS no se puede saber si estás parado.",
         "[RADIO] Cambios rápidos de celda observados sin velocidad GPS (H10 en N/A).",
@@ -73,9 +123,13 @@ class TerminalLocalizationCoverageTest {
         "N/A: Wi-Fi activo; se evita atribuir el contexto de red al enlace celular.",
         "Estabilidad de potencia",
         "N/A: no hay TAC válidos de vecinas para contrastar.",
-        "Coherencia geométrica (TA)",
+        "N/A: no hay TAC válidos de vecinas de la misma tecnología para contrastar.",
+        "N/A: no hay TAC válidos de vecinas de la misma tecnología y el mismo operador para contrastar.",
+        "Proximidad por Timing Advance",
         "Espectro de vecinos",
         "N/A: no hay celdas vecinas disponibles para contrastar el espectro.",
+        "N/A: no hay celdas vecinas de la misma tecnología para contrastar el espectro.",
+        "N/A: hacen falta celdas vecinas de la misma tecnología con potencia para comparar.",
         "Cifrado hardware",
         "N/A: todavía no existe una secuencia temporal utilizable.",
         "N/A: aún no hay observaciones previas geolocalizadas de esta celda.",
@@ -85,6 +139,30 @@ class TerminalLocalizationCoverageTest {
         "N/A: todavía no se ha observado un handover evaluable.",
         "N/A: no hubo cambio de celda.",
         "N/A: el intervalo entre observaciones no permite atribuir el desplazamiento al handover.",
+        "[API] Configuración de OpenCellID actualizada; las consultas anteriores se descartan.",
+        "[RADIO] H1 en N/A: el módem repite la misma marca de tiempo en sus lecturas, así que no se puede confirmar una celda aislada.",
+        "[API] " + com.alexisgordr.icdetector.core.ApiCoordinateCheck.LOG_NO_DISTANCE_CHECK,
+        "[API] OpenCellID en pausa: la API key no es válida. No se consultará hasta que la cambies en Ajustes.",
+        "[API] OpenCellID en pausa: la API key no tiene acceso (código 4). No se consultará hasta que cambies la configuración.",
+        "[API] OpenCellID en pausa por demasiadas peticiones: se reanudará en 2 min. No dice nada de la antena.",
+        "[API] OpenCellID en pausa: cupo diario agotado. Se reanudará en 1440 min. No dice nada de la antena.",
+        "[API] OpenCellID sin respuesta (red, proxy o servidor): se reintentará en 1 min.",
+        "[API] OpenCellID: la API key no es válida. Revísala en Ajustes. Respuesta: {}",
+        "[API] OpenCellID: la API key no tiene acceso (requiere lista blanca). Respuesta: {}",
+        "[API] OpenCellID: acceso denegado (HTTP 403) sin código de la API; puede venir de un proxy o un intermediario, no prueba que la clave falle. Se reintentará. Respuesta: <html>",
+        "[API] OpenCellID: la API rechazó los datos de esta celda (código 3). No dice nada de la antena. Respuesta: {}",
+        "[API] OpenCellID: error interno del servidor (código 5). Se reintentará. Respuesta: {}",
+        "[API] OpenCellID: consulta descartada; la configuración cambió mientras se hacía.",
+        "[API] OpenCellID: consulta anulada porque cambió la configuración (clave o ruta).",
+        "N/A: hubo una interrupción del servicio celular; esta celda es la nueva referencia, no un handover observado.",
+        "[H16] N/A: no hay fix GPS en la observación de la celda anterior.",
+        "[H16] N/A: el fix GPS de la celda anterior tiene una marca de tiempo inválida o futura.",
+        "[H16] N/A: el fix GPS de la celda anterior tiene más de 10 s; una posición reutilizada no demuestra que el móvil estuviera quieto.",
+        "[H16] N/A: no hay fix GPS en la observación de la celda nueva.",
+        "[H16] N/A: el fix GPS de la celda nueva tiene una marca de tiempo inválida o futura.",
+        "[H16] N/A: el fix GPS de la celda nueva tiene más de 10 s; una posición reutilizada no demuestra que el móvil estuviera quieto.",
+        "[H16] N/A: las dos observaciones usan el mismo fix GPS; no miden ningún desplazamiento.",
+        "[H16] N/A: el fix GPS de la celda nueva es anterior al de la celda anterior.",
         "N/A: baseline geográfico en aprendizaje (3/5 origen, 1/5 destino).",
         "Handover incoherente: el móvil recorrió 120 m, pero las zonas aprendidas quedan a 4000 m y no se solapan. La celda destino se anunciaba como vecina.",
         "Desplazamiento compatible con las zonas históricas (120 m recorridos; centros a 800 m).",
@@ -93,7 +171,7 @@ class TerminalLocalizationCoverageTest {
         "Multitud de MNCs",
         "Frecuencia (ARFCN) 5G sospechosa",
         "Frecuencia (EARFCN) 4G sospechosa",
-        "Cifrado de red anulado (A5/0)",
+        "Cifrado de red no activo según el sistema",
         "Efecto Ping-Pong (Cambios rápidos en parado)",
         "Huella RF incoherente con el historial (RSRQ/SINR muy desviados)",
         "Downgrade de banda forzado (1800MHz→800MHz, B3→B20)",
@@ -104,6 +182,40 @@ class TerminalLocalizationCoverageTest {
         "[sub-umbral] Huella RF incoherente con el historial (RSRQ/SINR muy desviados)",
         "[SERVICIO] Estado de servicio: EN SERVICIO · red=21407 (Movistar) · SIM=21407 · datos=LTE no registrado · roaming=no"
     )
+
+    /**
+     * 3.0 (corte de campaña) — Los textos que el motor guarda o muestra salen de sus constantes, no de
+     * una lista a mano: un motivo nuevo sin traducción rompe este test.
+     */
+    private val engineTexts: List<String> =
+        com.alexisgordr.icdetector.models.MccAbstention.entries.map { it.text } + listOf(
+            com.alexisgordr.icdetector.models.HeuristicReport.CSG_ABSTENTION_TEXT,
+            com.alexisgordr.icdetector.core.ThreatAnalyzer.H8_LTE_REASON,
+            com.alexisgordr.icdetector.core.ThreatAnalyzer.H8_NR_REASON,
+            com.alexisgordr.icdetector.core.MccConsistencyRule.failReason(208, 214),
+            com.alexisgordr.icdetector.core.DiagnosticEngine.H3_PASSED_EXPLANATION,
+            com.alexisgordr.icdetector.core.DiagnosticEngine.H3_FAILED_EXPLANATION,
+            "N/A: " + com.alexisgordr.icdetector.core.DiagnosticEngine.H3_UNKNOWN_ABSTENTION,
+            com.alexisgordr.icdetector.core.DiagnosticEngine.H8_FAILED_EXPLANATION,
+            com.alexisgordr.icdetector.core.DiagnosticEngine.H9_NA_EXPLANATION,
+            com.alexisgordr.icdetector.core.DiagnosticEngine.CSG_NA_EXPLANATION,
+            com.alexisgordr.icdetector.core.DiagnosticEngine.H11_FIX_TOO_OLD_EXPLANATION,
+            com.alexisgordr.icdetector.models.HeuristicReport.H11_FIX_ABSTENTION_TEXT,
+            com.alexisgordr.icdetector.models.StoredReasons.H15_REASON,
+            com.alexisgordr.icdetector.models.StoredReasons.H13_RF_REASON,
+            com.alexisgordr.icdetector.models.StoredReasons.h13PowerReason(20),
+            com.alexisgordr.icdetector.models.StoredReasons.confirmingPrefix(2, 3),
+            com.alexisgordr.icdetector.models.SUBTHRESHOLD_PREFIX,
+            com.alexisgordr.icdetector.models.SITE_UNVERIFIED_PREFIX,
+            com.alexisgordr.icdetector.models.LOCAL_TRUST_RECONFIGURATION_REASON
+        )
+
+    @Test fun `every text the engine stores or shows from a constant is translated`() {
+        val leftovers = engineTexts.map { it to localizeTerminalLine(it) }
+            .filter { (source, translated) -> translated == source || spanish.containsMatchIn(translated) }
+            .map { (source, translated) -> "$source\n  → $translated" }
+        assertTrue(leftovers.joinToString("\n"), leftovers.isEmpty())
+    }
 
     @Test fun `no spanish words remain in english terminal lines`() {
         val leftovers = lines.map { it to localizeTerminalLine(it) }

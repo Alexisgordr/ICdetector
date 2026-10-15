@@ -12,7 +12,8 @@
          Era el camino "automático" del fallback de Modo Avión ante 2G/3G, pero nunca se concede
          en una instalación normal (requiere adb), así que en la práctica siempre se ejecutaba la
          rama de reserva: capturar la SecurityException y abrir los ajustes de Modo Avión para que
-         lo active la persona. Esa rama sigue intacta y el comportamiento observable no cambia.
+         lo active la persona. Desde 3.0 tampoco queda el intento de escritura: la notificación de
+         red 2G/3G solo ofrece abrir los ajustes de Modo Avión.
          Declarar un permiso privilegiado que no se usa contradice el principio de mínimo
          privilegio que este proyecto dice defender, y es de lo primero que mira cualquiera que
          audite el manifiesto de una app de seguridad. -->
@@ -37,6 +38,7 @@
 
     <!-- memtagMode="sync" enforces MTE on GrapheneOS / MTE devices to prevent memory corruption attacks -->
     <application
+        android:name="com.alexisgordr.icdetector.ICDetectionApp"
         android:allowBackup="false"
         android:dataExtractionRules="@xml/data_extraction_rules"
         android:fullBackupContent="@xml/backup_rules"
@@ -57,6 +59,15 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+
+        <!-- 3.0 — Reinicio tras confirmar una restauración (proceso aparte). -->
+        <activity
+            android:name="com.alexisgordr.icdetector.backup.RestartActivity"
+            android:process=":restart"
+            android:exported="false"
+            android:excludeFromRecents="true"
+            android:noHistory="true"
+            android:theme="@android:style/Theme.Translucent.NoTitleBar" />
 
         <service
             android:name="com.alexisgordr.icdetector.service.MiniICService"

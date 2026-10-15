@@ -12,6 +12,19 @@ internal object PingPongRule {
     /** Por encima de esta velocidad los cambios rápidos son normales (desplazamiento). */
     const val MOVING_FAST_MPS = 8f
 
+    /**
+     * 3.0 — Edad máxima del fix cuya velocidad decide H10. Propia de H10: no es
+     * [GpsFixAge.LIVE_MAX_AGE_MS] (10 s), que decide movimiento en vivo y energía en la política de
+     * GPS. 30 s: un fix de esa edad sigue describiendo el estado de movimiento casi siempre, y una
+     * ráfaga de tres handovers en 10 s dentro de una ventana GPS recién abierta encuentra fix con
+     * más facilidad. Pasar de parado (semáforo) a tres handovers (tren arrancando) lleva más de 30 s.
+     * Revisar con la frecuencia real de H10 en N/A (columna de reglas no evaluadas del historial).
+     */
+    const val SPEED_MAX_AGE_MS = 30_000L
+
+    /** Prefijo de la clave de confirmación de un ping-pong ([confirmationKey]). */
+    const val CONFIRMATION_KEY_PREFIX = "pingpong:"
+
     enum class Outcome {
         /** Menos de [MIN_CHANGES] cambios en la ventana: H10 superada. */
         PASSED,
@@ -24,9 +37,43 @@ internal object PingPongRule {
     }
 
     /**
+     * 3.0 — La velocidad caduca mucho antes que la posición. La ubicación acepta fixes de hasta
+     * 120 s, pero una velocidad de hace 90 s (parado en un semáforo) no dice nada de los tres
+     * handovers de ahora (un tren que arranca). Solo cuenta si su fix tiene menos de
+     * [SPEED_MAX_AGE_MS] (reloj monotónico); si no, null y H10 queda N/A, igual que sin GPS.
+     *
+     * @param fixAgeMs edad del fix de la velocidad; null si no se sabe (cuenta como vieja).
+     */
+    fun liveSpeed(speedMps: Float?, fixAgeMs: Long?): Float? =
+        speedMps?.takeIf { fixAgeMs != null && fixAgeMs in 0 until SPEED_MAX_AGE_MS }
+
+    /**
      * @param changeTimesMs momento de cada cambio de celda guardado.
      * @param speedMps velocidad GPS, o null si no hay posición o no trae velocidad.
      */
+    /**
+     * 3.0 — Clave sobre la que [TemporalConfidence] acumula la racha. Normalmente es la identidad
+     * de la servidora, y un cambio de identidad reinicia la racha. Mientras H10 falla, el
+     * comportamiento sospechoso ES el cambio de identidad: un emisor que alterna dos identidades
+     * propias reiniciaba la racha en cada cambio y nunca se confirmaba. Entonces la clave es el
+     * CONJUNTO ordenado de identidades del ping-pong (las de la ventana más la actual), estable
+     * mientras alterne entre las mismas.
+     *
+     * @param history cambios de celda (identidad, instante) con el mismo reloj que [nowMs].
+     */
+    fun confirmationKey(
+        currentIdentity: String,
+        history: List<Pair<String, Long>>,
+        nowMs: Long,
+        pingPongFailed: Boolean
+    ): String {
+        if (!pingPongFailed) return currentIdentity
+        val identities = history.filter { nowMs - it.second in 0..WINDOW_MS }
+            .mapTo(sortedSetOf()) { it.first }
+        identities.add(currentIdentity)
+        return CONFIRMATION_KEY_PREFIX + identities.joinToString(",")
+    }
+
     fun evaluate(changeTimesMs: List<Long>, nowMs: Long, speedMps: Float?): Outcome {
         // Solo cuentan los cambios de la ventana: el servicio poda el historial únicamente cuando
         // llega otro cambio, así que una ráfaga antigua puede seguir guardada.

@@ -2,7 +2,7 @@ package com.alexisgordr.icdetector.models
 
 /**
  * Prefijo con el que se marcan en el historial las observaciones que SÍ fallaron alguna
- * heurística pero no llegaron al umbral de sospecha (score >= 70).
+ * heurística pero no llegaron al umbral de sospecha (score >= ScoreThreshold.SUSPICIOUS_BELOW, 70).
  *
  * v2.1: antes esas observaciones se guardaban con el score real pero con el motivo borrado
  * ("OK"), porque applyTemporalConfidence ponía suspiciousReason a null cuando la celda no era
@@ -13,6 +13,14 @@ package com.alexisgordr.icdetector.models
  * se mantiene intacta, pero la evidencia deja de tirarse a la basura.
  */
 const val SUBTHRESHOLD_PREFIX = "[sub-umbral]"
+
+/**
+ * 3.0 (#7, B4) — Prefijo de los motivos de Stable-Site cuando la protección está activa. Como
+ * [SUBTHRESHOLD_PREFIX], se guarda en castellano y la interfaz en inglés lo muestra como
+ * `[site-unverified]`. Antes se guardaba en inglés y no tenía traducción. Con la protección en
+ * modo sombra (STABLE_SITE_ENFORCEMENT_ENABLED = false) nunca se ha llegado a guardar.
+ */
+const val SITE_UNVERIFIED_PREFIX = "[sitio-sin-verificar]"
 
 data class HistoryRecord(
     val timestamp: String,
@@ -34,7 +42,8 @@ data class HistoryRecord(
     /**
      * Confianza de anomalía calculada por BayesianScorer en el momento de la observación (0..95).
      *
-     * Se persiste y se exporta para poder RECALIBRAR los likelihood ratios con datos reales —
+     * Se persiste y se exporta para poder REVISAR los likelihood ratios con datos reales (3.0:
+     * con datos solo benignos no basta para recalibrarlos; hacen falta también ataques reales) —
      * antes se calculaba en cada ciclo y se perdía al salir de la UI, así que no había nada que
      * calibrar (roadmap #7). No es una probabilidad medida: ver [CellData.anomalyConfidence].
      */
@@ -50,7 +59,7 @@ data class HistoryRecord(
     /**
      * Timing Advance CRUDO tal y como lo entregó el módem, y la unidad en que lo entregó.
      *
-     * v2.1: es la señal más cara del motor (H6 penaliza -40) y era la única que NO se exportaba,
+     * v2.1: alimenta H6 (en 3.0, solo la rama de proximidad, -15) y era la única que NO se exportaba,
      * así que nadie podía comprobar si su teléfono la reporta siquiera. Ahora se guarda el valor
      * sin transformar junto con su procedencia: si algún día hay que decidir empíricamente cómo
      * convertir el TA de NR, la evidencia estará recogida en vez de haber que empezar de cero.
@@ -83,7 +92,59 @@ data class HistoryRecord(
     val serviceState: String? = null,
     val networkOperator: String? = null,
     val simOperator: String? = null,
-    val networkRoaming: Boolean? = null
+    val networkRoaming: Boolean? = null,
+    /**
+     * 3.0 (#23) — Instante de la observación en milisegundos desde epoch (UTC). [timestamp] es
+     * texto local sin zona y se repite en el cambio de hora de otoño; este valor no. Null en las
+     * filas anteriores a 3.0: su zona nunca se guardó y no se reconstruye.
+     */
+    val observedAtMs: Long? = null,
+    /**
+     * 3.0 (#29) — Reglas que se abstuvieron en esta observación (`H1;H6;H9`), o `NONE` si todas se
+     * evaluaron. Null en filas anteriores a 3.0: entonces no se guardaba y es desconocido, nunca
+     * "evaluada".
+     */
+    val notEvaluatedHeuristics: String? = null,
+    /** 3.0 (#29) — Precisión en metros del fix de [lat]/[lon]. Null sin fix o en filas anteriores. */
+    val gpsAccuracyM: Float? = null,
+    /**
+     * 3.0 (#30) — Versión de la app que hizo la observación. Permite aplicar los cortes de dataset
+     * (H10 desde 2.10.9, H8 desde 2.10.10, …) fila a fila. Null en filas anteriores a 3.0.
+     */
+    val appVersion: String? = null,
+    /** 3.0 — Modo de ubicación (`CONTINUOUS` / `INTELLIGENT` / `ADAPTIVE`); null = desconocido. */
+    val locationMode: String? = null,
+    /** 3.0 — Evaluación del perfil local de esta fila (esquema 22); null si no se evaluó. */
+    val profile: ProfileExport? = null,
+    /**
+     * 3.0 — `history.id` de la fila, para cruzar el export con `profile_evaluations.history_id` o
+     * con una copia de seguridad. Null solo si la fila no viene de la base de datos.
+     */
+    val rowId: Long? = null,
+    /**
+     * 3.0 (esquema 24) — Lectura de la que sale la fila. Una misma lectura puede dar dos filas (la
+     * periódica o de handover y la de alarma confirmada), que comparten este valor. Null en filas
+     * anteriores al esquema 24.
+     */
+    val observationId: String? = null
+)
+
+/**
+ * 3.0 — Evaluación del perfil local de una fila, tal como se exporta. Independiente del score y de
+ * las heurísticas de la fila. El nivel no está calibrado y no es una probabilidad.
+ */
+data class ProfileExport(
+    val mode: String,
+    val level: String,
+    val score: Double?,
+    val metricsEvaluated: Int,
+    val metricsTotal: Int,
+    val abstainReason: String?,
+    val algorithmVersion: Int,
+    val revision: String?,
+    val evidence: String?,
+    val learned: Boolean,
+    val holdout: Boolean
 )
 
 /** Misma identidad completa que [CellData.identityKey], aplicada a una fila histórica. */

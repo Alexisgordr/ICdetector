@@ -2,6 +2,7 @@ package com.alexisgordr.icdetector.ui
 
 import android.annotation.SuppressLint
 import com.alexisgordr.icdetector.R
+import com.alexisgordr.icdetector.core.RowProvenance
 import androidx.compose.ui.res.stringResource
 
 import androidx.compose.foundation.BorderStroke
@@ -53,6 +54,7 @@ import com.alexisgordr.icdetector.utils.ExportUtils
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.delay
 import java.text.DateFormat
 import java.util.Date
@@ -65,6 +67,8 @@ fun HistoryPanel(
     dbHelper: CellDbHelper,
     // v2.10.4 — Opcional: la pestaña RADIO muestra datos en vivo del servicio si está conectado.
     service: com.alexisgordr.icdetector.service.MiniICService? = null,
+    /** 3.0 — Pestaña inicial: `profile` abre Perfil local (acceso «Ver evaluaciones» de Ajustes). */
+    initialTab: String? = null,
     onBack: () -> Unit
 ) {
     var items by remember { mutableStateOf<List<HistoryRecord>>(emptyList()) }
@@ -78,6 +82,15 @@ fun HistoryPanel(
     var showGeometry by remember { mutableStateOf(false) }
     // v2.10.4 — Pestaña de contexto de radio. Ver RadioScreen.
     var showRadio by remember { mutableStateOf(false) }
+    // 3.0 — Pestaña Perfil local: evaluaciones guardadas del perfil local (LocalProfileHistoryPanel).
+    // Visible con la opción experimental activada, que controla lo que se muestra del perfil.
+    var showProfile by remember { mutableStateOf(initialTab == "profile") }
+    val historyContext = LocalContext.current
+    val profileTabVisible = remember {
+        showProfile || historyContext.getSharedPreferences("miniic_prefs", android.content.Context.MODE_PRIVATE)
+            .getBoolean(com.alexisgordr.icdetector.core.profile.LocalProfileOption.PREF_KEY,
+                com.alexisgordr.icdetector.core.profile.LocalProfileOption.DEFAULT_ENABLED)
+    }
     var forensicCases by remember { mutableStateOf<List<ForensicCase>>(emptyList()) }
     var transitions by remember { mutableStateOf<List<CellTransitionSummary>>(emptyList()) }
     val showDeleteConfirm = remember { mutableStateOf(false) }
@@ -211,6 +224,7 @@ fun HistoryPanel(
                 showTopology -> stringResource(R.string.history_title_topology)
                 showGeometry -> stringResource(R.string.history_title_geometry)
                 showRadio -> stringResource(R.string.radio_title)
+                showProfile -> stringResource(R.string.history_title_local_profile)
                 showIncidents -> stringResource(R.string.history_title_incidents)
                 else -> stringResource(R.string.history_title_antennas)
             }, color = Color(0xFF666666), fontFamily = FontFamily.Monospace, fontSize = 12.sp)
@@ -228,13 +242,17 @@ fun HistoryPanel(
                 showTopology = tab == "topology"
                 showGeometry = tab == "geometry"
                 showRadio = tab == "radio"
+                showProfile = tab == "profile"
             }
-            FilterChip(selected = !showIncidents && !showForensics && !showTopology && !showGeometry && !showRadio, onClick = { select("antennas") }, label = { Text(stringResource(R.string.tab_antennas)) })
+            FilterChip(selected = !showIncidents && !showForensics && !showTopology && !showGeometry && !showRadio && !showProfile, onClick = { select("antennas") }, label = { Text(stringResource(R.string.tab_antennas)) })
             FilterChip(selected = showIncidents, onClick = { select("incidents") }, label = { Text(stringResource(R.string.tab_incidents)) })
             FilterChip(selected = showForensics, onClick = { select("forensics") }, label = { Text(stringResource(R.string.tab_forensics)) })
             FilterChip(selected = showTopology, onClick = { select("topology") }, label = { Text(stringResource(R.string.tab_topology)) })
             FilterChip(selected = showGeometry, onClick = { select("geometry") }, label = { Text(stringResource(R.string.tab_geometry)) })
             FilterChip(selected = showRadio, onClick = { select("radio") }, label = { Text(stringResource(R.string.tab_radio)) })
+            if (profileTabVisible) {
+                FilterChip(selected = showProfile, onClick = { select("profile") }, label = { Text(stringResource(R.string.tab_local_profile)) })
+            }
         }
 
         if (showForensics) {
@@ -259,6 +277,14 @@ fun HistoryPanel(
         }
         if (showRadio) {
             RadioPanel(dbHelper, service, Modifier.fillMaxWidth().weight(1f))
+            return@Column
+        }
+        if (showProfile) {
+            LocalProfileHistoryPanel(dbHelper, Modifier.fillMaxWidth().weight(1f)) { cellQuery ->
+                // «Ver celda en Antenas»: la pestaña Antenas filtrada por esa identidad.
+                antennaQuery = cellQuery
+                showProfile = false
+            }
             return@Column
         }
 
@@ -448,7 +474,10 @@ private fun AntennaDetailAccordions(
             Row(Modifier.fillMaxWidth().padding(vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f)) {
                     Text(record.timestamp, color = Color(0xFFAAAAAA), fontSize = 10.sp, fontFamily = FontFamily.Monospace)
-                    Text("${verificationStatusLabel(record.verified)} · ${"%.5f".format(java.util.Locale.ROOT, record.lat)}, ${"%.5f".format(java.util.Locale.ROOT, record.lon)}", color = Color(0xFF777777), fontSize = 9.sp, fontFamily = FontFamily.Monospace)
+                    // La precisión guardada acompaña a la posición; si no se guardó, se dice (no se supone).
+                    val accuracy = RowProvenance.accuracyMeters(record.gpsAccuracyM)
+                        ?.let { stringResource(R.string.antenna_gps_accuracy, it) } ?: stringResource(R.string.antenna_gps_accuracy_unknown)
+                    Text("${verificationStatusLabel(record.verified)} · ${"%.5f".format(java.util.Locale.ROOT, record.lat)}, ${"%.5f".format(java.util.Locale.ROOT, record.lon)} · $accuracy", color = Color(0xFF777777), fontSize = 9.sp, fontFamily = FontFamily.Monospace)
                 }
                 LocationButton(record.lat!!, record.lon!!, record.cid)
             }
@@ -459,7 +488,7 @@ private fun AntennaDetailAccordions(
     if (open == AntennaSection.HANDOVERS) {
         routes.forEach { route ->
             val direction = if (route.fromIdentity == identity) "→ ${route.toIdentity}" else "← ${route.fromIdentity}"
-            DetailText("$direction\n${route.observations}× · ${stringResource(R.string.route_trust_label)} ${(route.trustRatio * 100).toInt()}% · ${routeStatusLabel(route.lastStatus)} · ${DateFormat.getDateTimeInstance(DateFormat.SHORT, DateFormat.SHORT).format(Date(route.lastSeenMs))}")
+            DetailText("$direction\n${route.observations}× · ${stringResource(R.string.route_trust_label)} ${(route.trustRatio * 100).toInt()}% · ${routeStatusLabel(route)} · ${DateFormat.getDateTimeInstance(DateFormat.SHORT, DateFormat.SHORT).format(Date(route.lastSeenMs))}")
         }
         if (routes.isEmpty()) DetailText(stringResource(R.string.antenna_no_handovers))
     }
@@ -468,6 +497,13 @@ private fun AntennaDetailAccordions(
         val latest = records.first()
         val oldest = records.last()
         DetailText("CID ${latest.cid} · MCC/MNC ${latest.mcc}/${latest.mnc} · TAC ${latest.tac}\n${latest.radio.name} · PCI ${latest.pci ?: "N/A"} · ARFCN ${latest.arfcn ?: "N/A"}\n${latest.dbm} dBm · RSRQ ${latest.rsrq ?: "N/A"} · SINR ${latest.sinr ?: "N/A"} · TA ${latest.timingAdvance ?: "N/A"} ${latest.timingAdvanceUnit.name}\n${verificationStatusLabel(latest.verified)} · score ${latest.score}% · ${stringResource(R.string.antenna_anomaly_label)} ${"%.1f".format(java.util.Locale.ROOT, latest.anomalyConfidence)}%\n${records.size} ${stringResource(R.string.antenna_samples_label)} · ${oldest.timestamp} — ${latest.timestamp}")
+        val notEvaluated = when (val n = RowProvenance.notEvaluated(latest.notEvaluatedHeuristics)) {
+            RowProvenance.NotEvaluated.Unknown -> stringResource(R.string.antenna_not_evaluated_unknown)
+            RowProvenance.NotEvaluated.None -> stringResource(R.string.antenna_not_evaluated_none)
+            is RowProvenance.NotEvaluated.Rules -> stringResource(R.string.antenna_not_evaluated_rules, n.ids.joinToString(", "))
+        }
+        val notStored = stringResource(R.string.antenna_not_stored)
+        DetailText(notEvaluated + "\n" + stringResource(R.string.antenna_row_origin, latest.locationMode ?: notStored, latest.appVersion ?: notStored))
     }
 }
 
@@ -526,11 +562,37 @@ private fun TopologyPanel(
         }) { Text(stringResource(R.string.export)) } },
         dismissButton = { TextButton(onClick = { confirmExport = false }) { Text(stringResource(R.string.cancel)) } }
     )
+    // 3.0 — Aviso de privacidad antes de exportar Stable-Site, como en topología y Geometry: las claves
+    // de sitio son hashes deterministas sin sal y pueden asociarse a una zona aproximada.
+    var confirmStableSiteExport by remember { mutableStateOf(false) }
+    if (confirmStableSiteExport) AlertDialog(
+        onDismissRequest = { confirmStableSiteExport = false },
+        title = { Text(stringResource(R.string.export_stable_site_title)) },
+        text = { Text(stringResource(R.string.stable_site_export_privacy_warning)) },
+        confirmButton = { TextButton(onClick = {
+            confirmStableSiteExport = false
+            stableSiteExportLauncher.launch("ICD-stable-site-${System.currentTimeMillis()}.zip")
+        }) { Text(stringResource(R.string.export)) } },
+        dismissButton = { TextButton(onClick = { confirmStableSiteExport = false }) { Text(stringResource(R.string.cancel)) } }
+    )
+    // 3.0 — Consulta de Stable-Site integrada en Topología (StableSitePanel); la flecha vuelve aquí.
+    var showStableSite by remember { mutableStateOf(false) }
+    if (showStableSite) {
+        StableSitePanel(dbHelper, modifier) { showStableSite = false }
+        return
+    }
+    // 3.0 — Detalle de una ruta (datos de la ruta y sus episodios Stable-Site, paginados por sitio).
+    var selectedRoute by remember { mutableStateOf<CellTransitionSummary?>(null) }
+    selectedRoute?.let { route ->
+        RouteDetailPanel(dbHelper, route, routeStatusLabel(route), modifier) { selectedRoute = null }
+        return
+    }
     var filter by remember { mutableStateOf("ALL") }
     val visible = remember(transitions, filter) {
         when (filter) {
             "TRUSTED" -> transitions.filter { it.trustedObservations > 0 }
-            "REVIEW" -> transitions.filter { it.lastStatus != HeuristicStatus.PASSED }
+            // 3.0 (UI2) — REVISAR = algún FAILED registrado (ver RouteReview). N/A solo no cuenta.
+            "REVIEW" -> transitions.filter { com.alexisgordr.icdetector.core.RouteReview.needsReview(it) }
             else -> transitions
         }.sortedWith(compareByDescending<CellTransitionSummary> { it.observations }.thenByDescending { it.lastSeenMs })
     }
@@ -552,6 +614,12 @@ private fun TopologyPanel(
             TopologyMetric(stringResource(R.string.topology_metric_handovers), totalHandovers.toString(), Modifier.weight(1f))
             TopologyMetric(stringResource(R.string.topology_metric_trusted), trustedRoutes.toString(), Modifier.weight(1f))
         }
+        Spacer(Modifier.height(4.dp))
+        // «Aprendida» es un criterio de movilidad (H16 con GPS preciso), no una prueba de legitimidad.
+        Text(
+            stringResource(R.string.topology_learned_note),
+            color = Color(0xFF666666), fontFamily = FontFamily.Monospace, fontSize = 8.sp
+        )
         Spacer(Modifier.height(8.dp))
         Row(
             Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
@@ -560,6 +628,9 @@ private fun TopologyPanel(
             FilterChip(filter == "ALL", { filter = "ALL" }, label = { Text(stringResource(R.string.filter_all)) })
             FilterChip(filter == "TRUSTED", { filter = "TRUSTED" }, label = { Text(stringResource(R.string.filter_learned)) })
             FilterChip(filter == "REVIEW", { filter = "REVIEW" }, label = { Text(stringResource(R.string.filter_review)) })
+        }
+        if (filter == "REVIEW") {
+            Text(stringResource(R.string.route_review_note), color = Color(0xFF666666), fontFamily = FontFamily.Monospace, fontSize = 8.sp)
         }
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
             TextButton(
@@ -572,12 +643,20 @@ private fun TopologyPanel(
                 Text(stringResource(R.string.export_topology), fontFamily = FontFamily.Monospace, fontSize = 9.sp)
             }
             TextButton(
-                onClick = { stableSiteExportLauncher.launch("ICD-stable-site-${System.currentTimeMillis()}.zip") },
+                onClick = { confirmStableSiteExport = true },
                 colors = ButtonDefaults.textButtonColors(contentColor = Color(0xFF80CBC4))
             ) {
                 Icon(Icons.Default.Share, contentDescription = null, modifier = Modifier.size(14.dp))
                 Spacer(Modifier.width(4.dp))
                 Text(stringResource(R.string.export_stable_site), fontFamily = FontFamily.Monospace, fontSize = 9.sp)
+            }
+        }
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+            TextButton(
+                onClick = { showStableSite = true },
+                colors = ButtonDefaults.textButtonColors(contentColor = Color(0xFF80CBC4))
+            ) {
+                Text(stringResource(R.string.view_stable_site), fontFamily = FontFamily.Monospace, fontSize = 9.sp)
             }
         }
         exportMessage?.let {
@@ -600,7 +679,7 @@ private fun TopologyPanel(
         } else {
             LazyColumn(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 items(visible, key = { "${it.fromIdentity}>${it.toIdentity}" }) { route ->
-                    TopologyRouteCard(route)
+                    TopologyRouteCard(route) { selectedRoute = route }
                 }
             }
         }
@@ -618,18 +697,22 @@ private fun TopologyMetric(label: String, value: String, modifier: Modifier = Mo
 }
 
 @Composable
-private fun TopologyRouteCard(route: CellTransitionSummary) {
-    val statusText = routeStatusLabel(route.lastStatus)
-    val statusColor = when (route.lastStatus) {
-        HeuristicStatus.PASSED -> Color(0xFF4CAF50)
-        HeuristicStatus.FAILED -> Color(0xFFCF6679)
-        HeuristicStatus.NOT_EVALUATED -> Color(0xFFFFA000)
+private fun TopologyRouteCard(route: CellTransitionSummary, onOpen: () -> Unit) {
+    // 3.0 — Al pulsar la tarjeta se abre su detalle (RouteDetailPanel).
+    val statusText = routeStatusLabel(route)
+    val statusColor = when (com.alexisgordr.icdetector.core.RouteReview.current(route)) {
+        com.alexisgordr.icdetector.core.RouteReview.Current.COHERENT -> Color(0xFF4CAF50)
+        com.alexisgordr.icdetector.core.RouteReview.Current.FAILED -> Color(0xFFCF6679)
+        com.alexisgordr.icdetector.core.RouteReview.Current.NOT_EVALUATED,
+        com.alexisgordr.icdetector.core.RouteReview.Current.NO_HANDOVER_OBSERVED -> Color(0xFF888888)
     }
+    val details = routeStatusDetails(route)
     val lastSeen = remember(route.lastSeenMs) {
         java.text.SimpleDateFormat("yyyy-MM-dd HH:mm", java.util.Locale.getDefault())
             .format(java.util.Date(route.lastSeenMs))
     }
     Card(
+        onClick = onOpen,
         colors = CardDefaults.cardColors(containerColor = Color(0xFF111111)),
         border = BorderStroke(1.dp, statusColor.copy(alpha = 0.45f)),
         shape = RoundedCornerShape(4.dp)
@@ -658,6 +741,10 @@ private fun TopologyRouteCard(route: CellTransitionSummary) {
                 )
                 Text(lastSeen, color = Color(0xFF666666), fontFamily = FontFamily.Monospace, fontSize = 8.sp)
             }
+            // 3.0 (UI2) — Motivo del N/A, último evaluado (si no es la lectura actual) y fallos.
+            details.forEach { line ->
+                Text(line, color = Color(0xFF888888), fontFamily = FontFamily.Monospace, fontSize = 8.sp)
+            }
         }
     }
 }
@@ -678,15 +765,44 @@ private fun verificationStatusLabel(status: VerificationStatus): String = string
     }
 )
 
-/** Último veredicto de una ruta de handover (H16), igual que en la tarjeta de Topología. */
+/**
+ * 3.0 (UI2) — Estado de la ÚLTIMA OBSERVACIÓN de una ruta (H16), igual en tarjeta, detalle y
+ * antena. N/A se muestra SIN EVALUAR, nunca APRENDIENDO; sin ningún handover observado (ruta
+ * creada solo por viajes) no hay lectura que mostrar.
+ */
 @Composable
-private fun routeStatusLabel(status: HeuristicStatus): String = stringResource(
-    when (status) {
-        HeuristicStatus.PASSED -> R.string.coherent
-        HeuristicStatus.FAILED -> R.string.review
-        HeuristicStatus.NOT_EVALUATED -> R.string.topology_status_learning
+internal fun routeStatusLabel(route: CellTransitionSummary): String = stringResource(
+    when (com.alexisgordr.icdetector.core.RouteReview.current(route)) {
+        com.alexisgordr.icdetector.core.RouteReview.Current.COHERENT -> R.string.coherent
+        com.alexisgordr.icdetector.core.RouteReview.Current.FAILED -> R.string.review
+        com.alexisgordr.icdetector.core.RouteReview.Current.NOT_EVALUATED -> R.string.route_not_evaluated
+        com.alexisgordr.icdetector.core.RouteReview.Current.NO_HANDOVER_OBSERVED -> R.string.route_no_handover
     }
 )
+
+/**
+ * 3.0 (UI2) — Líneas de detalle de una ruta: motivo del N/A (si se guardó), el último resultado
+ * evaluado cuando NO es la lectura actual, con su fecha, y lo que se sabe de sus fallos.
+ */
+@Composable
+internal fun routeStatusDetails(route: CellTransitionSummary): List<String> {
+    val englishUi = LocalConfiguration.current.locales[0].language != "es"
+    val date = { ms: Long -> DateFormat.getDateTimeInstance(DateFormat.SHORT, DateFormat.SHORT).format(Date(ms)) }
+    val lines = mutableListOf<String>()
+    if (com.alexisgordr.icdetector.core.RouteReview.current(route) == com.alexisgordr.icdetector.core.RouteReview.Current.NOT_EVALUATED) {
+        route.lastExplanation?.let { lines += stringResource(R.string.route_not_evaluated_reason, if (englishUi) localizeTerminalLine(it) else it) }
+    }
+    com.alexisgordr.icdetector.core.RouteReview.previousEvaluated(route)?.let { (status, at) ->
+        val label = stringResource(if (status == HeuristicStatus.PASSED) R.string.coherent else R.string.review)
+        lines += stringResource(R.string.route_last_evaluated, label, date(at))
+    }
+    lines += when (val f = com.alexisgordr.icdetector.core.RouteReview.failures(route)) {
+        is com.alexisgordr.icdetector.core.RouteReview.Failures.Complete -> stringResource(R.string.route_failures_complete, f.count)
+        is com.alexisgordr.icdetector.core.RouteReview.Failures.AtLeast -> stringResource(R.string.route_failures_at_least, f.since + 1, f.since)
+        is com.alexisgordr.icdetector.core.RouteReview.Failures.UnknownBefore -> stringResource(R.string.route_failures_unknown, f.since)
+    }
+    return lines
+}
 
 /** Estado de un caso forense. */
 @Composable
@@ -826,7 +942,7 @@ private fun ForensicCaseList(
                                 fontWeight = FontWeight.Bold
                             )
                         }
-                        Text("${fc.createdAt} → ${fc.closedAt ?: stringResource(R.string.in_progress)}", color = Color(0xFF777777), fontFamily = FontFamily.Monospace, fontSize = 9.sp)
+                        Text("${fc.createdAt} → ${fc.closedAt ?: stringResource(R.string.case_in_progress)}", color = Color(0xFF777777), fontFamily = FontFamily.Monospace, fontSize = 9.sp)
                         if (fc.state == ForensicCaseState.READY || fc.state == ForensicCaseState.INTERRUPTED) {
                             OutlinedButton(onClick = {
                                 selectedForExport = fc
@@ -908,7 +1024,7 @@ private fun IncidentList(
                         }
                         Text("${incident.highestPhase}/${incident.requiredPhases} $stateLabel", color = stateColor, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Bold, fontSize = 10.sp)
                     }
-                    Text("${incident.startedAt} → ${incident.endedAt ?: stringResource(R.string.in_progress)}", color = Color(0xFF777777), fontFamily = FontFamily.Monospace, fontSize = 9.sp)
+                    Text("${incident.startedAt} → ${incident.endedAt ?: stringResource(R.string.case_in_progress)}", color = Color(0xFF777777), fontFamily = FontFamily.Monospace, fontSize = 9.sp)
                     Text(stringResource(R.string.score_confidence_format, incident.score, String.format(java.util.Locale.ROOT, "%.1f", incident.anomalyConfidence)), color = Color(0xFFAAAAAA), fontFamily = FontFamily.Monospace, fontSize = 9.sp)
                     if (expanded) {
                         HorizontalDivider(color = Color(0xFF222222))
@@ -939,63 +1055,64 @@ private fun IncidentList(
     }
 }
 
+/** 3.0 (UI1) — Estado del panel de estadísticas. */
+private sealed interface IntelState {
+    data object Loading : IntelState
+    data object Empty : IntelState
+    data object Failed : IntelState
+    data class Ready(val stats: com.alexisgordr.icdetector.storage.IntelStats) : IntelState
+}
+
 @Composable
 fun IntelPanel(dbHelper: CellDbHelper) {
-    var items by remember { mutableStateOf<List<HistoryRecord>>(emptyList()) }
-
-    LaunchedEffect(Unit) {
-        withContext(Dispatchers.IO) {
-            items = dbHelper.getRecords()
+    // 3.0 (UI1) — Cifras agregadas en SQL, en IO. Antes se leía el historial entero y se agrupaba
+    // en Compose. Salir de la pantalla cancela la corrutina; la cancelación no es un error.
+    var state by remember { mutableStateOf<IntelState>(IntelState.Loading) }
+    LaunchedEffect(dbHelper) {
+        state = IntelState.Loading
+        state = try {
+            withContext(Dispatchers.IO) {
+                val stats = dbHelper.getIntelStats(checkpoint = { ensureActive() })
+                if (stats == null) IntelState.Empty else IntelState.Ready(stats)
+            }
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
+        } catch (_: Exception) {
+            IntelState.Failed
         }
     }
 
-    if (items.isEmpty()) {
+    val message = when (state) {
+        IntelState.Loading -> stringResource(R.string.intel_loading)
+        IntelState.Empty -> stringResource(R.string.no_data_yet)
+        IntelState.Failed -> stringResource(R.string.intel_load_error)
+        is IntelState.Ready -> null
+    }
+    if (message != null) {
         Box(modifier = Modifier.fillMaxWidth().padding(16.dp),
             contentAlignment = Alignment.Center) {
-            Text(stringResource(R.string.no_data_yet), color = Color(0xFF444444),
+            Text(message, color = if (state == IntelState.Failed) Color(0xFFCF6679) else Color(0xFF444444),
                 fontFamily = FontFamily.Monospace, fontSize = 11.sp)
         }
         return
     }
+    val stats = (state as IntelState.Ready).stats
 
-    val groupedItems = remember(items) {
-        val groups = mutableMapOf<String, MutableList<HistoryRecord>>()
-        val orderedIdentities = mutableListOf<String>()
-        items.forEach { record ->
-            val identity = record.identityKey
-            if (!groups.containsKey(identity)) {
-                orderedIdentities.add(identity)
-                groups[identity] = mutableListOf()
-            }
-            groups[identity]!!.add(record)
-        }
-        orderedIdentities.map { identity -> identity to groups[identity]!! }
-    }
-
-    // Calcular estadísticas
-    val totalCells = groupedItems.size
-    val totalConnections = items.size
-    val avgScore = items.asSequence().map { it.score }.average()
-    val suspiciousCells = groupedItems.count { (_, records) -> records.any { it.score < 70 } }
-    val verifiedCells = groupedItems.count { (_, r) -> r.any { it.verified.name == "VERIFIED" } }
-    val notFoundCells = groupedItems.count { (_, r) -> r.any { it.verified.name == "NOT_FOUND" } }
-    val recordsWithGps = items.count { it.lat != null && it.lon != null }
-    val mostSeenCell = groupedItems.maxByOrNull { it.second.size }
-    // "Celdas anómalas" cuenta SOLO alarmas reales. Las observaciones sub-umbral que v2.1 empieza
-    // a registrar son material de análisis, no anomalías: incluirlas aquí inflaría el contador
-    // sin que hubiera pasado nada nuevo en la red.
-    val anomalousCells = groupedItems.count { (_, r) ->
-        r.any {
-            it.failedHeuristics.isNotBlank() &&
-                it.failedHeuristics != "OK" &&
-                !it.failedHeuristics.startsWith(SUBTHRESHOLD_PREFIX)
-        }
-    }
-    val networkTypes = items.groupBy { it.netType }
-        .mapValues { it.value.size }
-        .entries.sortedByDescending { it.value }
-    val dateFrom = items.lastOrNull()?.timestamp?.take(10) ?: "N/A"
-    val dateTo = items.firstOrNull()?.timestamp?.take(10) ?: "N/A"
+    val totalCells = stats.cells
+    val totalObservations = stats.observations
+    val avgScore = stats.averageScore
+    // Puntuación baja (< umbral) en alguna observación: NO es una alarma confirmada.
+    val lowScoreCells = stats.lowScoreCells
+    val verifiedCells = stats.verifiedCells
+    val notFoundCells = stats.notFoundCells
+    val recordsWithGps = stats.observationsWithGps
+    val mostSeenCell = stats.mostSeen
+    // Celdas con algún motivo guardado (no limpio, no sub-umbral). Incluye alarmas aún en
+    // confirmación: no son solo alarmas confirmadas, de ahí la etiqueta «CON MOTIVO».
+    val cellsWithReason = stats.cellsWithReason
+    val networkTypes = stats.networkTypes
+    val dateFrom = stats.dateFrom ?: "N/A"
+    val dateTo = stats.dateTo ?: "N/A"
 
     Column(
         modifier = Modifier.fillMaxWidth().padding(top = 12.dp),
@@ -1017,7 +1134,7 @@ fun IntelPanel(dbHelper: CellDbHelper) {
         // Grid 2x3 uniforme
         Row(modifier = Modifier.fillMaxWidth()) {
             IntelCell(Modifier.weight(1f), stringResource(R.string.intel_cells), totalCells.toString())
-            IntelCell(Modifier.weight(1f), stringResource(R.string.intel_connections), totalConnections.toString())
+            IntelCell(Modifier.weight(1f), stringResource(R.string.intel_connections), totalObservations.toString())
             IntelCell(Modifier.weight(1f), stringResource(R.string.intel_avg_score), String.format(java.util.Locale.ROOT, "%.1f%%", avgScore))
         }
 
@@ -1029,8 +1146,8 @@ fun IntelPanel(dbHelper: CellDbHelper) {
             IntelCell(Modifier.weight(1f), stringResource(R.string.intel_verified), verifiedCells.toString(), Color(0xFF4CAF50))
             IntelCell(Modifier.weight(1f), stringResource(R.string.intel_not_found), notFoundCells.toString(), Color(0xFFFFA000))
             IntelCell(
-                Modifier.weight(1f), stringResource(R.string.intel_suspicious), suspiciousCells.toString(),
-                if (suspiciousCells > 0) Color(0xFFCF6679) else Color(0xFF4CAF50)
+                Modifier.weight(1f), stringResource(R.string.intel_suspicious, com.alexisgordr.icdetector.core.ScoreThreshold.SUSPICIOUS_BELOW), lowScoreCells.toString(),
+                if (lowScoreCells > 0) Color(0xFFCF6679) else Color(0xFF4CAF50)
             )
         }
 
@@ -1041,8 +1158,8 @@ fun IntelPanel(dbHelper: CellDbHelper) {
         Row(modifier = Modifier.fillMaxWidth()) {
             IntelCell(Modifier.weight(1f), stringResource(R.string.intel_with_gps), recordsWithGps.toString())
             IntelCell(
-                Modifier.weight(1f), stringResource(R.string.intel_anomalies), anomalousCells.toString(),
-                if (anomalousCells > 0) Color(0xFFFFA000) else Color(0xFF4CAF50)
+                Modifier.weight(1f), stringResource(R.string.intel_anomalies), cellsWithReason.toString(),
+                if (cellsWithReason > 0) Color(0xFFFFA000) else Color(0xFF4CAF50)
             )
             // Período en 2 líneas para que no se corte
             Column(
@@ -1063,7 +1180,7 @@ fun IntelPanel(dbHelper: CellDbHelper) {
         Spacer(Modifier.height(6.dp))
 
         // MÁS VISTA — fila completa centrada
-        mostSeenCell?.let { (cid, records) ->
+        mostSeenCell?.let { (cid, seen) ->
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -1074,7 +1191,7 @@ fun IntelPanel(dbHelper: CellDbHelper) {
                 Text(cid, color = Color.White,
                     fontSize = 9.sp, fontFamily = FontFamily.Monospace,
                     fontWeight = FontWeight.Bold)
-                Text("${records.size}x", color = Color(0xFF4CAF50),
+                Text("${seen}x", color = Color(0xFF4CAF50),
                     fontSize = 9.sp, fontFamily = FontFamily.Monospace,
                     fontWeight = FontWeight.Bold)
             }
@@ -1092,10 +1209,10 @@ fun IntelPanel(dbHelper: CellDbHelper) {
             ) {
                 Text(stringResource(R.string.networks), color = Color(0xFF555555),
                     fontSize = 8.sp, fontFamily = FontFamily.Monospace)
-                networkTypes.take(3).forEach { (type, count) ->
+                networkTypes.forEach { (type, count) ->
                     Row(verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(2.dp)) {
-                        Text(type, color = Color(0xFF888888),
+                        Text(type ?: "?", color = Color(0xFF888888),
                             fontSize = 8.sp, fontFamily = FontFamily.Monospace)
                         Text(":$count", color = Color.White,
                             fontSize = 8.sp, fontFamily = FontFamily.Monospace,

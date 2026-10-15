@@ -23,6 +23,31 @@ class TrustContradictionForensicsTest {
         localCellTrust = LocalCellTrust(state = state, contradictions = contradictions)
     )
 
+    // 3.0 (#7, B5) — La celda que se sigue viendo no se desaloja aunque fuera la primera en entrar.
+    @Test fun `a cell seen recently is not evicted just because it entered first`() {
+        val tracker = TrustContradictionTransitionTracker(maxIdentities = 3)
+        tracker.observe(cell(LocalCellTrustState.ESTABLISHED, cid = "home"))
+        listOf("a", "b", "c", "d").forEach { other ->
+            tracker.observe(cell(LocalCellTrustState.ESTABLISHED, cid = other))
+            tracker.observe(cell(LocalCellTrustState.ESTABLISHED, cid = "home"))   // se vuelve a ver
+        }
+        assertEquals(
+            TrustContradictionSignal.TRANSITION,
+            tracker.observe(cell(LocalCellTrustState.CHANGED, setOf("PCI"), cid = "home"))
+        )
+    }
+
+    @Test fun `the identity unseen for longest is the one evicted`() {
+        val tracker = TrustContradictionTransitionTracker(maxIdentities = 2)
+        tracker.observe(cell(LocalCellTrustState.ESTABLISHED, cid = "old"))
+        tracker.observe(cell(LocalCellTrustState.ESTABLISHED, cid = "x"))
+        tracker.observe(cell(LocalCellTrustState.ESTABLISHED, cid = "y"))       // desaloja "old"
+        assertEquals(
+            TrustContradictionSignal.ON_START,
+            tracker.observe(cell(LocalCellTrustState.CHANGED, setOf("PCI"), cid = "old"))
+        )
+    }
+
     @Test fun `established to changed with contradiction triggers capture`() {
         val tracker = TrustContradictionTransitionTracker()
         assertEquals(TrustContradictionSignal.NONE, tracker.observe(cell(LocalCellTrustState.ESTABLISHED)))

@@ -32,7 +32,6 @@ class VerificationNeutralityTest {
     private fun analizar(estado: VerificationStatus) = ThreatAnalyzer.analyzeThreats(
         active = cell(estado),
         neighbors = emptyList(),
-        isHardwareCipheringActive = false,
         cellChangeHistory = emptyList(),
         currentLocation = null
     )
@@ -91,7 +90,6 @@ class VerificationNeutralityTest {
         val referencia = ThreatAnalyzer.analyzeThreats(
             active = celdaPegadaALaAntena(VerificationStatus.PENDING),
             neighbors = emptyList(),
-            isHardwareCipheringActive = false,
             cellChangeHistory = emptyList(),
             currentLocation = null
         )
@@ -106,7 +104,6 @@ class VerificationNeutralityTest {
             val r = ThreatAnalyzer.analyzeThreats(
                 active = celdaPegadaALaAntena(estado),
                 neighbors = emptyList(),
-                isHardwareCipheringActive = false,
                 cellChangeHistory = emptyList(),
                 currentLocation = null
             )

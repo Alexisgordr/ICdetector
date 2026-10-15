@@ -28,7 +28,7 @@ class ProductionPipelineRegressionTest {
         val phases = (1L..3L).map { token ->
             val analyzed = ThreatAnalyzer.analyzeThreats(
                 active = serving(), neighbors = listOf(neighbor()),
-                isHardwareCipheringActive = true, cellChangeHistory = emptyList(),
+                cellChangeHistory = emptyList(),
                 currentLocation = null
             )
             val trusted = LocalCellTrustEngine.apply(analyzed, LocalCellTrustEvidence())

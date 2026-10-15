@@ -12,6 +12,7 @@ import com.alexisgordr.icdetector.models.CellReputation
 import com.alexisgordr.icdetector.models.CellRfFingerprint
 import com.alexisgordr.icdetector.models.VerificationStatus
 import com.alexisgordr.icdetector.models.RadioTech
+import com.alexisgordr.icdetector.models.ServiceStateSnapshot
 
 object ThreatAnalyzer {
     /** CellInfo.UNAVAILABLE: el módem no entrega la frecuencia. No es una frecuencia. */
@@ -19,6 +20,10 @@ object ThreatAnalyzer {
 
     /** Ventana de H10: cambios de celda considerados "rápidos". */
     internal const val PING_PONG_WINDOW_MS = PingPongRule.WINDOW_MS
+
+    /** 3.0 (corte de campaña) — Motivos de H8, aviso de calidad de dato (ver la regla 8 en analyzeThreats). */
+    const val H8_LTE_REASON = "Calidad de dato: EARFCN 4G fuera de la tabla 3GPP"
+    const val H8_NR_REASON = "Calidad de dato: NR-ARFCN 5G fuera de la tabla 3GPP"
 
 
     /**
@@ -43,6 +48,15 @@ object ThreatAnalyzer {
      * Calcula el umbral dinámico según el contexto de densidad de celdas (vecinos)
      * Optimizamos para reducir falsos positivos en zonas rurales.
      */
+    /** 3.0 — MCC y MNC de la vecina iguales a los de la servidora (como números), o sin informar. */
+    internal fun sameOperatorOrUnknown(active: CellData, neighbour: CellData): Boolean {
+        fun known(v: String) = MccConsistencyRule.known(v)
+        fun same(a: String, b: String) = MccConsistencyRule.sameCode(a, b)
+        val mccOk = !known(neighbour.mcc) || !known(active.mcc) || same(neighbour.mcc, active.mcc)
+        val mncOk = !known(neighbour.mnc) || (known(active.mnc) && same(neighbour.mnc, active.mnc))
+        return mccOk && mncOk
+    }
+
     internal fun getDynamicLocationThreshold(
         neighbors: List<CellData>,
         radioTech: RadioTech
@@ -75,43 +89,13 @@ object ThreatAnalyzer {
         val validRecords = history.filter { it.lat != null && it.lon != null }
         if (validRecords.isEmpty()) return Triple(true, 0, null)
 
-        data class RecordAnalysis(
-            val isAnomalous: Boolean,
-            val severity: Int,
-            val threatDetail: String?
-        )
-
         val analyses = validRecords.map { record ->
             val results = FloatArray(1)
             Location.distanceBetween(
                 currentLocation.latitude, currentLocation.longitude,
                 record.lat!!, record.lon!!, results
             )
-            val distance = results[0].toDouble()
-
-            if (distance > threshold) {
-                val pciMismatch = record.pci != null && active.pci != null && record.pci != active.pci
-                val arfcnMismatch = record.arfcn != null && active.arfcn != null && record.arfcn != active.arfcn
-
-                val distanceFactor = (distance / threshold).coerceAtMost(3.0)
-                var severity = when {
-                    distanceFactor > 2.5 -> 40
-                    distanceFactor > 1.8 -> 30
-                    distanceFactor > 1.2 -> 20
-                    else -> 10
-                }
-
-                val detail = if (pciMismatch || arfcnMismatch) {
-                    severity += 25
-                    "Inconsistencia RF (PCI/ARFCN) detectada a gran distancia"
-                } else {
-                    "Celda detectada a distancia anómala (> ${threshold.toInt()}m)"
-                }
-
-                RecordAnalysis(true, severity, detail)
-            } else {
-                RecordAnalysis(false, 0, null)
-            }
+            mobileCellRecord(active, record, results[0].toDouble(), threshold)
         }
 
         val anomalousRecords = analyses.filter { it.isAnomalous }
@@ -125,11 +109,47 @@ object ThreatAnalyzer {
         return Triple(false, worst.severity.coerceAtMost(100), worst.threatDetail)
     }
 
+    /** Resultado de H11 para un registro del historial. */
+    internal data class RecordAnalysis(
+        val isAnomalous: Boolean,
+        val severity: Int,
+        val threatDetail: String?
+    )
+
+    /**
+     * 3.0 — Parte pura de H11 para un registro: a [distance] metros de la posición actual. Misma
+     * lógica geográfica que antes; lo único nuevo es que la discrepancia de PCI/PSC o canal (+25)
+     * exige datos válidos y comparables en ambos lados ([RadioChannels.rfDifference]).
+     */
+    internal fun mobileCellRecord(active: CellData, record: HistoryRecord, distance: Double, threshold: Double): RecordAnalysis {
+        if (distance <= threshold) return RecordAnalysis(false, 0, null)
+        // 3.0 — Solo cuentan discrepancias entre datos válidos y comparables (misma tecnología,
+        // cada lado validado con RadioChannels). Un centinela del historial (2147483647) o un
+        // dato desconocido ya no suma severidad.
+        val rf = RadioChannels.rfDifference(active.radioTech, active.pci, active.arfcn, record.radio, record.pci, record.arfcn)
+        val pciMismatch = rf.physicalId
+        val arfcnMismatch = rf.channel
+
+        val distanceFactor = (distance / threshold).coerceAtMost(3.0)
+        var severity = when {
+            distanceFactor > 2.5 -> 40
+            distanceFactor > 1.8 -> 30
+            distanceFactor > 1.2 -> 20
+            else -> 10
+        }
+
+        val detail = if (pciMismatch || arfcnMismatch) {
+            severity += 25
+            "Inconsistencia RF (PCI/ARFCN) detectada a gran distancia"
+        } else {
+            "Celda detectada a distancia anómala (> ${threshold.toInt()}m)"
+        }
+        return RecordAnalysis(true, severity, detail)
+    }
+
     fun analyzeThreats(
         active: CellData,
         neighbors: List<CellData>,
-        isHardwareCipheringActive: Boolean,
-        isHardwareCipheringAvailable: Boolean = false,
         cellChangeHistory: List<Pair<String, Long>>,
         currentLocation: Location?,
         preloadedHistory: List<HistoryRecord> = emptyList(),
@@ -139,13 +159,37 @@ object ThreatAnalyzer {
         signalBaseline: SignalBaseline? = null,
         previousBand: Int? = null,
         previousDbm: Int? = null,
+        /** 3.0 (#10) — Estación base ([LteSite.key]) de la celda en la que se midió [previousBand]. */
+        previousBandSite: String? = null,
+        /** 3.0 (#8) — NR-ARFCN de la servidora NR anterior (5G SA), para H14 en NR. */
+        previousNrArfcn: Int? = null,
         recentRegisteredDbm: List<Int> = emptyList(),
         rfStability: CellRfStability? = null,
         reputation: CellReputation? = null,
         rfFingerprint: CellRfFingerprint? = null,
         transitionCoherence: TransitionCoherenceResult = TransitionCoherenceResult(),
         isolatedCellConfirmed: Boolean = true,
-        nowMs: Long = System.currentTimeMillis()
+        /**
+         * 3.0 — Edad del fix de [currentLocation] en el momento de la entrega (reloj monotónico). Su
+         * VELOCIDAD solo decide H10 si es reciente (PingPongRule.liveSpeed, [PingPongRule.SPEED_MAX_AGE_MS]);
+         * null = edad desconocida, no se usa la velocidad. 3.0 (corte de campaña) — Y su POSICIÓN solo vale para
+         * H11 con 60 s o menos (MobileCellIdFixAge); con más, o desconocida, H11 se abstiene.
+         */
+        locationFixAgeMs: Long? = null,
+        /**
+         * 3.0 — Velocidad que decide H10: la del fix si es reciente ([PingPongRule.liveSpeed]).
+         * Es un parámetro para que los escenarios de la JVM puedan recorrer H10 (Location es de
+         * Android); el servicio no lo pasa y usa siempre este valor por defecto.
+         */
+        pingPongSpeedMps: Float? = PingPongRule.liveSpeed(
+            currentLocation?.takeIf { it.hasSpeed() }?.speed, locationFixAgeMs
+        ),
+        nowMs: Long = System.currentTimeMillis(),
+        /**
+         * 3.0 (corte de campaña) — ServiceState de esta observación (el del contexto capturado al recibirla):
+         * H3 compara el MCC de la servidora con el de la SIM y mira el roaming. Null = N/A.
+         */
+        serviceState: ServiceStateSnapshot? = null
     ): CellData {
         val reasons = mutableListOf<String>()
         var score = 100
@@ -166,7 +210,17 @@ object ThreatAnalyzer {
         var hLatencyCorrelation = true
         var hTransitionCoherence = true
 
-        var eIsolated = !isWifiActive
+        // 3.0 (corte de campaña) — Una celda CSG (femtocelda, indicador de grupo cerrado de abonados) está
+        // diseñada para ser aislada, potente, cercana y con su propio TAC: un único hecho benigno
+        // hacía fallar H1, H2, H5, H6 y H7 a la vez (una femtocelda a 10 m con −55 dBm es justo
+        // "TA ≤ 100 m con señal ≥ −60 dBm"). En una CSG esas cinco no se evalúan (N/A, sin puntos,
+        // sin motivo, fuera del bayesiano); el resto de reglas no cambia.
+        // 3.0 (corte de campaña) — Solo si esa identidad ya tiene historial local previo (CsgExemption): el
+        // indicador lo emite la propia celda, y un emisor hostil apagaba cinco reglas con un bit.
+        // Una celda CSG nueva se evalúa como cualquier otra.
+        val csgCell = CsgExemption.applies(active.csg?.indicator == true, reputation)
+
+        var eIsolated = !isWifiActive && !csgCell
         var ePowerJump = false
         var eMcc = false
         var eMncCount = false
@@ -174,7 +228,6 @@ object ThreatAnalyzer {
         var eTa = false
         var eGhost = false
         var eArfcn = false
-        val eCiphering = isHardwareCipheringAvailable
         var ePingPong = true
         var eMobileCellId = false
         var eLatencyCorrelation = false
@@ -184,27 +237,45 @@ object ThreatAnalyzer {
         val eTransitionCoherence = transitionCoherence.status != HeuristicStatus.NOT_EVALUATED
 
         // 1. Neighbor analysis
-        if (!isWifiActive && neighbors.isEmpty() && active.dbm >= -80 && isolatedCellConfirmed) {
-            hIsolated = false
-            reasons.add("Celda aislada")
-            score -= 15
+        //
+        // 3.0 (#28) — Sin vecinas y con señal fuerte, mientras IsolatedCellConfidence no haya
+        // confirmado 3 entregas seguidas, la regla todavía no sabe: N/A, no "superada".
+        // Sin vecinas y con señal débil sí se evalúa: los datos están y la condición (celda
+        // FUERTE y sola) no se da; una celda débil y sola es normal en zona rural.
+        if (!isWifiActive && !csgCell && neighbors.isEmpty() && active.dbm >= -80) {
+            if (isolatedCellConfirmed) {
+                hIsolated = false
+                reasons.add("Celda aislada")
+                score -= 15
+            } else {
+                eIsolated = false
+            }
         }
 
         // 2. Signal Gap analysis
-        val nextStrongest = neighbors.maxOfOrNull { it.dbm }
-        ePowerJump = !isWifiActive && nextStrongest != null
-        if (!isWifiActive && nextStrongest != null && active.dbm >= -75 && (active.dbm - nextStrongest > 35)) {
+        //
+        // 3.0 — H2 y H7 comparan potencias, y la magnitud depende de la tecnología: RSRP en LTE/NR,
+        // RSSI en GSM y RSCP en UMTS no son comparables (un RSRP LTE suele ser 20-30 dB más bajo que
+        // un RSSI GSM con la misma cobertura). Antes una vecina GSM a -106 dBm frente a una servidora
+        // LTE a -70 dBm daba un «salto» de 36 dB que era un artefacto de unidades. Solo cuentan las
+        // vecinas de la misma tecnología; sin ellas, N/A. H1 sigue contando vecinas de cualquier
+        // tecnología: eso solo hace la regla más conservadora.
+        val samePowerScale = neighbors.filter { it.radioTech == active.radioTech }
+        val nextStrongest = samePowerScale.maxOfOrNull { it.dbm }
+        ePowerJump = !isWifiActive && !csgCell && nextStrongest != null
+        if (ePowerJump && nextStrongest != null && active.dbm >= -75 && (active.dbm - nextStrongest > 35)) {
             hPowerJump = false
             reasons.add("Salto potencia (>35dB)")
             score -= 20
         }
 
-        // 3. MNC/MCC Inconsistency
-        eMcc = active.mcc != "N/A" && neighbors.any { it.mcc != "N/A" }
-        val differentMcc = neighbors.filter { it.mcc != "N/A" && active.mcc != "N/A" && it.mcc != active.mcc }
-        if (differentMcc.isNotEmpty()) {
+        // 3. Consistencia MCC — 3.0 (corte de campaña): servidora frente a SIM, no frente a las vecinas
+        // (ver MccConsistencyRule). Las vecinas solo sirven para reconocer una frontera.
+        val mccResult = MccConsistencyRule.evaluate(active, neighbors, serviceState)
+        eMcc = mccResult.status != HeuristicStatus.NOT_EVALUATED
+        if (mccResult.status == HeuristicStatus.FAILED) {
             hMcc = false
-            reasons.add("Inconsistencia MCC")
+            reasons.add(mccResult.failReason ?: MccConsistencyRule.REASON_PREFIX)
             score -= 30
         }
 
@@ -215,15 +286,30 @@ object ThreatAnalyzer {
         // Umbral >4 (antes >3): es habitual ver 3-4 MNC de forma legítima
         // (MVNOs, estaciones de tren, roaming, zonas fronterizas). Subir el umbral
         // reduce falsos positivos sin necesidad de tocar la LR (que sigue baja a propósito).
-        if (uniqueMncs.size > 4) {
+        // 3.0 — Solo penaliza si es evaluable: antes, con la MNC de la servidora en «N/A», el
+        // informe decía N/A y aun así restaba 15 puntos, guardaba el motivo y alimentaba el
+        // bayesiano. En las demás reglas la condición de fallo ya implicaba la de evaluación.
+        if (eMncCount && uniqueMncs.size > 4) {
             hMncCount = false
             reasons.add("Multitud de MNCs")
             score -= 15
         }
 
         // 5. TAC Deviation Audit
-        if (neighbors.isNotEmpty() && active.tac != "N/A") {
-            val neighborTacs = neighbors.map { it.tac }.filter { it != "N/A" }
+        //
+        // 3.0 — Solo vecinas de la MISMA tecnología: el TAC de LTE, el TAC de NR y el LAC de
+        // GSM/UMTS son espacios de identificadores distintos y nunca coinciden «por diseño». Antes
+        // una sola vecina GSM con su LAC hacía fallar H5 en una servidora LTE. Sin vecinas de la
+        // misma tecnología, N/A.
+        //
+        // 3.0 (fase 4) — Y solo vecinas del MISMO operador (o con MCC/MNC sin informar, hoy casi
+        // todas). El TAC es un identificador por operador: una vecina de otra red siempre tiene otro
+        // TAC. Antes, en una frontera, H3 y H5 fallaban juntas por la misma vecina extranjera (el
+        // bayesiano declara mccMismatch independiente), y en un país multioperador H5 fallaba sola
+        // si las únicas vecinas con TAC eran de otro MNC.
+        val sameTechTac = neighbors.filter { it.radioTech == active.radioTech && sameOperatorOrUnknown(active, it) }
+        if (!csgCell && sameTechTac.isNotEmpty() && active.tac != "N/A") {
+            val neighborTacs = sameTechTac.map { it.tac }.filter { it != "N/A" }
             eTac = neighborTacs.isNotEmpty()
             if (neighborTacs.isNotEmpty() && !neighborTacs.contains(active.tac)) {
                 hTac = false
@@ -243,61 +329,41 @@ object ThreatAnalyzer {
         // aparecen etiquetadas unas veces como 4G y otras como 5G sin cambiar de identidad, así
         // que las dos cosas se desincronizan de forma rutinaria — y un índice LTE tratado como
         // microsegundos (o al revés) desplaza la distancia por un factor cercano a 2. H6 lleva la
-        // penalización más alta del sistema (-40) y la LR más alta tras el cifrado (7.0): es el
-        // último sitio donde conviene deducir una unidad.
+        // LR más alta tras el cifrado (7.0): es el último sitio donde conviene deducir una unidad.
         //
         // Si la unidad no es determinable (valor raspado del toString() del fabricante), no hay
         // conversión y H6 NO JUZGA. Abstenerse es correcto: una geometría inventada aquí es peor
         // que no tener geometría.
-        val taMeters = active.timingAdvance?.let { active.timingAdvanceUnit.toMeters(it) }
+        // En una celda CSG no hay distancia que juzgar: una femtocelda está cerca por diseño (ver csgCell).
+        val taMeters = active.timingAdvance?.takeUnless { csgCell }?.let { active.timingAdvanceUnit.toMeters(it) }
         eTa = taMeters != null
-        if (taMeters != null) {
-            if (active.lat != null && active.lon != null && currentLocation != null) {
-                if (taMeters > 0) {
-                    val results = FloatArray(1)
-                    Location.distanceBetween(
-                        currentLocation.latitude, currentLocation.longitude,
-                        active.lat, active.lon, results
-                    )
-                    // La antena dice estar a >2 km pero el TA implica <500 m: incoherencia física.
-                    if (results[0] > 2000 && taMeters < 500) {
-                        hTa = false
-                        reasons.add("Suplantación TA")
-                        score -= 40
-                    }
-                }
-            } else {
-                // Sin posición de la antena: solo el caso "estoy pegado al emisor". El umbral de
-                // 100 m equivale exactamente al `ta <= 1` anterior en LTE (0 m y 78 m), y ahora
-                // se expresa en metros para que signifique lo mismo en cualquier tecnología.
-                //
-                // No hace falta excluir NR aquí: si hemos llegado a este punto es porque la unidad
-                // produjo metros, y NR nunca los produce (ver TimingAdvanceUnit.NR_RAW).
-                //
-                // Aquí había una excepción: la celda se libraba de la penalización si estaba
-                // VERIFIED. Se ha quitado — y no por poco importante, sino por lo contrario. Era la
-                // ÚLTIMA vía por la que el estado de verificación entraba en la puntuación, y la
-                // hacía entrar en silencio: misma celda, mismo TA, misma señal, distinto score
-                // según lo que contestara una base pública. Con ella dentro, la pregunta que la
-                // fase de recolección tiene que responder —¿aporta señal la verificación externa?—
-                // se contestaba en parte a sí misma.
-                //
-                // Desde v2.1 `ThreatAnalyzer` **no lee `active.verified` en ninguna heurística**.
-                // El detector y la etiqueta externa son ortogonales, y por eso podrán cruzarse.
-                if (taMeters <= 100 && active.dbm >= -60) {
-                    hTa = false
-                    reasons.add("Proximidad anómala (TA)")
-                    score -= 15
-                }
-            }
+        //
+        // 3.0 — Solo queda la rama de PROXIMIDAD (TA + señal). Había otra rama "geométrica" que
+        // comparaba el TA con la distancia entre el móvil y `active.lat/lon` como posición de la
+        // antena, pero ningún flujo de producción rellena esas coordenadas en CellData (CellParser
+        // no las tiene; las de OpenCellID van a apiLocationCache y solo se MUESTRAN como distancia,
+        // fuera del score por diseño). Era código muerto y se retira; no se sustituye la antena por
+        // la ubicación del móvil ni se conecta OpenCellID al score.
+        //
+        // Proximidad: solo el caso "estoy pegado al emisor". El umbral de 100 m equivale al
+        // `ta <= 1` anterior en LTE (0 m y 78 m) y se expresa en metros para que signifique lo mismo
+        // en cualquier tecnología; NR nunca llega aquí porque su unidad no produce metros. Desde
+        // v2.1 no hay excepción por VERIFIED: ThreatAnalyzer no lee `active.verified` en ninguna
+        // heurística (misma celda, mismo TA y misma señal dan el mismo resultado).
+        if (taMeters != null && taMeters <= 100 && active.dbm >= -60) {
+            hTa = false
+            reasons.add("Proximidad anómala (TA)")
+            score -= 15
         }
 
         // 7. Ghost Cells Check
         // Umbral subido a -65dBm y vecinas a -110dBm para reducir
         // falsos positivos en zonas rurales con macroceldas
-        eGhost = !isWifiActive && neighbors.isNotEmpty()
-        if (!isWifiActive && active.dbm >= -65 && neighbors.isNotEmpty()
-            && neighbors.all { it.dbm <= -110 }) {
+        // 3.0 — Misma escala de potencia que la servidora (ver H2): un -110 de RSRP es una vecina
+        // normal; un -110 de RSSI, una vecina muerta.
+        eGhost = !isWifiActive && !csgCell && samePowerScale.isNotEmpty()
+        if (eGhost && active.dbm >= -65
+            && samePowerScale.all { it.dbm <= -110 }) {
             hGhost = false
             reasons.add("Vecinos fantasma")
             score -= 25
@@ -311,37 +377,46 @@ object ThreatAnalyzer {
         // frecuencia. Antes ese valor entraba como "frecuencia sospechosa" y restaba 15 puntos:
         // se confundía no tener el dato con tener un dato imposible. Ahora H8 queda N/A. Un valor
         // medido fuera de rango sigue fallando como antes. Corte de dataset solo para H8.
+        //
+        // 3.0 (#22) — Los rangos vienen de RadioChannels, el mismo validador que usa el
+        // aprendizaje. El NR-ARFCN 0 no lo usa ninguna banda: RadioChannels no lo acepta, así que H8
+        // lo marca y el aprendizaje no lo toma por una portadora legítima.
+        //
+        // 3.0 (corte de campaña) — H8 es un aviso de CALIDAD DE DATO, no evidencia de amenaza: un IMSI catcher
+        // necesita un canal válido para que el móvil se registre en él, así que un ARFCN fuera de la
+        // tabla 3GPP describe un módem que informa mal, no un ataque. Se sigue evaluando, publicando
+        // (informe, terminal, caja negra) y guardando en la fila con su motivo, pero no resta puntos,
+        // no entra en el bayesiano ni cuenta para los episodios. Corte de dataset para H8.
+        // Su motivo tampoco va a `reasons` (que acaba en pantalla y en las alertas): un motivo sin
+        // penalización no es una observación sobre la antena (igual que la verificación externa,
+        // más abajo). Va aparte, en `dataQualityReason`, y solo se añade a la fila guardada.
+        var dataQualityReason: String? = null
         active.arfcn?.takeUnless { it == ARFCN_UNAVAILABLE }?.let { arfcn ->
             if (active.radioTech == RadioTech.NR) {
                 eArfcn = true
-                if (arfcn > 3279165 || arfcn == 0) {
+                if (!RadioChannels.isValidChannel(RadioTech.NR, arfcn)) {
                     hArfcn = false
-                    reasons.add("Frecuencia (ARFCN) 5G sospechosa")
-                    score -= 15
+                    dataQualityReason = H8_NR_REASON
                 }
             } else if (active.radioTech == RadioTech.LTE) {
                 eArfcn = true
-                if (arfcn > 262143) {  // EARFCN 0 es válido (Banda 1, 2110 MHz); el "no disponible" llega como > 262143
+                if (!RadioChannels.isValidChannel(RadioTech.LTE, arfcn)) {  // EARFCN 0 es válido (Banda 1, 2110 MHz)
                     hArfcn = false
-                    reasons.add("Frecuencia (EARFCN) 4G sospechosa")
-                    score -= 15
+                    dataQualityReason = H8_LTE_REASON
                 }
             }
         }
 
-        // 9. Hardware Ciphering Check (Android 14+)
-        if (isHardwareCipheringAvailable && !isHardwareCipheringActive) {
-            reasons.add("Cifrado de red anulado (A5/0)")
-            score -= 50
-        }
+        // 9. Cifrado — 3.0 (corte de campaña): regla reservada. Android no expone a una app sin privilegios
+        // el estado de cifrado del módem, así que no hay nada que evaluar: H9 es siempre N/A, sin
+        // puntos ni LR. Conserva su id y su posición en el informe (CSV y numeración).
 
         // 10. Ping-Pong Effect
         // v2.10.9 — La decisión vive en PingPongRule (probada sin Android). Solo cuentan los
         // cambios de los últimos 10 s (antes, una ráfaga antigua seguía fallando durante horas
         // con el móvil quieto) y, sin velocidad GPS, H10 queda N/A en vez de suponer 0 km/h.
         // La regla no cambia. Corte de dataset solo para H10.
-        val speedMps = currentLocation?.takeIf { it.hasSpeed() }?.speed
-        when (PingPongRule.evaluate(cellChangeHistory.map { it.second }, nowMs, speedMps)) {
+        when (PingPongRule.evaluate(cellChangeHistory.map { it.second }, nowMs, pingPongSpeedMps)) {
             PingPongRule.Outcome.PASSED, PingPongRule.Outcome.PASSED_MOVING -> Unit
             PingPongRule.Outcome.NOT_EVALUATED -> ePingPong = false
             PingPongRule.Outcome.FAILED -> {
@@ -352,10 +427,16 @@ object ThreatAnalyzer {
         }
 
         // 11. Consistencia Geográfica y RF (PCI/ARFCN)
-        eMobileCellId = currentLocation != null && active.cellId != "N/A" &&
+        // 3.0 (corte de campaña) — Solo con un fix de 60 s o menos (reloj monotónico; ver MobileCellIdFixAge).
+        // Antes valía cualquier fix aceptado por la ubicación (hasta 120 s en modo continuo): en
+        // movimiento, una posición vieja hacía parecer lejana una celda que estaba donde debía.
+        // Con un fix más viejo o sin edad, H11 se abstiene y lo deja escrito (`H11(fix_viejo)`).
+        val h11FixTooOld = currentLocation != null && !MobileCellIdFixAge.usable(locationFixAgeMs)
+        val h11Location = currentLocation.takeUnless { h11FixTooOld }
+        eMobileCellId = h11Location != null && active.cellId != "N/A" &&
             preloadedHistory.any { it.lat != null && it.lon != null }
         val (hMobileOk, hMobilePenalty, hMobileReason) = analyzeMobileCellId(
-            active, currentLocation, preloadedHistory, neighbors
+            active, h11Location, preloadedHistory, neighbors
         )
         if (!hMobileOk) {
             hMobileCellId = false
@@ -401,7 +482,7 @@ object ThreatAnalyzer {
             }
             if (!isWifiActive && significant && active.dbm >= -95) {
                 hSignalBaseline = false
-                reasons.add("Potencia anómala vs historial (+${excessDb.toInt()}dB)")
+                reasons.add(com.alexisgordr.icdetector.models.StoredReasons.h13PowerReason(excessDb.toInt()))
                 score -= when {
                     excessDb >= 30 -> 25
                     excessDb >= 24 -> 18
@@ -427,7 +508,7 @@ object ThreatAnalyzer {
                     val sinrAnom = sinrOff > maxOf(8.0, 4.0 * fp.sinrStd)
                     if (rsrqAnom && sinrAnom) {
                         hSignalBaseline = false
-                        reasons.add("Huella RF incoherente con el historial (RSRQ/SINR muy desviados)")
+                        reasons.add(com.alexisgordr.icdetector.models.StoredReasons.H13_RF_REASON)
                         score -= 15
                     }
                 }
@@ -476,11 +557,37 @@ object ThreatAnalyzer {
                 val newStrong = active.dbm >= -95
                 val notCoverageFallback = previousDbm != null && active.dbm >= previousDbm
 
-                if (prevStrong && newStrong && notCoverageFallback && !degrading) {
+                // 3.0 (#10) — Mismo eNodeB: la propia estación base pasa el móvil a otra de sus
+                // portadoras. En los primeros datos de campo, los 9 avisos de H14 fueron así
+                // (79360544 -> 79360545, eNB 310002). No es un downgrade forzado: no se penaliza.
+                val sameSite = previousBandSite != null && previousBandSite == LteSite.key(active)
+
+                if (prevStrong && newStrong && notCoverageFallback && !degrading && !sameSite) {
                     hBandDowngrade = false
                     val from = BandPlan.approxFreqMhz(previousBand) ?: 0
                     val to = BandPlan.approxFreqMhz(curBand) ?: 0
                     reasons.add("Downgrade de banda forzado (${from}MHz→${to}MHz, B$previousBand→B$curBand)")
+                    score -= 25
+                }
+            }
+        }
+
+        // 14b. 3.0 (#8) — Downgrade de banda en 5G SA (NR → NR). Misma regla y mismas
+        // condiciones que en LTE, con la clase alta/baja sacada de la frecuencia del NR-ARFCN
+        // (las bandas NR se solapan, así que no se usa un número de banda). Sin excepción de
+        // "misma estación": el gNB ID tiene longitud variable y no se puede extraer del NCI.
+        // Un cambio entre LTE y NR no se evalúa (N/A).
+        if (active.radioTech == RadioTech.NR) {
+            val curMhz = NrFrequency.dlMhz(active.arfcn)
+            val prevMhz = NrFrequency.dlMhz(previousNrArfcn)
+            eBandDowngrade = curMhz != null && prevMhz != null && previousDbm != null
+            if (eBandDowngrade && NrFrequency.isHigh(previousNrArfcn) && NrFrequency.isLow(active.arfcn)) {
+                val prevStrong = previousDbm!! >= -90
+                val newStrong = active.dbm >= -95
+                val notCoverageFallback = active.dbm >= previousDbm
+                if (prevStrong && newStrong && notCoverageFallback && !isSignalDegrading(recentRegisteredDbm)) {
+                    hBandDowngrade = false
+                    reasons.add("Downgrade de banda forzado (5G ${prevMhz!!.toInt()}MHz→${curMhz!!.toInt()}MHz)")
                     score -= 25
                 }
             }
@@ -546,7 +653,7 @@ object ThreatAnalyzer {
 
                 if (pciFlapping) {
                     hRfStability = false
-                    reasons.add("Identidad RF inestable: misma Cell ID alternando PCI en la misma portadora (posible clon)")
+                    reasons.add(com.alexisgordr.icdetector.models.StoredReasons.H15_REASON)
                     score -= 30
                 }
             }
@@ -570,8 +677,6 @@ object ThreatAnalyzer {
             if (!hTac) add("tacDev")
             if (!hTa) add("taDistance")
             if (!hGhost) add("ghostCells")
-            if (!hArfcn) add("arfcn")
-            if (isHardwareCipheringAvailable && !isHardwareCipheringActive) add("ciphering")
             if (!hPingPong) add("pingPong")
             if (!hMobileCellId) add("h11")
             if (!hSignalBaseline) add("signalBaseline")
@@ -586,7 +691,9 @@ object ThreatAnalyzer {
         val anomalyConfidence = BayesianScorer.calculate(
             failedList,
             active.verified.name,
-            isNetworkLatencyAnomalous,
+            // 3.0 — Solo H12 FAILED aporta la LR de latencia; el indicador bruto no (antes pesaba
+            // aunque H12 no fallara: con Wi-Fi, señal débil o RF normal).
+            latencyCorrelationFailed = !hLatencyCorrelation,
             neighborCount = neighbors.size,
             trustScore = reputation?.trustScore ?: -1
         )
@@ -622,7 +729,7 @@ object ThreatAnalyzer {
         // `Verified` del historial y en la cabecera, que lo dice con todas las letras.
 
         val finalScore = score.coerceIn(0, 100)
-        val isSuspicious = finalScore < 70
+        val isSuspicious = ScoreThreshold.isBelow(finalScore)
 
         fun status(evaluated: Boolean, passed: Boolean): HeuristicStatus = when {
             !evaluated -> HeuristicStatus.NOT_EVALUATED
@@ -634,12 +741,15 @@ object ThreatAnalyzer {
             isolatedCell = status(eIsolated, hIsolated),
             powerJump = status(ePowerJump, hPowerJump),
             mccConsistency = status(eMcc, hMcc),
+            mccAbstention = mccResult.abstention,
+            csgCell = csgCell,
+            mobileCellIdFixTooOld = h11FixTooOld,
             mncCount = status(eMncCount, hMncCount),
             tacDeviation = status(eTac, hTac),
             taDistance = status(eTa, hTa),
             ghostNeighbors = status(eGhost, hGhost),
             arfcnSanity = status(eArfcn, hArfcn),
-            hardwareCiphering = status(eCiphering, isHardwareCipheringActive),
+            hardwareCiphering = HeuristicStatus.NOT_EVALUATED,
             pingPong = status(ePingPong, hPingPong),
             mobileCellId = status(eMobileCellId, hMobileCellId),
             latencyCorrelation = status(eLatencyCorrelation, hLatencyCorrelation),
@@ -651,11 +761,12 @@ object ThreatAnalyzer {
 
         return active.copy(
             isSuspicious = isSuspicious,
-            suspiciousReason = if (reasons.isNotEmpty()) reasons.joinToString(" | ") else null,
+            suspiciousReason = if (reasons.isNotEmpty()) reasons.joinToString(com.alexisgordr.icdetector.models.StoredReasons.SEPARATOR) else null,
             heuristicReport = report,
             securityScore = finalScore,
             anomalyConfidence = anomalyConfidence,
-            transitionCoherence = transitionCoherence
+            transitionCoherence = transitionCoherence,
+            dataQualityReason = dataQualityReason
         )
     }
 }

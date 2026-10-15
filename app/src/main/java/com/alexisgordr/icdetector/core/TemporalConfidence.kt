@@ -23,7 +23,21 @@ import java.util.concurrent.ConcurrentHashMap
 class TemporalConfidence(
     private val confirmationCycles: Int = 3,
     private val minObservationSpacingMs: Long = 2_000L,
-    private val maxObservationStallMs: Long = 30_000L,
+    private val maxObservationStallMs: Long = MAX_OBSERVATION_STALL_MS,
+    /**
+     * 3.0 (#20) — Hueco máximo entre dos observaciones aceptadas para seguir contándolas como
+     * consecutivas. Pasado el hueco, la racha vuelve a empezar. Es el mismo valor que usa
+     * [CoverageContinuity] para H1 y el contexto de bandas: una sola constante,
+     * [CoverageContinuity.MAX_GAP_MS] (120 s; ahí está su porqué).
+     *
+     * No confundir con [maxObservationStallMs] (30 s), que es otra cosa: la salida de emergencia
+     * para aceptar una lectura nueva cuando el módem repite un timestamp congelado. Por qué 120 y
+     * no 30: con lecturas cada 10 s (pantalla apagada), 30 s son 3 lecturas perdidas, lo normal
+     * con un módem atascado, y ahí hay que dejar pasar una muestra real sin romper nada; 120 s son
+     * 12, un hueco de cobertura de verdad, y ahí sí hay que romper la continuidad. La relación la
+     * fija CoverageContinuityTest, no solo este comentario.
+     */
+    private val maxContinuityGapMs: Long = CoverageContinuity.MAX_GAP_MS,
     private val elapsedRealtimeMs: () -> Long = { System.nanoTime() / 1_000_000L }
 ) {
 
@@ -31,6 +45,19 @@ class TemporalConfidence(
     private var lastStreakKey = ""
     private var lastObservationToken: Long? = null
     private var lastAcceptedAtMs: Long? = null
+
+    /**
+     * 3.0 (#20) — Pérdida de la servidora utilizable (lista vacía, abstención, modo avión). Dos
+     * ciclos sospechosos, un hueco sin señal y otro ciclo de la misma celda ya no completan una
+     * confirmación como si fueran seguidos.
+     */
+    fun interrupt() = reset()
+
+    /**
+     * 3.0 — Hay una racha de sospecha en curso (en confirmación o alarma ya confirmada). Lo lee el
+     * análisis bajo el mismo cerrojo que la publicación, que es quien la cambia.
+     */
+    val inConfirmation: Boolean get() = anomalyStreaks.isNotEmpty()
 
     /** Olvida todas las rachas. Útil al reiniciar el servicio o entre escenarios de test. */
     fun reset() {
@@ -50,9 +77,21 @@ class TemporalConfidence(
     fun apply(
         cell: CellData,
         observationToken: Long? = null,
-        isFreshDelivery: Boolean = true
+        isFreshDelivery: Boolean = true,
+        /**
+         * La celda llega sospechosa solo porque [ThreatEpisodeTracker] retiene la promoción, sin
+         * evidencia nueva en esta observación. El ciclo cuenta para la continuidad, pero la racha
+         * no avanza ni se rompe.
+         */
+        heldWithoutEvidence: Boolean = false,
+        /**
+         * Clave de la racha; por defecto, la identidad de la celda. Durante un ping-pong (H10
+         * fallida) el servicio pasa [PingPongRule.confirmationKey], el conjunto de identidades, para
+         * que alternar entre ellas no reinicie la racha.
+         */
+        confirmationKey: String? = null
     ): CellData {
-        val streakKey = keyOf(cell)
+        val streakKey = confirmationKey ?: keyOf(cell)
 
         // Si cambia la celda activa, resetear todos los streaks
         if (streakKey != lastStreakKey) {
@@ -75,10 +114,18 @@ class TemporalConfidence(
         val stalledFreshDelivery = isFreshDelivery && lastAcceptedAtMs?.let {
             now - it >= maxObservationStallMs
         } == true
-        val isNewObservation = observationToken == null || previousToken == null ||
-            (observationToken > previousToken &&
-                (!cell.isSuspicious || observationToken - previousToken >= minObservationSpacingMs)) ||
-            stalledFreshDelivery
+        // Sin token (módem sin marcas de tiempo) no hay forma de distinguir una muestra nueva de
+        // la misma muestra repetida por el fallback cacheado de allCellInfo: solo cuenta una
+        // entrega fresca, igual que en ThreatEpisodeTracker. Antes, tres entregas cacheadas de la
+        // misma muestra confirmaban una alarma.
+        val isNewObservation = if (observationToken == null) {
+            isFreshDelivery
+        } else {
+            previousToken == null ||
+                (observationToken > previousToken &&
+                    (!cell.isSuspicious || observationToken - previousToken >= minObservationSpacingMs)) ||
+                stalledFreshDelivery
+        }
 
         if (!isNewObservation) {
             return decorate(cell, anomalyStreaks[streakKey] ?: 0)
@@ -88,15 +135,23 @@ class TemporalConfidence(
         if (observationToken != null && (previousToken == null || observationToken > previousToken)) {
             lastObservationToken = observationToken
         }
+        // 3.0 (#20) — Demasiado tiempo desde la última observación aceptada: no son consecutivas.
+        if (lastAcceptedAtMs?.let { now - it > maxContinuityGapMs } == true) anomalyStreaks.clear()
         lastAcceptedAtMs = now
 
-        val currentStreak = if (cell.isSuspicious) {
-            val newStreak = (anomalyStreaks[streakKey] ?: 0) + 1
-            anomalyStreaks[streakKey] = newStreak
-            newStreak
-        } else {
-            anomalyStreaks.remove(streakKey)
-            0
+        val currentStreak = when {
+            // Retención del episodio sin evidencia nueva: neutra. Antes avanzaba la racha, y dos
+            // fallos sub-umbral seguidos de dos ciclos limpios confirmaban una alarma.
+            cell.isSuspicious && heldWithoutEvidence -> anomalyStreaks[streakKey] ?: 0
+            cell.isSuspicious -> {
+                val newStreak = (anomalyStreaks[streakKey] ?: 0) + 1
+                anomalyStreaks[streakKey] = newStreak
+                newStreak
+            }
+            else -> {
+                anomalyStreaks.remove(streakKey)
+                0
+            }
         }
 
         return decorate(cell, currentStreak)
@@ -118,7 +173,7 @@ class TemporalConfidence(
                 // "null". Hoy no ocurre (todo fallo añade su motivo), pero el texto ya no depende
                 // de ello. Con motivo, la cadena es idéntica a la de antes.
                 cell.isSuspicious -> listOfNotNull(
-                    "[$currentStreak/$requiredCycles ciclos confirmando]",
+                    com.alexisgordr.icdetector.models.StoredReasons.confirmingPrefix(currentStreak, requiredCycles),
                     cell.suspiciousReason
                 ).joinToString(" ")
                 // La celda no llega al umbral de sospecha, pero SÍ falló heurísticas. Antes esto
@@ -133,9 +188,15 @@ class TemporalConfidence(
     }
 
     /**
-     * Dos evidencias fuertes e independientes reducen la confirmación a dos observaciones reales.
-     * Una señal aislada —aunque tenga mucho peso— conserva los tres ciclos para no convertir una
-     * lectura defectuosa del módem o del GPS en alarma instantánea.
+     * Dos fallos fuertes en la misma observación (dos cualesquiera de H11, H13, H15 y H16) reducen
+     * la confirmación a dos observaciones reales. Un fallo fuerte aislado conserva los tres ciclos
+     * para no convertir una lectura defectuosa del módem o del GPS en alarma instantánea.
+     *
+     * Dos fallos fuertes NO son necesariamente evidencias independientes: H11 y H16 leen el mismo
+     * fijo GPS y las posiciones guardadas de las mismas celdas, así que una posición errónea puede
+     * hacer fallar las dos y acortar la confirmación por una sola causa (y H11 y H15 pueden
+     * reaccionar al mismo cambio de PCI/ARFCN). Es una limitación documentada (MANUAL, «Shared
+     * evidence»), no una garantía de independencia; la regla no se ha cambiado.
      */
     private fun requiredCycles(cell: CellData): Int {
         val report = cell.heuristicReport
@@ -146,5 +207,14 @@ class TemporalConfidence(
             report.transitionCoherence // H16: handover físicamente incoherente
         ).count { it == HeuristicStatus.FAILED }
         return if (cell.isSuspicious && strongFailures >= 2) 2 else confirmationCycles
+    }
+
+    companion object {
+        /**
+         * Tiempo tras el que una entrega fresca se acepta aunque el módem repita un timestamp
+         * congelado: 3 lecturas perdidas con la pantalla apagada (cada 10 s). Debe ser menor que
+         * [CoverageContinuity.MAX_GAP_MS]; ver CoverageContinuityTest.
+         */
+        const val MAX_OBSERVATION_STALL_MS = 30_000L
     }
 }

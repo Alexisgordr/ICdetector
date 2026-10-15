@@ -241,6 +241,8 @@ class ForensicRecorder(
             put("requiredPhases", active.temporalProgress.required); put("score", active.securityScore)
             put("anomalyConfidence", active.anomalyConfidence); put("verified", active.verified.name)
             put("reason", active.suspiciousReason ?: "")
+            // 3.0 (corte de campaña) — Aviso de calidad de dato (H8), aparte del motivo de sospecha.
+            put("dataQualityReason", active.dataQualityReason ?: JSONObject.NULL)
             put("localTrust", JSONObject().apply {
                 put("state", active.localCellTrust.state.name)
                 put("confidencePercent", active.localCellTrust.confidencePercent)
@@ -256,6 +258,7 @@ class ForensicRecorder(
                 put("servingDays", s.evidence?.currentServingDays ?: 0)
                 put("neighbourDays", s.evidence?.currentNeighbourDays ?: 0)
             })
+            // Con los motivos de abstención del CSV (`H3=NOT_EVALUATED(roaming)`, `H1=...(csg)`).
             put("heuristics", active.heuristicReport.snapshot())
             put("diagnostics", JSONArray().apply { active.heuristicDiagnostics.forEach { d ->
                 put(JSONObject().apply { put("id", d.id); put("name", d.name); put("status", d.status.name); put("explanation", d.explanation) })

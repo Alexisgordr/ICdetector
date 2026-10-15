@@ -15,7 +15,7 @@ object TopologyExporter {
         val packageInfo = context.packageManager.getPackageInfo(context.packageName, 0)
         val files = buildFiles(
             transitions = transitions,
-            appVersion = packageInfo.versionName ?: "unknown",
+            appVersion = com.alexisgordr.icdetector.core.AppBuildId.current(packageInfo.versionName) ?: "unknown",
             appVersionCode = packageInfo.longVersionCode,
             generatedAt = Instant.now()
         )
@@ -112,7 +112,8 @@ object TopologyExporter {
         return LinkedHashMap(files)
     }
 
-    private fun csv(value: Any?): String = "\"${value?.toString().orEmpty().replace("\"", "\"\"")}\""
+    // 3.0 — Escapado y protección de texto compartidos (ver CsvText). Siempre entre comillas, como antes.
+    private fun csv(value: Any?): String = com.alexisgordr.icdetector.utils.CsvText.quoted(value)
     private fun xml(value: String): String = value.replace("&", "&amp;").replace("<", "&lt;")
         .replace(">", "&gt;").replace("\"", "&quot;").replace("'", "&apos;")
     private fun sha256(bytes: ByteArray): String = MessageDigest.getInstance("SHA-256")

@@ -11,10 +11,15 @@ package com.alexisgordr.icdetector.core
  * parpadea dentro de ese margen sigue siendo el mismo episodio y no repite el aviso.
  *
  * Sin Android, para poder probarla en la JVM.
+ *
+ * 3.0 — El reloj es obligatorio y debe ser MONOTÓNICO (el servicio pasa
+ * SystemClock.elapsedRealtime, el mismo que SecurityAlertController usa para sus otras duraciones).
+ * Antes era la hora de pared por defecto: un ajuste de hora (NTP, zona, cambio manual) podía cerrar
+ * un episodio de golpe, y volver a notificar la misma alarma, o alargarlo y callar uno nuevo.
  */
 class AlarmEpisodeGate(
     private val closeAfterMs: Long = DEFAULT_CLOSE_AFTER_MS,
-    private val clock: () -> Long = System::currentTimeMillis
+    private val clock: () -> Long
 ) {
     private var activeIdentity: String? = null
     private var clearSinceMs: Long? = null
@@ -43,7 +48,20 @@ class AlarmEpisodeGate(
         if (now - since >= closeAfterMs) reset()
     }
 
-    /** Cambio de celda o historial borrado: el siguiente aviso es siempre un episodio nuevo. */
+    /**
+     * 3.0 — Cambio de celda. Cierra el episodio, salvo si es el de un ping-pong
+     * ([PingPongRule.confirmationKey]): ahí cambiar de celda es el propio comportamiento del
+     * episodio, y cerrarlo notificaría la misma alarma en cada alternancia.
+     *
+     * @return true si el episodio sigue abierto.
+     */
+    fun onHandover(): Boolean {
+        if (activeIdentity?.startsWith(PingPongRule.CONFIRMATION_KEY_PREFIX) == true) return true
+        reset()
+        return false
+    }
+
+    /** Historial borrado o servicio reiniciado: el siguiente aviso es siempre un episodio nuevo. */
     fun reset() {
         activeIdentity = null
         clearSinceMs = null

@@ -23,13 +23,13 @@ class StableSiteTest {
         assertNotEquals(a,b); assertNotEquals(a,c)
     }
 
-    @Test fun `rf ranges follow the physical radio and accept channel zero`() {
+    @Test fun `rf ranges follow the physical radio and accept channel zero except NR`() {
         fun fp(radio:RadioTech,arfcn:Int,pci:Int)=StableSiteNeighbourEvidence.rfFingerprint(
             CellData(false,radio.name,"N/A","N/A","N/A",-100,"N/A",radioTech=radio,arfcn=arfcn,pci=pci)
         )
         assertNotNull(fp(RadioTech.LTE,0,0));assertNotNull(fp(RadioTech.LTE,262_143,503))
         assertNull(fp(RadioTech.LTE,262_144,503));assertNull(fp(RadioTech.LTE,100,504))
-        assertNotNull(fp(RadioTech.NR,0,0));assertNotNull(fp(RadioTech.NR,3_279_165,1007))
+        assertNull("NR-ARFCN 0: sin banda, mismo criterio que H8", fp(RadioTech.NR,0,0)); assertNotNull(fp(RadioTech.NR,1,0)); assertNotNull(fp(RadioTech.NR,3_279_165,1007))
         assertNull(fp(RadioTech.NR,3_279_166,1007));assertNull(fp(RadioTech.NR,100,1008))
         assertNotNull(fp(RadioTech.UMTS,0,0));assertNotNull(fp(RadioTech.UMTS,16_383,511))
         assertNull(fp(RadioTech.UMTS,16_384,511));assertNull(fp(RadioTech.UMTS,100,512))
@@ -96,7 +96,7 @@ class StableSiteTest {
         val c = MotionClassifier()
         val one = fix(0)
         repeat(20) { assertEquals(MotionState.UNKNOWN, c.observe(one).state) }
-        assertEquals(0L, c.current(one.timeMs).durationSeconds)
+        assertEquals(0L, c.current(one.elapsedRealtimeMs).durationSeconds)
         c.observe(fix(30_000))
         val before = c.current(30_001)
         c.observe(fix(10_000))
@@ -124,11 +124,11 @@ class StableSiteTest {
     }
 
     @Test fun `site key hides coordinates and tolerates ordinary jitter`() {
-        val a = StableSiteKey.from(42.82670, -1.64550)
-        val b = StableSiteKey.from(42.82675, -1.64545)
+        val a = StableSiteKey.candidates(42.82670, -1.64550).first()
+        val b = StableSiteKey.candidates(42.82675, -1.64545).first()
         assertTrue(StableSiteKey.candidates(42.82670, -1.64550).intersect(StableSiteKey.candidates(42.82675, -1.64545).toSet()).isNotEmpty())
         assertFalse(a.contains("42.82670")); assertEquals(20, a.length)
-        assertNotEquals(a, StableSiteKey.from(42.83670, -1.64550))
+        assertNotEquals(a, StableSiteKey.candidates(42.83670, -1.64550).first())
     }
 
     @Test fun `overlapping site grids survive jitter across a base grid corner`() {

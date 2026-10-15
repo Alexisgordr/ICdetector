@@ -538,7 +538,10 @@ private fun GeometryMetric(
 @Composable
 private fun MobilityPanel(snapshot: MobilityGeometrySnapshot, onExport: () -> Unit) {
     val trip = snapshot.openTrip
-    val current = snapshot.cells.firstOrNull { it.identity == trip?.lastServing }
+    // 3.0 (G2) — Familiaridad histórica de la celda actual: la misma política y los mismos datos
+    // que la evaluación en directo (todas sus aristas, no solo las cargadas en pantalla).
+    val current = snapshot.currentCell
+    val config = com.alexisgordr.icdetector.core.MobilityFamiliarityConfig()
     val transitionTotal = snapshot.transitions.sumOf { it.observations }
     val historicalTrips = snapshot.transitions.maxOfOrNull { it.tripCount } ?: 0
     Surface(color = Color(0xFF111A1D), shape = RoundedCornerShape(6.dp)) {
@@ -553,7 +556,7 @@ private fun MobilityPanel(snapshot: MobilityGeometrySnapshot, onExport: () -> Un
             GeometryLine(stringResource(R.string.mobility_movement), if(trip?.hadMoving==true) stringResource(R.string.mobility_moving_observed) else stringResource(R.string.mobility_no_evidence))
             GeometryLine(stringResource(R.string.mobility_distinct_cells_edges), "${trip?.distinctCells ?: 0} / ${trip?.edgeCount ?: 0}")
             GeometryLine(stringResource(R.string.mobility_current_cell), familiarityLabel(current?.familiarity))
-            GeometryLine(stringResource(R.string.mobility_prior_good_edges), "${current?.goodEdges ?: 0}/2 · K=3")
+            GeometryLine(stringResource(R.string.mobility_prior_good_edges), "${current?.goodEdges ?: 0}/${config.goodEdgesRequired} · K=${config.priorTripsRequired}")
             GeometryLine(stringResource(R.string.mobility_transitions_total), transitionTotal.toString())
             GeometryLine(stringResource(R.string.mobility_max_trips_per_edge), historicalTrips.toString())
             if(trip!=null && snapshot.pendingEdges.isNotEmpty()) {
@@ -611,7 +614,7 @@ private fun NodeCard(
             GeometryLine(stringResource(R.string.incoming_outgoing), "$incoming / $outgoing")
             GeometryLine(stringResource(R.string.geometry_local_cell_trust), mobility?.localTrustState ?: stringResource(R.string.geometry_not_available))
             GeometryLine(stringResource(R.string.geometry_mobility), familiarityLabel(mobility?.familiarity))
-            GeometryLine(stringResource(R.string.geometry_good_edges), "${mobility?.goodEdges ?: 0}/2")
+            GeometryLine(stringResource(R.string.geometry_good_edges), "${mobility?.goodEdges ?: 0}/${com.alexisgordr.icdetector.core.MobilityFamiliarityConfig().goodEdgesRequired}")
             GeometryLine(stringResource(R.string.geometry_relevant_trips), (mobility?.relevantTripCount ?: 0).toString())
             GeometryLine(stringResource(R.string.geometry_transitions_in_out), "${mobility?.incomingTransitions ?: 0} / ${mobility?.outgoingTransitions ?: 0}")
             GeometryLine(stringResource(R.string.geometry_trusted_in_out), "${mobility?.trustedIncoming ?: 0} / ${mobility?.trustedOutgoing ?: 0}")

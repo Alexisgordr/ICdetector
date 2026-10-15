@@ -4,6 +4,7 @@ import android.content.Context
 import android.net.Uri
 import com.alexisgordr.icdetector.models.HistoryRecord
 import com.alexisgordr.icdetector.models.ServiceStateSnapshot
+import com.alexisgordr.icdetector.storage.ObservationTime
 import java.io.OutputStreamWriter
 import java.nio.charset.StandardCharsets
 
@@ -14,7 +15,29 @@ object ExportUtils {
         // v2.10.4 — Contexto de radio. Van al final para que cualquier análisis que lea las
         // columnas por nombre (o las 23 primeras por posición) siga funcionando igual.
         "ServingConnection,BandwidthKHz,Bands,AdditionalPlmns,CsgIndicator,CsgIdentity,CsgName," +
-        "SecondaryCarriers,ServiceState,NetworkOperator,SimOperator,NetworkRoaming"
+        "SecondaryCarriers,ServiceState,NetworkOperator,SimOperator,NetworkRoaming," +
+        // 3.0 (#23) — Instante inequívoco en UTC (ISO-8601). Vacío en filas anteriores a 3.0.
+        "ObservedAtUtc," +
+        // 3.0 (#29) — Reglas no evaluadas (`H1;H9`, `NONE` si todas) y precisión del GPS en metros.
+        // Vacías en filas anteriores a 3.0: desconocido.
+        "NotEvaluatedHeuristics,GpsAccuracyM," +
+        // 3.0 (#30) — Versión de la app de cada fila (vacía antes de 3.0) y, constantes en todo el
+        // fichero, el teléfono y la versión de Android que hicieron el export. Sirven para separar
+        // ficheros de varias personas al unirlos. Ningún identificador personal ni del aparato.
+        "AppVersion,ExportDevice,ExportAndroid," +
+        // 3.0 (esquema 21) — Modo: CONTINUOUS, INTELLIGENT o ADAPTIVE. Al final, para no
+        // mover ninguna columna anterior. Vacío en filas anteriores al esquema 21: desconocido.
+        "LocationMode," +
+        // 3.0 (esquema 22) — Perfil local en sombra, al final para no mover ninguna columna. Vacías
+        // si la fila no se evaluó (filas anteriores o sin perfil). El nivel no está calibrado y no
+        // es una probabilidad; ProfileMode dice si era sombra o la opción experimental visible.
+        "ProfileMode,ProfileLevel,ProfileScore,ProfileCoverage,ProfileAbstainReason,ProfileAlgorithm," +
+        "ProfileRevision,ProfileEvidence,ProfileLearned,ProfileHoldout," +
+        // 3.0 — Identificadores, al final para no mover ninguna columna: RowId es `history.id`
+        // (cruza con profile_evaluations.history_id y con una copia de seguridad) y ObservationId,
+        // la lectura de origen: dos filas de la misma lectura (periódica y alarma confirmada) lo
+        // comparten. ObservationId vacío en filas anteriores al esquema 24.
+        "RowId,ObservationId"
 
     /** Cabecera del CSV de eventos de servicio (pestaña Radio). */
     const val SERVICE_STATE_CSV_HEADER = "TimestampUtc,State,DataRegistered,VoiceRegistered,Searching," +
@@ -58,8 +81,9 @@ object ExportUtils {
                 OutputStreamWriter(outputStream, StandardCharsets.UTF_8).use { writer ->
                     writer.append(CSV_HEADER).append("\n")
                     var written = 0
+                    val device = ExportDevice.current()
                     val expected = streamRecords { item ->
-                        writer.append(csvRow(item)).append("\n")
+                        writer.append(csvRow(item, device)).append("\n")
                         written++
                     }
                     writer.flush()
@@ -69,8 +93,24 @@ object ExportUtils {
             }
         }
 
+    /**
+     * 3.0 (#30) — Teléfono y Android que hacen el export. Solo fabricante, modelo y versión:
+     * nada que identifique a la persona ni al aparato concreto (ni IMEI, ni número de serie).
+     */
+    data class ExportDevice(val device: String, val android: String) {
+        companion object {
+            val UNKNOWN = ExportDevice("", "")
+
+            fun current(): ExportDevice = ExportDevice(
+                device = listOfNotNull(android.os.Build.MANUFACTURER, android.os.Build.MODEL)
+                    .joinToString(" ").trim(),
+                android = "${android.os.Build.VERSION.RELEASE.orEmpty()} (API ${android.os.Build.VERSION.SDK_INT})"
+            )
+        }
+    }
+
     /** Una fila del CSV, ya escapada. Pura: se puede probar sin Android. */
-    fun csvRow(item: HistoryRecord): String = listOf(
+    fun csvRow(item: HistoryRecord, export: ExportDevice = ExportDevice.UNKNOWN): String = listOf(
         item.timestamp,
         item.netType,
         item.cid,
@@ -105,7 +145,26 @@ object ExportUtils {
         item.serviceState ?: "",
         item.networkOperator ?: "",
         item.simOperator ?: "",
-        item.networkRoaming?.let { if (it) 1 else 0 } ?: ""
+        item.networkRoaming?.let { if (it) 1 else 0 } ?: "",
+        item.observedAtMs?.let { ObservationTime.utcIso(it) } ?: "",
+        item.notEvaluatedHeuristics ?: "",
+        item.gpsAccuracyM?.let { String.format(java.util.Locale.ROOT, "%.1f", it) } ?: "",
+        item.appVersion ?: "",
+        export.device,
+        export.android,
+        item.locationMode ?: "",
+        item.profile?.mode ?: "",
+        item.profile?.level ?: "",
+        item.profile?.score?.let { String.format(java.util.Locale.ROOT, "%.2f", it) } ?: "",
+        item.profile?.let { "${it.metricsEvaluated}/${it.metricsTotal}" } ?: "",
+        item.profile?.abstainReason ?: "",
+        item.profile?.algorithmVersion ?: "",
+        item.profile?.revision ?: "",
+        item.profile?.evidence ?: "",
+        item.profile?.let { if (it.learned) 1 else 0 } ?: "",
+        item.profile?.let { if (it.holdout) 1 else 0 } ?: "",
+        item.rowId ?: "",
+        item.observationId ?: ""
     ).joinToString(",") { csvEscape(it) }
 
     /** Una fila del CSV de eventos de servicio. Pura: se puede probar sin Android. */
@@ -145,14 +204,8 @@ object ExportUtils {
      * Escapa un campo para CSV según RFC 4180: si contiene coma, comillas dobles o saltos de
      * línea, lo envuelve entre comillas y duplica las comillas internas; si no, lo deja tal cual.
      * Así ningún valor raro (p.ej. una razón con comillas o una coma) puede descuadrar una fila,
-     * y los datos llegan íntegros al análisis posterior.
+     * y los datos llegan íntegros al análisis posterior. 3.0 — Antes protege el texto que una hoja
+     * de cálculo podría tomar por fórmula (nombre de red, CSG…); ver [CsvText].
      */
-    private fun csvEscape(value: Any?): String {
-        val s = value?.toString() ?: ""
-        return if (s.contains('"') || s.contains(',') || s.contains('\n') || s.contains('\r')) {
-            "\"" + s.replace("\"", "\"\"") + "\""
-        } else {
-            s
-        }
-    }
+    private fun csvEscape(value: Any?): String = CsvText.field(value)
 }

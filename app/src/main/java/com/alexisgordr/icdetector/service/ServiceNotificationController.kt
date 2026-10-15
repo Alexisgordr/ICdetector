@@ -11,6 +11,7 @@ import android.content.Intent
 import android.provider.Settings
 import androidx.core.app.NotificationCompat
 import com.alexisgordr.icdetector.MainActivity
+import com.alexisgordr.icdetector.core.AlarmAudibility
 import com.alexisgordr.icdetector.models.CellData
 import com.alexisgordr.icdetector.ui.localizeTerminalLine
 import com.alexisgordr.icdetector.util.AppLanguage
@@ -19,7 +20,11 @@ import com.alexisgordr.icdetector.util.LocaleController
 /** Owns notification construction and channels for the foreground service. */
 internal class ServiceNotificationController(
     private val context: Context,
-    private val serviceClass: Class<*>
+    private val serviceClass: Class<*>,
+    /** 3.0 — Modo de ubicación, para que el título diga si el GPS es continuo o adaptativo. */
+    private val locationMode: () -> com.alexisgordr.icdetector.core.LocationMode = {
+        com.alexisgordr.icdetector.core.LocationMode.CONTINUOUS
+    }
 ) {
     fun createChannels() {
         val manager = context.getSystemService(NotificationManager::class.java)
@@ -37,6 +42,29 @@ internal class ServiceNotificationController(
                 NotificationManager.IMPORTANCE_HIGH
             ).apply { description = context.getString(R.string.channel_alerts_description) }
         )
+        // 3.0 — Canal propio para los avisos 2G/3G, separado de las alarmas confirmadas: silenciar
+        // uno no silencia el otro. Volver a crear un canal existente solo actualiza nombre y
+        // descripción; Android conserva la importancia y el sonido que haya elegido el usuario.
+        manager.createNotificationChannel(
+            NotificationChannel(
+                LEGACY_CHANNEL_ID,
+                context.getString(R.string.channel_legacy_network_name),
+                NotificationManager.IMPORTANCE_DEFAULT
+            ).apply { description = context.getString(R.string.channel_legacy_network_description) }
+        )
+        // 3.0 — Avisos silenciosos de Stable-Site: canal propio, importancia baja, sin sonido ni
+        // vibración. No es el canal de alarmas y no usa ningún tono.
+        manager.createNotificationChannel(
+            NotificationChannel(
+                STABLE_SITE_CHANNEL_ID,
+                context.getString(R.string.channel_stable_site_name),
+                NotificationManager.IMPORTANCE_LOW
+            ).apply {
+                description = context.getString(R.string.channel_stable_site_description)
+                setSound(null, null)
+                enableVibration(false)
+            }
+        )
     }
 
     fun foregroundNotification(text: String): Notification {
@@ -53,11 +81,24 @@ internal class ServiceNotificationController(
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
         )
         return NotificationCompat.Builder(context, CHANNEL_ID)
-            .setContentTitle(context.getString(R.string.notif_monitoring_title))
+            .setContentTitle(
+                context.getString(
+                    when (locationMode()) {
+                        com.alexisgordr.icdetector.core.LocationMode.ADAPTIVE -> R.string.notif_monitoring_title_adaptive
+                        com.alexisgordr.icdetector.core.LocationMode.INTELLIGENT -> R.string.notif_monitoring_title_intelligent
+                        com.alexisgordr.icdetector.core.LocationMode.CONTINUOUS -> R.string.notif_monitoring_title
+                    }
+                )
+            )
             .setContentText(text)
             .setSmallIcon(android.R.drawable.ic_menu_info_details)
             .setContentIntent(openApp)
             .setOngoing(true)
+            // 3.0 (#35) — Se repinta cada ~2 s: nunca debe sonar ni vibrar, aunque el usuario
+            // haya dado sonido al canal. Si pitaba, la salida lógica era silenciar la app entera,
+            // y con ella las alarmas confirmadas.
+            .setOnlyAlertOnce(true)
+            .setSilent(true)
             .addAction(android.R.drawable.ic_menu_close_clear_cancel, context.getString(R.string.stop), stopService)
             .build()
     }
@@ -67,25 +108,82 @@ internal class ServiceNotificationController(
             .notify(NOTIFICATION_ID, foregroundNotification(text))
     }
 
-    fun showAirplaneModeAction() {
+    /**
+     * 3.0 — Aviso de un episodio de red 2G/3G (uno por episodio, ver LegacyNetworkEpisodeGate).
+     * Describe el uso o el cambio a 2G/3G, no un ataque, y ofrece abrir los ajustes de modo avión.
+     * [silent]: «Solo notificación» (predeterminado). Si no es silenciosa, suena lo que diga el canal
+     * [LEGACY_CHANNEL_ID] y Android (volumen, No molestar): no hay ningún tono aparte.
+     */
+    fun showLegacyNetworkNotice(
+        kind: com.alexisgordr.icdetector.core.LegacyNetworkEpisodeGate.Trigger,
+        silent: Boolean,
+        /** Ya validada (LegacyNetwork.previousSignalDbm); null = «señal previa desconocida». */
+        previousDbm: Int?
+    ) {
         val settings = PendingIntent.getActivity(
             context,
             2,
             Intent(Settings.ACTION_AIRPLANE_MODE_SETTINGS),
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
         )
-        val notification = NotificationCompat.Builder(context, ALERT_CHANNEL_ID)
-            .setContentTitle(context.getString(R.string.notif_legacy_network_title))
-            .setContentText(context.getString(R.string.airplane_settings_hint))
+        val title = context.getString(
+            if (kind == com.alexisgordr.icdetector.core.LegacyNetworkEpisodeGate.Trigger.CHANGE_FROM_MODERN) R.string.notif_legacy_change_title
+            else R.string.notif_legacy_network_title
+        )
+        val previous = previousDbm?.let { context.getString(R.string.notif_legacy_previous_signal, it) }
+            ?: context.getString(R.string.notif_legacy_previous_unknown)
+        val body = context.getString(R.string.notif_legacy_network_body) + "\n" + previous
+        val notification = NotificationCompat.Builder(context, LEGACY_CHANNEL_ID)
+            .setContentTitle(title)
+            .setContentText(body)
+            .setStyle(NotificationCompat.BigTextStyle().bigText(body))
             .setSmallIcon(android.R.drawable.stat_sys_warning)
-            .setPriority(NotificationCompat.PRIORITY_HIGH)
-            .setCategory(NotificationCompat.CATEGORY_ALARM)
+            .setPriority(NotificationCompat.PRIORITY_DEFAULT)
+            .setCategory(NotificationCompat.CATEGORY_STATUS)
+            .setSilent(silent)
             .setContentIntent(settings)
-            .addAction(android.R.drawable.ic_menu_manage, context.getString(R.string.notif_open_settings), settings)
+            .addAction(android.R.drawable.ic_menu_manage, context.getString(R.string.notif_open_airplane_settings), settings)
             .setAutoCancel(true)
             .build()
         context.getSystemService(NotificationManager::class.java)
-            .notify(AIRPLANE_ACTION_NOTIFICATION_ID, notification)
+            .notify(LEGACY_NETWORK_NOTIFICATION_ID, notification)
+    }
+
+    /**
+     * 3.0 — Aviso silencioso de Stable-Site, uno por episodio (ver StableSiteNotices). Describe un
+     * cambio inusual de celda en un lugar conocido, nunca un ataque. Al tocarlo se abre el episodio.
+     * Cada episodio tiene su propio id de notificación y su propio PendingIntent.
+     * Devuelve false si Android no la mostraría (notificaciones de la app o el canal desactivados):
+     * así el terminal no dice «publicado» cuando no lo está.
+     */
+    fun showStableSiteNotice(episodeId: String): Boolean {
+        val manager = context.getSystemService(NotificationManager::class.java)
+        val channel = manager.getNotificationChannel(STABLE_SITE_CHANNEL_ID)
+        if (!manager.areNotificationsEnabled() || channel?.importance == NotificationManager.IMPORTANCE_NONE) return false
+        val id = com.alexisgordr.icdetector.core.StableSiteNotices.notificationId(episodeId)
+        val openEpisode = PendingIntent.getActivity(
+            context,
+            id,
+            Intent(context, MainActivity::class.java)
+                .putExtra(com.alexisgordr.icdetector.core.StableSiteNotices.EXTRA_EPISODE_ID, episodeId)
+                .addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP),
+            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
+        )
+        val body = context.getString(R.string.notif_stable_site_body)
+        val notification = NotificationCompat.Builder(context, STABLE_SITE_CHANNEL_ID)
+            .setContentTitle(context.getString(R.string.notif_stable_site_title))
+            .setContentText(body)
+            .setStyle(NotificationCompat.BigTextStyle().bigText(body))
+            .setSmallIcon(android.R.drawable.ic_dialog_info)
+            .setPriority(NotificationCompat.PRIORITY_LOW)
+            .setCategory(NotificationCompat.CATEGORY_STATUS)
+            .setSilent(true)
+            .setOnlyAlertOnce(true)
+            .setContentIntent(openEpisode)
+            .setAutoCancel(true)
+            .build()
+        manager.notify(id, notification)
+        return true
     }
 
     /**
@@ -125,8 +223,42 @@ internal class ServiceNotificationController(
     companion object {
         const val CHANNEL_ID = "miniic_channel"
         const val ALERT_CHANNEL_ID = "miniic_security_alerts"
+        /** 3.0 — Avisos de red 2G/3G (uno por episodio). */
+        const val LEGACY_CHANNEL_ID = "miniic_legacy_network"
+        /** 3.0 — Avisos silenciosos de Stable-Site (uno por episodio, sin sonido). */
+        const val STABLE_SITE_CHANNEL_ID = "miniic_stable_site_notices"
         const val NOTIFICATION_ID = 202
-        const val AIRPLANE_ACTION_NOTIFICATION_ID = 204
+        const val LEGACY_NETWORK_NOTIFICATION_ID = 204
         const val CONFIRMED_ALARM_NOTIFICATION_ID = 205
+
+        /** 3.0 (#35) — ¿Sonaría ahora la notificación de una alarma confirmada? */
+        fun alarmAudibility(context: Context): AlarmAudibility.AlarmSound {
+            val manager = context.getSystemService(NotificationManager::class.java)
+            val channel = manager.getNotificationChannel(ALERT_CHANNEL_ID)
+            val sound = channel?.sound
+            return AlarmAudibility.evaluate(
+                notificationsEnabled = manager.areNotificationsEnabled(),
+                alertChannelImportance = channel?.importance,
+                // Sonido "Ninguno": null o Uri.EMPTY, según la versión de Android.
+                alertChannelHasSound = sound != null && sound != android.net.Uri.EMPTY
+            )
+        }
+
+        /**
+         * 3.0 (#35) — Ajustes del canal de alertas; si las notificaciones de la app están
+         * desactivadas, los ajustes de notificaciones de la app (el canal no se puede tocar).
+         */
+        fun alarmSettingsIntent(context: Context): Intent {
+            val manager = context.getSystemService(NotificationManager::class.java)
+            val intent = if (manager.areNotificationsEnabled()) {
+                Intent(Settings.ACTION_CHANNEL_NOTIFICATION_SETTINGS)
+                    .putExtra(Settings.EXTRA_CHANNEL_ID, ALERT_CHANNEL_ID)
+            } else {
+                Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS)
+            }
+            return intent
+                .putExtra(Settings.EXTRA_APP_PACKAGE, context.packageName)
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        }
     }
 }

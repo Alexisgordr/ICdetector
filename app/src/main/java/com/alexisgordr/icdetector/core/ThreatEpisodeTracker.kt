@@ -7,25 +7,52 @@ import com.alexisgordr.icdetector.models.identityKey
 /**
  * Correlates weak evidence across fresh observations without changing any individual heuristic.
  *
- * A single RF oddity remains sub-threshold. Promotion requires evidence from at least two
- * independent physical families, seen in at least two fresh modem deliveries inside a short
- * window, and the current observation must still contain evidence. This closes the gap between
- * isolated per-sample scoring and a short-lived attack sequence while preserving the existing
- * temporal confirmation performed by [TemporalConfidence].
+ * A single RF oddity remains sub-threshold. What the implementation does:
+ *  - Evidence is the set of rule families that FAILED in a fresh modem delivery (a repeated token
+ *    is not new evidence). It is kept for [windowMs] (90 s) and only for the same serving identity.
+ *  - A promotion STARTS or is RENEWED only when the current observation adds new evidence and,
+ *    together with the window, there are at least two different families in at least two
+ *    distinct observations.
+ *  - Once started, the promotion is HELD for up to [promotionHoldMs] (30 s) even if the current
+ *    observation has no failures at all; a handover to another identity ends it at once.
+ *  - A promoted cell is only marked suspicious here. It still goes through [TemporalConfidence]
+ *    (consecutive phases) before any alert. A held cycle without new evidence
+ *    ([Evaluation.heldWithoutEvidence]) neither advances nor breaks that streak: the hold bridges
+ *    normal gaps, it does not supply the phases. An episode alarm needs three promoted
+ *    observations that each carry fresh evidence (of any family).
+ *
+ * Different families are not guaranteed to be independent evidence: they are a grouping of rules,
+ * and two of them can share inputs and causes (the GPS fix, the cell's stored history, one PCI or
+ * channel change). Two families mean two different rules failed, not two independent facts. See
+ * MANUAL, *Shared evidence*.
  */
 class ThreatEpisodeTracker(
     private val windowMs: Long = 90_000L,
     private val promotionHoldMs: Long = 30_000L,
+    /**
+     * Monotonic clock in ms. The service injects SystemClock.elapsedRealtime, which keeps counting in
+     * deep sleep, so both windows expire in real time. The default (System.nanoTime) stops in deep
+     * sleep on Android; it stays only as a portable default, and tests inject a fake clock.
+     */
     private val nowMs: () -> Long = { System.nanoTime() / 1_000_000L }
 ) {
-    enum class Family { RF_DOMINANCE, IDENTITY, MOBILITY, CROSS_LAYER }
+    /**
+     * 3.0 (corte de campaña) — DATA_QUALITY (H8) y UNAVAILABLE (H9, no evaluable desde una app) no son
+     * evidencia: el tracker no las cuenta como familia.
+     */
+    enum class Family { RF_DOMINANCE, IDENTITY, MOBILITY, CROSS_LAYER, DATA_QUALITY, UNAVAILABLE }
 
     data class Evaluation(
         val cell: CellData,
         val watching: Boolean,
         val startedWatching: Boolean,
         val promoted: Boolean,
-        val families: Set<Family>
+        val families: Set<Family>,
+        /**
+         * Promoted only by the hold: this observation added no fresh evidence. [TemporalConfidence]
+         * keeps the streak as it is (neither +1 nor reset).
+         */
+        val heldWithoutEvidence: Boolean = false
     )
 
     private data class Evidence(
@@ -85,9 +112,12 @@ class ThreatEpisodeTracker(
             promotedUntilMs = 0L
         }
 
-        // Once independent evidence has opened an episode, bridge short normal gaps so that the
-        // existing consecutive-cycle confirmation can observe the episode as a continuous state.
-        // The bridge is deliberately much shorter than the 90 s correlation window.
+        // Once new evidence from two families has opened (or renewed) an episode, bridge short
+        // normal gaps: for up to 30 s the cell stays promoted even when the current observation
+        // has no failures, so a clean cycle does not break the confirmation streak. Those held
+        // cycles are marked [Evaluation.heldWithoutEvidence] and do not advance it either: before,
+        // two sub-threshold failures followed by two clean cycles confirmed an alarm in 15 s. The
+        // bridge is deliberately much shorter than the 90 s correlation window.
         val promote = !cell.isSuspicious && promotedIdentity == cell.identityKey &&
             now <= promotedUntilMs
         val promotedCell = if (promote) {
@@ -98,12 +128,24 @@ class ThreatEpisodeTracker(
                 suspiciousReason = listOfNotNull(
                     cell.suspiciousReason,
                     "Episodio multiseñal ($names)"
-                ).joinToString(" | ")
+                ).joinToString(com.alexisgordr.icdetector.models.StoredReasons.SEPARATOR)
             )
         } else cell
 
-        return Evaluation(promotedCell, watching, started, promote, accumulatedFamilies)
+        return Evaluation(
+            promotedCell, watching, started, promote, accumulatedFamilies,
+            heldWithoutEvidence = promote && !acceptedEvidence
+        )
     }
+
+    /** 3.0 — Hay una promoción de episodio vigente (incluida la retención de 30 s). */
+    fun hasOpenEpisode(): Boolean = promotedIdentity != null && nowMs() <= promotedUntilMs
+
+    /**
+     * 3.0 (#20) — Pérdida de señal: la evidencia de antes del hueco no se correlaciona con la de
+     * después, aunque siga dentro de la ventana de 90 s.
+     */
+    fun interrupt() = reset()
 
     fun reset() {
         evidence.clear()
@@ -112,23 +154,11 @@ class ThreatEpisodeTracker(
         promotedUntilMs = 0L
     }
 
-    private fun familiesOf(cell: CellData): Set<Family> = buildSet {
-        val h = cell.heuristicReport
-        fun failed(vararg values: HeuristicStatus) = values.any { it == HeuristicStatus.FAILED }
-
-        if (failed(h.isolatedCell, h.powerJump, h.ghostNeighbors, h.signalBaseline)) {
-            add(Family.RF_DOMINANCE)
-        }
-        if (failed(h.mccConsistency, h.mncCount, h.tacDeviation, h.arfcnSanity, h.rfStability)) {
-            add(Family.IDENTITY)
-        }
-        if (failed(h.taDistance, h.pingPong, h.mobileCellId, h.bandDowngrade, h.transitionCoherence)) {
-            add(Family.MOBILITY)
-        }
-        if (failed(h.hardwareCiphering, h.latencyCorrelation)) {
-            add(Family.CROSS_LAYER)
-        }
-    }
+    // 3.0 (#7, O2) — Las familias salen de la lista canónica de reglas (HeuristicCatalog).
+    private fun familiesOf(cell: CellData): Set<Family> =
+        HeuristicCatalog.values()
+            .filter { it.isEvidence && it.status(cell.heuristicReport) == HeuristicStatus.FAILED }
+            .mapTo(linkedSetOf()) { it.episodeFamily }
 
     private companion object {
         const val EPISODE_ALARM_SCORE = 69

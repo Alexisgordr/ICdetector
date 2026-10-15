@@ -99,6 +99,27 @@ class CellDbHelperTrustEvidenceTest {
     }
 
     @Test
+    fun addedCarrierIsNotVetoedByTheOldCarrierStillInUse() {
+        // 3.0 — Agregación de portadoras: 200/6400 sigue limpia cada día (también hoy) y 473/3600
+        // lleva 14 días en cuarentena. El veto del par viejo es por portadora: no aplica.
+        insertRows(countPerDay = 5, days = 30, pci = 200, arfcn = 6400, failedHeuristics = "OK")
+        insertRows(
+            countPerDay = 5,
+            days = 14,
+            pci = 473,
+            arfcn = 3600,
+            failedHeuristics = "$SUBTHRESHOLD_PREFIX $LOCAL_TRUST_RECONFIGURATION_REASON (ARFCN)"
+        )
+
+        val evidence = helper.getLocalCellTrustEvidence(cell(pci = 473, arfcn = 3600))
+        assertEquals(setOf(200), evidence.knownPcisByArfcn[6400])
+        val candidate = evidence.reconfigurationCandidate
+        assertNotNull(candidate)
+        assertEquals(14, candidate!!.distinctDays)
+        assertFalse(candidate.oldPairSeenRecently)
+    }
+
+    @Test
     fun h15RealTraceKeepsOwnRowsButCountsOneAlternativeEpisode() {
         seedH15Baseline()
         val base = System.currentTimeMillis() - 60_000
@@ -107,7 +128,7 @@ class CellDbHelperTrustEvidenceTest {
         insertH15Row(base + 2_000, 200, H15_REASON, 70)
         insertH15Row(base + 3_000, 48, H15_REASON, 70)
 
-        val evidence = helper.getCellRfStability(CID_H15, MNC, TAC, MCC, RadioTech.LTE)
+        val evidence = checkNotNull(helper.getCellRfStability(CID_H15, MNC, TAC, MCC, RadioTech.LTE)) { "lectura RF fallida" }
         val counts = evidence.pciByArfcn.getValue(2850).toMap()
         val episodes = evidence.recentPciEpisodesByArfcn.getValue(2850).toMap()
 
@@ -125,20 +146,26 @@ class CellDbHelperTrustEvidenceTest {
                 if (index == 0) 100 else 70)
         }
 
-        val evidence = helper.getCellRfStability(CID_H15, MNC, TAC, MCC, RadioTech.LTE)
+        val evidence = checkNotNull(helper.getCellRfStability(CID_H15, MNC, TAC, MCC, RadioTech.LTE)) { "lectura RF fallida" }
         val episodes = evidence.recentPciEpisodesByArfcn.getValue(2850).toMap()
         assertTrue(episodes.getValue(48) >= 2)
         assertEquals(2, episodes[200])
     }
 
     @Test
-    fun h15DoesNotReadmitRowsThatAlsoFailedAnotherHeuristic() {
+    fun h15ReadmitsItsOwnRowsEvenWhenAnotherHeuristicAlsoFailed() {
+        // 3.0 — Una fila que lleva el motivo de H15 cuenta para H15 aunque otra regla fallara en la
+        // misma fila (antes quedaba fuera y el PCI del clon dejaba de contarse). Una fila con otro
+        // motivo y sin el de H15 sigue fuera.
         seedH15Baseline()
         val base = System.currentTimeMillis() - 60_000
         insertH15Row(base, 200, "$H15_REASON | Consistencia geográfica fallida", 30)
+        insertH15Row(base + 1_000, 311, "Consistencia geográfica fallida", 30)
 
-        val evidence = helper.getCellRfStability(CID_H15, MNC, TAC, MCC, RadioTech.LTE)
-        assertFalse(evidence.pciByArfcn.getValue(2850).toMap().containsKey(200))
+        val evidence = checkNotNull(helper.getCellRfStability(CID_H15, MNC, TAC, MCC, RadioTech.LTE)) { "lectura RF fallida" }
+        val carrier = evidence.pciByArfcn.getValue(2850).toMap()
+        assertEquals(1, carrier[200])
+        assertFalse("una fila sin el motivo de H15 sigue fuera", carrier.containsKey(311))
     }
 
     @Test
@@ -148,7 +175,7 @@ class CellDbHelperTrustEvidenceTest {
         insertH15Row(base, 200, "$SUBTHRESHOLD_PREFIX $H15_REASON", 70)
         insertH15Row(base + 1_000, 200, "[2/3 ciclos confirmando] $H15_REASON", 70)
 
-        val evidence = helper.getCellRfStability(CID_H15, MNC, TAC, MCC, RadioTech.LTE)
+        val evidence = checkNotNull(helper.getCellRfStability(CID_H15, MNC, TAC, MCC, RadioTech.LTE)) { "lectura RF fallida" }
         assertEquals(2, evidence.pciByArfcn.getValue(2850).toMap()[200])
     }
 
@@ -159,7 +186,7 @@ class CellDbHelperTrustEvidenceTest {
         listOf(48, 200, 48, 200).forEachIndexed { index, pci ->
             insertH15Row(base + index * 1_000L, pci, H15_REASON, 70)
         }
-        val latched = helper.getCellRfStability(CID_H15, MNC, TAC, MCC, RadioTech.LTE)
+        val latched = checkNotNull(helper.getCellRfStability(CID_H15, MNC, TAC, MCC, RadioTech.LTE)) { "lectura RF fallida" }
         assertFalse(analyzeH15(latched))
 
         // TemporalConfidence guarda estas observaciones normales con el motivo sub-umbral que
@@ -168,7 +195,7 @@ class CellDbHelperTrustEvidenceTest {
             insertH15Row(base + 10_000 + index * 1_000L, 48,
                 "$SUBTHRESHOLD_PREFIX $H15_REASON", 70)
         }
-        val recovered = helper.getCellRfStability(CID_H15, MNC, TAC, MCC, RadioTech.LTE)
+        val recovered = checkNotNull(helper.getCellRfStability(CID_H15, MNC, TAC, MCC, RadioTech.LTE)) { "lectura RF fallida" }
         assertTrue(analyzeH15(recovered))
         assertTrue(recovered.pciByArfcn.getValue(2850).toMap().getValue(48) >= 25)
     }
@@ -177,7 +204,6 @@ class CellDbHelperTrustEvidenceTest {
         ThreatAnalyzer.analyzeThreats(
             active = cell(pci = 48, arfcn = 2850).copy(cellId = CID_H15),
             neighbors = emptyList(),
-            isHardwareCipheringActive = true,
             cellChangeHistory = emptyList(),
             currentLocation = null,
             rfStability = evidence

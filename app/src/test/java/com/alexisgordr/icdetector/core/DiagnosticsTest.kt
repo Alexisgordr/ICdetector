@@ -135,6 +135,36 @@ class DiagnosticsTest {
     }
 
     @Test
+    fun `cached deliveries without a token never advance the streak`() {
+        val temporal = TemporalConfidence(3)
+        val suspicious = cell().copy(isSuspicious = true, suspiciousReason = "test")
+
+        val results = (1..3).map {
+            temporal.apply(suspicious, observationToken = null, isFreshDelivery = false)
+        }
+
+        results.forEach { assertEquals(0, it.temporalProgress.phase) }
+        assertFalse(results.last().isSuspicious)
+    }
+
+    @Test
+    fun `cached repeats without a token do not complete a fresh streak`() {
+        val temporal = TemporalConfidence(3)
+        val suspicious = cell().copy(isSuspicious = true, suspiciousReason = "test")
+
+        temporal.apply(suspicious, observationToken = null)
+        temporal.apply(suspicious, observationToken = null, isFreshDelivery = false)
+        val cached = temporal.apply(suspicious, observationToken = null, isFreshDelivery = false)
+        assertEquals(1, cached.temporalProgress.phase)
+        assertFalse(cached.isSuspicious)
+
+        temporal.apply(suspicious, observationToken = null)
+        val third = temporal.apply(suspicious, observationToken = null)
+        assertEquals(3, third.temporalProgress.phase)
+        assertTrue(third.isSuspicious)
+    }
+
+    @Test
     fun `emergency acceptance never lowers the token watermark`() {
         var elapsed = 0L
         val temporal = TemporalConfidence(3, elapsedRealtimeMs = { elapsed })
@@ -156,7 +186,7 @@ class DiagnosticsTest {
         val inputs = DiagnosticEngine.Inputs(
             neighborCount = 0, wifiActive = false, locationAvailable = false,
             historyWithLocation = 0, latencyAvailable = false,
-            cipheringAvailable = false, previousBandAvailable = false,
+            previousBandAvailable = false,
             signalBaseline = null, rfFingerprint = null, rfStability = null, reputation = null
         )
         val diagnostic = DiagnosticEngine.explain(cell(), inputs).first { it.id == 6 }
@@ -165,11 +195,39 @@ class DiagnosticsTest {
     }
 
     @Test
+    fun `H3 diagnostics say why it passed, failed or abstained`() {
+        val inputs = DiagnosticEngine.Inputs(
+            neighborCount = 2, wifiActive = false, locationAvailable = false,
+            historyWithLocation = 0, latencyAvailable = false,
+            previousBandAvailable = false,
+            signalBaseline = null, rfFingerprint = null, rfStability = null, reputation = null
+        )
+        fun h3(report: HeuristicReport) = DiagnosticEngine.explain(cell(report), inputs).first { it.id == 3 }.explanation
+        assertEquals(DiagnosticEngine.H3_PASSED_EXPLANATION, h3(HeuristicReport(mccConsistency = HeuristicStatus.PASSED)))
+        assertEquals(DiagnosticEngine.H3_FAILED_EXPLANATION, h3(HeuristicReport(mccConsistency = HeuristicStatus.FAILED)))
+        assertEquals(
+            "N/A: PLMN extranjero con vecinas coherentes (frontera).",
+            h3(HeuristicReport(mccAbstention = MccAbstention.BORDER))
+        )
+        assertEquals("N/A: ${DiagnosticEngine.H3_UNKNOWN_ABSTENTION}.", h3(HeuristicReport()))
+        // 3.0 (corte de campaña) — Celda CSG: H1/H2/H5/H6/H7 explican la abstención por la CSG, las demás no.
+        val csg = DiagnosticEngine.explain(cell(HeuristicReport(csgCell = true)), inputs)
+        listOf(1, 2, 5, 6, 7).forEach { id -> assertEquals(DiagnosticEngine.CSG_NA_EXPLANATION, csg.first { it.id == id }.explanation) }
+        assertTrue(csg.first { it.id == 4 }.explanation != DiagnosticEngine.CSG_NA_EXPLANATION)
+        // 3.0 (corte de campaña) — H11 con un fix viejo dice por qué se abstuvo.
+        assertEquals(DiagnosticEngine.H11_FIX_TOO_OLD_EXPLANATION,
+            DiagnosticEngine.explain(cell(HeuristicReport(mobileCellIdFixTooOld = true)), inputs).first { it.id == 11 }.explanation)
+        // 3.0 (corte de campaña) — H9 reservada: siempre la misma explicación.
+        val h9 = DiagnosticEngine.explain(cell(HeuristicReport()), inputs).first { it.id == 9 }
+        assertEquals(HeuristicStatus.NOT_EVALUATED, h9.status)
+        assertEquals(DiagnosticEngine.H9_NA_EXPLANATION, h9.explanation)
+    }
+
+    @Test
     fun `maturity reflects actual analyzer thresholds`() {
         val inputs = DiagnosticEngine.Inputs(
             neighborCount = 1, wifiActive = false, locationAvailable = true,
-            historyWithLocation = 1, latencyAvailable = true, cipheringAvailable = true,
-            previousBandAvailable = true,
+            historyWithLocation = 1, latencyAvailable = true, previousBandAvailable = true,
             signalBaseline = SignalBaseline(20, -90.0, 3.0, -100, -80),
             rfFingerprint = CellRfFingerprint(30, -10.0, 1.0, 12.0, 2.0),
             rfStability = CellRfStability(4, emptyList(), emptyList()),
@@ -189,7 +247,7 @@ class DiagnosticsTest {
         fun inputs(gate: Boolean?) = DiagnosticEngine.Inputs(
             neighborCount = 0, wifiActive = false, locationAvailable = false,
             historyWithLocation = 0, latencyAvailable = false,
-            cipheringAvailable = false, previousBandAvailable = false,
+            previousBandAvailable = false,
             signalBaseline = null, rfFingerprint = null, rfStability = null, reputation = null,
             trustGateMet = gate
         )
@@ -199,5 +257,21 @@ class DiagnosticsTest {
         val waiting = DiagnosticEngine.maturity(inputs(true))
         assertEquals(BaselineLevel.EMPTY, waiting.signalLevel)
         assertEquals(DiagnosticEngine.maturity(inputs(false)).copy(trustGateMet = true), waiting)
+    }
+
+    @Test
+    fun `alternating identities reset the streak unless they share a confirmation key`() {
+        val a = cell().copy(isSuspicious = true, suspiciousReason = "test")
+        val b = a.copy(cellId = "124")
+
+        val perCell = TemporalConfidence(3)
+        val plain = listOf(a, b, a, b).map { perCell.apply(it) }
+        assertTrue(plain.all { it.temporalProgress.phase == 1 })
+
+        val grouped = TemporalConfidence(3)
+        val key = PingPongRule.CONFIRMATION_KEY_PREFIX + "A,B"
+        val results = listOf(a, b, a).map { grouped.apply(it, confirmationKey = key) }
+        assertEquals(listOf(1, 2, 3), results.map { it.temporalProgress.phase })
+        assertTrue(results.last().isSuspicious)
     }
 }

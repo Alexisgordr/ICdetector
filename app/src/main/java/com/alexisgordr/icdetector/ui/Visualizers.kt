@@ -341,15 +341,17 @@ fun MiniSinrGraph(sinr: Int?) {
  * Mapeo correcto por tipo de red:
  *  - 4G LTE y 5G NSA  -> la celda registrada es LTE (en NSA, el ancla), su arfcn es un
  *    EARFCN válido, así que se mapea con BandPlan.
- *  - 5G SA            -> el arfcn es un NR-ARFCN (otra tabla); NO se mapea con la tabla
- *    LTE (daría una banda falsa). Se muestra "5G".
+ *  - Celda NR (radioTech NR) -> el arfcn es un NR-ARFCN (otra tabla); NO se mapea con la
+ *    tabla LTE (daría una banda falsa). Se muestra "5G NR".
  *  - Resto / desconocido -> "—".
  *
  * Rojo (heurística 14 disparada) o gris neutro.
  */
 @Composable
-fun BandIndicator(arfcn: Int?, networkType: String, suspicious: Boolean) {
-    val isSa = networkType.contains("(SA)")
+fun BandIndicator(arfcn: Int?, networkType: String, suspicious: Boolean, radioTech: com.alexisgordr.icdetector.models.RadioTech = com.alexisgordr.icdetector.models.RadioTech.UNKNOWN) {
+    // 3.0 — NR por la clase de CellInfo (radioTech) o por la etiqueta antigua "(SA)": su canal es un
+    // NR-ARFCN y nunca se mapea con la tabla LTE. Ya no se etiqueta como SA sin evidencia.
+    val isSa = radioTech == com.alexisgordr.icdetector.models.RadioTech.NR || networkType.contains("(SA)")
     val mappable = !isSa && (
         networkType.contains("LTE") ||
         networkType.contains("4G") ||

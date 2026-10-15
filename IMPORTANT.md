@@ -4,26 +4,20 @@
 >
 > | | |
 > |---|---|
-> | **Dataset baseline** | v2.10.5 (version code 33) — Day 1 of the dataset |
-> | **Campaign releases** | v2.10.x, bug fixes only (current: v2.10.10) |
-> | **Database schema** | 19 |
+> | **Campaign build** | 3.0.0 (version code 39), from GitHub Releases; it includes the whole campaign cut |
+> | **Day 1** | A fresh database on 3.0.0 |
+> | **Database schema** | 25 |
 > | **Duration** | Approximately three months |
+> | **Previous stage** | v2.10.x, dataset baseline v2.10.5, schema 19 (closed; see [below](#previous-stage-the-v210x-campaign)) |
 >
-> **3.0 is not part of the campaign.** The 3.0 betas change the database (schema 20), the inputs of
-> several rules and how alarms are confirmed, so their data is not comparable with the campaign.
-> They are the same app as the stable release (`com.alexisgordr.icdetector`): installing one on the
-> phone that collects campaign data would upgrade and migrate its database. **Keep the campaign phone
-> on v2.10.x.**
+> **The campaign moves to 3.0.** After a full audit of the app, collection restarts on 3.0.0.
+> That release changes how many rules are evaluated, and the 3.0 betas brought several dataset cuts
+> of their own, so data from before it is not comparable with data from after it.
 
 ICdetection is in a **three-month field-collection and stabilization period**. The priority is no
 longer adding features, heuristics, screens or new detection ideas. It is to **leave the methodology
 stable, collect data, observe real behaviour, measure how often each rule warns, study possible false
 positives and validate the current design over time.**
-
-v2.10.4 was originally announced as the freeze release. A final review before the campaign found a
-few data-integrity and stability bugs, so they were fixed first. **v2.10.5 is the real starting
-point**: it changes no heuristic, weight, threshold or schema — it only makes the data it writes more
-trustworthy.
 
 ---
 
@@ -61,6 +55,53 @@ for everything else. No reset is needed.
 
 ### Dataset cuts during the campaign
 
+**The campaign cut.** Made on the last 3.0 beta (3.0.0-beta4) and included in 3.0.0: at the start of
+collection, H3, H8, H9, femtocell (CSG) cells and the anomaly-confidence prior were changed together;
+before Day 1 the cut was completed with H10, H11 and the condition for the femtocell exemption. Unlike the bug fixes described above, this
+changes how evidence is weighed; it was made once, early, so that the rest of the campaign runs on a
+single method. [Status.md](Status.md#dataset-cuts-in-30) lists what changed and how to tell rows from
+before and after it.
+
+Every later fix that changes how a rule is evaluated will be listed in [CHANGELOG.md](CHANGELOG.md)
+and [Status.md](Status.md) as a cut for that rule. Each row records the app version and build commit
+that observed it (`AppVersion`), so cuts can be applied per row.
+
+---
+
+## Recommended database reset
+
+For a clean dataset, start from a **fresh local database on 3.0.0** (GitHub Releases). It
+includes the whole campaign cut and the fixes made with it.
+
+> **How to reset:** export anything you want to keep, then open **History → Delete history** and
+> type `DELETE` (English interface) or `BORRAR` (Spanish interface) to confirm.
+>
+> This removes antenna history, incidents, forensic cases, transitions, service-state events,
+> Stable-Site learning, the route-familiarity trips and the local profile in a single
+> all-or-nothing transaction.
+>
+> Uninstalling and reinstalling (or *Settings → Apps → ICdetection → Storage → Clear data*) remains a
+> valid alternative, but it also removes app settings such as your OpenCellID API key.
+
+**Updating without a reset also works.** Installing 3.0.0 over a 3.0 beta migrates the database and
+the app keeps working. In that case, **note the date you updated**: rows recorded
+before it belong to an earlier dataset and can be separated by `AppVersion`. Coming from v2.10.x,
+3.0 needs a clean install anyway.
+
+> **Day 1 = 3.0.0, schema 25, a fresh database and the audited detection baseline.**
+
+---
+
+## Previous stage: the v2.10.x campaign
+
+The first collection stage ran on v2.10.x with v2.10.5 as Day 1 (schema 19). v2.10.4 had been
+announced as the freeze release, but a final review found a few data-integrity and stability bugs,
+so v2.10.5, which changes no heuristic, weight, threshold or schema, became the real starting
+point. Its data stays valid for what it measured and is not comparable with 3.0 data. The notes
+below are kept for anyone analysing it.
+
+### Dataset cuts during the v2.10.x stage
+
 | Release | Rule | Change | Earlier data |
 |---|---|---|---|
 | v2.10.6 – v2.10.8 | — | Interface, localization, notifications and stability only | Fully comparable |
@@ -83,42 +124,7 @@ meant to measure.
 
 Full details of every release are in [CHANGELOG.md](CHANGELOG.md).
 
----
-
-## Recommended database reset
-
-For a clean research dataset, start from a **fresh local database on v2.10.5 or later**. The reset
-is recommended for dataset consistency, not required for normal app operation.
-
-> **How to reset:** export anything you want to keep, then open **History → Delete history** and
-> type `DELETE` (English interface) or `BORRAR` (Spanish interface) to confirm.
->
-> This removes antenna history, incidents, forensic cases, transitions, service-state events,
-> Stable-Site learning **and** the route-familiarity trip tables (`mobility_trips`,
-> `mobility_trip_cells`, `mobility_trip_edges`) in a single all-or-nothing transaction.
->
-> Uninstalling and reinstalling (or *Settings → Apps → ICdetection → Storage → Clear data*) remains a
-> valid alternative, but it also removes app settings such as your OpenCellID API key.
-
-The reason is methodological, not database corruption. Earlier versions did not always distinguish
-Android's `PRIMARY_SERVING` and `SECONDARY_SERVING` cells during carrier aggregation, so a secondary
-carrier could sometimes be treated as the active serving cell. Those cells, PCI values, ARFCNs,
-signal readings and GPS positions were real observations; the problem was the **role** assigned to
-some of them. That could influence RF identity stability (H15), signal baselines, serving-cell
-transitions and H16 context, topology and geometry, and local historical learning.
-
-Existing databases keep working, and retention gradually reduces the influence of older data. For a
-controlled three-month dataset, however, a clean start gives a clear methodological boundary:
-
-> **Day 1 = v2.10.5 behaviour, schema 19, corrected serving-cell selection, honest neighbour identity
-> reporting and the current detection baseline.**
-
-Old exports remain useful for development history, regression analysis and understanding how the
-detector evolved.
-
----
-
-## Why v2.10.5 is the baseline
+### Why v2.10.5 was the baseline
 
 **Carried from v2.10.4.** Serving-cell selection prioritizes Android's `PRIMARY_SERVING` state;
 secondary carriers stay available as radio context but cannot replace the primary because their
@@ -173,16 +179,12 @@ recalibrate the likelihood ratios, which would also need data from real attacks.
 
 ## A note on the release history
 
-I want to apologize for the unusually high number of releases during development. Real-world testing
-repeatedly exposed behaviour that was difficult or impossible to understand from Android
-documentation alone: carrier aggregation, modem handovers, unavailable neighbour identities, Timing
-Advance limitations, historical baselines and vendor-specific telephony reporting all required real
-hardware. Some changes were small; others needed migrations, regression tests or a new
-interpretation of historical evidence.
-
-I preferred to document and correct problems rather than hide them or leave known issues in the
-detector. v2.10.5 follows the same principle: it was better to fix the last known integrity bugs
-before Day 1 than to carry them through three months of data.
+There were many releases during development because real hardware kept exposing behaviour the
+Android documentation does not describe: carrier aggregation, modem handovers, missing neighbour
+identities, Timing Advance limits and vendor-specific reporting. I preferred to document and correct
+those problems rather than carry them into the data. For the same reason the whole app was audited
+before the campaign moved to 3.0: better to fix what the audit found before Day 1 than to carry it
+through three months of data. Thank you for your patience with the update rate.
 
 ICdetection is an Android userland cellular anomaly auditor, not definitive proof of an IMSI catcher
 or surveillance system. The goal of this stage is not to claim perfection, but to find out how well

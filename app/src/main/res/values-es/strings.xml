@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<resources>
+<resources xmlns:tools="http://schemas.android.com/tools">
     <string name="settings_title">CONFIGURACIÓN</string>
     <string name="settings_language">IDIOMA</string>
     <string name="language_spanish">Español</string>
@@ -7,7 +7,7 @@
     <string name="settings_apis">APIS</string>
     <string name="tor_proxy">Proxy Tor (Orbot)</string>
     <string name="tor_unavailable_latency">No disponible con la sonda de latencia activa: Tor falsearía la medida.</string>
-    <string name="tor_description">Enruta las API por Tor (SOCKS5 9050)</string>
+    <string name="tor_description">Enruta las consultas a OpenCellID por Tor (SOCKS5 9050). Sin salida directa de reserva.</string>
     <string name="latency_detection">Detección de latencia (Experimental)</string>
     <string name="unavailable_wifi">No disponible con Wi-Fi activo.</string>
     <string name="unavailable_vpn">No disponible con VPN activa.</string>
@@ -55,13 +55,15 @@
     <string name="filter_review">REVISAR</string>
     <string name="export_topology">EXPORTAR TOPOLOGÍA</string>
     <string name="export_stable_site">EXPORTAR STABLE-SITE</string>
+    <string name="export_stable_site_title">Exportar Stable-Site</string>
+    <string name="stable_site_export_privacy_warning">Las claves de sitio no son anónimas: son hashes deterministas y sin sal de una cuadrícula de unos 500 m, así que cualquiera puede calcular las claves de una zona y asociarlas a una ubicación aproximada. Las identidades de celda, las horas y los recuentos también pueden revelar tus hábitos. No incluye coordenadas exactas ni credenciales. Revisa el ZIP antes de compartirlo.</string>
     <string name="no_routes_filter">SIN RUTAS PARA ESTE FILTRO</string>
     <string name="handover_route">RUTA DE HANDOVER</string>
     <string name="export_forensic_title">Exportar caso forense</string>
     <string name="forensic_privacy_warning">El paquete puede contener ubicación GPS precisa, datos de radio, modelo del dispositivo y registros técnicos. Revísalo antes de compartirlo; nunca contiene claves de API, IMSI ni IMEI.</string>
-    <string name="no_forensic_cases">SIN CASOS FORENSES\nLa captura comienza automáticamente en 1/3</string>
+    <string name="no_forensic_cases" tools:ignore="TypographyFractions">SIN CASOS FORENSES\nLa captura comienza automáticamente en 1/3</string>
     <string name="forensic_phase_format">Fase máxima %1$d/3 · %2$d muestras</string>
-    <string name="in_progress">EN CURSO</string>
+    <string name="case_in_progress">EN CURSO</string>
     <string name="export_forensic_case">EXPORTAR CASO FORENSE</string>
     <string name="automatic_capture_running">CAPTURA AUTOMÁTICA EN CURSO</string>
     <string name="no_incidents">SIN INCIDENTES REGISTRADOS</string>
@@ -98,19 +100,22 @@
     <string name="site_warning">Los sectores agrupados bajo este eNodeB aparecen muy separados. Puede indicar una identidad reutilizada o anómala, pero también una red distribuida; revísalo con el resto de evidencias.</string>
     <string name="route_distance_format">centros %1$d m · sin explicar %2$d m</string>
     <string name="monitoring_active">Sondeo activo</string>
-    <string name="verified_label">✅ VERIFICADA</string><string name="not_found_label">➖ SIN REGISTRO</string><string name="rejected_label">⚠️ RESPUESTA DESCARTADA</string><string name="api_error_label">⚠️ ERROR API</string><string name="pending_label">⏳ PENDIENTE</string>
+    <string name="verified_label">✅ REGISTRADA</string><string name="not_found_label">➖ SIN REGISTRO</string><string name="rejected_label">⚠️ RESPUESTA DESCARTADA</string><string name="api_error_label">⚠️ ERROR API</string><string name="pending_label">⏳ PENDIENTE</string><string name="public_db_off_label">⏸ BASE PÚBLICA DESACTIVADA</string>
     <string name="security_alerts_channel">Alertas de seguridad</string><string name="stop">Detener</string>
     <string name="permissions_required">Android te pedirá estos permisos a continuación. Esto es para lo que se usa cada uno.</string>
     <string name="monitor">MONITOR</string><string name="history">HISTORIAL</string>
     <string name="searching_signal">BUSCANDO SEÑAL…</string><string name="network_anomaly_confirmed">ANOMALÍA DE RED CONFIRMADA</string><string name="no_anomalies">SIN ANOMALÍAS DETECTADAS</string>
     <string name="observing_score">OBSERVANDO — %1$d%%</string><string name="unconfirmed_anomaly_score">ANOMALÍA SIN CONFIRMAR — %1$d%%</string>
-    <string name="public_db_registered">Registrada en base pública</string><string name="public_db_not_found">Sin registro en base pública (no implica amenaza)</string><string name="public_db_rejected">Respuesta de la base descartada; se reintentará</string><string name="public_db_pending">Consultando base pública…</string><string name="public_db_error">Base pública sin respuesta</string>
+    <string name="public_db_registered">Registrada en base pública (no prueba legitimidad)</string><string name="public_db_not_found">Sin registro en base pública (no implica amenaza)</string><string name="public_db_rejected">Respuesta de la base descartada; se reintentará</string><string name="public_db_pending">Consultando base pública…</string><string name="public_db_off_no_token">Comprobación de base pública desactivada (sin token)</string><string name="public_db_error">Base pública sin respuesta</string>
     <string name="csv_exported_format">✅ CSV exportado: %1$d filas</string>
     <string name="incident_observing">OBSERVANDO</string><string name="incident_confirmed">CONFIRMADO</string><string name="incident_recovered">RECUPERADO</string><string name="incident_interrupted">INTERRUMPIDO</string>
     <string name="critical_battery_gps_paused">Batería crítica: GPS continuo en pausa</string><string name="no_signal_airplane">Sin señal / Modo Avión</string><string name="searching_network">Buscando red…</string>
-    <string name="latency_warning">Latencia anómala persistente — posible interferencia MITM</string><string name="airplane_settings_hint">Toca para abrir los ajustes de Modo Avión.</string>
+    <string name="analysis_unavailable">Análisis temporalmente no disponible</string>
+    <string name="analysis_previous_result_format">Se muestra el último resultado válido (%1$s). No está actualizado. Es un fallo interno de la app, no falta de señal ni una anomalía de red.</string>
+    <string name="analysis_no_previous_result">Todavía no hay un resultado válido. Es un fallo interno de la app, no falta de señal ni una anomalía de red.</string>
+    <string name="latency_warning">Latencia anómala persistente — posible interferencia MITM</string>
     <string name="heuristic_rule_format">H%1$d · regla de detección</string><string name="status_passed">SUPERADA</string><string name="status_failed">FALLIDA</string><string name="status_coherent">COHERENTE</string><string name="status_incoherent">INCOHERENTE</string>
-    <string-array name="heuristic_names"><item>Celda aislada</item><item>Estabilidad de potencia</item><item>Consistencia MCC</item><item>Límite MNC</item><item>Validación regional TAC</item><item>Coherencia geométrica (TA)</item><item>Espectro de vecinos</item><item>Sanidad ARFCN</item><item>Cifrado hardware</item><item>Anti ping-pong</item><item>Consistencia geográfica</item><item>Correlación latencia + RF</item><item>Baseline y huella RF</item><item>Downgrade de banda</item><item>Estabilidad de identidad RF</item><item>Coherencia de transición celular</item></string-array><string name="transition_explanation_passed">El handover observado es coherente con las rutas locales aprendidas.</string><string name="transition_explanation_failed">El handover observado no concuerda con las rutas locales aprendidas.</string><string name="transition_explanation_na">No hay suficiente historial fiable de rutas para evaluar esta transición.</string>
+    <string-array name="heuristic_names"><item>Celda aislada</item><item>Estabilidad de potencia</item><item>Consistencia MCC</item><item>Límite MNC</item><item>Validación regional TAC</item><item>Proximidad por Timing Advance</item><item>Espectro de vecinos</item><item>Calidad de dato ARFCN</item><item>Cifrado hardware</item><item>Anti ping-pong</item><item>Consistencia geográfica</item><item>Correlación latencia + RF</item><item>Baseline y huella RF</item><item>Downgrade de banda</item><item>Estabilidad de identidad RF</item><item>Coherencia de transición celular</item></string-array><string name="transition_explanation_passed">El handover observado es coherente con las rutas locales aprendidas.</string><string name="transition_explanation_failed">El handover observado no concuerda con las rutas locales aprendidas.</string><string name="transition_explanation_na">No hay suficiente historial fiable de rutas para evaluar esta transición.</string>
     <string name="mobility_sanity">CORDURA DE MOVILIDAD · H16</string>
     <string name="badge_registered">REGISTRADA</string><string name="badge_not_found">SIN REGISTRO</string><string name="badge_rejected">RESPUESTA DESCARTADA</string><string name="badge_pending">PENDIENTE</string><string name="badge_error">ERROR API</string>
     <string name="raw_terminal_output">SALIDA RAW DEL TERMINAL</string>
@@ -119,14 +124,14 @@
     <string name="heuristic_index">ÍNDICE HEURÍSTICO · SOLO DATOS EVALUADOS</string><string name="evaluation_summary_format">%1$d/%2$d evaluadas · %3$d fallos · %4$d sin datos</string><string name="evaluation_short_format">%1$d/%2$d EVALUADAS · %3$d FALLOS</string><string name="anomaly_confidence_format">Confianza de anomalía (no calibrada): %1$s%%</string>
     <string name="baseline_signal">Potencia RSRP</string><string name="baseline_fingerprint">Huella RSRQ/SINR</string><string name="baseline_pci">Identidad PCI</string><string name="baseline_reputation">Reputación local</string>
     <string name="episode_watch_started">Evidencia inicial: vigilancia intensiva temporal activada.</string>
-    <string name="episode_promoted_format">Episodio multiseñal: familias independientes %1$s.</string>
+    <string name="episode_promoted_format">Episodio multiseñal: familias distintas %1$s.</string>
     <string name="local_trust_title">CONFIANZA LOCAL DE LA CELDA</string>
     <string name="local_trust_format">%1$s · %2$d%%</string>
     <string name="local_trust_progress">%1$d/%2$d días · %3$d/%4$d muestras limpias · %5$d h observadas</string>
     <string name="local_trust_ceiling">Evidencia local revocable · techo epistémico 98%</string>
     <string name="trust_state_new">NUEVA</string><string name="trust_state_learning">APRENDIENDO</string><string name="trust_state_established">CONSOLIDADA</string><string name="trust_state_changed">CAMBIADA</string><string name="trust_state_quarantined">EN CUARENTENA</string><string name="trust_state_site_unverified">SITIO SIN VERIFICAR</string>
     <string name="trust_desc_new">Aún no hay historial limpio suficiente; no se afirma legitimidad.</string>
-    <string name="trust_desc_learning">Construyendo un perfil local durante días independientes con identidad RF, GPS y handovers fiables.</string>
+    <string name="trust_desc_learning">Construyendo un perfil local durante días independientes con identidad RF, GPS y handovers aprendidos.</string>
     <string name="trust_desc_established">Coincide con un patrón local observado repetidamente. Es confianza, no prueba de autenticidad.</string>
     <string name="trust_desc_changed">El patrón actual de RF, geometría o handover contradice el perfil local consolidado: %1$s.</string>
     <string name="trust_desc_quarantined">Esta observación no puede entrenar el perfil porque una o más reglas de anomalía han fallado.</string>
@@ -213,7 +218,7 @@
     <string name="export_failed_format">❌ Error al exportar: %1$s</string>
     <string name="unknown_error">desconocido</string>
     <string name="export_error_format">Error: %1$s</string>
-    <string name="route_trust_label">confianza</string>
+    <string name="route_trust_label">aprendidos</string>
     <string name="antenna_anomaly_label">anomalía</string>
     <string name="antenna_samples_label">muestras</string>
     <string name="topology_exporting">Exportando topología…</string>
@@ -221,23 +226,23 @@
     <string name="stable_site_exporting">Exportando Stable-Site…</string>
     <string name="stable_site_exported">Stable-Site exportado correctamente</string>
     <string name="topology_export_privacy_warning">El paquete contiene identidades celulares y rutas de handover que pueden revelar patrones habituales de movimiento. No incluye IMSI, IMEI, teléfono ni credenciales. Revísalo antes de compartirlo.</string>
+    <string name="topology_learned_note">Aprendido: el cambio superó la comprobación de movilidad (H16) con dos posiciones GPS precisas y se sumó a la referencia local de rutas. No prueba que las celdas sean legítimas.</string>
     <string name="topology_header">MAPA LÓGICO LOCAL · NO MODIFICA EL SCORE</string>
     <string name="topology_metric_cells">CELDAS</string>
     <string name="topology_metric_handovers">HANDOVERS</string>
-    <string name="topology_metric_trusted">FIABLES</string>
+    <string name="topology_metric_trusted">APRENDIDAS</string>
     <string name="topology_empty">SIN RUTAS TODAVÍA\nLa topología aparecerá tras los primeros handovers</string>
-    <string name="topology_status_learning">APRENDIENDO</string>
-    <string name="topology_route_counts_format">%1$d observaciones · %2$d fiables</string>
+    <string name="topology_route_counts_format">%1$d observaciones · %2$d aprendidos</string>
     <string name="forensic_exporting_format">Exportando %1$s…</string>
     <string name="forensic_exported">Caso exportado correctamente</string>
     <string name="forensic_window_note">Ventana automática: 60 s antes · episodio completo · 60 s después</string>
     <string name="intel_title">RESUMEN DE INTELIGENCIA RF</string>
     <string name="intel_cells">CELDAS</string>
-    <string name="intel_connections">CONEXIONES</string>
+    <string name="intel_connections">OBSERVACIONES</string>
     <string name="intel_avg_score">SCORE MEDIO</string>
-    <string name="intel_suspicious">SOSPECHOSAS</string>
-    <string name="intel_with_gps">CON GPS</string>
-    <string name="intel_anomalies">ANOMALÍAS</string>
+    <string name="intel_suspicious">SCORE &lt; %1$d</string>
+    <string name="intel_with_gps">OBS. CON GPS</string>
+    <string name="intel_anomalies">CON MOTIVO</string>
     <string name="export_geometry">EXPORTAR GEOMETRÍA</string>
     <string name="geometry_exporting">Exportando geometría…</string>
     <string name="geometry_exported">Geometría exportada correctamente</string>
@@ -250,7 +255,7 @@
     <string name="mobility_moving_observed">MOVIMIENTO OBSERVADO</string>
     <string name="mobility_no_evidence">SIN EVIDENCIA</string>
     <string name="mobility_distinct_cells_edges">Celdas / aristas distintas</string>
-    <string name="mobility_current_cell">Celda actual</string>
+    <string name="mobility_current_cell">Celda actual · viajes anteriores</string>
     <string name="mobility_prior_good_edges">Aristas buenas previas</string>
     <string name="mobility_transitions_total">Transiciones observadas acumuladas</string>
     <string name="mobility_max_trips_per_edge">Máx. viajes históricos por arista</string>
@@ -258,12 +263,12 @@
     <string name="geometry_not_available">NO DISPONIBLE</string>
     <string name="geometry_relevant_trips">Viajes relevantes</string>
     <string name="geometry_transitions_in_out">Transiciones entrada/salida</string>
-    <string name="geometry_trusted_in_out">Fiables entrada/salida</string>
+    <string name="geometry_trusted_in_out">Aprendidos entrada/salida</string>
     <string name="geometry_route_counts_format">Transiciones %1$d · Viajes %2$d</string>
-    <string name="intel_verified">VERIFICADAS</string>
+    <string name="intel_verified">REGISTRADAS</string>
     <string name="intel_not_found">NO ENCONTRADAS</string>
     <string name="geometry_local_cell_trust">Confianza local</string>
-    <string name="geometry_mobility">Movilidad</string>
+    <string name="geometry_mobility">Familiaridad · viajes anteriores</string>
     <string name="geometry_good_edges">Aristas buenas</string>
     <string name="mobility_familiarity_unknown">DESCONOCIDA EN RUTA</string>
     <string name="mobility_familiarity_observed">OBSERVADA EN RUTA</string>
@@ -283,10 +288,11 @@
     <string name="permissions_denied_hint">Si denegaste un permiso y Android ya no lo vuelve a pedir, concédelo desde los ajustes de la app.</string>
     <string name="permissions_open_settings">Abrir ajustes de la app</string>
     <string name="notif_monitoring_title">ICdetection: monitorización · GPS continuo</string>
-    <string name="notif_legacy_network_title">ICdetection: red 2G/3G detectada</string>
-    <string name="notif_open_settings">ABRIR AJUSTES</string>
+    <string name="notif_monitoring_title_adaptive">ICdetection: monitorización · GPS adaptativo</string>
+    <string name="notif_monitoring_title_intelligent">ICdetection: monitorización · GPS inteligente</string>
+    <string name="notif_legacy_network_title">ICdetection: red 2G/3G en uso</string>
     <string name="channel_monitoring_name">Monitorización</string>
-    <string name="channel_alerts_description">Avisos accionables de degradación celular</string>
+    <string name="channel_alerts_description">Alarmas de anomalía de red confirmadas, una por episodio</string>
     <string name="notif_latency_title">⚠ Anomalía de red</string>
     <string name="collection_interrupted_format">⚠ Recolección interrumpida %1$dh %2$dmin</string>
     <string name="write_failure_notification">⚠ ESCRITURA FALLIDA — no se están guardando datos</string>
@@ -295,4 +301,295 @@
     <string name="alarm_notification_body_format">CID %1$s · %2$s · %3$s</string>
     <string name="baseline_waiting">EN ESPERA</string>
     <string name="baseline_needs_days">NECESITA 2 DÍAS</string>
+    <!-- 3.0 (#26) — Indicador de latencia de red -->
+    <string name="latency_state_ok">● RED OK</string>
+    <string name="latency_state_anomalous">● RED ANÓMALA</string>
+    <string name="latency_state_learning">● RED APRENDIENDO</string>
+    <string name="latency_state_not_measured">● RED N/A</string>
+    <!-- 3.0 (#35) — Alarmas silenciadas -->
+    <string name="alarm_muted_title">⚠ ALARMAS SILENCIADAS</string>
+    <string name="alarm_muted_body_silenced">El canal Alertas de seguridad está en silencio, así que la notificación de una anomalía de red confirmada llegará sin sonido. Vuelve a darle sonido: ICdetection solo suena cuando se confirma una anomalía de red, y la notificación de monitorización es siempre silenciosa. El pitido corto de alerta es aparte y sigue sonando salvo con el móvil en silencio, vibración o No molestar.</string>
+    <string name="alarm_muted_body_blocked">Las notificaciones de ICdetection están desactivadas, así que una anomalía de red confirmada no aparecerá como notificación. Vuelve a activarlas: ICdetection solo suena cuando se confirma una anomalía de red, y la notificación de monitorización es siempre silenciosa. El pitido corto de alerta es aparte y sigue sonando salvo con el móvil en silencio, vibración o No molestar.</string>
+    <string name="alarm_muted_action">ABRIR AJUSTES DE ALERTAS</string>
+    <!-- 3.0 — Modo de ubicación -->
+    <string name="location_adaptive_off">Mantiene las peticiones de GPS con la pantalla encendida y apagada. Recomendado para campañas donde importa la continuidad de ubicación. Gasta más batería, también donde la recepción GPS es mala.</string>
+    <string name="location_adaptive_on">GPS continuo con pantalla encendida y recepción disponible. Con pantalla apagada, las peticiones se limitan a cambios de celda, sospechas y volver a usar el móvil. Tras varios fallos se pausa y vuelve a comprobar cada 2, 5 o 10 minutos. Las reglas que necesitan ubicación pueden quedar en N/A más a menudo.</string>
+    <string name="location_mode_title">Modo de ubicación</string>
+    <string name="location_mode_continuous">Continuo · campañas de campo</string>
+    <string name="location_mode_intelligent">Inteligente · ubicaciones frecuentes</string>
+    <string name="location_mode_adaptive">Adaptativo · menos peticiones de GPS</string>
+    <string name="location_intelligent_description">Pide una ubicación GPS fresca aproximadamente cada 45 segundos, también con la pantalla apagada. Un cambio a una antena nueva siempre despierta el GPS y lo mantiene activo hasta 60 segundos después de la última antena nueva, así que sigue encendido durante un trayecto; los saltos entre antenas conocidas estando quieto no lo mantienen encendido. Fuera de esas ventanas, cada intento termina al obtener una posición o a los 20 segundos (45 segundos en el primero). Tras varios fallos reintenta cada 2, 5 o 10 minutos; una antena nueva sigue teniendo un intento corto, como mucho uno por minuto. Una ubicación fresca recupera el ritmo normal. El escaneo celular continúa, pero no se garantiza una posición para cada celda. El ahorro depende de la recepción.</string>
+    <!-- 3.0 — Indicador GPS de la pantalla principal -->
+    <string name="gps_state_ok">● GPS OK</string>
+    <string name="gps_state_unavailable">● SIN GPS</string>
+    <!-- 3.0 — Copia de seguridad -->
+    <string name="backup_section_title">Copia de seguridad</string>
+    <string name="backup_section_body">Guarda en un fichero todos los datos de ICdetection (historial, antenas, incidentes, casos forenses, Stable-Site y trayectos) y tus ajustes, salvo la clave de OpenCelliD. El fichero no va cifrado y contiene tu historial de ubicaciones: guárdalo en privado.</string>
+    <string name="backup_export">EXPORTAR COPIA</string>
+    <string name="backup_import">RESTAURAR COPIA</string>
+    <string name="backup_import_replaces">Restaurar SUSTITUYE todos los datos actuales. Antes de reemplazar nada, guardas una copia de tus datos actuales donde elijas.</string>
+    <string name="backup_working">Trabajando…</string>
+    <string name="backup_export_ok">Copia guardada: %1$s</string>
+    <string name="backup_export_failed">No se pudo crear la copia (%1$s). No se ha cambiado nada.</string>
+    <string name="restore_confirm_title">¿Sustituir todos los datos?</string>
+    <string name="restore_confirm_body">Esta copia (versión %1$s, creada %2$s) SUSTITUIRÁ todos los datos actuales.\n\nLa monitorización se para y después eliges dónde guardar una copia de tus datos actuales. Solo si esa copia se guarda, la app se reinicia y restaura la copia. Si algo falla, tus datos actuales se conservan.</string>
+    <string name="restore_confirm_continue">CONTINUAR</string>
+    <string name="restore_cancelled">Restauración cancelada. No se ha cambiado nada.</string>
+    <string name="restore_pre_backup_failed">No se pudo guardar la copia de tus datos actuales (%1$s). No se ha reemplazado nada.</string>
+    <string name="restore_rejected_not_backup">Este fichero no es una copia de seguridad de ICdetection.</string>
+    <string name="restore_rejected_not_icdetection">Esta copia la hizo otra app.</string>
+    <string name="restore_rejected_unknown_format">Esta copia usa un formato que esta versión no conoce. Actualiza ICdetection y vuelve a intentarlo.</string>
+    <string name="restore_rejected_missing_version">Esta copia no indica qué versión la hizo, así que no se puede comprobar.</string>
+    <string name="restore_rejected_campaign">Esta copia es de la v2.10.x. Los datos de la 3.0 no se mezclan con los de la v2.10.x, así que no se puede restaurar aquí.</string>
+    <string name="restore_rejected_future">Esta copia la hizo una versión más nueva de ICdetection. Actualiza la app y vuelve a intentarlo.</string>
+    <string name="restore_rejected_damaged">Esta copia está dañada o incompleta. No se ha cambiado nada.</string>
+    <string name="restore_result_title">Restauración</string>
+    <string name="restore_result_ok">Copia restaurada. Tus datos anteriores se guardaron como %1$s.</string>
+    <string name="restore_result_ok_no_name">Copia restaurada.</string>
+    <string name="restore_result_rolled_back">La restauración no se pudo completar (%1$s). Tus datos anteriores están intactos.</string>
+    <string name="restore_result_pending">La restauración se interrumpió y se completará al volver a abrir la app (%1$s).</string>
+    <string name="restore_drain_failed">La monitorización no pudo terminar de guardar sus datos pendientes, así que la restauración no ha empezado. No se ha cambiado nada; vuelve a intentarlo en un momento.</string>
+    <!-- 3.0 — Primera apertura -->
+    <string name="first_run_title">Bienvenido a ICdetection 3.0</string>
+    <string name="first_run_body">¿Quieres restaurar una copia de seguridad? No se graba nada hasta que elijas.</string>
+    <string name="first_run_foreign_data">Este móvil ya tiene datos de ICdetection que no salieron de esta instalación (por ejemplo, copiados por una herramienta de transferencia). Empezar de cero los borra; restaurar una copia los sustituye. Si la restauración falla, se conservan.</string>
+    <string name="first_run_restore">RESTAURAR UNA COPIA</string>
+    <string name="first_run_fresh">EMPEZAR DE CERO</string>
+    <string name="first_run_restore_confirm_title">¿Restaurar esta copia?</string>
+    <string name="first_run_restore_confirm_body">Copia de la versión %1$s, creada %2$s. La app se reinicia y la restaura. Si algo falla, vuelves a esta pregunta.</string>
+    <string name="first_run_restore_confirm_replace">Copia de la versión %1$s, creada %2$s. La app se reinicia y la copia SUSTITUYE los datos que ya hay en este móvil. Si algo falla, esos datos se conservan y vuelves a esta pregunta.</string>
+    <string name="first_run_fresh_failed">No se pudo borrar todo, así que no se ha decidido nada. Vuelve a intentarlo.</string>
+    <string name="first_run_fresh_confirm_title">¿Borrar los datos que hay?</string>
+    <string name="first_run_fresh_confirm_body">Empezar de cero borra todos los datos de ICdetection que ya hay en este móvil. No se puede deshacer.</string>
+    <!-- 3.0 — Perfil local (experimental) -->
+    <string name="local_profile_title">Perfil local (experimental)</string>
+    <string name="local_profile_body">Aprende cómo suele verse la señal de cada celda en ESTE teléfono y anota, en cada fila guardada, cuánto se aparta la observación. Siempre funciona en segundo plano (sombra) y va en el CSV exportado. Activarlo solo muestra aquí la última evaluación: no añade, silencia ni rebaja alertas, y no es prueba de un IMSI catcher.</string>
+    <string name="local_profile_summary">Referencias utilizables (maduras y de este teléfono): %1$d de %2$d</string>
+    <string name="local_profile_none">Todavía no hay evaluaciones.</string>
+    <string name="local_profile_last_level">Última evaluación: %1$s (desviación %2$s, métricas %3$s)</string>
+    <string name="local_profile_last_abstain">Última evaluación: sin nivel (%1$s)</string>
+    <string name="local_profile_last_when">%1$s · celda %2$s</string>
+    <string name="local_profile_previous">Del perfil anterior al último reinicio.</string>
+    <string name="local_profile_errors">Errores del perfil local: %1$d (último %2$s — %3$s). No afectan a las filas guardadas ni a las alertas.</string>
+    <string name="local_profile_log_failed">La opción ha cambiado, pero no se pudo registrar el cambio.</string>
+    <string name="local_profile_not_engine">EXPERIMENTAL — no es una decisión del motor. Sin calibrar: la desviación no es una probabilidad. Un perfil maduro no significa que el método esté validado.</string>
+    <string name="local_profile_level_none">sin desviación</string>
+    <string name="local_profile_level_low">baja</string>
+    <string name="local_profile_level_moderate">moderada</string>
+    <string name="local_profile_level_high">alta</string>
+    <string name="local_profile_level_abstain">sin nivel</string>
+    <string name="local_profile_reset">REINICIAR PERFIL LOCAL</string>
+    <string name="local_profile_reset_title">¿Reiniciar el perfil local?</string>
+    <string name="local_profile_reset_body">Borra lo que ha aprendido el perfil local para que empiece de nuevo en este teléfono. Se conservan el historial, las alertas, las evaluaciones pasadas y todo lo demás.</string>
+    <string name="local_profile_reset_confirm">REINICIAR</string>
+    <string name="local_profile_reset_done">Perfil local reiniciado. Vuelve a aprender con las nuevas observaciones.</string>
+    <string name="local_profile_reset_failed">No se pudo reiniciar el perfil local. No se ha cambiado nada.</string>
+    <!-- 3.0 — Historial → Perfil local -->
+    <string name="tab_local_profile">PERFIL LOCAL</string>
+    <string name="history_title_local_profile">Perfil local — desviación de señal (experimental)</string>
+    <string name="local_profile_view_evaluations">VER EVALUACIONES</string>
+    <string name="profile_history_note">Evaluaciones del perfil local guardadas, de la más reciente a la más antigua: observaciones normales, desviaciones de señal y abstenciones. Experimental y sin calibrar; no es una decisión del motor ni una alerta.</string>
+    <string name="profile_history_restored_note">Este historial se restauró desde una copia: algunas evaluaciones pueden haberse hecho en otro teléfono.</string>
+    <string name="profile_history_loading">Cargando…</string>
+    <string name="profile_history_empty">Todavía no hay evaluaciones del perfil local.</string>
+    <string name="profile_history_empty_filter">No hay evaluaciones con este nivel.</string>
+    <string name="profile_history_error">No se pudieron leer las evaluaciones. No se ha cambiado nada.</string>
+    <string name="profile_history_error_more">No se pudieron cargar más evaluaciones. Se conserva la lista anterior.</string>
+    <string name="profile_history_retry">REINTENTAR</string>
+    <string name="profile_history_load_more">CARGAR MÁS</string>
+    <string name="profile_filter_deviations">desviaciones</string>
+    <string name="profile_history_metrics">métricas %1$d/%2$d</string>
+    <string name="profile_history_reason">motivo %1$s</string>
+    <string name="profile_mode_shadow">sombra</string>
+    <string name="profile_mode_experimental">visualización experimental</string>
+    <string name="profile_history_section_evaluation">EVALUACIÓN DEL PERFIL</string>
+    <string name="profile_history_evaluated_at">Evaluada: %1$s</string>
+    <string name="profile_history_algorithm">Algoritmo %1$d · referencia %2$s</string>
+    <string name="profile_history_holdout">Reservada solo para evaluar (no se aprendió).</string>
+    <string name="profile_history_learned">Se aprendió después de evaluarla.</string>
+    <string name="profile_history_not_learned">No se aprendió (repetida, en cuarentena o no válida).</string>
+    <string name="profile_history_observation_rows">Una sola evaluación para las %1$d filas del historial de esta observación (por ejemplo, la periódica y una alarma confirmada).</string>
+    <string name="profile_history_section_values">VALORES Y REFERENCIA USADA</string>
+    <string name="profile_metric_dbm">Nivel de señal (dBm)</string>
+    <string name="profile_metric_rsrq">Calidad de señal (RSRQ)</string>
+    <string name="profile_history_metric_with_reference">%1$s: observado %2$d · referencia %3$s ± %4$s · desviación %5$s</string>
+    <string name="profile_history_metric_without_reference">%1$s: observado %2$s · referencia no guardada</string>
+    <string name="profile_history_not_available">no disponible</string>
+    <string name="profile_history_section_observation">OBSERVACIÓN HISTÓRICA</string>
+    <string name="profile_history_observation_missing">La fila del historial ya no está disponible.</string>
+    <string name="profile_history_identity">MCC %1$s · MNC %2$s · TAC %3$s · CID %4$s · %5$s</string>
+    <string name="profile_history_saved_reason">Motivo guardado: %1$s</string>
+    <string name="profile_history_h13">H13 (línea base de señal) en ese momento: %1$s</string>
+    <string name="profile_history_h13_note">H13 y el perfil local miran la misma señal de la misma celda: que coincidan no es una confirmación independiente.</string>
+    <string name="profile_h13_failed">falló (su motivo consta en la fila guardada)</string>
+    <string name="profile_h13_not_evaluated">no evaluada</string>
+    <string name="profile_h13_no_failure">sin fallo registrado en el motivo guardado</string>
+    <string name="profile_h13_unknown">desconocido (fila anterior a 3.0)</string>
+    <string name="profile_history_open_cell">VER CELDA EN ANTENAS</string>
+    <string name="profile_history_approximate_time">hora local, sin instante exacto</string>
+    <string name="profile_history_evaluation_time">hora de la evaluación</string>
+    <!-- 3.0 — Historial → Topología → Stable-Site -->
+    <string name="view_stable_site">VER STABLE-SITE</string>
+    <string name="stable_site_view_back_topology">Topología</string>
+    <string name="stable_site_view_back_sites">Sitios</string>
+    <string name="stable_site_view_shadow_note">Stable-Site funciona en sombra: no añade alarmas ni bloquea el aprendizaje de confianza.</string>
+    <string name="stable_site_view_active_note">ACTIVE significa sitio maduro, no que se aplique ninguna protección.</string>
+    <string name="stable_site_view_key_note">Los sitios se muestran por su clave guardada: sin nombres ni coordenadas.</string>
+    <string name="stable_site_view_no_sites">No hay sitios Stable-Site con este estado.</string>
+    <string name="stable_site_view_error">No se pudieron leer los datos de Stable-Site. No se ha cambiado nada.</string>
+    <string name="stable_site_view_error_more">No se pudo cargar más. Se conserva la lista anterior.</string>
+    <string name="stable_site_view_current_state">Estado actual: %1$s (%2$s)</string>
+    <string name="stable_site_view_seen">Primera vez %1$s · última vez %2$s</string>
+    <string name="stable_site_view_progress">PROGRESO HACIA ACTIVE</string>
+    <string name="stable_site_view_serving_days">Días de servicio</string>
+    <string name="stable_site_view_static_days">Días estáticos</string>
+    <string name="stable_site_view_full_neighbour_days">Días con vecinas completas</string>
+    <string name="stable_site_view_rf_neighbour_days">Días con vecinas RF</string>
+    <string name="stable_site_view_serving_observations">Observaciones de servicio</string>
+    <string name="stable_site_view_neighbour_rule">Vecinas: basta con los días de vecinas completas o con los de vecinas RF.</string>
+    <string name="stable_site_view_section_cells">CELDAS</string>
+    <string name="stable_site_view_section_rf">HUELLAS RF</string>
+    <string name="stable_site_view_no_cells">No hay celdas registradas en este sitio.</string>
+    <string name="stable_site_view_rf_note">Las huellas RF son vecinas sin Cell ID (tecnología, canal y PCI): contexto local, no identidades celulares completas.</string>
+    <string name="stable_site_view_no_rf">No hay huellas RF en este sitio.</string>
+    <string name="stable_site_view_no_episodes">No hay episodios con este filtro.</string>
+    <string name="stable_site_view_role_serving">servidora</string>
+    <string name="stable_site_view_role_neighbour">vecina</string>
+    <string name="stable_site_view_cell_counts">%1$d observaciones · %2$d días · última %3$s</string>
+    <string name="stable_site_view_episode_site">Sitio %1$s</string>
+    <string name="stable_site_view_no_site">Sin sitio asociado</string>
+    <string name="stable_site_view_episode_period">Última vez %1$s · cerrado %2$s</string>
+    <string name="stable_site_view_episode_open">sin cerrar</string>
+    <string name="stable_site_view_last_evaluation">ÚLTIMA EVALUACIÓN GUARDADA DEL EPISODIO</string>
+    <string name="stable_site_view_evaluated_at">Evaluado %1$s (no es la evidencia inicial ni el estado actual del sitio)</string>
+    <string name="stable_site_view_episode_flags">conocida en el sitio %1$s · vista antes %2$s · vista como vecina %3$s · días de servicio %4$s · días de vecina %5$s · corroborada %6$s</string>
+    <string name="stable_site_view_yes">sí</string>
+    <string name="stable_site_view_no">no</string>
+    <string name="stable_site_route_title">EPISODIOS STABLE-SITE DE ESTA RUTA</string>
+    <string name="stable_site_route_note">Episodios con la misma celda anterior y nueva (A→B) que empiezan antes de la última vez que se vio esta ruta (margen de consulta de 2 minutos, no una prueba de asociación). Se relacionan con la ruta en conjunto, no con una transición concreta.</string>
+    <string name="stable_site_route_none">Sin contexto Stable-Site asociado.</string>
+    <string name="stable_site_state_unavailable">no disponible</string>
+    <string name="stable_site_state_bootstrap">BOOTSTRAP</string>
+    <string name="stable_site_state_learning">LEARNING</string>
+    <string name="stable_site_state_shadow_ready">SHADOW_READY</string>
+    <string name="stable_site_state_active">ACTIVE</string>
+    <string name="stable_site_capability_full">Identidad completa de vecinas</string>
+    <string name="stable_site_capability_rf">Contexto RF de vecinas</string>
+    <string name="stable_site_capability_none">Sin datos útiles de vecinas</string>
+    <string name="stable_site_capability_full_note">se vieron vecinas con identidad celular completa.</string>
+    <string name="stable_site_capability_rf_note">solo se vieron huellas RF sin Cell ID.</string>
+    <string name="stable_site_capability_none_note">el teléfono no informó de vecinas útiles en este sitio.</string>
+    <string name="route_detail_last_seen">Última vez %1$s</string>
+    <string name="stable_site_route_group_count">%1$d episodios</string>
+    <string name="route_detail_identities">De %1$s a %2$s</string>
+    <string name="route_detail_counts">%1$d cambios · %2$d aprendidos · último veredicto %3$s · %4$d trayectos</string>
+    <!-- Stable-Site en lenguaje sencillo -->
+    <string name="stable_site_simple_title">STABLE-SITE: LUGARES</string>
+    <string name="stable_site_simple_intro">Cada lugar indica si ICdetection ya tiene una referencia de sus celdas habituales y qué le falta. Nada de esto es un veredicto de seguridad.</string>
+    <string name="stable_site_analysis_only">Solo análisis: no modifica las alarmas.</string>
+    <string name="stable_site_simple_learning">Aprendiendo este lugar</string>
+    <string name="stable_site_simple_preparing">Referencia en preparación</string>
+    <string name="stable_site_simple_ready">Referencia preparada</string>
+    <string name="stable_site_simple_not_enough">Sin datos suficientes</string>
+    <string name="stable_site_simple_learning_note">ICdetection todavía está recogiendo las celdas habituales de este lugar.</string>
+    <string name="stable_site_simple_preparing_note">Ya hay una referencia parcial; faltan algunos requisitos.</string>
+    <string name="stable_site_simple_ready_note">Se conocen las celdas habituales de este lugar. Es una referencia para el análisis, no una protección activa.</string>
+    <string name="stable_site_simple_not_enough_note">No hay información guardada suficiente de este lugar para preparar una referencia.</string>
+    <string name="stable_site_simple_place_seen">Visto por última vez: %1$s</string>
+    <string name="stable_site_missing_serving_days">Falta: más días conectado aquí.</string>
+    <string name="stable_site_missing_static_days">Falta: más días con el móvil quieto aquí.</string>
+    <string name="stable_site_missing_serving_observations">Falta: más observaciones de la celda conectada.</string>
+    <string name="stable_site_missing_neighbour_days">Falta: más días con celdas cercanas registradas.</string>
+    <string name="stable_site_missing_no_neighbour_data">Falta: el móvil no informa aquí de celdas cercanas utilizables.</string>
+    <string name="stable_site_missing_nothing">Se cumplen todos los requisitos.</string>
+    <string name="stable_site_missing_unknown">Sin información suficiente para saber qué falta.</string>
+    <string name="stable_site_requirements_title">REQUISITOS DE LA REFERENCIA</string>
+    <string name="stable_site_requirement_met">✓ %1$s: %2$d de %3$d</string>
+    <string name="stable_site_requirement_pending">· %1$s: %2$d de %3$d (pendiente)</string>
+    <string name="stable_site_requirement_serving_days">Días conectado aquí</string>
+    <string name="stable_site_requirement_static_days">Días quieto aquí</string>
+    <string name="stable_site_requirement_neighbour_days">Días con celdas cercanas</string>
+    <string name="stable_site_requirement_serving_observations">Observaciones de la celda conectada</string>
+    <string name="stable_site_requirements_note">Los días solo cuentan cuando hay datos nuevos; no es una cuenta atrás.</string>
+    <string name="stable_site_show_technical">VER DETALLES TÉCNICOS</string>
+    <string name="stable_site_hide_technical">OCULTAR DETALLES TÉCNICOS</string>
+    <string name="stable_site_changes_title">CAMBIOS DE CELDA EN ESTE LUGAR</string>
+    <string name="stable_site_changes_note">Cambios de celda conectada guardados aquí. No son alertas ni indican su causa.</string>
+    <string name="stable_site_changes_all">Todos los cambios</string>
+    <string name="stable_site_changes_recorded">Novedades registradas en sombra</string>
+    <string name="stable_site_kind_observed">Cambio observado</string>
+    <string name="stable_site_kind_novelty">Novedad registrada en sombra</string>
+    <string name="stable_site_kind_observed_note">El móvil pasó a otra celda. No se marcó como novedad durante este episodio.</string>
+    <string name="stable_site_kind_novelty_note">En algún momento del episodio se marcó como novedad en modo sombra (sin alarma). La marca se conserva aunque la última evaluación ya no lo cumpliera.</string>
+    <string name="stable_site_no_info">Sin información suficiente</string>
+    <string name="stable_site_state_then">Lugar en ese momento: %1$s</string>
+    <string name="stable_site_motion_then">Movimiento: %1$s</string>
+    <string name="stable_site_motion_still">móvil quieto</string>
+    <string name="stable_site_motion_moving">móvil en movimiento</string>
+    <string name="stable_site_reason_few_prior_sightings">Motivo: la celda tenía pocos antecedentes en este lugar mientras el móvil estaba quieto.</string>
+    <string name="stable_site_reason_conditions_not_met">Motivo: no se cumplieron las condiciones para registrar una novedad en esta evaluación.</string>
+    <string name="stable_site_reason_hold">Motivo: se aplicó una retención por novedad.</string>
+    <string name="stable_site_reason_no_location">Motivo: no había una ubicación fiable.</string>
+    <string name="stable_site_reason_no_site_data">Motivo: no había datos guardados de este lugar.</string>
+    <string name="stable_site_route_simple">Ruta vista %1$d veces</string>
+    <!-- Procedencia de los datos -->
+    <string name="antenna_gps_accuracy">±%1$d m</string>
+    <string name="antenna_gps_accuracy_unknown">precisión no guardada</string>
+    <string name="antenna_not_evaluated_rules">Reglas no evaluadas: %1$s</string>
+    <string name="antenna_not_evaluated_none">Reglas no evaluadas: ninguna</string>
+    <string name="antenna_not_evaluated_unknown">Reglas no evaluadas: sin dato (fila anterior a 3.0)</string>
+    <string name="antenna_row_origin">Modo de ubicación %1$s · app %2$s</string>
+    <string name="antenna_not_stored">sin dato</string>
+    <string name="profile_abstain_incomplete_context">contexto de la observación incompleto</string>
+    <string name="profile_abstain_no_profile">sin referencia aprendida para esta celda</string>
+    <string name="profile_abstain_immature">referencia aún inmadura</string>
+    <string name="profile_abstain_stale">referencia caducada (sin datos recientes)</string>
+    <string name="profile_abstain_incompatible_device">referencia de otro modelo de teléfono</string>
+    <string name="profile_abstain_incompatible_radio">referencia de otra tecnología de radio</string>
+    <string name="profile_abstain_incompatible_algorithm">referencia de otra versión del algoritmo</string>
+    <string name="profile_abstain_no_compatible_metric">ninguna métrica válida en esta observación</string>
+    <string name="profile_history_reason_code">Código de motivo guardado: %1$s</string>
+    <!-- Avisos de red 2G/3G -->
+    <string name="notif_legacy_change_title">ICdetection: cambio de 4G/5G a 2G/3G</string>
+    <string name="notif_legacy_network_body">El móvil está usando una red 2G/3G. Puede ocurrir con poca cobertura 4G/5G o en llamadas sin VoLTE; no es un ataque confirmado. Usa los ajustes de modo avión si quieres salir de la red.</string>
+    <string name="notif_open_airplane_settings">AJUSTES DE MODO AVIÓN</string>
+    <string name="legacy_alert_title">Avisos de red 2G/3G</string>
+    <string name="legacy_alert_off">Desactivados</string>
+    <string name="legacy_alert_notify">Solo notificación</string>
+    <string name="legacy_alert_notify_sound">Notificación y sonido</string>
+    <string name="legacy_alert_description">Un aviso cuando el móvil empieza a usar 2G/3G; no se repite mientras siga en ella. Para un aviso nuevo tiene que volver antes al menos 1 minuto seguido a 4G/5G. Puede deberse a cobertura o a llamadas sin VoLTE. Si tu móvil ofrece el ajuste «Permitir 2G», desactivarlo evita 2G (no 3G). El modo avión es siempre decisión tuya.</string>
+    <string name="channel_legacy_network_name">Red 2G/3G</string>
+    <string name="channel_legacy_network_description">Avisos de uso o cambio a 2G/3G, uno por episodio. Que suenen depende del ajuste de la app y de este canal.</string>
+    <!-- 3.0 — Avisos silenciosos de Stable-Site -->
+    <string name="stable_site_notices_title">Avisos silenciosos de Stable-Site</string>
+    <string name="stable_site_notices_description">Disponibles cuando la referencia del lugar esté preparada. No activan alarmas.</string>
+    <string name="channel_stable_site_name">Avisos silenciosos de Stable-Site</string>
+    <string name="channel_stable_site_description">Un aviso silencioso por cada cambio de celda inusual en un lugar conocido. Sin sonido, sin vibración y sin alarmas.</string>
+    <string name="notif_stable_site_title">Cambio inusual en este lugar</string>
+    <string name="notif_stable_site_body">Con el teléfono quieto, ha pasado a una celda que este lugar no suele usar. Puede deberse a mantenimiento de la red o a cambios del operador. No confirma un ataque. Toca para ver el episodio.</string>
+    <string name="stable_site_notice_status_learning">Referencia en aprendizaje</string>
+    <string name="stable_site_notice_status_ready">Referencia preparada: avisos silenciosos disponibles</string>
+    <string name="stable_site_notice_status_disabled">Avisos desactivados por el usuario</string>
+    <string name="stable_site_episode_focus_title">EPISODIO DE STABLE-SITE</string>
+    <string name="stable_site_episode_focus_note">Este episodio generó un aviso silencioso. Es solo análisis: no activa alarmas.</string>
+    <string name="stable_site_episode_focus_missing">Este episodio ya no está guardado. Los episodios cerrados se borran 120 días después de la última vez que se vieron, y todos se borran al reiniciar el aprendizaje de Stable-Site o el historial.</string>
+    <string name="stable_site_episode_focus_open_sites">Ver Stable-Site</string>
+    <string name="notif_legacy_previous_signal">Última señal anterior observada: %1$d dBm (solo contexto).</string>
+    <string name="notif_legacy_previous_unknown">Señal previa desconocida.</string>
+    <string name="opencellid_privacy">Cada consulta envía a OpenCellID tu API key y la identidad de la celda (MCC, MNC, código de área, Cell ID y tecnología). Tor oculta tu IP, pero la misma clave permite a OpenCellID enlazar tus consultas. Con el proxy seleccionado y Tor no disponible, las consultas fallan: nunca salen por conexión directa.</string>
+    <string name="latency_tor_dialog_title">¿Desactivar el proxy de OpenCellID?</string>
+    <string name="latency_tor_dialog_body">Activar latencia desactivará el proxy de OpenCellID; las consultas podrán salir directamente por tu conexión. OpenCellID verá tu IP. Nada cambia hasta que guardes.</string>
+    <string name="latency_tor_dialog_confirm">Activar latencia</string>
+    <string name="latency_tor_dialog_cancel">Cancelar</string>
+    <string name="intel_loading">Cargando estadísticas…</string>
+    <string name="intel_load_error">No se pudieron leer las estadísticas. El historial no se ha modificado.</string>
+    <string name="route_not_evaluated">SIN EVALUAR</string>
+    <string name="route_no_handover">SIN HANDOVER OBSERVADO</string>
+    <string name="route_not_evaluated_reason">Sin evaluar: %1$s</string>
+    <string name="route_last_evaluated">Último resultado evaluado: %1$s (%2$s). No es la lectura actual.</string>
+    <string name="route_failures_complete">Fallos registrados: %1$d</string>
+    <string name="route_failures_at_least">Al menos %1$d fallo(s): uno o más antes de que se contaran, %2$d desde entonces.</string>
+    <string name="route_failures_unknown">Fallos desde que se cuentan: %1$d. Los anteriores se desconocen.</string>
+    <string name="route_review_note">REVISAR: rutas con al menos un FAILED registrado. Un N/A por sí solo no cuenta.</string>
+    <string name="arfcn_out_of_table">ARFCN fuera de la tabla 3GPP (calidad de dato)</string>
 </resources>

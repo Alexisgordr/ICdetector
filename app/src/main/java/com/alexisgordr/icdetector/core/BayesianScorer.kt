@@ -14,8 +14,12 @@ package com.alexisgordr.icdetector.core
  * ratios exactos. Estos valores son interpretaciones expertas,
  * no constantes científicamente medidas.
  *
- * Prior P(IMSI) = 0.02 (2%) — estimación conservadora
+ * Prior P(IMSI) = 0.005 (0,5 %) — estimación conservadora
  * para entorno urbano europeo sin contexto especial.
+ * 3.0 (corte de campaña): bajado de 0.02 a 0.005. Con el 2 % una sola señal débil (p. ej. H6 sola,
+ * LR 7) ya pintaba un 12,5 %; con 0,5 % se queda en ~3,4 % y hace falta evidencia
+ * combinada para subir. Las LR no cambian; solo el punto de partida. Corte de dataset:
+ * anomaly_confidence no es comparable entre filas anteriores y posteriores a este cambio.
  *
  * Heurísticas agrupadas por correlación física para evitar
  * inflación del posterior por dependencia implícita en Naive Bayes.
@@ -32,7 +36,7 @@ package com.alexisgordr.icdetector.core
  */
 object BayesianScorer {
 
-    private const val PRIOR = 0.02f
+    internal const val PRIOR = 0.005f
 
     private val LIKELIHOOD_RATIOS = mapOf(
         // Grupo RF Dominance — señal dominante anómala
@@ -41,6 +45,8 @@ object BayesianScorer {
         "powerJump"   to 5.5f,  // LTEInspector — power dominance fiable en urbano
         "ghostCells"  to 4.5f,  // Ambiente RF artificialmente controlado
         "signalBaseline" to 3.5f, // Potencia anómala vs historial propio (mismo fenómeno de dominancia)
+        "taDistance"  to 7.0f,  // H6: proximidad anómala por TA (≤ 100 m con señal ≥ -60 dBm): un emisor muy cerca
+        "bandDowngrade" to 2.5f, // H14: celda nueva fuerte en banda baja; absorbida por powerJump si coinciden
 
         // Grupo Identidad — parámetros de red anómalos
         // Expert-derived LR estimate — not directly reported by source paper
@@ -52,16 +58,18 @@ object BayesianScorer {
         // Expert-derived LR estimate — not directly reported by source paper
         "pingPong"    to 3.0f,  // Baja especificidad standalone
         "h11"         to 6.0f,  // Compromiso móvil vs fijo
-        "taDistance"  to 7.0f,  // Físicamente irrefutable con TA real
         "rfStability" to 6.0f,  // Misma Cell ID con PCI/ARFCN mutados — clon reconfigurándose
         "transitionCoherence" to 1.8f, // H16 nace conservadora; necesita calibración de campo
 
         // Independientes
         // Expert-derived LR estimate — not directly reported by source paper
-        "arfcn"       to 8.0f,  // ARFCN fuera 3GPP spec — imposible legítimo
-        "ciphering"   to 12.0f, // A5/0 en LTE — indicador crítico (ETSI papers)
-        "latency"     to 1.8f,  // Experimental — demasiadas variables confundentes
-        "bandDowngrade" to 2.5f  // Downgrade forzado a banda baja
+        // 3.0 (corte de campaña) — "arfcn" (H8) ya no está: un ARFCN fuera de la tabla 3GPP no es evidencia de
+        // ataque (un IMSI catcher necesita un canal válido para que el móvil se registre), sino un
+        // módem que informa mal. H8 es un aviso de calidad de dato ([DATA_QUALITY_KEYS]).
+        // 3.0 (corte de campaña) — "ciphering" (H9) tampoco: Android no expone el estado de cifrado a una app sin
+        // privilegios, H9 nunca se evalúa y una LR de 12 para una regla que no mide nada no es
+        // honesta. Queda reservada ([UNAVAILABLE_KEYS]).
+        "latency"     to 1.8f   // Experimental — demasiadas variables confundentes
     )
 
     /**
@@ -92,13 +100,19 @@ object BayesianScorer {
     // signalBaseline (potencia anómala vs historial) es el mismo fenómeno de
     // dominancia visto contra el propio histórico, así que se agrupa aquí para
     // que solo cuente la LR más alta y no infle el posterior junto a powerJump.
-    private val RF_DOMINANCE_GROUP = listOf("powerJump", "ghostCells", "isolated", "signalBaseline", "bandDowngrade")
+    //
+    // 3.0 — taDistance (H6) va aquí, no en movilidad: solo falla con TA ≤ 100 m Y señal ≥ -60 dBm,
+    // que es la misma señal dominante que hace fallar H2 (≥ -75 y salto > 35 dB) y H7 (≥ -65). En
+    // grupos distintos, un solo transmisor cercano se multiplicaba: H6 sola 12,5 %, H6 + H2 (vivir
+    // bajo una macro de azotea) 44 %. Aquí cuenta solo la mayor, y con 7,0 sigue siendo la que manda.
+    // bandDowngrade (H14) exige una celda nueva fuerte: si coincide con powerJump es el mismo hecho.
+    private val RF_DOMINANCE_GROUP = listOf("powerJump", "ghostCells", "isolated", "signalBaseline", "bandDowngrade", "taDistance")
 
     // Movilidad — correlación moderada, comportamiento temporal.
     // rfStability (PCI/ARFCN mutados de una misma Cell ID) se agrupa aquí porque comparte
     // con h11 el mismo fenómeno de identidad RF inconsistente; juntas no deben inflar el
     // posterior, así que solo cuenta la LR más alta del grupo.
-    private val MOBILITY_GROUP = listOf("pingPong", "h11", "taDistance", "rfStability", "transitionCoherence")
+    private val MOBILITY_GROUP = listOf("pingPong", "h11", "rfStability", "transitionCoherence")
 
     // mncCount y tacDev — correlación débil entre sí
     // pueden aparecer juntos en estaciones mal configuradas
@@ -114,9 +128,15 @@ object BayesianScorer {
     // Heurísticas de DOMINANCIA RF que dan falsos positivos en entornos dispersos (rural,
     // macroceldas): una sola antena dominando sin vecinas es ANÓMALO en ciudad pero NORMAL en
     // el campo. Suavizamos SOLO estas según la densidad del entorno (nº de vecinas visibles).
-    // NO se tocan las físicamente sólidas en cualquier contexto (MCC, ARFCN, cifrado, H11,
+    // NO se tocan las físicamente sólidas en cualquier contexto (MCC, H11,
     // H13/signalBaseline, H14/bandDowngrade, H15): esas valen igual en ciudad o campo.
     private val ENV_SENSITIVE = setOf("isolated", "powerJump", "ghostCells")
+
+    // 3.0 — H6 la amortigua la REPUTACIÓN pero no la densidad: la proximidad no depende de cuántas
+    // vecinas haya, pero quien vive al lado de una antena con semanas de historial limpio no debe
+    // llevarse cada día la LR entera (con confianza ≥ 80: 7,0 → 4,6, posterior 8,6 %). Si en campo
+    // sigue saltando a diario en celdas de confianza, bajar la LR a 5,0.
+    private val TRUST_ONLY_SENSITIVE = setOf("taDistance")
 
     // Factor [0..1] que escala la FUERZA de la evidencia (LR) de las heurísticas sensibles.
     // 1.0 = sin cambios (urbano/denso o densidad desconocida). <1.0 = evidencia suavizada
@@ -132,7 +152,7 @@ object BayesianScorer {
     // Factor de reputación: una celda con historial limpio probado durante semanas merece
     // menos sensibilidad en las heurísticas DÉBILES (ya ha demostrado ser legítima). Solo
     // amortigua (<=1.0), nunca amplifica. trustScore < 0 (desconocida) o bajo -> sin cambios.
-    // No afecta a las heurísticas físicas (mismo conjunto ENV_SENSITIVE que densityFactor).
+    // Se aplica a ENV_SENSITIVE (junto con la densidad) y a TRUST_ONLY_SENSITIVE (H6, solo esto).
     private fun trustFactor(trustScore: Int): Float = when {
         trustScore < 0    -> 1.0f   // desconocida -> sin cambios
         trustScore >= 80  -> 0.6f   // celda muy probada -> suaviza ruido débil
@@ -140,10 +160,47 @@ object BayesianScorer {
         else              -> 1.0f   // poca confianza -> escrutinio completo
     }
 
+    /**
+     * 3.0 (fase 4) — Grupo de correlación del scorer; INDEPENDENT = actualiza por su cuenta.
+     * 3.0 (corte de campaña) — NOT_SCORED: la regla no es evidencia y no tiene LR: H8 (se evalúa y se publica
+     * como calidad de dato) y H9 (reservada: no se puede evaluar desde una app).
+     */
+    enum class Group { RF_DOMINANCE, MOBILITY, WEAK_IDENTITY, INDEPENDENT, NOT_SCORED }
+
+    /** 3.0 (corte de campaña) — Claves de reglas que son avisos de calidad de dato, sin LR: H8. */
+    internal val DATA_QUALITY_KEYS = setOf("arfcn")
+
+    /** 3.0 (corte de campaña) — Claves de reglas que una app no puede evaluar, sin LR: H9 (cifrado). */
+    internal val UNAVAILABLE_KEYS = setOf("ciphering")
+
+    /** Claves sin LR: ni calidad de dato ni reglas reservadas son evidencia. */
+    internal val NOT_SCORED_KEYS = DATA_QUALITY_KEYS + UNAVAILABLE_KEYS
+
+    /** Grupo de una clave, para declararlo y comprobarlo en HeuristicCatalog. */
+    internal fun groupOf(key: String): Group = when (key) {
+        in NOT_SCORED_KEYS -> Group.NOT_SCORED
+        in RF_DOMINANCE_GROUP -> Group.RF_DOMINANCE
+        in MOBILITY_GROUP -> Group.MOBILITY
+        in WEAK_IDENTITY_GROUP -> Group.WEAK_IDENTITY
+        else -> Group.INDEPENDENT
+    }
+
+    /** 3.0 (#7, O2) — Claves con peso, para comprobar que coinciden con HeuristicCatalog. */
+    internal val weightedKeys: Set<String> get() = LIKELIHOOD_RATIOS.keys
+
+    /** 3.0 (#7, O2) — Claves usadas en los grupos de correlación. */
+    internal val groupedKeys: Set<String> get() = ALL_GROUPED.toSet()
+
+    /**
+     * @param latencyCorrelationFailed H12 en estado FAILED en esta observación. La LR de latencia
+     *   se aplica SOLO entonces: el indicador bruto de latencia anómala no es evidencia por sí solo
+     *   (con Wi-Fi, sin medición, con señal débil o con RF normal, H12 no falla y no debe pesar).
+     *   No va en [failedHeuristics] para no contarla dos veces.
+     */
     fun calculate(
         failedHeuristics: List<String>,
         verificationStatus: String,
-        isLatencyAnomalous: Boolean,
+        latencyCorrelationFailed: Boolean,
         neighborCount: Int = -1,
         trustScore: Int = -1
     ): Float {
@@ -151,7 +208,13 @@ object BayesianScorer {
         // Las heurísticas DÉBILES (sensibles al entorno) se amortiguan por densidad Y por
         // reputación: ambos factores son <=1.0 y se multiplican (un entorno disperso y/o una
         // celda muy probada reducen el ruido de las señales débiles). Nunca por debajo de neutro.
-        val df = densityFactor(neighborCount) * trustFactor(trustScore)
+        val trust = trustFactor(trustScore)
+        val df = densityFactor(neighborCount) * trust
+        fun damped(h: String, base: Float): Float = when (h) {
+            in ENV_SENSITIVE -> 1.0f + (base - 1.0f) * df
+            in TRUST_ONLY_SENSITIVE -> 1.0f + (base - 1.0f) * trust
+            else -> base
+        }
 
         // Para cada grupo — aplicar solo la LR más potente.
         // Las heurísticas sensibles al entorno ven su LR suavizada hacia 1.0 (neutro) según
@@ -159,10 +222,7 @@ object BayesianScorer {
         ALL_GROUPS.forEach { group ->
             val maxLr = failedHeuristics
                 .filter { it in group }
-                .maxOfOrNull { h ->
-                    val base = LIKELIHOOD_RATIOS[h] ?: 1.0f
-                    if (h in ENV_SENSITIVE) 1.0f + (base - 1.0f) * df else base
-                } ?: 1.0f
+                .maxOfOrNull { h -> damped(h, LIKELIHOOD_RATIOS[h] ?: 1.0f) } ?: 1.0f
 
             if (maxLr > 1.0f) {
                 posterior = bayesUpdate(posterior, maxLr)
@@ -181,8 +241,8 @@ object BayesianScorer {
         val dbLr = DB_RATIOS[verificationStatus] ?: 1.0f
         posterior = bayesUpdate(posterior, dbLr)
 
-        // Factor latencia experimental
-        if (isLatencyAnomalous) {
+        // Factor latencia experimental: solo con H12 FAILED (ver el parámetro).
+        if (latencyCorrelationFailed) {
             posterior = bayesUpdate(posterior, LIKELIHOOD_RATIOS["latency"]!!)
         }
 

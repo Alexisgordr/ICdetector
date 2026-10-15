@@ -20,6 +20,8 @@ private val replacements = linkedMapOf(
     // v2.10.8 — Prefijo de las observaciones sub-umbral. El dato guardado sigue en castellano
     // (SUBTHRESHOLD_PREFIX); solo se traduce al mostrarlo.
     "[sub-umbral]" to "[sub-threshold]",
+    // 3.0 (#7, B4) — Prefijo de Stable-Site (SITE_UNVERIFIED_PREFIX).
+    "[sitio-sin-verificar]" to "[site-unverified]",
     // v2.10.4 — Líneas [RADIO] y [SERVICIO]. Van antes que las genéricas ("Celda ", etc.)
     // y las frases largas antes que las cortas que contienen.
     "[SERVICIO]" to "[SERVICE]",
@@ -50,6 +52,11 @@ private val replacements = linkedMapOf(
     "Solicitando fix GPS preciso" to "Requesting precise GPS fix",
     "Fix GPS preciso no disponible" to "Precise GPS fix unavailable",
     "Handover celular completado" to "Cellular handover completed",
+    // 3.0 (#20)
+    "Continuidad interrumpida por pérdida de señal: la confirmación vuelve a empezar." to
+        "Continuity interrupted by signal loss: confirmation starts again.",
+    "Continuidad interrumpida por un hueco sin lecturas: la confirmación vuelve a empezar." to
+        "Continuity interrupted by a gap without readings: confirmation starts again.",
     "Nueva celda" to "New cell",
     "Ping-Pong observado" to "Ping-pong observed",
     "Sin credenciales configuradas" to "No credentials configured",
@@ -108,6 +115,16 @@ private val replacements = linkedMapOf(
     "Se reintentará" to "Will retry",
     "no permite afirmar ni desmentir nada sobre esta antena" to "provides no evidence for or against this cell",
     "Firmas geográficas obtenidas" to "Geographic signatures obtained",
+    "Poda de histórico fallida" to "History pruning failed",
+    // 3.0 — Poda omitida por la guardia del reloj (RetentionClockGuard).
+    "Poda de histórico omitida: el reloj del teléfono va por delante de la última observación guardada; no se ha borrado nada." to
+        "History pruning skipped: the phone's clock is ahead of the last stored observation; nothing was deleted.",
+    "Poda de histórico omitida: borraría" to "History pruning skipped: it would delete",
+    "registros (de" to "records (of",
+    "; más del" to "; more than",
+    "¿reloj adelantado? No se ha borrado nada." to "is the clock ahead? Nothing was deleted.",
+    "no se ha borrado nada; se reintentará en el próximo mantenimiento." to
+        "nothing was deleted; it will be retried at the next maintenance.",
     "Poda de histórico" to "History pruning",
     "registros de más de" to "records older than",
     "días eliminados" to "days deleted",
@@ -126,8 +143,31 @@ private val replacements = linkedMapOf(
     "Captura forense restablecida." to "Forensic capture restored.",
     "Mantenimiento de base de datos fallido" to "Database maintenance failed",
     "No se pudo registrar" to "Could not register",
-    "Red 2G/3G detectada" to "2G/3G network detected",
-    "Abriendo ajustes para Modo Avión manual" to "Opening settings for manual Airplane mode",
+    "Red 2G/3G en uso: cambio desde 4G/5G" to "2G/3G network in use: change from 4G/5G",
+    "Red 2G/3G en uso" to "2G/3G network in use",
+    " · aviso " to " · alert ",
+    "Lectura del historial RF fallida: H15 no se evalúa hasta que vuelva a leerse." to
+        "RF history read failed: H15 is not evaluated until it can be read again.",
+    "Lectura del historial RF restablecida." to "RF history read restored.",
+    "Análisis temporalmente no disponible por un fallo interno (no es falta de señal ni una anomalía de red): se mantiene el último resultado válido, no actualizado." to
+        "Analysis temporarily unavailable due to an internal error (not a missing signal or a network anomaly): the last valid result is kept, not updated.",
+    "Análisis restablecido: resultado actualizado." to "Analysis restored: result updated.",
+    "Resultado publicado, pero falló el registro o el aviso de este ciclo (historial, incidentes, caja negra o alerta): puede faltar esa parte." to
+        "Result published, but this cycle's recording or alert failed (history, incidents, black box or alert): that part may be missing.",
+    // 3.0 — StableSiteNotices.LOG_*
+    "Aviso silencioso publicado: cambio inusual de celda en este lugar con el teléfono quieto. No confirma un ataque." to
+        "Silent notice posted: unusual cell change at this place while the phone was still. It does not confirm an attack.",
+    "Aviso silencioso no mostrado: las notificaciones de la app o su canal están desactivadas. El episodio queda guardado." to
+        "Silent notice not shown: the app's notifications or their channel are turned off. The episode is kept.",
+    "Aviso silencioso no publicado por un fallo al notificar. El episodio queda guardado." to
+        "Silent notice not posted because notifying failed. The episode is kept.",
+    "Aviso silencioso omitido: desactivado en Ajustes. El episodio queda guardado." to
+        "Silent notice skipped: turned off in Settings. The episode is kept.",
+    "N/A: no se pudo leer el historial RF en este ciclo." to "N/A: the RF history could not be read in this cycle.",
+    "última señal anterior observada" to "last earlier signal observed",
+    "señal previa desconocida" to "earlier signal unknown",
+    "Puede deberse a cobertura o a llamadas sin VoLTE; no es un ataque confirmado." to
+        "It can be caused by coverage or calls without VoLTE; it is not a confirmed attack.",
     "Latencia" to "Latency",
     "sin suficientes endpoints disponibles" to "not enough endpoints available",
     "anómala" to "anomalous",
@@ -150,11 +190,27 @@ private val replacements = linkedMapOf(
     "Downgrade de Banda" to "Band downgrade",
     "Celda Aislada" to "Isolated cell",
     "Consistencia MCC" to "MCC consistency",
+    // 3.0 (corte de campaña) — H3 compara la servidora con la SIM: motivo guardado, abstenciones y diagnóstico.
+    "Inconsistencia MCC: servidora" to "MCC inconsistency: serving",
+    ", sin roaming ni vecinas con ese MCC" to ", no roaming and no neighbor with that MCC",
+    "Inconsistencia MCC" to "MCC inconsistency",
+    "sin ServiceState, no se sabe si hay roaming" to "no ServiceState, roaming unknown",
+    "sin MCC de la SIM" to "no SIM MCC",
+    "sin MCC de la servidora" to "no serving-cell MCC",
+    "MCC distinto del de la SIM con roaming declarado" to "MCC differs from the SIM with roaming declared",
+    "PLMN extranjero con vecinas coherentes (frontera)" to "foreign PLMN with consistent neighbors (border)",
+    "El MCC de la servidora coincide con el de la SIM." to "The serving cell's MCC matches the SIM's.",
+    "El MCC de la servidora no es el de la SIM, sin roaming y sin vecinas con ese MCC." to "The serving cell's MCC is not the SIM's, with no roaming and no neighbor sharing that MCC.",
+    "faltan datos de la SIM o de la servidora" to "SIM or serving-cell data missing",
     "Límite MNC" to "MNC limit",
     "Validación Regional TAC" to "Regional TAC validation",
-    "Geometría (TA)" to "Geometry (TA)",
     "Cifrado Nulo" to "Null ciphering",
-    "Sanidad ARFCN" to "ARFCN sanity",
+    // 3.0 (corte de campaña) — H8 es un aviso de calidad de dato.
+    "Calidad de dato ARFCN" to "ARFCN data quality",
+    "Calidad de dato: EARFCN 4G fuera de la tabla 3GPP" to "Data quality: 4G EARFCN outside the 3GPP table",
+    "Calidad de dato: NR-ARFCN 5G fuera de la tabla 3GPP" to "Data quality: 5G NR-ARFCN outside the 3GPP table",
+    "Calidad de dato: el módem informa un canal fuera de la tabla 3GPP. No es evidencia de ataque y no resta puntos." to
+        "Data quality: the modem reports a channel outside the 3GPP table. It is not evidence of an attack and subtracts no points.",
     "Integridad PCI" to "PCI integrity",
     "Consistencia Geográfica" to "Geographic consistency",
     "Correlación Latency + RF" to "Latency + RF correlation",
@@ -222,9 +278,60 @@ private val replacements = linkedMapOf(
     "Transición celular incoherente" to "Incoherent cellular transition",
     "Episodio multiseñal" to "Multi-signal episode",
     "Cambio en identidad celular consolidada" to "Established local cell identity changed",
+    "familias distintas" to "different families",
+    // Texto anterior a 3.0: se conserva para traducir registros y casos ya guardados.
     "familias independientes" to "independent families",
     "todavía no se ha observado un handover evaluable" to "no evaluable handover has been observed yet",
     "faltan dos posiciones GPS contemporáneas" to "two contemporaneous GPS positions are unavailable",
+    // 3.0 (V3) — ApiCoordinateCheck.LOG_NO_DISTANCE_CHECK
+    "registro encontrado sin contraste de distancia (no hay posición propia reciente y fiable). No confirma que la antena esté donde dice la base." to
+        "record found without a distance check (no recent, reliable own position). It does not confirm that the cell is where the database says.",
+    // 3.0 — MiniICService.ISOLATED_TOKEN_STUCK_LOG
+    "H1 en N/A: el módem repite la misma marca de tiempo en sus lecturas, así que no se puede confirmar una celda aislada." to
+        "H1 N/A: the modem repeats the same timestamp in its readings, so an isolated cell cannot be confirmed.",
+    // 3.0 (V1) — Pausa global de OpenCellID y códigos documentados
+    "sin código de la API; puede venir de un proxy o un intermediario, no prueba que la clave falle. Se reintentará." to
+        "without an API code; it may come from a proxy or an intermediary and does not prove the key is wrong. Will retry.",
+    "acceso denegado" to "access denied",
+    "OpenCellID en pausa: la API key no es válida. No se consultará hasta que la cambies en Ajustes." to
+        "OpenCellID paused: the API key is invalid. No queries until you change it in Settings.",
+    "OpenCellID en pausa: la API key no tiene acceso (código 4). No se consultará hasta que cambies la configuración." to
+        "OpenCellID paused: the API key has no access (code 4). No queries until you change the settings.",
+    "OpenCellID en pausa por demasiadas peticiones: se reanudará en" to "OpenCellID paused after too many requests: resuming in",
+    "OpenCellID en pausa: cupo diario agotado. Se reanudará en" to "OpenCellID paused: daily quota exhausted. Resuming in",
+    "OpenCellID sin respuesta (red, proxy o servidor): se reintentará en" to "No response from OpenCellID (network, proxy or server): retrying in",
+    "No dice nada de la antena." to "It says nothing about the cell.",
+    "la API key no es válida. Revísala en Ajustes." to "the API key is invalid. Review it in Settings.",
+    "la API key no tiene acceso (requiere lista blanca)." to "the API key has no access (whitelisting required).",
+    "la API rechazó los datos de esta celda (código 3)." to "the API rejected this cell's data (code 3).",
+    "error interno del servidor (código 5). Se reintentará." to "internal server error (code 5). Will retry.",
+    // 3.0 (V4) — Configuración de OpenCellID
+    "Configuración de OpenCellID actualizada; las consultas anteriores se descartan." to
+        "OpenCellID settings updated; earlier queries are discarded.",
+    "consulta descartada; la configuración cambió mientras se hacía." to
+        "query discarded; the settings changed while it was running.",
+    "consulta anulada porque cambió la configuración (clave o ruta)." to
+        "query cancelled because the settings changed (key or route).",
+    // 3.0 (G4) — HandoverReference.INTERRUPTION_EXPLANATION
+    "hubo una interrupción del servicio celular; esta celda es la nueva referencia, no un handover observado." to
+        "cellular service was interrupted; this cell is the new reference, not an observed handover.",
+    // 3.0 — H16: validación del fix GPS de cada extremo (TransitionCoherence.gpsProblem).
+    "no hay fix GPS en la observación de la celda anterior." to
+        "there is no GPS fix in the observation of the previous cell.",
+    "el fix GPS de la celda anterior tiene una marca de tiempo inválida o futura." to
+        "the GPS fix of the previous cell has an invalid or future timestamp.",
+    "el fix GPS de la celda anterior tiene más de 10 s; una posición reutilizada no demuestra que el móvil estuviera quieto." to
+        "the GPS fix of the previous cell is more than 10 s old; a reused position does not show that the phone was still.",
+    "no hay fix GPS en la observación de la celda nueva." to
+        "there is no GPS fix in the observation of the new cell.",
+    "el fix GPS de la celda nueva tiene una marca de tiempo inválida o futura." to
+        "the GPS fix of the new cell has an invalid or future timestamp.",
+    "el fix GPS de la celda nueva tiene más de 10 s; una posición reutilizada no demuestra que el móvil estuviera quieto." to
+        "the GPS fix of the new cell is more than 10 s old; a reused position does not show that the phone was still.",
+    "las dos observaciones usan el mismo fix GPS; no miden ningún desplazamiento." to
+        "both observations use the same GPS fix; they measure no movement.",
+    "el fix GPS de la celda nueva es anterior al de la celda anterior." to
+        "the GPS fix of the new cell is older than that of the previous cell.",
     "la precisión GPS es insuficiente" to "GPS accuracy is insufficient",
     "se exige" to "required",
     "Transición aprendida previamente" to "Previously learned transition",
@@ -244,18 +351,33 @@ private val replacements = linkedMapOf(
     "el módem no entrega un Timing Advance convertible a metros" to "the modem does not provide Timing Advance convertible to meters",
     "no hay celdas vecinas disponibles para contrastar el espectro" to "no neighbor cells are available for spectrum comparison",
     "el módem no entrega ARFCN/EARFCN para esta tecnología" to "the modem does not provide ARFCN/EARFCN for this technology",
-    "Android o el fabricante no exponen el estado de cifrado a esta app" to "Android or the manufacturer does not expose ciphering status to this app",
-    "estado de cifrado no disponible" to "ciphering status unavailable",
+    // 3.0 (corte de campaña) — H11 sin fix reciente.
+    "el fix GPS tiene más de 60 s (o no se sabe su edad); en movimiento, la posición ya no sería la de esta lectura" to "the GPS fix is older than 60 s (or its age is unknown); when moving, the position would no longer be this reading's",
+    "fix GPS de más de 60 s o sin edad conocida" to "GPS fix older than 60 s or of unknown age",
+    // 3.0 — Reinicio del watchdog de callbacks.
+    "Watchdog: callbacks de telefonía reiniciados;" to "Watchdog: telephony callbacks restarted;",
+    "s sin entregas de celdas." to "s without cell deliveries.",
+    // 3.0 (corte de campaña) — Celda CSG: H1/H2/H5/H6/H7 no se evalúan.
+    "celda CSG (femtocelda): las reglas de dominancia, proximidad e identidad local no aplican a una celda diseñada para ser aislada" to "CSG cell (femtocell): the dominance, proximity and local-identity rules do not apply to a cell designed to be isolated",
+    "celda CSG (femtocelda)" to "CSG cell (femtocell)",
+    // 3.0 (corte de campaña) — H9 reservada.
+    "Android no expone el estado de cifrado a aplicaciones sin privilegios; regla reservada" to "Android does not expose ciphering status to unprivileged apps; reserved rule",
     "todavía no existe una secuencia temporal utilizable" to "no usable temporal sequence exists yet",
     "falta una posición GPS reciente" to "a recent GPS position is unavailable",
     "aún no hay observaciones previas geolocalizadas de esta celda" to "this cell has no previous geolocated observations yet",
     "identidad celular insuficiente para comparar" to "insufficient cell identity for comparison",
     "Wi-Fi/VPN impide atribuir la latencia al enlace celular" to "Wi-Fi/VPN prevents attributing latency to the cellular link",
     "la sonda de latencia todavía no tiene una medición válida" to "the latency probe does not yet have a valid measurement",
+    // 3.0 (#28)
+    "sin vecinas, pendiente de confirmar" to "no neighbours, pending confirmation",
+    " entregas)" to " deliveries)",
+    // 3.0 (#26)
+    "la sonda de latencia aún aprende la referencia de esta celda" to "the latency probe is still learning this cell's reference",
     "el módem no entrega RSRQ ni SINR" to "the modem provides neither RSRQ nor SINR",
     "faltan datos cruzados del ciclo" to "cross-signal data is unavailable for this cycle",
     "baseline en aprendizaje; se necesitan muestras históricas compatibles" to "baseline still learning; compatible historical samples are required",
-    "falta una banda LTE anterior válida para comparar" to "a previous valid LTE band is unavailable for comparison",
+    "falta una banda anterior válida (LTE o 5G) de la misma tecnología para comparar" to
+        "no previous valid band (LTE or 5G) of the same technology to compare with",
     "la tecnología o banda actual no permite la comparación" to "the current technology or band does not allow comparison",
     "historial RF insuficiente" to "insufficient RF history",
     "observaciones" to "observations",
@@ -270,6 +392,9 @@ private val replacements = linkedMapOf(
     "sin registro en OpenCellID; no resta puntos porque esa base es incompleta" to "not in OpenCellID; no points deducted because that database is incomplete",
     "respuesta descartada o no creíble; no concluye nada sobre la antena" to "response discarded or not credible; nothing is concluded about the antenna",
     "pendiente de verificar" to "pending verification",
+    // 3.0 — Sin token de OpenCellID (AuditLogController.PUBLIC_DB_OFF / NO_TOKEN_NOTE).
+    "comprobación de base pública desactivada (sin token)" to "public database check off (no token)",
+    "Sin token de OpenCellID: la base pública no se consulta." to "No OpenCellID token: the public database is not queried.",
     "CICLO DE AUDITORÍA" to "AUDIT CYCLE",
     "7. Espectro Fantasma" to "7. Ghost Spectrum",
     "9. Cifrado Hardware" to "9. Hardware Ciphering",
@@ -295,6 +420,14 @@ private val replacements = linkedMapOf(
     "sin portadoras secundarias" to "no secondary carriers",
     "Primaria declarada sin señal utilizable: ciclo en abstención." to "Declared primary has no usable signal: cycle abstains.",
     "Ubicación continua activa (24/7). Consumo de batería elevado por diseño: las coordenadas son necesarias para H11, H13 y H16." to "Continuous location active (24/7). High battery use by design: coordinates are needed for H11, H13 and H16.",
+    // 3.0 — Modo de ubicación
+    "Modo de ubicación adaptativo: GPS continuo solo con la pantalla encendida." to "Adaptive location mode: continuous GPS only while the screen is on.",
+    "Modo de ubicación continuo: GPS activo también con la pantalla apagada." to "Continuous location mode: GPS stays active with the screen off.",
+    "Modo de ubicación inteligente: intentos GPS breves cada 45 s cuando hay recepción." to "Smart location mode: short GPS attempts every 45 s when reception is available.",
+    "Recepción GPS recuperada: reanudando el modo de ubicación." to "GPS reception recovered: resuming the location mode.",
+    "Recepción GPS degradada: próximo intento periódico en " to "Poor GPS reception: next periodic attempt in ",
+    "El escaneo celular continúa." to "Cellular scanning continues.",
+    "No se pudo registrar el GPS continuo: " to "Could not register continuous GPS: ",
     "Batería crítica (<" to "Critical battery (<",
     "%): ubicación continua en pausa hasta conectar el cargador." to "%): continuous location paused until the charger is connected.",
     "Alimentación recuperada: ubicación continua y recolección 24/7 reanudadas." to "Power restored: continuous location and 24/7 collection resumed.",
@@ -340,9 +473,13 @@ private val replacements = linkedMapOf(
     "N/A: sin lectura celular válida." to "N/A: no valid cellular reading.",
     "Estabilidad de potencia" to "Power stability",
     "N/A: no hay TAC válidos de vecinas para contrastar." to "N/A: no valid neighbour TACs to compare.",
-    "Coherencia geométrica (TA)" to "Geometric coherence (TA)",
+    "N/A: no hay TAC válidos de vecinas de la misma tecnología para contrastar." to "N/A: no valid TACs from neighbours of the same technology to compare.",
+    "N/A: no hay TAC válidos de vecinas de la misma tecnología y el mismo operador para contrastar." to "N/A: no valid TACs from neighbours of the same technology and operator to compare.",
+    "Proximidad por Timing Advance" to "Timing Advance proximity",
     "Espectro de vecinos" to "Neighbour spectrum",
     "N/A: no hay celdas vecinas disponibles para contrastar el espectro." to "N/A: no neighbour cells available to compare the spectrum.",
+    "N/A: no hay celdas vecinas de la misma tecnología para contrastar el espectro." to "N/A: no neighbour cells of the same technology to compare the spectrum.",
+    "N/A: hacen falta celdas vecinas de la misma tecnología con potencia para comparar." to "N/A: neighbour cells of the same technology with signal readings are required for comparison.",
     "Cifrado hardware" to "Hardware ciphering",
     "N/A: todavía no existe una secuencia temporal utilizable." to "N/A: no usable time sequence yet.",
     "N/A: aún no hay observaciones previas geolocalizadas de esta celda." to "N/A: no previous geolocated observations of this cell yet.",
@@ -353,6 +490,14 @@ private val replacements = linkedMapOf(
     "no hubo cambio de celda." to "there was no cell change.",
     "el intervalo entre observaciones no permite atribuir el desplazamiento al handover." to "the interval between observations does not allow attributing the movement to the handover.",
     "La celda destino ya era vecina visible antes del handover." to "The destination cell was already a visible neighbour before the handover.",
+    // 3.0 — H16: posición del teléfono respecto a las dos zonas aprendidas (TransitionCoherence).
+    "falta la posición del fix de la celda nueva." to "the position of the new cell's fix is missing.",
+    "la posición está fuera de las zonas aprendidas de ambas celdas; entre dos celdas grandes ese salto puede ser normal." to
+        "the position is outside the learned zones of both cells; between two large cells that jump can be normal.",
+    "la posición está en la zona aprendida de la celda nueva, no en la de la anterior." to
+        "the position is in the new cell's learned zone, not in the previous one's.",
+    "la zona aprendida de la celda nueva no queda lo bastante lejos de la posición." to
+        "the new cell's learned zone is not far enough from the position.",
     " origen, " to " origin, ",
     " destino)." to " destination).",
     "pero las zonas aprendidas quedan a " to "but the learned zones are ",
@@ -365,7 +510,7 @@ private val replacements = linkedMapOf(
     "Vecinos fantasma" to "Ghost neighbours",
     "Frecuencia (ARFCN) 5G sospechosa" to "Suspicious 5G frequency (ARFCN)",
     "Frecuencia (EARFCN) 4G sospechosa" to "Suspicious 4G frequency (EARFCN)",
-    "Cifrado de red anulado (A5/0)" to "Network ciphering disabled (A5/0)",
+    "Cifrado de red no activo según el sistema" to "Network ciphering reported inactive by the system",
     "Efecto Ping-Pong (Cambios rápidos en parado)" to "Ping-Pong effect (rapid changes while stationary)",
     "Huella RF incoherente con el historial (RSRQ/SINR muy desviados)" to "RF fingerprint inconsistent with history (RSRQ/SINR far off)",
     "Downgrade de banda forzado" to "Forced band downgrade",

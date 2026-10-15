@@ -1,5 +1,8 @@
 package com.alexisgordr.icdetector.network
 
+import com.alexisgordr.icdetector.core.ExternalFailure
+import com.alexisgordr.icdetector.core.ExternalFailureClassifier
+import com.alexisgordr.icdetector.core.RetryAfter
 import com.alexisgordr.icdetector.core.VerificationDecision
 import com.alexisgordr.icdetector.models.CellData
 import com.alexisgordr.icdetector.models.VerificationStatus
@@ -29,19 +32,31 @@ import java.net.Proxy
  */
 object OpenCellIdClient {
 
+    /** Proxy SOCKS de Orbot/Tor. */
+    val TOR_PROXY = Proxy(Proxy.Type.SOCKS, InetSocketAddress("127.0.0.1", 9050))
+
+    /**
+     * 3.0 (V4) — Cliente para una configuración. Con proxy, el proxy es EXPLÍCITO: OkHttp no prueba
+     * otra ruta si no está disponible (sin ProxySelector ni salida directa de reserva); la petición
+     * falla. Sin proxy, `Proxy.NO_PROXY`: tampoco hereda un proxy del sistema por sorpresa.
+     */
+    fun clientFor(config: com.alexisgordr.icdetector.core.VerificationConfig, base: OkHttpClient): OkHttpClient =
+        base.newBuilder().proxy(if (config.proxyEnabled) TOR_PROXY else Proxy.NO_PROXY).build()
+
+    /**
+     * Consulta con una INSTANTÁNEA de la configuración ([config]): clave y ruta de la misma versión
+     * durante toda la consulta. [holder] (si se da) registra la llamada para cancelarla si cambia la
+     * ruta, y comprueba justo antes de conectar que la configuración sigue vigente.
+     */
     fun tryOpenCellIdSyncWithData(
         cell: CellData,
-        openCellIdKey: String,
-        isProxyEnabled: Boolean,
-        client: OkHttpClient
+        config: com.alexisgordr.icdetector.core.VerificationConfig,
+        client: OkHttpClient,
+        holder: com.alexisgordr.icdetector.core.VerificationConfigHolder? = null
     ): VerificationOutcome {
-        val currentClient = if (isProxyEnabled) {
-            client.newBuilder()
-                .proxy(Proxy(Proxy.Type.SOCKS, InetSocketAddress("127.0.0.1", 9050)))
-                .build()
-        } else {
-            client
-        }
+        if (holder != null && !holder.isCurrent(config)) return configChanged()
+        val currentClient = clientFor(config, client)
+        val openCellIdKey = config.apiKey
 
         return try {
             val cleanKey = openCellIdKey.trim()
@@ -58,68 +73,99 @@ object OpenCellIdClient {
                 .addQueryParameter("format", "json")
                 .build()
             val request = Request.Builder().url(url).build()
-            currentClient.newCall(request).execute().use { response ->
-                val body = response.body.string()
-                val json = runCatching { JSONObject(body) }.getOrNull()
+            val call = currentClient.newCall(request)
+            val untrack = holder?.track(config) { call.cancel() } ?: {}
+            try {
+                if (call.isCanceled()) return configChanged()
+                call.execute().use { response ->
+                    val body = response.body.string()
+                    val json = runCatching { JSONObject(body) }.getOrNull()
 
-                // Principio de la respuesta cruda, para el terminal. La clave viaja en la URL, que
-                // NO se registra; el cuerpo no la contiene.
-                // El error "API Key not known" puede repetir literalmente la clave enviada.
-                // Nunca dejarla en el terminal ni en un informe compartido.
-                val cuerpoSeguro = if (cleanKey.isNotEmpty()) {
-                    body.replace(cleanKey, "[REDACTED]")
-                } else body
-                val crudo = cuerpoSeguro
-                    .take(160)
-                    .replace(Regex("\\s+"), " ")
+                    // Principio de la respuesta cruda, para el terminal. La clave viaja en la URL, que
+                    // NO se registra; el cuerpo no la contiene.
+                    // El error "API Key not known" puede repetir literalmente la clave enviada.
+                    // Nunca dejarla en el terminal ni en un informe compartido.
+                    val cuerpoSeguro = if (cleanKey.isNotEmpty()) {
+                        body.replace(cleanKey, "[REDACTED]")
+                    } else body
+                    val crudo = cuerpoSeguro
+                        .take(160)
+                        .replace(Regex("\\s+"), " ")
 
-                val hasCoords = json != null && json.has("lat") && json.has("lon")
-                val identityOk = hasCoords && VerificationDecision.identityMatches(
-                    esperada = VerificationDecision.Identity(
-                        mcc = cell.mcc, mnc = cell.mnc, area = cell.tac,
-                        cellId = cell.cellId, radio = cell.radioTech
-                    ),
-                    recibida = VerificationDecision.reportedFromOpenCellId(
-                        mcc = json!!.optTexto("mcc"),
-                        mnc = json.optTexto("mnc"),
-                        // `lac` es el parámetro canónico también para TAC. `tac`/`cid` pueden
-                        // aparecer como auxiliares a cero y solo son fallback si falta el canónico.
-                        lac = json.optTexto("lac"),
-                        tac = json.optTexto("tac"),
-                        cellId = json.optTexto("cellid"),
-                        cid = json.optTexto("cid"),
-                        radio = json.optTexto("radio")
+                    val hasCoords = json != null && json.has("lat") && json.has("lon")
+                    val identityOk = hasCoords && VerificationDecision.identityMatches(
+                        esperada = VerificationDecision.Identity(
+                            mcc = cell.mcc, mnc = cell.mnc, area = cell.tac,
+                            cellId = cell.cellId, radio = cell.radioTech
+                        ),
+                        recibida = VerificationDecision.reportedFromOpenCellId(
+                            mcc = json!!.optTexto("mcc"),
+                            mnc = json.optTexto("mnc"),
+                            // `lac` es el parámetro canónico también para TAC. `tac`/`cid` pueden
+                            // aparecer como auxiliares a cero y solo son fallback si falta el canónico.
+                            lac = json.optTexto("lac"),
+                            tac = json.optTexto("tac"),
+                            cellId = json.optTexto("cellid"),
+                            cid = json.optTexto("cid"),
+                            radio = json.optTexto("radio")
+                        )
                     )
-                )
 
-                val veredicto = VerificationDecision.forOpenCellId(
-                    httpCode = response.code,
-                    hasCoordinates = hasCoords,
-                    errorCode = json?.optInt("code", -1) ?: -1,
-                    identityOk = identityOk,
-                    mensajeApi = listOfNotNull(
+                    val mensajeApi = listOfNotNull(
                         json?.optTexto("error"), json?.optTexto("message"), json?.optTexto("notice")
-                    ).joinToString(" ").takeIf { it.isNotBlank() },
-                    crudo = crudo
-                )
+                    ).joinToString(" ").takeIf { it.isNotBlank() }
+                    val veredicto = VerificationDecision.forOpenCellId(
+                        httpCode = response.code,
+                        hasCoordinates = hasCoords,
+                        errorCode = json?.optInt("code", -1) ?: -1,
+                        identityOk = identityOk,
+                        mensajeApi = mensajeApi,
+                        crudo = crudo
+                    )
 
-                VerificationOutcome(
-                    status = veredicto.status,
-                    source = VerificationSource.OPENCELLID,
-                    record = if (veredicto.status == VerificationStatus.VERIFIED) json else null,
-                    reason = veredicto.reason
-                )
+                    // 3.0 (V1) — Clase del fallo por código HTTP y código de la API (documentados), no por
+                    // el texto. Retry-After solo cuenta en los límites, y solo si es válido.
+                    val apiCode = json?.optInt("code", -1) ?: -1
+                    val failure = ExternalFailureClassifier.classify(response.code, apiCode,
+                        temporaryNotice = apiCode == VerificationDecision.OCID_CELL_NOT_FOUND && VerificationDecision.isTemporaryNotice(mensajeApi))
+                    val retryAfter = if (failure == ExternalFailure.RATE_LIMITED || failure == ExternalFailure.DAILY_QUOTA)
+                        RetryAfter.parse(response.header("Retry-After"), System.currentTimeMillis()) else null
+
+                    VerificationOutcome(
+                        status = veredicto.status,
+                        source = VerificationSource.OPENCELLID,
+                        record = if (veredicto.status == VerificationStatus.VERIFIED) json else null,
+                        reason = veredicto.reason,
+                        externalFailure = failure,
+                        retryAfterMillis = retryAfter
+                    )
+                }
+            } finally {
+                untrack()
             }
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
         } catch (_: Exception) {
+            // 3.0 (V4) — Cancelada por un cambio de ruta, o la configuración cambió mientras tanto:
+            // no es un fallo de red de la configuración nueva.
+            if (holder != null && !holder.isCurrent(config)) return configChanged()
             // IOException (red) o JSONException (respuesta malformada): no se sabe.
             VerificationOutcome(
                 status = VerificationStatus.ERROR,
                 source = VerificationSource.OPENCELLID,
-                reason = "OpenCellID: sin conexión o respuesta ilegible."
+                reason = "OpenCellID: sin conexión o respuesta ilegible.",
+                externalFailure = ExternalFailure.TRANSIENT
             )
         }
     }
 }
+
+private fun configChanged() = VerificationOutcome(
+    status = VerificationStatus.ERROR,
+    source = VerificationSource.OPENCELLID,
+    reason = "OpenCellID: consulta anulada porque cambió la configuración (clave o ruta).",
+    failure = VerificationFailure.CONFIG_CHANGED
+)
 
 /**
  * Valor de un campo como texto, sea número o cadena en el JSON, o null si no está.

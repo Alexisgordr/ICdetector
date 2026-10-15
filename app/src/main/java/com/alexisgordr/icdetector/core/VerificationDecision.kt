@@ -32,9 +32,15 @@ object VerificationDecision {
     const val OCID_CELL_NOT_FOUND = 1
     /** API key inválida. */
     const val OCID_INVALID_KEY = 2
+    /** Datos de entrada inválidos (HTTP 400). */
+    const val OCID_INVALID_INPUT = 3
+    /** Hace falta lista blanca (HTTP 403). Solo este código, no el 403 a secas, culpa al acceso. */
+    const val OCID_WHITELIST_REQUIRED = 4
+    /** Error interno del servidor (HTTP 500). */
+    const val OCID_SERVER_ERROR = 5
     /** Demasiadas peticiones seguidas. */
     const val OCID_TOO_MANY_REQUESTS = 6
-    /** Límite diario agotado (1000 consultas en la key gratuita). */
+    /** Límite diario agotado (la documentación da 1.000 créditos por día; no dice a qué hora se reinicia). */
     const val OCID_DAILY_LIMIT = 7
 
     /** Lo que se preguntó. Todo lo que hay que comprobar en la respuesta. */
@@ -138,6 +144,15 @@ object VerificationDecision {
     }
 
     /**
+     * Code 1 acompañado de un aviso de indisponibilidad temporal: no es una negativa sobre la celda.
+     * Heurística heredada (el texto no está documentado); solo afecta a code 1.
+     */
+    fun isTemporaryNotice(mensajeApi: String?): Boolean {
+        val texto = mensajeApi.orEmpty().lowercase()
+        return listOf("temporar", "unavailable", "maintenance", "try again").any { it in texto }
+    }
+
+    /**
      * Veredicto para una respuesta de **OpenCellID**.
      *
      * @param httpCode código HTTP.
@@ -165,12 +180,23 @@ object VerificationDecision {
         // compatible.
         if (httpCode !in 200..299) {
             return when (httpCode) {
-                429 -> Verdict(VerificationStatus.ERROR,
+                // La cuota diaria se identifica por code 7; un 429 sin él es una limitación temporal.
+                429 -> if (errorCode == OCID_DAILY_LIMIT) Verdict(VerificationStatus.ERROR,
                     "OpenCellID: límite diario de consultas agotado. NO significa que la antena no exista; se reintentará. Respuesta: $crudo")
+                else Verdict(VerificationStatus.ERROR,
+                    "OpenCellID: demasiadas peticiones seguidas. Se reintentará.")
                 503 -> Verdict(VerificationStatus.ERROR,
                     "OpenCellID: demasiadas peticiones seguidas. Se reintentará.")
-                401, 403 -> Verdict(VerificationStatus.ERROR,
-                    "OpenCellID: la API key no es válida o no tiene permiso. Revísala en Ajustes. Respuesta: $crudo")
+                // 3.0 (V5) — Solo los códigos documentados culpan a la clave. Un 401/403 sin ellos
+                // puede venir de un proxy o de un intermediario: se dice así y se reintenta.
+                401, 403 -> when (errorCode) {
+                    OCID_INVALID_KEY -> Verdict(VerificationStatus.ERROR,
+                        "OpenCellID: la API key no es válida. Revísala en Ajustes. Respuesta: $crudo")
+                    OCID_WHITELIST_REQUIRED -> Verdict(VerificationStatus.ERROR,
+                        "OpenCellID: la API key no tiene acceso (requiere lista blanca). Respuesta: $crudo")
+                    else -> Verdict(VerificationStatus.ERROR,
+                        "OpenCellID: acceso denegado (HTTP $httpCode) sin código de la API; puede venir de un proxy o un intermediario, no prueba que la clave falle. Se reintentará. Respuesta: $crudo")
+                }
                 // Un 404 es un endpoint que no responde donde se esperaba, no una antena
                 // inexistente. La forma documentada de decir "no la tengo" es HTTP 200 con code 1.
                 404 -> Verdict(VerificationStatus.ERROR,
@@ -188,10 +214,7 @@ object VerificationDecision {
                 OCID_CELL_NOT_FOUND -> {
                     // La documentación avisa de que code 1 también puede acompañar un mensaje de
                     // indisponibilidad temporal. En ese caso no es una negativa sobre la celda.
-                    val texto = mensajeApi.orEmpty().lowercase()
-                    val temporal = listOf("temporar", "unavailable", "maintenance", "try again")
-                        .any { it in texto }
-                    if (temporal) {
+                    if (isTemporaryNotice(mensajeApi)) {
                         Verdict(VerificationStatus.ERROR,
                             "OpenCellID: servicio temporalmente no disponible. Se reintentará. Respuesta: $crudo")
                     } else {
@@ -204,7 +227,13 @@ object VerificationDecision {
                 OCID_TOO_MANY_REQUESTS -> Verdict(VerificationStatus.ERROR,
                     "OpenCellID: demasiadas peticiones seguidas. Se reintentará.")
                 OCID_INVALID_KEY -> Verdict(VerificationStatus.ERROR,
-                    "OpenCellID: la API key no es válida o no tiene permiso. Revísala en Ajustes. Respuesta: $crudo")
+                    "OpenCellID: la API key no es válida. Revísala en Ajustes. Respuesta: $crudo")
+                OCID_WHITELIST_REQUIRED -> Verdict(VerificationStatus.ERROR,
+                    "OpenCellID: la API key no tiene acceso (requiere lista blanca). Respuesta: $crudo")
+                OCID_INVALID_INPUT -> Verdict(VerificationStatus.ERROR,
+                    "OpenCellID: la API rechazó los datos de esta celda (código 3). No dice nada de la antena. Respuesta: $crudo")
+                OCID_SERVER_ERROR -> Verdict(VerificationStatus.ERROR,
+                    "OpenCellID: error interno del servidor (código 5). Se reintentará. Respuesta: $crudo")
                 else -> Verdict(VerificationStatus.ERROR,
                     "OpenCellID: error $errorCode de la API. Respuesta: $crudo")
             }

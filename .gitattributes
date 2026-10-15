@@ -18,3 +18,7 @@
 *.pdf binary
 *.zip binary
 *.gz binary
+
+# 3.0 — `git archive` (los ZIP del proyecto) escribe aquí el commit; Gradle lo usa para
+# AppVersion cuando no hay carpeta .git. Ver app/build.gradle.kts y core/AppBuildId.kt.
+BUILD_COMMIT export-subst

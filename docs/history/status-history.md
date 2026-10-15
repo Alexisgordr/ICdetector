@@ -1,9 +1,79 @@
 # ICdetection — status history
 
-> **Archive.** This file is the per-release status log kept up to v2.10.10, moved here unchanged when
-> the documentation was reorganised. It includes the historical v2.1 field notes in English and
-> Spanish. For the current state of the project see [Status.md](../../Status.md); for the full record
-> of every release see [CHANGELOG.md](../../CHANGELOG.md).
+> **Archive.** This file is the per-release status log kept up to 3.0.0-beta4, moved here unchanged
+> when the documentation was reorganised. It includes the historical v2.1 field notes in English and
+> Spanish. For the current state of the project see [Status.md](../../Status.md); for the full
+> record of every release see [CHANGELOG.md](../../CHANGELOG.md).
+
+## 3.0.0-beta4 — Phase 4: maintenance and documentation (local beta, not released)
+
+**Version code:** 39
+**Database schema:** 20 (unchanged)
+**Security effect:** no weight or threshold change; continuity also breaks after a gap without readings
+**Install:** same app id `com.alexisgordr.icdetector`; updates from earlier 3.0 betas install normally
+**Version code:** every 3.0 beta uses 39 (next after v2.10.10, 38); betas are never published, so the release keeps 39
+**Context capture (A03):** time, GPS and service state captured when the reading arrives (`ObservationContext`), not when the row is saved after the analysis
+**Continuity (#20):** a gap of more than 2 min without readings breaks continuity like a signal loss (`CoverageContinuity`; H1 streak, H14 band context, confirmation); confirmation gap measured with `elapsedRealtime`
+**Dataset cuts:** context columns (A03); H1, H14 and confirmation methodology (#20 follow-up)
+**Migration fix:** schema 20 creates `history`, `incidents` or `forensic_cases` if missing before altering them (instrumented tests failed with `no such table`); real v2.10.x databases were not affected
+
+**#31** — validation limits documented in README, IMPORTANT and MANUAL. **#7** — B4: Stable-Site
+prefix stored in Spanish (`[sitio-sin-verificar]`) and translated; B5: LRU eviction in
+`TrustContradictionTransitionTracker`; O1: H15 history scan reviewed, no limit, query plan guarded in
+`check_sql_affinity.py`; O2: `HeuristicCatalog` as the canonical list of the 16 rules (ids, scorer
+keys, episode families) with a consistency test; O5: `PreciseFixBackoff` for normal precise-fix
+requests. Every item of the 3.0 roadmap (#27) is now implemented.
+
+## 3.0.0-beta3 — Phase 3: confirmation and rule behaviour (local beta, not released)
+
+**Version code:** 39
+**Database schema:** 20 (unchanged)
+**Security effect:** confirmation restarts after a coverage gap; weights and thresholds unchanged
+**Dataset cuts:** confirmation methodology (#20), H14 (#10, #8, band table), H12 (#26), H1 status (#28)
+**Install:** same app id `com.alexisgordr.icdetector`; updates from earlier 3.0 betas install normally
+
+**#20** — `CollectionGeneration.losses` counts signal losses (not handovers or manual refreshes); a
+loss clears H14's band context before analysis and interrupts `TemporalConfidence` and
+`ThreatEpisodeTracker` at publication, with a terminal line for the black box; accepted observations
+more than 2 min apart are not consecutive. **#10** — `LteSite` (MCC-MNC-eNB); no H14 penalty within
+one eNodeB. **#26** — latency states N/A / APRENDIENDO / OK / ANOMALA, 90 s validity, H12 only on a
+measurement, indicator strings EN/ES. **#28** — H1 `N/A` while `IsolatedCellConfidence` is pending,
+with progress in the diagnostic. **#8** — `NrFrequency` (TS 38.104 raster) and H14 NR → NR; H6 on NR
+remains `N/A` by decision. Band table checked against TS 36.104 V19.2.0 (bands 53–113 resolvable).
+
+## 3.0.0-beta2 — Phase 2: correct inputs to the rules (local beta, not released)
+
+**Version code:** 39
+**Database schema:** 20 (unchanged from beta1)
+**Security effect:** rules receive corrected inputs; weights and thresholds unchanged
+**Dataset cuts:** H5 (#11), H6 (#21, #33), H10 and handover rows (#19), H14 (#32), H15 and local trust (#22)
+**Install:** same app id `com.alexisgordr.icdetector`; updates from earlier 3.0 betas install normally
+
+**#19** — handovers by full serving identity (MCC, MNC, TAC, Cell ID, technology); unknown fields
+are not a change. **#11** — LTE neighbour TAC 65535 / Cell ID 268435455 read as unavailable.
+**#22** — `RadioChannels`: one per-technology frequency/PCI validator for local trust, H15,
+Stable-Site and H8; EARFCN 0 learnt. **#32** — complete TS 36.101 band table (Band 71 fixed),
+EARFCN-first band resolution with `getBands()` fallback; validator counts declared bands outside the
+table. **#21** — TA borrowed only from a duplicate of the same transmitter. **#33** — TA stub-zero
+evidence per declared unit, saved per unit; old global evidence not read. Tests for each, including
+an instrumented EARFCN 0 learning test.
+
+## 3.0.0-beta1 — Phase 1: data foundations (local beta, not released)
+
+**Version code:** 39
+**Database schema:** 20 (additive migration; rows before 3.0 keep the new columns empty = unknown)
+**Security effect:** none on rules, weights or thresholds; stale analysis cycles no longer publish or alert
+**Dataset:** methodology cut for ages and ordering (exact UTC instant from 3.0); not part of the v2.10.5 campaign
+**Install:** clean install of 3.0 (export, uninstall v2.10.x, install); same app id `com.alexisgordr.icdetector`, later 3.0 versions update normally
+
+Phase 1 of the ordered 3.0 roadmap (GitHub issue #27), developed on a separate branch and not
+published. **#23** — each row stores the observation instant in UTC; windows, verification TTL,
+retention and H15 ordering use it (rows before 3.0 keep the previous comparison on local text).
+**#29** — rules not evaluated and GPS accuracy per row. **#30** — app version per row; the CSV adds
+the exporting phone and Android version. **#25** — "latest row" means latest observed, not latest
+written. **#24** — a cycle invalidated by signal loss or a serving-cell change no longer publishes.
+Validator: UTC/local coherence, evaluation coverage, GPS accuracy, versions and dataset cuts.
+Tests: JVM migration test (SQLite via sqlite-jdbc, test-only), instrumented 19→20 upgrade test.
 
 ## v2.10.10 — Bug fixes inside the freeze (stable)
 

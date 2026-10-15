@@ -3,7 +3,12 @@ package com.alexisgordr.icdetector.core
 import kotlin.math.*
 
 enum class MotionState { UNKNOWN, STATIC_CONFIRMED, MOVING }
-enum class MotionReason { FIRST_FIX, INSUFFICIENT_DURATION, ACCURACY_POOR, NO_RECENT_FIX, STATIC, MOVEMENT }
+/**
+ * Why the classifier reached its state. 3.0 — POSITIONS_DISPERSED: the window already lasts the
+ * required two minutes, but the fixes are spread beyond the static envelope; before, this was
+ * reported as INSUFFICIENT_DURATION. Only the terminal log shows it; it is not stored.
+ */
+enum class MotionReason { FIRST_FIX, INSUFFICIENT_DURATION, ACCURACY_POOR, NO_RECENT_FIX, STATIC, MOVEMENT, POSITIONS_DISPERSED }
 enum class StableSiteFeatureState { UNAVAILABLE, BOOTSTRAP, LEARNING, SHADOW_READY, ACTIVE }
 enum class StableSiteNovelty { KNOWN_AT_SITE, SITE_NOVEL, GLOBALLY_NOVEL }
 enum class NeighbourEvidenceCapability { FULL_NEIGHBOUR_IDENTITY, RF_NEIGHBOUR_ONLY, NO_NEIGHBOUR_DATA }
@@ -30,23 +35,14 @@ data class NeighbourDiagnostic(
 }
 
 object StableSiteNeighbourEvidence {
-    private const val ANDROID_UNAVAILABLE = Int.MAX_VALUE
-
+    // 3.0 (#22) — Mismos rangos que el resto de la app (RadioChannels). Android sí expone para GSM un
+    // identificador físico, el BSIC (CellIdentityGsm.getBsic), pero esta app no lo lee ni lo usa
+    // como PCI; sin él, una celda GSM no puede formar una huella RF.
     fun isValidArfcn(radio: com.alexisgordr.icdetector.models.RadioTech, value: Int): Boolean =
-        value != ANDROID_UNAVAILABLE && when (radio) {
-            com.alexisgordr.icdetector.models.RadioTech.LTE -> value in 0..262_143
-            com.alexisgordr.icdetector.models.RadioTech.NR -> value in 0..3_279_165
-            com.alexisgordr.icdetector.models.RadioTech.UMTS -> value in 0..16_383
-            else -> false // GSM has ARFCN but this model receives no BSIC/PCI counterpart.
-        }
+        radio != com.alexisgordr.icdetector.models.RadioTech.GSM && RadioChannels.isValidChannel(radio, value)
 
     fun isValidPhysicalId(radio: com.alexisgordr.icdetector.models.RadioTech, value: Int): Boolean =
-        value != ANDROID_UNAVAILABLE && when (radio) {
-            com.alexisgordr.icdetector.models.RadioTech.LTE -> value in 0..503
-            com.alexisgordr.icdetector.models.RadioTech.NR -> value in 0..1007
-            com.alexisgordr.icdetector.models.RadioTech.UMTS -> value in 0..511
-            else -> false
-        }
+        RadioChannels.isValidPhysicalId(radio, value)
 
     fun rfFingerprint(cell: com.alexisgordr.icdetector.models.CellData): RfNeighbourFingerprint? {
         if (cell.cellId != "N/A") return null
@@ -70,27 +66,39 @@ data class StableSiteMaturity(
 )
 
 object StableSiteMaturityPolicy {
+    // 3.0 — Umbrales con nombre (mismos valores y misma lógica que antes) para que la consulta de
+    // Historial → Topología → Stable-Site muestre el progreso sin copiar las reglas en la interfaz.
+    /** Días de servicio y estáticos por debajo de los cuales el sitio sigue en LEARNING. */
+    const val LEARNING_SERVING_DAYS = 5
+    const val LEARNING_STATIC_DAYS = 2
+    /** Requisitos de ACTIVE (sitio maduro; no significa que se aplique ninguna protección). */
+    const val ACTIVE_SERVING_DAYS = 7
+    const val ACTIVE_STATIC_DAYS = 3
+    const val ACTIVE_NEIGHBOUR_DAYS = 3
+    const val ACTIVE_SERVING_OBSERVATIONS = 30
+
     fun evaluate(servingDays: Int, staticDays: Int, fullNeighbourDays: Int, rfNeighbourDays: Int, servingObservations: Int): StableSiteMaturity {
         val capability = when {
-            fullNeighbourDays >= 3 -> NeighbourEvidenceCapability.FULL_NEIGHBOUR_IDENTITY
+            fullNeighbourDays >= ACTIVE_NEIGHBOUR_DAYS -> NeighbourEvidenceCapability.FULL_NEIGHBOUR_IDENTITY
             rfNeighbourDays > 0 -> NeighbourEvidenceCapability.RF_NEIGHBOUR_ONLY
             fullNeighbourDays > 0 -> NeighbourEvidenceCapability.FULL_NEIGHBOUR_IDENTITY
             else -> NeighbourEvidenceCapability.NO_NEIGHBOUR_DATA
         }
-        val neighbourReady = fullNeighbourDays >= 3 || rfNeighbourDays >= 3
+        val neighbourReady = fullNeighbourDays >= ACTIVE_NEIGHBOUR_DAYS || rfNeighbourDays >= ACTIVE_NEIGHBOUR_DAYS
         val state = when {
             servingDays == 0 -> StableSiteFeatureState.BOOTSTRAP
-            servingDays < 5 || staticDays < 2 -> StableSiteFeatureState.LEARNING
-            servingDays < 7 || staticDays < 3 || !neighbourReady || servingObservations < 30 -> StableSiteFeatureState.SHADOW_READY
+            servingDays < LEARNING_SERVING_DAYS || staticDays < LEARNING_STATIC_DAYS -> StableSiteFeatureState.LEARNING
+            servingDays < ACTIVE_SERVING_DAYS || staticDays < ACTIVE_STATIC_DAYS || !neighbourReady ||
+                servingObservations < ACTIVE_SERVING_OBSERVATIONS -> StableSiteFeatureState.SHADOW_READY
             else -> StableSiteFeatureState.ACTIVE
         }
         val reason = when {
             state == StableSiteFeatureState.ACTIVE -> "MATURE_${capability.name}"
-            servingDays < 7 -> "NEEDS_SERVING_DAYS"
-            staticDays < 3 -> "NEEDS_STATIC_DAYS"
-            servingObservations < 30 -> "NEEDS_SERVING_OBSERVATIONS"
-            fullNeighbourDays in 1..2 -> "NEEDS_FULL_NEIGHBOUR_DAYS"
-            rfNeighbourDays in 1..2 -> "NEEDS_RF_NEIGHBOUR_DAYS"
+            servingDays < ACTIVE_SERVING_DAYS -> "NEEDS_SERVING_DAYS"
+            staticDays < ACTIVE_STATIC_DAYS -> "NEEDS_STATIC_DAYS"
+            servingObservations < ACTIVE_SERVING_OBSERVATIONS -> "NEEDS_SERVING_OBSERVATIONS"
+            fullNeighbourDays in 1 until ACTIVE_NEIGHBOUR_DAYS -> "NEEDS_FULL_NEIGHBOUR_DAYS"
+            rfNeighbourDays in 1 until ACTIVE_NEIGHBOUR_DAYS -> "NEEDS_RF_NEIGHBOUR_DAYS"
             !neighbourReady && capability == NeighbourEvidenceCapability.NO_NEIGHBOUR_DATA -> "NO_USABLE_NEIGHBOUR_DATA"
             else -> "MATURE"
         }
@@ -101,16 +109,33 @@ object StableSiteMaturityPolicy {
 // Field rollout switch. v2.9.1 records wouldTrigger but does not freeze trust learning.
 const val STABLE_SITE_ENFORCEMENT_ENABLED = false
 
-data class MotionFix(val latitude: Double, val longitude: Double, val timeMs: Long, val accuracyM: Float, val speedMps: Float?)
+/**
+ * 3.0 — [elapsedRealtimeMs] is MONOTONIC time since boot (Location.elapsedRealtimeNanos / 1e6), the
+ * same clock as SystemClock.elapsedRealtime. It keeps counting in deep sleep and is not affected by
+ * civil-clock changes. It is only meaningful within one boot and is never persisted; civil time is
+ * used only to name the day a row belongs to (recordStableSiteContext).
+ */
+data class MotionFix(val latitude: Double, val longitude: Double, val elapsedRealtimeMs: Long, val accuracyM: Float, val speedMps: Float?)
 data class MotionEvidence(
     val state: MotionState,
+    /**
+     * Length in seconds of the classifier's CURRENT window of fixes (first to latest kept fix),
+     * capped by the window size (about 3 minutes). It is not time spent static: motion.csv stores
+     * the value of the last evaluation saved for that day and state (`duration_s`).
+     */
     val durationSeconds: Long = 0,
     val accuracyM: Float? = null,
     val displacementM: Float? = null,
     val reason: MotionReason? = null
 )
 
-/** Conservative rolling classifier driven only by distinct GNSS fixes. */
+/**
+ * Conservative rolling classifier driven only by distinct GNSS fixes.
+ *
+ * 3.0 — All times (fix order, freshness, durations) are monotonic elapsedRealtime milliseconds;
+ * no civil (epoch) time enters here. The state lives only in memory, so a process restart starts
+ * again from UNKNOWN and never reuses monotonic times from an earlier boot.
+ */
 class MotionClassifier(
     private val requiredStaticMs: Long = 120_000L,
     private val expectedFixIntervalMs: Long = 15_000L
@@ -120,22 +145,28 @@ class MotionClassifier(
     private var lastAcceptedFixTime = Long.MIN_VALUE
     private var latest = MotionEvidence(MotionState.UNKNOWN, reason = MotionReason.NO_RECENT_FIX)
 
-    @Synchronized fun observe(fix: MotionFix): MotionEvidence {
+    /**
+     * [nowElapsedMs] is SystemClock.elapsedRealtime at delivery. A fix older than the grace period
+     * (a cached or late callback) or stamped in the future (a Location from an earlier boot, whose
+     * monotonic time does not belong to this one) is not motion evidence and is ignored.
+     */
+    @Synchronized fun observe(fix: MotionFix, nowElapsedMs: Long = fix.elapsedRealtimeMs): MotionEvidence {
+        if (fix.elapsedRealtimeMs > nowElapsedMs + FUTURE_TOLERANCE_MS || nowElapsedMs - fix.elapsedRealtimeMs > gracePeriodMs) return latest
         // A Location can arrive through both the continuous and one-shot listeners. It is
         // evidence only once, and an older callback must not rewind or inflate the window.
-        if (fix.timeMs <= lastAcceptedFixTime) return latest
-        if (fix.timeMs <= 0 || fix.accuracyM > MAX_ACCURACY_M || !fix.accuracyM.isFinite()) {
-            if (lastAcceptedFixTime == Long.MIN_VALUE || fix.timeMs - lastAcceptedFixTime > gracePeriodMs) fixes.clear()
+        if (fix.elapsedRealtimeMs <= lastAcceptedFixTime) return latest
+        if (fix.elapsedRealtimeMs <= 0 || fix.accuracyM > MAX_ACCURACY_M || !fix.accuracyM.isFinite()) {
+            if (lastAcceptedFixTime == Long.MIN_VALUE || fix.elapsedRealtimeMs - lastAcceptedFixTime > gracePeriodMs) fixes.clear()
             latest = MotionEvidence(MotionState.UNKNOWN, accuracyM = fix.accuracyM, reason = MotionReason.ACCURACY_POOR)
             return latest
         }
-        if (lastAcceptedFixTime != Long.MIN_VALUE && fix.timeMs - lastAcceptedFixTime > gracePeriodMs) fixes.clear()
-        lastAcceptedFixTime = fix.timeMs
+        if (lastAcceptedFixTime != Long.MIN_VALUE && fix.elapsedRealtimeMs - lastAcceptedFixTime > gracePeriodMs) fixes.clear()
+        lastAcceptedFixTime = fix.elapsedRealtimeMs
         fixes.addLast(fix)
-        while (fixes.isNotEmpty() && fix.timeMs - fixes.first().timeMs > requiredStaticMs + 60_000L) fixes.removeFirst()
+        while (fixes.isNotEmpty() && fix.elapsedRealtimeMs - fixes.first().elapsedRealtimeMs > requiredStaticMs + 60_000L) fixes.removeFirst()
         val first = fixes.first()
         val distance = distanceMeters(first.latitude, first.longitude, fix.latitude, fix.longitude)
-        val duration = ((fix.timeMs - first.timeMs) / 1_000L).coerceAtLeast(0)
+        val duration = ((fix.elapsedRealtimeMs - first.elapsedRealtimeMs) / 1_000L).coerceAtLeast(0)
         val reliableSpeed = fix.speedMps?.takeIf { it.isFinite() && it >= 0f }
         val movementThreshold = max(40f, first.accuracyM + fix.accuracyM)
         if ((reliableSpeed != null && reliableSpeed >= 2.5f) || distance > movementThreshold) {
@@ -145,17 +176,28 @@ class MotionClassifier(
         }
         val envelope = max(25f, fixes.maxOf { it.accuracyM } * 1.5f)
         val maxDistance = fixes.maxOf { distanceMeters(first.latitude, first.longitude, it.latitude, it.longitude) }
-        val static = duration * 1_000L >= requiredStaticMs && maxDistance <= envelope && fixes.none { (it.speedMps ?: 0f) > 1.5f }
+        val longEnough = duration * 1_000L >= requiredStaticMs
+        val compact = maxDistance <= envelope
+        val slowMovement = fixes.any { (it.speedMps ?: 0f) > 1.5f }
+        val static = longEnough && compact && !slowMovement
+        // 3.0 — The reason names the real cause (same conditions as before, only the label changes).
+        val reason = when {
+            static -> MotionReason.STATIC
+            fixes.size == 1 -> MotionReason.FIRST_FIX
+            !compact -> MotionReason.POSITIONS_DISPERSED
+            slowMovement -> MotionReason.MOVEMENT
+            else -> MotionReason.INSUFFICIENT_DURATION
+        }
         latest = MotionEvidence(
             if (static) MotionState.STATIC_CONFIRMED else MotionState.UNKNOWN,
-            duration, fix.accuracyM, maxDistance,
-            if (static) MotionReason.STATIC else if (fixes.size == 1) MotionReason.FIRST_FIX else MotionReason.INSUFFICIENT_DURATION
+            duration, fix.accuracyM, maxDistance, reason
         )
         return latest
     }
 
-    @Synchronized fun current(nowMs: Long): MotionEvidence {
-        if (lastAcceptedFixTime == Long.MIN_VALUE || nowMs - lastAcceptedFixTime > gracePeriodMs) {
+    /** [nowElapsedMs]: SystemClock.elapsedRealtime. Deep sleep counts, so a long sleep expires the window. */
+    @Synchronized fun current(nowElapsedMs: Long): MotionEvidence {
+        if (lastAcceptedFixTime == Long.MIN_VALUE || nowElapsedMs - lastAcceptedFixTime > gracePeriodMs) {
             fixes.clear()
             latest = MotionEvidence(MotionState.UNKNOWN, reason = MotionReason.NO_RECENT_FIX)
         }
@@ -163,6 +205,8 @@ class MotionClassifier(
     }
     companion object {
         private const val MAX_ACCURACY_M = 50f
+        /** Clock granularity between the Location stamp and the delivery read; not a new threshold. */
+        private const val FUTURE_TOLERANCE_MS = 1_000L
         fun distanceMeters(aLat: Double, aLon: Double, bLat: Double, bLon: Double): Float {
             val r = 6_371_000.0; val p1 = Math.toRadians(aLat); val p2 = Math.toRadians(bLat)
             val dp = p2 - p1; val dl = Math.toRadians(bLon - aLon)
@@ -175,7 +219,6 @@ class MotionClassifier(
 /** 500 m Web-Mercator bucket, hashed before persistence to avoid exact-coordinate storage. */
 object StableSiteKey {
     const val GRID_METERS = 500.0
-    fun from(latitude: Double, longitude: Double): String = candidates(latitude, longitude).first()
     /** Four overlapping grids ensure that ordinary GNSS jitter cannot split every site view. */
     fun candidates(latitude: Double, longitude: Double): List<String> {
         val lat = latitude.coerceIn(-85.0, 85.0)
@@ -209,8 +252,16 @@ data class StableSiteDecision(
     val novelty: StableSiteNovelty = StableSiteNovelty.KNOWN_AT_SITE,
     val wouldTrigger: Boolean = false, val enforced: Boolean = false,
     val siteKey: String? = null, val reason: String = "NO_SITE_DATA",
-    val evidence: StableSiteEvidence? = null
+    val evidence: StableSiteEvidence? = null,
+    /** 3.0 — The open serving-change episode this evaluation was saved to, if any (see StableSiteNotices). */
+    val episodeId: String? = null
 )
+
+/**
+ * 3.0 — Result of observing the serving cell for episodes. [created] is true only in the cycle that
+ * opened the episode, i.e. the cycle that saw the serving change happen.
+ */
+data class StableSiteEpisodeObservation(val episodeId: String?, val created: Boolean)
 
 object StableSiteEvaluator {
     fun evaluate(e: StableSiteEvidence, enforcementEnabled: Boolean = STABLE_SITE_ENFORCEMENT_ENABLED): StableSiteDecision {

@@ -1,6 +1,7 @@
 package com.alexisgordr.icdetector.service
 
-import android.location.Location
+import com.alexisgordr.icdetector.core.ObservationContext
+import com.alexisgordr.icdetector.core.ObservedFix
 import com.alexisgordr.icdetector.models.CellData
 import com.alexisgordr.icdetector.models.ServiceStateSnapshot
 import com.alexisgordr.icdetector.models.toCompactString
@@ -8,6 +9,9 @@ import com.alexisgordr.icdetector.storage.CellDbHelper
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
+
+/** Una fila del historial: la celda analizada, el motivo y el contexto de cuando se observó. */
+internal class ObservationRow(val cell: CellData, val reason: String, val context: ObservationContext)
 
 /**
  * Owns routine, handover and confirmed-alarm writes to cellular history.
@@ -17,84 +21,145 @@ import kotlinx.coroutines.launch
  * escritura en segundo plano, y si esta se retrasaba una fila de la celda A podía llevar el
  * contexto del momento B. Las escrituras van además por una cola de un solo hilo, en orden, y
  * se descartan las que se programaron antes de un "Borrar historial".
+ *
+ * 3.0 (A03) — El contexto ya no se toma al guardar (después del análisis) sino al RECIBIR la
+ * lectura de celdas: [capture] se llama en la entrega y su [ObservationContext] viaja con el
+ * ciclo hasta aquí. Un análisis lento ya no puede asociar una lectura anterior a la hora, la
+ * posición o el estado de servicio de un momento posterior.
  */
 internal class ObservationPersistenceController(
     private val scope: CoroutineScope,
-    private val db: CellDbHelper,
-    private val location: () -> Location?,
+    /** Escribe la fila y devuelve su rowId (-1 si falló). En la app, [logObservation]. */
+    private val insert: (ObservationRow) -> Long,
+    private val location: () -> ObservedFix?,
     /** v2.10.4 — Último ServiceState conocido, guardado junto a cada fila como contexto. */
     private val serviceState: () -> ServiceStateSnapshot? = { null },
     private val onWrite: (Long) -> Unit,
     private val onPeriodicMissingLocation: (Long) -> Unit,
     /** Cola de un solo hilo: las filas se guardan en el orden en que se observaron. */
     private val writeDispatcher: CoroutineDispatcher,
+    /** 3.0 — Ver MiniICService.quiesceForRestore. */
+    private val writeGate: com.alexisgordr.icdetector.core.WriteGate = com.alexisgordr.icdetector.core.WriteGate(),
     /** Cambia con cada "Borrar historial": una escritura de antes del borrado no se guarda. */
     private val historyGeneration: () -> Long = { 0L },
-    private val clock: () -> Long = System::currentTimeMillis
+    private val clock: () -> Long = System::currentTimeMillis,
+    /** 3.0 — Modo de ubicación activo ([com.alexisgordr.icdetector.core.LocationMode.storedValue]). */
+    private val locationMode: () -> String? = { null },
+    /**
+     * 3.0 — Perfil local en sombra, después de guardar la fila y en la misma cola. Su resultado no
+     * vuelve aquí y sus fallos se absorben: la fila guardada y [onWrite] no cambian.
+     */
+    private val afterWrite: (ObservationRow, Long) -> Unit = { _, _ -> },
+    /** 3.0 (F10) — Fallo absorbido de [afterWrite], para diagnóstico. Tampoco puede fallar hacia aquí. */
+    private val onAfterWriteError: (Throwable) -> Unit = {},
+    /**
+     * 3.0 — Excepción de [insert] (p. ej. SQLiteFullException o SQLiteCantOpenDatabaseException al
+     * abrir la base de datos). Se registra aquí y la fila cuenta como fallida (-1) para [onWrite].
+     */
+    private val onInsertError: (Throwable) -> Unit = {}
 ) {
     private var lastPeriodicWrite = 0L
 
-    /** Todo lo que describe la observación, fijado en el momento de observarla. */
-    private class Snapshot(
-        val cell: CellData,
-        val reason: String,
-        val fix: Location?,
-        val service: ServiceStateSnapshot?,
-        val observedAtMs: Long,
-        val generation: Long
-    )
+    /** Lo que se escribe, con la generación del historial en la que se programó. */
+    private class Pending(val row: ObservationRow, val generation: Long)
 
-    private fun snapshot(cell: CellData, reason: String) = Snapshot(
-        cell = cell,
-        reason = reason,
-        fix = location(),
-        service = serviceState(),
+    /**
+     * 3.0 (A03) — Contexto de la observación que acaba de llegar. Se llama al recibir la lectura,
+     * antes de analizarla. [fix] es la posición que use el análisis; si no se pasa, la actual.
+     */
+    fun capture(fix: ObservedFix? = location()) = ObservationContext(
         observedAtMs = clock(),
-        generation = historyGeneration()
+        fix = fix,
+        service = serviceState(),
+        locationMode = locationMode()
     )
 
-    /** Escribe en orden; null si la fila pertenece a un historial que ya se borró. */
-    private fun write(snapshot: Snapshot): Long? =
-        if (snapshot.generation != historyGeneration()) null else insert(snapshot)
+    private fun pending(cell: CellData, reason: String, context: ObservationContext) =
+        Pending(ObservationRow(cell, reason, context), historyGeneration())
 
-    fun recordHandover(cell: CellData) {
-        record(cell)
-        lastPeriodicWrite = System.currentTimeMillis()
+    /**
+     * Escribe en orden; null si la fila pertenece a un historial que ya se borró.
+     *
+     * 3.0 — Una excepción al escribir cuenta como fila fallida (-1), igual que un insert rechazado.
+     * Antes, si fallaba la apertura de la base de datos (writableDatabase, fuera del insert), la
+     * excepción subía al manejador de corrutinas del servicio, [onWrite] no se llamaba y la salud
+     * de recolección no avisaba de nada. El error no se pierde: va a [onInsertError].
+     */
+    private fun write(pending: Pending): Long? {
+        if (pending.generation != historyGeneration()) return null
+        return try {
+            insert(pending.row)
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            runCatching { onInsertError(e) }
+            -1L
+        }
     }
 
-    fun recordConfirmedAlarm(cell: CellData) =
-        record(cell, cell.suspiciousReason ?: "ALARMA CONFIRMADA")
+    fun recordHandover(cell: CellData, context: ObservationContext) {
+        record(cell, context)
+        lastPeriodicWrite = context.observedAtMs
+    }
 
-    fun recordPeriodicIfDue(cell: CellData, screenOn: Boolean) {
+    fun recordConfirmedAlarm(cell: CellData, context: ObservationContext) =
+        record(cell, context, com.alexisgordr.icdetector.models.StoredReasons.forRow(
+            cell.suspiciousReason ?: "ALARMA CONFIRMADA", cell.dataQualityReason
+        ))
+
+    fun recordPeriodicIfDue(cell: CellData, screenOn: Boolean, context: ObservationContext) {
         if (!isRecordable(cell)) return
-        val now = clock()
+        val now = context.observedAtMs
         val interval = if (screenOn) SCREEN_ON_INTERVAL_MS else SCREEN_OFF_INTERVAL_MS
         if (now - lastPeriodicWrite < interval) return
         lastPeriodicWrite = now
 
-        val snapshot = snapshot(cell, cell.suspiciousReason ?: "OK")
-        scope.launch(writeDispatcher) {
-            val rowId = write(snapshot) ?: return@launch
+        val pending = pending(cell, com.alexisgordr.icdetector.models.StoredReasons.forRow(cell.suspiciousReason, cell.dataQualityReason), context)
+        writeGate.launch(scope, writeDispatcher) {
+            val rowId = write(pending) ?: return@launch
             onWrite(rowId)
-            if (rowId != -1L && snapshot.fix == null && !screenOn) onPeriodicMissingLocation(snapshot.observedAtMs)
+            shadow(pending.row, rowId)
+            if (rowId != -1L && context.fix == null && !screenOn) onPeriodicMissingLocation(context.observedAtMs)
         }
     }
 
-    private fun record(cell: CellData, reason: String = cell.suspiciousReason ?: "OK") {
+    private fun record(
+        cell: CellData,
+        context: ObservationContext,
+        // 3.0 (corte de campaña) — El aviso de calidad de dato (H8) no se muestra, pero sí se guarda.
+        reason: String = com.alexisgordr.icdetector.models.StoredReasons.forRow(cell.suspiciousReason, cell.dataQualityReason)
+    ) {
         if (!isRecordable(cell)) return
-        val snapshot = snapshot(cell, reason)
-        scope.launch(writeDispatcher) {
-            write(snapshot)?.let(onWrite)
+        val pending = pending(cell, reason, context)
+        writeGate.launch(scope, writeDispatcher) {
+            write(pending)?.let { rowId ->
+                onWrite(rowId)
+                shadow(pending.row, rowId)
+            }
         }
     }
 
-    private fun insert(snapshot: Snapshot): Long {
-        val cell = snapshot.cell
-        val fix = snapshot.fix
-        val service = snapshot.service
-        val reason = snapshot.reason
-        return db.logConnection(
-        observedAtMs = snapshot.observedAtMs,
+    private fun shadow(row: ObservationRow, rowId: Long) {
+        if (rowId > 0) runCatching { afterWrite(row, rowId) }.onFailure { e -> runCatching { onAfterWriteError(e) } }
+    }
+
+    private fun isRecordable(cell: CellData): Boolean =
+        cell.cellId != "N/A" && cell.dbm != -999 && cell.dbm != Int.MAX_VALUE
+
+    private companion object {
+        const val SCREEN_ON_INTERVAL_MS = 5L * 60L * 1000L
+        const val SCREEN_OFF_INTERVAL_MS = 15L * 60L * 1000L
+    }
+}
+
+/** Guarda una fila del historial con su contexto de observación y la versión de la app (#30). */
+internal fun CellDbHelper.logObservation(row: ObservationRow, appVersion: String?): Long {
+    val cell = row.cell
+    val fix = row.context.fix
+    val service = row.context.service
+    val reason = row.reason
+    return logConnection(
+        observedAtMs = row.context.observedAtMs,
         netType = cell.networkType,
         cid = cell.cellId,
         mnc = cell.mnc,
@@ -123,15 +188,11 @@ internal class ObservationPersistenceController(
         serviceState = service?.state,
         networkOperator = service?.operatorNumeric,
         simOperator = service?.simOperator,
-        networkRoaming = service?.roaming
-        )
-    }
-
-    private fun isRecordable(cell: CellData): Boolean =
-        cell.cellId != "N/A" && cell.dbm != -999 && cell.dbm != Int.MAX_VALUE
-
-    private companion object {
-        const val SCREEN_ON_INTERVAL_MS = 5L * 60L * 1000L
-        const val SCREEN_OFF_INTERVAL_MS = 15L * 60L * 1000L
-    }
+        networkRoaming = service?.roaming,
+        notEvaluatedHeuristics = cell.heuristicReport.notEvaluatedIds(),
+        gpsAccuracyM = fix?.accuracyM,
+        appVersion = appVersion,
+        locationMode = row.context.locationMode,
+        observationId = row.context.observationId
+    )
 }

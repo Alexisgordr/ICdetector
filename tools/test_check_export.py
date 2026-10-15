@@ -1,3 +1,4 @@
+import re
 import unittest
 from datetime import datetime
 from pathlib import Path
@@ -5,7 +6,9 @@ import sys
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from check_export import (
-    calendar_period_stats, radio_context_summary, ta_consistency_issues, ta_unit_diagnostic
+    LTE_EARFCN_RANGES, bands_outside_table, calendar_period_stats, dataset_cut_summary, evaluation_coverage, gps_accuracy_issues, abstention_reasons, failure_rates, failed_rules, RULE_REASON_PREFIXES,
+    instant_issues, location_mode_summary, profile_summary, profile_row_issue, EXPECTED_COLUMNS_V30_IDS, observation_summary, PROFILE_ABSTAIN_REASONS, radio_context_summary, row_instant, version_key,
+    ta_consistency_issues, ta_unit_diagnostic
 )
 
 
@@ -87,5 +90,264 @@ class RadioContextSummaryTest(unittest.TestCase):
         self.assertEqual(1, summary["invalid_service"])
 
 
+
+
+class ObservedInstantTest(unittest.TestCase):
+    """3.0 (#23) — El instante UTC desambigua la hora repetida del cambio de hora de otoño."""
+
+    def test_repeated_autumn_hour_has_two_distinct_instants(self):
+        # Madrid, 25-10-2026: las 02:30 locales ocurren dos veces (CEST +2 y CET +1).
+        first = {"Timestamp": "2026-10-25 02:30:00", "ObservedAtUtc": "2026-10-25T00:30:00.000Z"}
+        second = {"Timestamp": "2026-10-25 02:30:00", "ObservedAtUtc": "2026-10-25T01:30:00.000Z"}
+        self.assertLess(row_instant(first), row_instant(second))
+        self.assertEqual([], instant_issues([first, second]))
+
+    def test_rows_before_3_0_have_no_instant_and_are_not_flagged(self):
+        legacy = {"Timestamp": "2026-09-01 10:00:00", "ObservedAtUtc": ""}
+        self.assertIsNone(row_instant(legacy))
+        self.assertEqual([], instant_issues([legacy]))
+
+    def test_impossible_offsets_and_unreadable_instants_are_flagged(self):
+        rows = [
+            {"Timestamp": "2026-10-09 12:00:00", "ObservedAtUtc": "2026-10-08T12:00:00.000Z"},
+            {"Timestamp": "2026-10-09 12:07:00", "ObservedAtUtc": "2026-10-09T10:00:00.000Z"},
+            {"Timestamp": "2026-10-09 12:00:00", "ObservedAtUtc": "yesterday"},
+        ]
+        self.assertEqual(3, len(instant_issues(rows)))
+
+    def test_half_hour_zones_are_valid(self):
+        row = {"Timestamp": "2026-10-09 17:30:00", "ObservedAtUtc": "2026-10-09T12:00:00.250Z"}
+        self.assertEqual([], instant_issues([row]))
+
+
+class EvaluationCoverageTest(unittest.TestCase):
+    """3.0 (#29) — Cuánto tiempo fue evaluable cada regla, sin contar las filas antiguas."""
+
+    def test_coverage_counts_only_rows_that_recorded_it(self):
+        rows = [
+            {"NotEvaluatedHeuristics": "H1;H9"},
+            {"NotEvaluatedHeuristics": "H9"},
+            {"NotEvaluatedHeuristics": "NONE"},
+            {"NotEvaluatedHeuristics": ""},          # anterior a 3.0: desconocido
+        ]
+        coverage = evaluation_coverage(rows)
+        self.assertEqual((2, 3), coverage["H1"])
+        self.assertEqual((1, 3), coverage["H9"])
+        self.assertEqual((3, 3), coverage["H5"])
+
+    def test_a_rule_with_its_abstention_reason_is_still_that_rule(self):
+        rows = [
+            {"NotEvaluatedHeuristics": "H1;H3(roaming)"},
+            {"NotEvaluatedHeuristics": "H3(frontera);H9"},
+            {"NotEvaluatedHeuristics": "H1(csg);H2(csg);H3;H5(csg);H6(csg);H7(csg)"},  # H3 sin motivo
+            {"NotEvaluatedHeuristics": "NONE"},
+        ]
+        coverage = evaluation_coverage(rows)
+        self.assertEqual((1, 4), coverage["H3"])
+        self.assertEqual((2, 4), coverage["H1"])
+        self.assertEqual((3, 4), coverage["H5"])
+        self.assertEqual({
+            "H1": {"csg": 1}, "H2": {"csg": 1}, "H3": {"roaming": 1, "frontera": 1},
+            "H5": {"csg": 1}, "H6": {"csg": 1}, "H7": {"csg": 1},
+        }, abstention_reasons(rows))
+
+    def test_failure_rate_counts_failed_over_evaluated(self):
+        rows = [
+            {"NotEvaluatedHeuristics": "H9", "FailedHeuristics": "[sub-umbral] Inconsistencia MCC: servidora 208 ≠ SIM 214, sin roaming ni vecinas con ese MCC"},
+            {"NotEvaluatedHeuristics": "H3(roaming);H9", "FailedHeuristics": "OK"},
+            {"NotEvaluatedHeuristics": "H9", "FailedHeuristics": "[2/3 ciclos confirmando] Salto potencia (>35dB) | Vecinos fantasma | Calidad de dato: EARFCN 4G fuera de la tabla 3GPP"},
+            {"NotEvaluatedHeuristics": "", "FailedHeuristics": "Celda aislada"},  # anterior a 3.0: no cuenta
+        ]
+        rates = failure_rates(rows)
+        self.assertEqual((1, 2), rates["H3"])
+        self.assertEqual((1, 3), rates["H2"])
+        self.assertEqual((1, 3), rates["H7"])
+        self.assertEqual((1, 3), rates["H8"])
+        self.assertEqual((0, 3), rates["H1"])
+        self.assertEqual((0, 0), rates["H9"])
+
+    def test_reasons_that_are_not_rules_match_none(self):
+        self.assertEqual(set(), failed_rules("OK"))
+        self.assertEqual(set(), failed_rules(""))
+        self.assertEqual({"H11", "H15"}, failed_rules(
+            "Inconsistencia RF (PCI/ARFCN) detectada a gran distancia | Identidad RF inestable: misma Cell ID alternando PCI en la misma portadora (posible clon)"))
+        self.assertEqual({"H13"}, failed_rules("Potencia anómala vs historial (+20dB)"))
+
+    def test_every_reason_the_analyzer_writes_maps_to_one_rule(self):
+        root = Path(__file__).resolve().parent.parent / "app/src/main/java/com/alexisgordr/icdetector"
+        analyzer = (root / "core/ThreatAnalyzer.kt").read_text(encoding="utf-8")
+        literals = re.findall(r'reasons\.add\((?:hMobileReason \?: )?"([^"$]+)', analyzer)
+        constants = [
+            re.search(r'const val %s = "([^"]+)"' % name, text).group(1)
+            for name, text in [
+                ("H8_LTE_REASON", analyzer), ("H8_NR_REASON", analyzer),
+                ("REASON_PREFIX", (root / "core/MccConsistencyRule.kt").read_text(encoding="utf-8")),
+                ("H13_POWER_PREFIX", (root / "models/StoredReasons.kt").read_text(encoding="utf-8")),
+                ("H13_RF_PREFIX", (root / "models/StoredReasons.kt").read_text(encoding="utf-8")),
+                ("H15_PREFIX", (root / "models/StoredReasons.kt").read_text(encoding="utf-8")),
+            ]
+        ]
+        detail = re.findall(r'"(Inconsistencia RF[^"]*|Celda detectada a distancia anómala)', analyzer)
+        texts = literals + constants + detail
+        self.assertGreaterEqual(len(literals), 12)
+        for text in texts:
+            self.assertEqual(1, len(failed_rules(text)), text)
+        # Cada regla con motivo tiene al menos uno de esos textos (H9 no escribe ninguno).
+        covered = set().union(*(failed_rules(t) for t in texts))
+        self.assertEqual(set(RULE_REASON_PREFIXES), covered)
+
+    def test_no_rows_with_the_column_means_unknown_not_evaluated(self):
+        coverage = evaluation_coverage([{"NotEvaluatedHeuristics": ""}, {}])
+        self.assertEqual((0, 0), coverage["H1"])
+
+
+class GpsAccuracyTest(unittest.TestCase):
+    NEW = "2026-10-09T10:00:00.000Z"
+
+    def test_accepted_fixes_and_rows_without_position_pass(self):
+        rows = [
+            {"ObservedAtUtc": self.NEW, "Lat": "40.4", "Lon": "-3.7", "GpsAccuracyM": "12.0"},
+            {"ObservedAtUtc": self.NEW, "Lat": "", "Lon": "", "GpsAccuracyM": ""},
+            {"ObservedAtUtc": "", "Lat": "40.4", "Lon": "-3.7", "GpsAccuracyM": ""},  # anterior a 3.0
+        ]
+        self.assertEqual([], gps_accuracy_issues(rows))
+
+    def test_missing_or_impossible_accuracy_is_flagged(self):
+        rows = [
+            {"ObservedAtUtc": self.NEW, "Lat": "40.4", "Lon": "-3.7", "GpsAccuracyM": ""},
+            {"ObservedAtUtc": self.NEW, "Lat": "40.4", "Lon": "-3.7", "GpsAccuracyM": "150.0"},
+            {"ObservedAtUtc": self.NEW, "Lat": "", "Lon": "", "GpsAccuracyM": "10.0"},
+        ]
+        self.assertEqual(3, len(gps_accuracy_issues(rows)))
+
+
+class DatasetCutTest(unittest.TestCase):
+    """3.0 (#30) — Con la versión por fila, cada corte de dataset se aplica fila a fila."""
+
+    def test_pre_release_counts_as_its_base_version(self):
+        self.assertEqual((3, 0, 0), version_key("3.0.0-beta1"))
+        self.assertEqual((2, 10, 10), version_key("2.10.10"))
+        # 3.0 — El commit de la compilación tras "+" no cambia la versión.
+        self.assertEqual((3, 0, 0), version_key("3.0.0-beta4+6bb5ed3"))
+        self.assertEqual((3, 0, 0), version_key("3.0.0+6bb5ed3-dirty"))
+        self.assertEqual((3, 0, 0), version_key("3.0.0+nogit"))
+        self.assertIsNone(version_key(""))
+        self.assertIsNone(version_key("unknown"))
+
+    def test_rows_are_split_by_each_cut_and_legacy_rows_stay_unknown(self):
+        rows = [{"AppVersion": "3.0.0-beta1"}, {"AppVersion": "3.0.0-beta1"},
+                {"AppVersion": "3.1.0"}, {"AppVersion": ""}]
+        versions, unknown, cuts = dataset_cut_summary(rows)
+        self.assertEqual(1, unknown)
+        self.assertEqual(2, versions["3.0.0-beta1"])
+        by_cut = {cut: (before, after) for cut, _, before, after in cuts}
+        self.assertEqual((0, 3), by_cut["3.0.0"])
+        self.assertEqual((0, 3), by_cut["2.10.10"])
+
+
+class LteBandTableTest(unittest.TestCase):
+    """3.0 (#32) — La tabla del validador es la misma que la de la app."""
+
+    def test_python_table_matches_bandplan_kt(self):
+        import re
+        source = (Path(__file__).resolve().parent.parent /
+                  "app/src/main/java/com/alexisgordr/icdetector/core/BandPlan.kt").read_text(encoding="utf-8")
+        kotlin = {int(b): (int(lo), int(hi))
+                  for b, lo, hi in re.findall(r"LteBand\((\d+), [\d.]+, (\d+), (\d+)\)", source)}
+        self.assertEqual(kotlin, LTE_EARFCN_RANGES)
+
+    def test_rows_with_declared_bands_outside_the_table_are_counted(self):
+        rows = [
+            {"Radio": "LTE", "Bands": "3", "ARFCN": "1500"},
+            {"Radio": "LTE", "Bands": "252", "ARFCN": "255500"},
+            {"Radio": "LTE", "Bands": "", "ARFCN": "255500"},
+            {"Radio": "NR", "Bands": "78", "ARFCN": "632448"},
+        ]
+        with_bands, outside, declared = bands_outside_table(rows)
+        self.assertEqual((2, 1), (with_bands, outside))
+        self.assertEqual(1, declared["252"])
+
+    def test_location_modes_are_counted_and_unknown_kept_apart(self):
+        rows = [
+            {"LocationMode": "CONTINUOUS"}, {"LocationMode": "ADAPTIVE"},
+            {"LocationMode": "ADAPTIVE"}, {"LocationMode": "INTELLIGENT"},
+            {"LocationMode": ""}, {}, {"LocationMode": "GPS"},
+        ]
+        modes, unknown, invalid = location_mode_summary(rows)
+        self.assertEqual(1, modes["CONTINUOUS"])
+        self.assertEqual(2, modes["ADAPTIVE"])
+        self.assertEqual(1, modes["INTELLIGENT"])
+        self.assertEqual((2, 1), (unknown, invalid))
+
+    def test_profile_evaluations_are_counted_and_incoherent_rows_flagged(self):
+        rows = [
+            {"ProfileMode": "SHADOW", "ProfileLevel": "NONE", "ProfileScore": "0.50"},
+            {"ProfileMode": "SHADOW", "ProfileLevel": "HIGH", "ProfileScore": "4.20"},
+            {"ProfileMode": "SHADOW", "ProfileLevel": "ABSTAIN", "ProfileAbstainReason": "PROFILE_IMMATURE"},
+            {"ProfileLevel": ""}, {},
+            {"ProfileMode": "SHADOW", "ProfileLevel": "ABSTAIN", "ProfileScore": "1.00"},
+            {"ProfileMode": "SHADOW", "ProfileLevel": "LOW"},
+            {"ProfileMode": "SHADOW", "ProfileLevel": "PROBABLE", "ProfileScore": "0.9"},
+        ]
+        levels, modes, missing, invalid = profile_summary(rows)
+        self.assertEqual((1, 1, 1), (levels["NONE"], levels["HIGH"], levels["ABSTAIN"]))
+        self.assertEqual(3, modes["SHADOW"])
+        self.assertEqual((2, 3), (missing, invalid))
+
+    def test_profile_rows_with_impossible_values_are_flagged(self):
+        good = {"ProfileMode": "SHADOW", "ProfileLevel": "HIGH", "ProfileScore": "4.20", "ProfileCoverage": "1/2",
+                "ProfileAbstainReason": "", "ProfileAlgorithm": "2", "ProfileLearned": "1", "ProfileHoldout": "0"}
+        self.assertIsNone(profile_row_issue(good))
+        abstain = dict(good, ProfileLevel="ABSTAIN", ProfileScore="", ProfileCoverage="0/2",
+                       ProfileAbstainReason="PROFILE_IMMATURE")
+        self.assertIsNone(profile_row_issue(abstain))
+        # Redondeo: 1.996 se exporta como 2.00 con nivel NONE, y 3.996 como 4.00 con MODERATE.
+        self.assertIsNone(profile_row_issue(dict(good, ProfileLevel="NONE", ProfileScore="2.00")))
+        self.assertIsNone(profile_row_issue(dict(good, ProfileLevel="MODERATE", ProfileScore="4.00")))
+        bad = [
+            dict(good, ProfileScore="not-a-number"), dict(good, ProfileScore="NaN"), dict(good, ProfileScore="-10"),
+            dict(good, ProfileScore="inf"), dict(good, ProfileScore="1.20"), dict(good, ProfileLevel="LOW", ProfileScore="3.50"),
+            dict(good, ProfileCoverage="5/2"), dict(good, ProfileCoverage="0/2"), dict(good, ProfileCoverage="x"),
+            dict(good, ProfileCoverage="1/0"), dict(abstain, ProfileCoverage="1/2"),
+            dict(good, ProfileAlgorithm="-1"), dict(good, ProfileAlgorithm="0"),
+            dict(good, ProfileLearned="1", ProfileHoldout="1"), dict(good, ProfileLearned="yes"),
+            dict(abstain, ProfileAbstainReason="BECAUSE"),
+        ]
+        for row in bad:
+            self.assertIsNotNone(profile_row_issue(row), row)
+        _, _, _, invalid = profile_summary(bad)
+        self.assertEqual(len(bad), invalid)
+
+    def test_abstain_reasons_match_the_app(self):
+        kotlin = (Path(__file__).resolve().parent.parent /
+                  "app/src/main/java/com/alexisgordr/icdetector/core/profile/LocalProfileModel.kt").read_text(encoding="utf-8")
+        body = kotlin.split("enum class AbstainReason {")[1].split("}")[0]
+        body = re.sub(r"/\*\*.*?\*/", "", body, flags=re.S)
+        names = [n.strip() for n in body.split(",") if n.strip()]
+        self.assertEqual(list(PROFILE_ABSTAIN_REASONS), names)
+
+    def test_old_exports_without_the_extra_profile_columns_are_not_rejected(self):
+        self.assertIsNone(profile_row_issue({"ProfileMode": "SHADOW", "ProfileLevel": "LOW", "ProfileScore": "2.5"}))
+
+    def test_columns_match_the_app_with_profile_then_ids_last(self):
+        kotlin = (Path(__file__).resolve().parent.parent /
+                  "app/src/main/java/com/alexisgordr/icdetector/utils/ExportUtils.kt").read_text(encoding="utf-8")
+        header = "".join(re.findall(r'"([^"]*)"', kotlin.split("const val CSV_HEADER =")[1].split("const val")[0]))
+        self.assertEqual(EXPECTED_COLUMNS_V30_IDS, header.split(","))
+
+    def test_rows_of_the_same_reading_are_grouped(self):
+        rows = [
+            {"RowId": "1", "ObservationId": "a"}, {"RowId": "2", "ObservationId": "a"},
+            {"RowId": "3", "ObservationId": "b"}, {"RowId": "4", "ObservationId": ""},
+        ]
+        self.assertEqual((1, 1, 2, 0), observation_summary(rows))
+
+    def test_repeated_row_ids_are_counted(self):
+        rows = [{"RowId": "7", "ObservationId": "a"}, {"RowId": "7", "ObservationId": "b"}, {"RowId": "", "ObservationId": "c"}]
+        self.assertEqual((0, 0, 0, 1), observation_summary(rows))
+
 if __name__ == "__main__":
     unittest.main()
+
+
+

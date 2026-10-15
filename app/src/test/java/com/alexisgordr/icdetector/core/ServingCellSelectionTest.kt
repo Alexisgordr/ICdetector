@@ -117,4 +117,46 @@ class ServingCellSelectionTest {
 
         assertEquals(listOf("100", "301", "302"), ordered.map { it.cellId })
     }
+
+    // ── 3.0 — Fallback sin primaria declarada y duplicados con datos desconocidos ─────────────
+
+    private fun raw(cid: String, state: CellConnectionState, arfcn: Int?, pci: Int?, registered: Boolean = true, radio: RadioTech = RadioTech.LTE) =
+        CellData(isRegistered = registered, networkType = "4G LTE", cellId = cid, mnc = "07", tac = "31601", dbm = -90,
+            mcc = "214", radioTech = radio, arfcn = arfcn, pci = pci, connectionState = state)
+
+    @Test
+    fun `without a declared primary the fallback never picks a declared secondary`() {
+        // Módem que solo rellena el estado de la pata NR (SECONDARY) y deja la LTE sin estado.
+        val nrLeg = raw("nr", CellConnectionState.SECONDARY_SERVING, 632_448, 100, radio = RadioTech.NR)
+        val lte = raw("lte", CellConnectionState.UNKNOWN, 1301, 48)
+        assertEquals(1, ServingCellSelection.primaryIndex(listOf(nrLeg, lte)))
+        assertEquals("lte", ServingCellSelection.withPrimaryFirst(listOf(nrLeg, lte)).first().cellId)
+        // Si solo hay secundarias declaradas, abstención.
+        assertEquals(-1, ServingCellSelection.primaryIndex(listOf(nrLeg)))
+        // Sin estado en ninguna: la primera registrada, como antes.
+        assertEquals(0, ServingCellSelection.primaryIndex(listOf(lte, raw("x", CellConnectionState.UNKNOWN, 6400, 200))))
+    }
+
+    @Test
+    fun `unknown ARFCN and PCI are not a match, so the entry is not dropped as a duplicate`() {
+        val primary = raw("p", CellConnectionState.PRIMARY_SERVING, null, null)
+        val other = raw("s", CellConnectionState.SECONDARY_SERVING, null, null)
+        assertEquals(1, ServingCellSelection.secondaryCarriers(listOf(primary, other), 0).size)
+        // Fuera de rango tampoco es coincidencia.
+        val bad = raw("p", CellConnectionState.PRIMARY_SERVING, Int.MAX_VALUE, 999)
+        assertEquals(1, ServingCellSelection.secondaryCarriers(listOf(bad, raw("s", CellConnectionState.SECONDARY_SERVING, Int.MAX_VALUE, 999)), 0).size)
+        // Con los dos valores válidos e iguales sí es la misma portadora.
+        val known = raw("p", CellConnectionState.PRIMARY_SERVING, 1301, 48)
+        assertEquals(0, ServingCellSelection.secondaryCarriers(listOf(known, raw("dup", CellConnectionState.SECONDARY_SERVING, 1301, 48)), 0).size)
+    }
+
+    @Test
+    fun `repeated secondaries are merged only when their channel and PCI are known`() {
+        val primary = raw("p", CellConnectionState.PRIMARY_SERVING, 1301, 48)
+        val known = raw("a", CellConnectionState.SECONDARY_SERVING, 6400, 200)
+        val unknown = raw("u", CellConnectionState.SECONDARY_SERVING, null, null)
+        val list = ServingCellSelection.secondaryCarriers(listOf(primary, known, known.copy(cellId = "b"), unknown, unknown.copy(cellId = "v")), 0)
+        assertEquals(3, list.size)
+        assertEquals(2, list.count { it.arfcn == null })
+    }
 }

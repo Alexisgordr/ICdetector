@@ -24,10 +24,17 @@ class TransitionCoherenceTest {
         to: List<CellLocationSample> = barcelona,
         prior: Int = 0,
         neighbor: Boolean = false,
-        accuracy: Float = 10f
+        accuracy: Float = 10f,
+        // 3.0 — Por defecto el teléfono está en la zona de origen (Madrid): el caso que H16 persigue.
+        here: CellLocationSample? = madrid.first()
     ) = TransitionCoherence.Input(
         fromIdentity = "214-01-1-A-LTE", toIdentity = "214-01-1-B-LTE",
-        elapsedSeconds = 5, deviceDistanceMeters = moved,
+        elapsedSeconds = 5,
+        // 3.0 — Dos fixes propios, distintos y recientes (ver TransitionGpsFreshnessTest).
+        previous = TransitionCoherence.Endpoint(100_000L, 98_000L * 1_000_000L),
+        current = TransitionCoherence.Endpoint(105_000L, 104_000L * 1_000_000L),
+        deviceDistanceMeters = moved,
+        currentPosition = here,
         previousAccuracyMeters = accuracy, currentAccuracyMeters = accuracy,
         fromSamples = from, toSamples = to, priorTrustedTransitions = prior,
         destinationWasNeighbor = neighbor
@@ -104,8 +111,7 @@ class TransitionCoherenceTest {
             tac = "1", dbm = -90, mcc = "214"
         )
         val analyzed = ThreatAnalyzer.analyzeThreats(
-            active = cell, neighbors = emptyList(), isHardwareCipheringActive = true,
-            cellChangeHistory = emptyList(), currentLocation = null,
+            active = cell, neighbors = emptyList(), cellChangeHistory = emptyList(), currentLocation = null,
             transitionCoherence = TransitionCoherenceResult(
                 status = HeuristicStatus.FAILED, explanation = "test",
                 fromIdentity = "A", toIdentity = "B"

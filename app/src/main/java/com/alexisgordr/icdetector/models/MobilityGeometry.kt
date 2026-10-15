@@ -3,6 +3,7 @@ package com.alexisgordr.icdetector.models
 import com.alexisgordr.icdetector.core.MobilityEdge
 import com.alexisgordr.icdetector.core.MobilityFamiliarity
 import com.alexisgordr.icdetector.core.MobilityFamiliarityConfig
+import com.alexisgordr.icdetector.core.MobilityFamiliarityPolicy
 
 data class MobilityTripSummary(
     val tripId: String,
@@ -37,7 +38,9 @@ data class MobilityGeometrySnapshot(
     val transitions: List<CellTransitionSummary>,
     val trips: List<MobilityTripSummary>,
     val pendingEdges: Set<MobilityEdge>,
-    val cells: List<MobilityCellPresentation>
+    val cells: List<MobilityCellPresentation>,
+    /** 3.0 (G2) — Familiaridad histórica de la celda actual del viaje abierto (todas sus aristas). */
+    val currentCell: MobilityFamiliarityPolicy.Assessment? = null
 ) {
     val openTrip: MobilityTripSummary? get() = trips.firstOrNull { it.state == "OPEN" }
 }
@@ -63,14 +66,10 @@ object MobilityGeometryProjection {
             val incoming = incomingByCell[identity].orEmpty()
             val outgoing = outgoingByCell[identity].orEmpty()
             val incident = incoming + outgoing
-            val good = incident.count { it.tripCount >= config.priorTripsRequired }
-            val familiarity = when {
-                good >= config.goodEdgesRequired -> MobilityFamiliarity.KNOWN_ON_ROUTE
-                incident.any { it.tripCount > 0 } -> MobilityFamiliarity.OBSERVED_ON_ROUTE
-                else -> MobilityFamiliarity.UNKNOWN_ON_ROUTE
-            }
+            // 3.0 (G2) — La misma política que el servicio (MobilityFamiliarityPolicy).
+            val assessment = MobilityFamiliarityPolicy.assess(incident.map { it.tripCount }, config)
             MobilityCellPresentation(
-                identity, identity.substringAfterLast('-', "UNKNOWN"), null, familiarity, good,
+                identity, identity.substringAfterLast('-', "UNKNOWN"), null, assessment.familiarity, assessment.goodEdges,
                 incident.maxOfOrNull { it.tripCount } ?: 0,
                 incoming.size, outgoing.size, incoming.sumOf { it.observations }, outgoing.sumOf { it.observations },
                 incoming.sumOf { it.trustedObservations }, outgoing.sumOf { it.trustedObservations },

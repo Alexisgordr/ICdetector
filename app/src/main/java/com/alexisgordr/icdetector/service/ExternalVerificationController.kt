@@ -3,7 +3,13 @@ package com.alexisgordr.icdetector.service
 import com.alexisgordr.icdetector.core.HistoryEpoch
 
 import android.location.Location
+import com.alexisgordr.icdetector.core.ApiCoordinateCheck
+import com.alexisgordr.icdetector.core.ExternalFailure
+import com.alexisgordr.icdetector.core.MobilityClock
+import com.alexisgordr.icdetector.core.VerificationAttempts
 import com.alexisgordr.icdetector.core.VerificationDecision
+import com.alexisgordr.icdetector.core.VerificationPauseGate
+import com.alexisgordr.icdetector.core.VerificationPauseState
 import com.alexisgordr.icdetector.models.CellData
 import com.alexisgordr.icdetector.models.VerificationStatus
 import com.alexisgordr.icdetector.models.identityKey
@@ -21,8 +27,8 @@ internal class ExternalVerificationController(
     private val db: CellDbHelper,
     private val client: OkHttpClient,
     private val coordinateValidator: ApiCoordinateValidator,
-    private val apiKey: () -> String,
-    private val proxyEnabled: () -> Boolean,
+    /** 3.0 (V4) — Clave y ruta juntas, publicadas de forma atómica; cada consulta usa una instantánea. */
+    private val config: com.alexisgordr.icdetector.core.VerificationConfigHolder,
     private val currentLocation: () -> Location?,
     private val cache: ConcurrentHashMap<String, VerificationStatus>,
     private val errorTimes: ConcurrentHashMap<String, Long>,
@@ -39,7 +45,10 @@ internal class ExternalVerificationController(
      * escribe ni publica nada al terminar: antes podía repoblar las cachés y actualizar filas nuevas
      * con el resultado de una verificación de antes del borrado.
      */
-    private val historyEpoch: HistoryEpoch = HistoryEpoch()
+    private val historyEpoch: HistoryEpoch = HistoryEpoch(),
+    /** 3.0 (V1) — Pausa global de consultas de red, por credencial (ver VerificationPauseGate). */
+    private val pauseGate: VerificationPauseGate = VerificationPauseGate(),
+    private val clock: () -> MobilityClock = { MobilityClock(System.currentTimeMillis(), System.nanoTime() / 1_000_000, null) }
 ) {
     /** Ejecuta [block] solo si el historial no se ha borrado desde que empezó la consulta. */
     private fun ifCurrent(generation: Long, block: () -> Unit): Boolean =
@@ -53,8 +62,9 @@ internal class ExternalVerificationController(
         if (!mayAttempt(key, cache[key])) return
         val generation = historyEpoch.current()
 
-        val token = apiKey().trim()
-        if (token.isBlank() || token.startsWith("pk.YOUR")) {
+        // 3.0 (V4) — Una instantánea para toda la consulta: la clave y la ruta de la misma versión.
+        val snapshot = config.current()
+        if (!snapshot.hasCredentials) {
             // v2.10.10 — La re-comprobación de un VERIFIED en memoria es local (base de datos y su
             // TTL) y no necesita OpenCellID: antes, sin credenciales, se salía aquí y la etiqueta
             // podía seguir caducada indefinidamente.
@@ -67,7 +77,7 @@ internal class ExternalVerificationController(
         }
         loggedMissingCredentials = false
 
-        synchronized(cache) {
+        val query = synchronized(cache) {
             if (!mayAttempt(key, cache[key])) return
             if (cache[key] == VerificationStatus.VERIFIED) {
                 // Re-comprobación periódica (v2.10.10): la etiqueta sigue siendo VERIFIED mientras
@@ -76,22 +86,20 @@ internal class ExternalVerificationController(
             } else {
                 cache[key] = VerificationStatus.PENDING
             }
+            // 3.0 (V4) — Esta consulta es la dueña del pendiente de la celda.
+            attempts.claim(key)
         }
 
         scope.launch(Dispatchers.IO) {
-            try {
-                verifyNow(cell, key, token, generation)
-            } catch (e: Exception) {
-                // Sin esto la antena se quedaba en PENDING en la caché y mayAttempt() no la
-                // volvía a intentar hasta reiniciar el servicio. Como ERROR se reintenta sola.
-                ifCurrent(generation) {
-                    if (cache[key] == VerificationStatus.PENDING) {
-                        cache[key] = VerificationStatus.ERROR
-                        errorTimes[key] = now()
-                    }
-                }
-                log("Error al verificar (${e.javaClass.simpleName}). Se reintentará más tarde.")
-            }
+            // 3.0 (V4) — El error se gestiona con la consulta aún dueña (configuración vigente y
+            // propiedad, juntas); la propiedad se libera en el finally exterior, después del catch.
+            attempts.run(key, query, snapshot, { block -> ifCurrent(generation, block) },
+                body = { verifyNow(cell, key, query, snapshot, generation) },
+                onFailure = { e, _ ->
+                    // Sin esto la antena se quedaba en PENDING y mayAttempt() no la volvía a intentar
+                    // hasta reiniciar el servicio. Como ERROR se reintenta sola.
+                    log("Error al verificar (${e.javaClass.simpleName}). Se reintentará más tarde.")
+                })
         }
     }
 
@@ -115,7 +123,7 @@ internal class ExternalVerificationController(
         }
     }
 
-    private fun verifyNow(cell: CellData, key: String, token: String, generation: Long) {
+    private fun verifyNow(cell: CellData, key: String, query: Long, snapshot: com.alexisgordr.icdetector.core.VerificationConfig, generation: Long) {
         val loc = currentLocation()
         val stored = db.getKnownStatus(
             cell.mnc, cell.tac, cell.cellId, cell.mcc,
@@ -132,10 +140,54 @@ internal class ExternalVerificationController(
             return
         }
 
+        // 3.0 (V1) — Pausa global: después de la comprobación local (que nunca se bloquea) y antes de
+        // la red. Es de la credencial, no de la celda: cambiar de celda no la salta.
+        pauseGate.blocking(snapshot.credentialFingerprint, clock())?.let { pause ->
+            val applied = config.applyIfCurrent(snapshot) {
+                logPauseOnce(pause)
+                ifCurrent(generation) {
+                    if (attempts.owns(key, query) && cache[key] == VerificationStatus.PENDING) {
+                        // Sin consulta no hay veredicto: ERROR (no se sabe), que solo se reintenta en local
+                        // mientras dure la pausa. Nunca NOT_FOUND: un límite no dice que la celda no exista.
+                        cache[key] = VerificationStatus.ERROR
+                        errorTimes[key] = now()
+                        errorRetryMs.remove(key)
+                        publish(cell, VerificationStatus.ERROR, generation)
+                    }
+                }
+            }
+            if (!applied) discardStale(key, query, generation)
+            return
+        }
+
         log("Verificando antena MCC ${cell.mcc} · MNC ${cell.mnc} · TAC ${cell.tac} · CID ${cell.cellId}")
-        val result = OpenCellIdClient.tryOpenCellIdSyncWithData(cell, token, proxyEnabled(), client)
+        val result = OpenCellIdClient.tryOpenCellIdSyncWithData(cell, snapshot, client, config)
+        // 3.0 (V4) — Si la configuración cambió durante la consulta, su resultado no se aplica: ni
+        // cachés, ni pausas, ni base, ni pantalla. La comprobación y los efectos van juntos bajo el
+        // candado de la configuración: un cambio de ajustes no puede colarse entre ambos.
+        val applied = result.failure != com.alexisgordr.icdetector.network.VerificationFailure.CONFIG_CHANGED &&
+            config.applyIfCurrent(snapshot) { applyResult(cell, key, snapshot, result, generation) }
+        if (!applied) discardStale(key, query, generation)
+    }
+
+    /** Descarta una consulta de ajustes anteriores: solo quita el pendiente si sigue siendo suyo. */
+    private fun discardStale(key: String, query: Long, generation: Long) {
+        attempts.discard(key, query) { block -> ifCurrent(generation, block) }
+        log("OpenCellID: consulta descartada; la configuración cambió mientras se hacía.")
+    }
+
+    /** Efectos de una respuesta de la configuración VIGENTE; se llama con su candado tomado. */
+    private fun applyResult(
+        cell: CellData, key: String, snapshot: com.alexisgordr.icdetector.core.VerificationConfig,
+        result: com.alexisgordr.icdetector.network.VerificationOutcome, generation: Long
+    ) {
         log("OpenCellID → ${result.status.name}")
         result.reason?.let(log)
+        // 3.0 (V1) — Solo la configuración vigente (bajo su candado) puede abrir o cerrar una pausa.
+        pauseGate.onResult(snapshot.credentialFingerprint, result.externalFailure, result.retryAfterMillis, clock())
+            ?.let(::logPauseOnce)
+        if (result.externalFailure == ExternalFailure.INVALID_INPUT) errorRetryMs[key] = VerificationPauseGate.INVALID_INPUT_RETRY_MS
+        else errorRetryMs.remove(key)
 
         var status = result.status
         val data = result.record
@@ -143,7 +195,10 @@ internal class ExternalVerificationController(
             val lat = data.optDouble("lat", Double.NaN)
             val lon = data.optDouble("lon", Double.NaN)
             val hasCoordinates = !lat.isNaN() && !lon.isNaN()
-            if (hasCoordinates && coordinateValidator.isValid(lat, lon, cell)) {
+            val check = if (hasCoordinates) coordinateValidator.check(lat, lon, cell) else null
+            if (check != null && check.result != ApiCoordinateCheck.Result.REJECTED) {
+                // 3.0 (V3) — Sin posición propia fiable no se rechaza, pero se dice que no hubo contraste.
+                if (check.result == ApiCoordinateCheck.Result.FOUND_WITHOUT_DISTANCE_CHECK) log(ApiCoordinateCheck.LOG_NO_DISTANCE_CHECK)
                 completeVerified(cell, key, lat, lon, generation)
                 return
             }
@@ -225,7 +280,7 @@ internal class ExternalVerificationController(
 
     private fun mayAttempt(key: String, status: VerificationStatus?): Boolean = when (status) {
         null -> true
-        VerificationStatus.ERROR -> now() - (errorTimes[key] ?: 0L) >= ERROR_RETRY_MS
+        VerificationStatus.ERROR -> now() - (errorTimes[key] ?: 0L) >= (errorRetryMs[key] ?: ERROR_RETRY_MS)
         VerificationStatus.NOT_FOUND -> now() - (notFoundTimes[key] ?: 0L) >= RECHECK_MS
         VerificationStatus.REJECTED -> now() - (rejectedTimes[key] ?: 0L) >= RECHECK_MS
         // v2.10.10 — Antes VERIFIED no caducaba nunca dentro de una sesión: con el servicio en
@@ -244,6 +299,33 @@ internal class ExternalVerificationController(
         }
 
     private fun now() = System.currentTimeMillis()
+
+    /** 3.0 (V1) — Espera propia de un ERROR de esa celda (entrada inválida); por defecto ERROR_RETRY_MS. */
+    private val errorRetryMs = ConcurrentHashMap<String, Long>()
+
+    /** 3.0 (V1) — La última pausa anunciada: una línea por pausa, no una por celda o intento. */
+    @Volatile private var loggedPause: VerificationPauseState? = null
+
+    private fun logPauseOnce(pause: VerificationPauseState) {
+        val same = loggedPause?.let { it.kind == pause.kind && it.fingerprint == pause.fingerprint && it.untilCivilMs == pause.untilCivilMs }
+        if (same == true) return
+        loggedPause = pause
+        log(VerificationPauseGate.describe(pause, clock()))
+    }
+
+    /**
+     * 3.0 (V1) — La configuración cambió (clave o ruta): la pausa de otra credencial y la transitoria
+     * dejan de aplicar, y las celdas en ERROR pueden volver a intentarlo ya con la nueva.
+     */
+    fun onConfigChanged() {
+        pauseGate.onConfigChanged(config.current().credentialFingerprint)
+        loggedPause = null
+        errorRetryMs.clear()
+        errorTimes.keys.forEach { errorTimes[it] = 0L }
+    }
+
+    /** 3.0 (V4) — Propiedad del pendiente de cada celda y su ciclo (reclamar, fallar, liberar). */
+    private val attempts = VerificationAttempts(cache, errorTimes, config, ::now) { errorRetryMs.remove(it) }
 
     /** Última vez que se comprobó que una celda VERIFIED sigue siéndolo. */
     private val verifiedCheckedAt = ConcurrentHashMap<String, Long>()

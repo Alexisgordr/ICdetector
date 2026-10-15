@@ -8,14 +8,25 @@ import com.alexisgordr.icdetector.models.LocalCellTrustState
 import com.alexisgordr.icdetector.models.LOCAL_TRUST_RECONFIGURATION_REASON
 import com.alexisgordr.icdetector.models.RadioTech
 
-/** Builds a slow, revocable local confidence profile with a deliberate 98% epistemic ceiling. */
+/**
+ * Builds a slow, revocable local confidence profile with a deliberate 98% epistemic ceiling.
+ *
+ * Once a cell is eligible, any contradiction (PCI/ARFCN not learned, H11 or H16 failed) marks it
+ * CHANGED and freezes it out of learning. It becomes an alarm candidate only with an RF change
+ * (PCI or ARFCN) PLUS a failed H11 (geography) or H16 (handover). That is two different signals,
+ * not two independent ones: they can share data and causes. H11 also reads the cell's PCI/ARFCN
+ * history, H11 and H16 read the same GPS fix and stored positions, and a legitimate re-planning or
+ * a wrong GPS fix can produce both. The candidate is then only marked suspicious here; it still
+ * passes through the episode tracker and [TemporalConfidence] before any alert.
+ */
 object LocalCellTrustEngine {
     const val MAX_CONFIDENCE = 98
     const val REQUIRED_DAYS = 14
     const val REQUIRED_CLEAN_OBSERVATIONS = 20
-    private fun acceptedReconfiguration(cell: CellData, evidence: LocalCellTrustEvidence): Boolean {
+    private fun acceptedReconfiguration(pci: Int?, arfcn: Int?, evidence: LocalCellTrustEvidence): Boolean {
         val candidate = evidence.reconfigurationCandidate ?: return false
-        return cell.pci == candidate.pci && cell.arfcn == candidate.arfcn &&
+        if (pci == null || arfcn == null) return false
+        return pci == candidate.pci && arfcn == candidate.arfcn &&
             candidate.distinctDays >= REQUIRED_DAYS &&
             candidate.cappedObservations >= REQUIRED_CLEAN_OBSERVATIONS &&
             candidate.locatedObservations >= 8 && candidate.ageHours >= 13L * 24L &&
@@ -23,6 +34,17 @@ object LocalCellTrustEngine {
     }
 
     fun apply(cell: CellData, evidence: LocalCellTrustEvidence, stableSite: StableSiteDecision = StableSiteDecision()): CellData {
+        // 3.0 — Without a readable Cell ID nobody knows which cell this reading is. The service
+        // only refreshes its cached evidence for a readable one, so here it would be the previous
+        // cell's: a mature profile could then accuse another cell of a PCI/ARFCN change. Such a
+        // reading is judged with no local evidence at all.
+        val usable = if (ServingIdentityChange.hasReadableCellId(ServingIdentityChange.of(cell))) {
+            evidence
+        } else LocalCellTrustEvidence()
+        return evaluate(cell, usable, stableSite)
+    }
+
+    private fun evaluate(cell: CellData, evidence: LocalCellTrustEvidence, stableSite: StableSiteDecision): CellData {
         val confidence = confidence(cell, evidence)
         val rfIdentityReady = when (cell.radioTech) {
             RadioTech.LTE -> evidence.knownPcisByArfcn.isNotEmpty()
@@ -36,20 +58,26 @@ object LocalCellTrustEngine {
             evidence.locatedObservations >= 8 && evidence.rfObservations >= 10 &&
             evidence.trustedTransitions >= 3 && rfIdentityReady
 
+        // 3.0 — The current PCI/ARFCN are validated per technology exactly like the learned
+        // references (RadioChannels) before any lookup or comparison: an absent value, a sentinel
+        // (Int.MAX_VALUE) or an out-of-range value is "unknown", never an RF contradiction by
+        // itself. CellData keeps the original values, so H8 still sees and fails them.
+        val pci = RadioChannels.physicalIdOrNull(cell.radioTech, cell.pci)
+        val arfcn = RadioChannels.channelOrNull(cell.radioTech, cell.arfcn)
         val contradictions = linkedSetOf<String>()
         if (eligible) {
             if (cell.radioTech == RadioTech.LTE || cell.radioTech == RadioTech.NR) {
-                val accepted = acceptedReconfiguration(cell, evidence)
-                val carrierPcis = cell.arfcn?.let(evidence.knownPcisByArfcn::get)
-                if (!accepted && cell.arfcn != null && carrierPcis == null) contradictions += "ARFCN"
-                if (!accepted && cell.pci != null && carrierPcis != null && cell.pci !in carrierPcis) {
+                val accepted = acceptedReconfiguration(pci, arfcn, evidence)
+                val carrierPcis = arfcn?.let(evidence.knownPcisByArfcn::get)
+                if (!accepted && arfcn != null && carrierPcis == null) contradictions += "ARFCN"
+                if (!accepted && pci != null && carrierPcis != null && pci !in carrierPcis) {
                     contradictions += "PCI"
                 }
             } else {
-                if (cell.pci != null && evidence.knownPcis.isNotEmpty() && cell.pci !in evidence.knownPcis) {
+                if (pci != null && evidence.knownPcis.isNotEmpty() && pci !in evidence.knownPcis) {
                     contradictions += "PCI"
                 }
-                if (cell.arfcn != null && evidence.knownArfcns.isNotEmpty() && cell.arfcn !in evidence.knownArfcns) {
+                if (arfcn != null && evidence.knownArfcns.isNotEmpty() && arfcn !in evidence.knownArfcns) {
                     contradictions += "ARFCN"
                 }
             }
@@ -58,8 +86,10 @@ object LocalCellTrustEngine {
         }
 
         val rfChanged = "PCI" in contradictions || "ARFCN" in contradictions
-        val independentContradiction = "GEOMETRY" in contradictions || "HANDOVER" in contradictions
-        val alarmCandidate = eligible && rfChanged && independentContradiction
+        // A second, different signal (H11 or H16), not an independent one: see the class comment.
+        val positionOrHandoverContradiction = "GEOMETRY" in contradictions || "HANDOVER" in contradictions
+        val alarmCandidate = eligible && rfChanged && positionOrHandoverContradiction
+        // Solo reglas de evidencia: un H8 fallado (calidad de dato) no pone la celda en cuarentena.
         val hasFailures = cell.heuristicReport.failedCount > 0
         val state = when {
             contradictions.isNotEmpty() -> LocalCellTrustState.CHANGED
@@ -85,9 +115,17 @@ object LocalCellTrustEngine {
             localCellTrust = trust,
             // TemporalConfidence marks this as sub-threshold before persistence. Keeping a reason
             // is what freezes CHANGED observations out of every trusted-learning query.
+            // 3.0 — Added to the reasons other rules already wrote, never replacing them (it used
+            // to overwrite them). Only a row whose SOLE reason is this marker matches
+            // LOCAL_TRUST_RECONFIGURATION_HISTORY_LIKE; see CellDbHelper's reconfiguration candidate.
             suspiciousReason = when {
-                contradictions.isNotEmpty() -> reason
-                stableSite.enforced -> "[site-unverified] ${stableSite.reason}"
+                contradictions.isNotEmpty() -> com.alexisgordr.icdetector.models.StoredReasons.append(cell.suspiciousReason, reason)
+                // 3.0 — Also added, never replacing: it used to overwrite the reasons of other rules
+                // (a power jump with an unverified site was stored with the site marker only).
+                stableSite.enforced -> com.alexisgordr.icdetector.models.StoredReasons.append(
+                    cell.suspiciousReason,
+                    "${com.alexisgordr.icdetector.models.SITE_UNVERIFIED_PREFIX} ${stableSite.reason}"
+                )
                 else -> cell.suspiciousReason
             },
             stableSiteDecision = stableSite
@@ -97,7 +135,7 @@ object LocalCellTrustEngine {
             localCellTrust = trust,
             isSuspicious = true,
             securityScore = minOf(cell.securityScore, 69),
-            suspiciousReason = listOfNotNull(cell.suspiciousReason, reason).joinToString(" | "),
+            suspiciousReason = com.alexisgordr.icdetector.models.StoredReasons.append(cell.suspiciousReason, reason),
             stableSiteDecision = stableSite
         )
     }

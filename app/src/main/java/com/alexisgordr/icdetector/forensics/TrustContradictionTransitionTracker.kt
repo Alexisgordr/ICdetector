@@ -38,7 +38,14 @@ enum class TrustContradictionSignal {
  * It is observational only: it never mutates [CellData] or feeds a result back into detection.
  */
 class TrustContradictionTransitionTracker(private val maxIdentities: Int = 500) {
-    private val previousStates = LinkedHashMap<String, LocalCellTrustState>()
+    /**
+     * 3.0 (#7, B5) — Orden de ACCESO (LRU), no de inserción. Con el orden de inserción, la celda
+     * que se ve a diario (la de casa) era de las primeras en entrar y, en un día con muchas celdas,
+     * la primera en salir aunque se acabara de ver; si después cambiaba de estado se registraba como
+     * [TrustContradictionSignal.ON_START] en vez de [TrustContradictionSignal.TRANSITION]. Ahora sale
+     * la identidad que lleva más tiempo sin verse.
+     */
+    private val previousStates = LinkedHashMap<String, LocalCellTrustState>(16, 0.75f, true)
 
     fun observe(cell: CellData): TrustContradictionSignal {
         val identity = cell.identityKey

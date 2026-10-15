@@ -61,7 +61,7 @@ class StableSiteStorageTest {
         assertEquals(1,count(upgraded,"SELECT COUNT(*) FROM forensic_cases"))
         assertEquals(0,count(upgraded,"SELECT COUNT(*) FROM site_cell_evidence"))
         assertEquals(0,count(upgraded,"SELECT COUNT(*) FROM site_motion_days"))
-        assertEquals(19,upgraded.version)
+        assertEquals(CellDbHelper.DATABASE_VERSION,upgraded.version)
     }
 
     @Test fun twentyPollsRemainOneEpisodeAndSurviveHelperRestart(){
@@ -84,6 +84,37 @@ class StableSiteStorageTest {
         val corroborated=StableSiteDecision(StableSiteFeatureState.ACTIVE,StableSiteNovelty.KNOWN_AT_SITE,false,false,"A",evidence=triggerEvidence.copy(siteKey="A",currentServingDays=3))
         db.applyStableSiteDecision(corroborated,current,listOf("A","B"),enforcementEnabled=true)
         assertEquals(0,count(db.readableDatabase,"SELECT COUNT(*) FROM site_holds WHERE active=1"))
+    }
+
+    @Test fun episodeStartIsReportedOnceAndSurvivesHelperRestart(){
+        val previous=cell("100").identityKey;val current=cell("999")
+        val opened=db.observeStableSiteEpisodeStart(current.identityKey,previous,1_000)
+        assertTrue(opened.created);assertTrue(opened.episodeId!=null)
+        repeat(3){assertEquals(StableSiteEpisodeObservation(opened.episodeId,false),db.observeStableSiteEpisodeStart(current.identityKey,current.identityKey,2_000L+it))}
+        db.close();db=CellDbHelper(context);db.writableDatabase
+        assertEquals(StableSiteEpisodeObservation(opened.episodeId,false),db.observeStableSiteEpisodeStart(current.identityKey,null,5_000))
+        val still=StableSiteEvidence("B",StableSiteFeatureState.ACTIVE,7,3,3,0,0,false,7,MotionEvidence(MotionState.STATIC_CONFIRMED,130,8f,2f),35,previous)
+        val saved=db.applyStableSiteDecision(StableSiteEvaluator.evaluate(still),current)
+        assertEquals(opened.episodeId,saved.episodeId)
+        assertEquals(StableSiteNotices.Action.NOTIFY,StableSiteNotices.decide(saved,true,opened.episodeId))
+        // Otro cambio cierra el episodio anterior: solo uno abierto, y el nuevo se informa como creado.
+        val other=db.observeStableSiteEpisodeStart(cell("555").identityKey,current.identityKey,6_000)
+        assertTrue(other.created)
+        assertEquals(1,count(db.readableDatabase,"SELECT COUNT(*) FROM site_shadow_triggers WHERE closed_ms IS NULL"))
+    }
+
+    @Test fun episodeStartedBeforeMaturityIsNeverPending(){
+        val previous=cell("100").identityKey;val current=cell("999")
+        val learning=StableSiteEvidence("B",StableSiteFeatureState.LEARNING,2,1,0,0,0,false,7,MotionEvidence(MotionState.MOVING,60,8f,300f),5,previous)
+        val atStart=StableSiteEvaluator.evaluate(learning)
+        val opened=db.observeStableSiteEpisodeStart(current.identityKey,previous,1_000)
+        val pending=StableSiteNotices.pendingAfterObservation(null,opened,atStart)
+        assertEquals(null,pending)
+        db.applyStableSiteDecision(atStart,current)
+        val mature=db.applyStableSiteDecision(StableSiteEvaluator.evaluate(learning.copy(featureState=StableSiteFeatureState.ACTIVE,
+            motion=MotionEvidence(MotionState.STATIC_CONFIRMED,130,8f,2f))),current)
+        assertTrue("el evaluador real lo marcaría",mature.wouldTrigger)
+        assertEquals(StableSiteNotices.Action.NONE,StableSiteNotices.decide(mature,true,pending))
     }
 
     @Test fun shadowReadyNeverEnforcesEvenWhenFutureFlagIsEnabled(){
@@ -156,7 +187,7 @@ class StableSiteStorageTest {
         legacy.execSQL("INSERT INTO site_cell_evidence VALUES('site','cell','SERVING',1,2,3)")
         legacy.version=17;legacy.close()
         db=CellDbHelper(context);val upgraded=db.writableDatabase
-        assertEquals(19,upgraded.version)
+        assertEquals(CellDbHelper.DATABASE_VERSION,upgraded.version)
         assertEquals(1,count(upgraded,"SELECT COUNT(*) FROM history WHERE cid='kept'"))
         assertEquals(1,count(upgraded,"SELECT COUNT(*) FROM site_cell_evidence"))
         assertEquals(0,count(upgraded,"SELECT COUNT(*) FROM site_rf_neighbours"))
@@ -177,7 +208,7 @@ class StableSiteStorageTest {
         legacy.execSQL("INSERT INTO cell_transitions VALUES('A','B',9,4,'PASSED',123)")
         legacy.version=16;legacy.close()
         db=CellDbHelper(context);val upgraded=db.writableDatabase
-        assertEquals(19,upgraded.version)
+        assertEquals(CellDbHelper.DATABASE_VERSION,upgraded.version)
         assertEquals(1,count(upgraded,"SELECT COUNT(*) FROM history WHERE cid='history-kept'"))
         assertEquals(1,count(upgraded,"SELECT COUNT(*) FROM forensic_cases WHERE id=2"))
         assertEquals(1,count(upgraded,"SELECT COUNT(*) FROM forensic_samples WHERE id=3 AND case_id=2"))
@@ -203,7 +234,10 @@ class StableSiteStorageTest {
 
     @Test fun tripResumesAfterHelperRestartAndGeometryReadsDoNotOwnLifecycle(){
         val config=MobilityFamiliarityConfig(3,2,3,20,30,1_000,100,10_000)
-        val first=MobilityFamiliarityEngine(db,config,true){"persistent-trip"}
+        // 3.0 (G3) — El ancla monotónica del viaje sobrevive al reinicio (el servicio la guarda en
+        // preferencias); aquí, un almacén compartido por los dos motores hace ese papel.
+        val anchors=InMemoryMobilityAnchorStore()
+        val first=MobilityFamiliarityEngine(db,config,true,anchors){"persistent-trip"}
         first.observe("A",MotionEvidence(MotionState.MOVING),0)
         first.observe("B",MotionEvidence(MotionState.MOVING),1)
         // Geometry reads the same route table, but opening/closing that UI has no write path to
@@ -211,7 +245,7 @@ class StableSiteStorageTest {
         db.getCellTransitions()
         assertEquals(1,count(db.readableDatabase,"SELECT COUNT(*) FROM mobility_trips WHERE state='OPEN' AND trip_id='persistent-trip'"))
         db.close();db=CellDbHelper(context);db.writableDatabase
-        val resumed=MobilityFamiliarityEngine(db,config,true){"must-not-be-created"}
+        val resumed=MobilityFamiliarityEngine(db,config,true,anchors){"must-not-be-created"}
         assertEquals("persistent-trip",resumed.recover(2).tripId)
         resumed.observe("C",MotionEvidence(MotionState.MOVING),3)
         resumed.observe("C",MotionEvidence(MotionState.STATIC_CONFIRMED),4)
@@ -284,7 +318,7 @@ class StableSiteStorageTest {
         legacy.execSQL("INSERT INTO history VALUES(1,'kept')")
         legacy.version=18;legacy.close()
         db=CellDbHelper(context);val upgraded=db.writableDatabase
-        assertEquals(19,upgraded.version)
+        assertEquals(CellDbHelper.DATABASE_VERSION,upgraded.version)
         assertEquals(1,count(upgraded,"SELECT COUNT(*) FROM history WHERE cid='kept'"))
         val columns=upgraded.rawQuery("PRAGMA table_info(history)",null).use{c->buildSet{while(c.moveToNext())add(c.getString(1))}}
         assertTrue(columns.containsAll(CellDbHelper.RADIO_CONTEXT_COLUMNS.map{it.first}))

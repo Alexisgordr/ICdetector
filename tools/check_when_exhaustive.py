@@ -45,6 +45,13 @@ def enums_del_proyecto(ficheros):
             # Se descartan comentarios para no confundir palabras en mayúsculas del texto.
             cabecera = re.sub(r"/\*.*?\*/", " ", cabecera, flags=re.S)
             cabecera = re.sub(r"//[^\n]*", " ", cabecera)
+            # Los argumentos del constructor (`ALL(setOf(Otro.VALOR))`) no son valores del enum: se
+            # quitan los paréntesis, del más interno al más externo.
+            while True:
+                limpia = re.sub(r"\([^()]*\)", " ", cabecera)
+                if limpia == cabecera:
+                    break
+                cabecera = limpia
             valores = set(re.findall(r"\b([A-Z][A-Z0-9_]{1,})\b", cabecera))
             if valores:
                 enums[nombre] = valores
@@ -83,7 +90,8 @@ def main():
             tiene_null = re.search(r"^\s*null\s*->", cuerpo, re.M) is not None
             cubierto = False
             for nombre, valores in enums.items():
-                usados = set(re.findall(rf"{nombre}\.([A-Z][A-Z0-9_]*)\s*->", cuerpo))
+                # Nombre completo: "Outcome" no debe casar dentro de "RestoreOutcome".
+                usados = set(re.findall(rf"(?<![A-Za-z0-9_]){nombre}\.([A-Z][A-Z0-9_]*)\s*->", cuerpo))
                 if not usados:
                     continue
                 cubierto = True
