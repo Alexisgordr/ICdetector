@@ -152,8 +152,7 @@ Run by CI on pull requests to `main`, on `main` and on release tags:
 1. Push `main` (a fast-forward from the `ICdetection-v3.1.0` branch), let CI pass, push the tag
    `v3.1.0` and attach the signed APK to the GitHub release. The release notes must say that a
    full reinstall is required.
-2. F-Droid: not published there yet, so its first version (3.1.0, version code 40) is a fresh install
-   for everyone. Its release notes are `fastlane/metadata/android/*/changelogs/40.txt`.
+2. The store notes for 3.1.0 are in `fastlane/metadata/android/*/changelogs/40.txt`.
 3. Close the issues resolved in 3.1.0 ([docs/3.1.0-progress.md](docs/3.1.0-progress.md) lists them
    with their commits); #44 stays open.
 4. Restart field collection on 3.1.0 and test it on more devices.
