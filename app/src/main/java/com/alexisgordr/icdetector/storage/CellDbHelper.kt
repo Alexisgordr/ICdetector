@@ -221,6 +221,19 @@ class CellDbHelper(
     }
 
     /**
+     * 3.1.0 (#39) — Write-ahead logging. Con el diario de reversión de antes, cada escritura del
+     * servicio bloqueaba las lecturas de la pantalla (y al revés) mientras duraba; con WAL leen y
+     * escriben a la vez, y una escritura cortada a medias se descarta entera al reabrir. Se activa
+     * antes de abrir la base, para todas sus conexiones. La copia de seguridad ya sabe tratar el
+     * WAL: copia también el `-wal` y consolida la copia en un solo fichero en modo DELETE
+     * (BackupExporter, AndroidDatabaseOps.consolidate); la restauración mueve `-wal` y `-shm` con
+     * la base (RestoreEngine.AUX_SUFFIXES).
+     */
+    init {
+        setWriteAheadLoggingEnabled(true)
+    }
+
+    /**
      * Activa las claves ajenas — v2.8.0.
      *
      * `forensic_samples` declara `FOREIGN KEY(case_id) REFERENCES forensic_cases(id) ON DELETE

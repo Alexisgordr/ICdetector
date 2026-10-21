@@ -20,6 +20,11 @@ Version code 40. A local build; not published yet.
   — was removed with it, and *Delete history* now goes through the gate too: while a restore is in
   progress it does nothing and says so in the terminal.
 
+- **Write-ahead logging (#39).** The database now uses WAL: the service's writes no longer block the
+  screens' reads, and an interrupted write is discarded whole when the database reopens. A backup
+  checkpoints passively before copying, copies the `-wal` with the main file and consolidates the copy
+  into one file in DELETE mode, as before; a restore moves `-wal` and `-shm` with the database.
+
 ### Removed
 
 - **External verification (OpenCellID).** The optional lookup of the serving cell in OpenCellID is

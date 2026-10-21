@@ -13,7 +13,11 @@ import java.time.Instant
  * Con una transacción exclusiva abierta en la conexión de la app (nadie más puede escribir y las
  * escrituras en curso terminan antes) se copian el fichero principal y, si existe, su `-wal`. La
  * copia se consolida aparte (checkpoint + modo DELETE + `integrity_check`) y ese único fichero es
- * el que va al ZIP con su SHA-256. La base de la app no se modifica.
+ * el que va al ZIP con su SHA-256. El contenido de la base de la app no se modifica.
+ *
+ * 3.1.0 (#39) — La base de la app usa WAL. Antes de copiar se hace un checkpoint PASIVO (no espera
+ * ni bloquea a nadie): vuelca lo que pueda al fichero principal para que el `-wal` que se copia sea
+ * pequeño. Lo que no haya podido volcar sigue en el `-wal`, que se copia igual.
  */
 object BackupExporter {
 
@@ -34,6 +38,7 @@ object BackupExporter {
         try {
             val copy = File(workDir, BackupFormat.DATABASE_ENTRY)
             val db = helper.writableDatabase
+            runCatching { db.rawQuery("PRAGMA wal_checkpoint(PASSIVE)", null).use { it.moveToFirst() } }
             db.beginTransaction()
             try {
                 databaseFile.copyTo(copy, overwrite = true)
