@@ -16,6 +16,7 @@ import androidx.activity.ComponentActivity
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.ui.graphics.Color
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -58,6 +59,9 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         dbHelper = CellDbHelper.getInstance(this)
+        // 3.1.0 (#47) — Único punto de apertura de la base, antes de que nada la lea. Si es de una
+        // versión más nueva, DatabaseGate lo publica y abajo se enseña el diálogo bloqueante.
+        dbHelper.openThroughGate()
         firstRunPending = com.alexisgordr.icdetector.backup.FirstRun.isPending(this)
         // 3.1.0 (#42) — Un fallo de arranque del servicio (también de un proceso anterior, p. ej.
         // tras reiniciar) se enseña en la pantalla principal hasta que el servicio arranque bien.
@@ -85,7 +89,12 @@ class MainActivity : ComponentActivity() {
                     error = Color(0xFFCF6679)
                 )
             ) {
-                if (firstRunPending) {
+                val databaseState by com.alexisgordr.icdetector.storage.DatabaseGate.state.collectAsState()
+                val newer = databaseState as? com.alexisgordr.icdetector.storage.DatabaseGate.State.NewerSchema
+                if (newer != null) {
+                    // 3.1.0 (#47) — Bloqueante: ninguna pantalla que lea la base, ningún servicio.
+                    com.alexisgordr.icdetector.ui.DatabaseNewerDialog(newer, onClose = { finish() })
+                } else if (firstRunPending) {
                     com.alexisgordr.icdetector.ui.FirstRunScreen(onStartedFresh = { firstRunPending = false })
                 } else {
                     MainLayout(context = this, dbHelper = dbHelper, service = service)
@@ -120,6 +129,8 @@ class MainActivity : ComponentActivity() {
         // se establezca (puede ocurrir entre el callback de permisos y el LaunchedEffect). Sin él,
         // dos binds quedarían con un solo unbind al cerrar (fuga de ciclo de vida).
         if (isBound || isBinding || restoreInProgress) return
+        // 3.1.0 (#47) — Base de una versión más nueva: el diálogo está a la vista, nada arranca.
+        if (com.alexisgordr.icdetector.storage.DatabaseGate.blocked) return
         if (com.alexisgordr.icdetector.backup.FirstRun.isPending(this)) return
 
         val intent = Intent(this, MiniICService::class.java)

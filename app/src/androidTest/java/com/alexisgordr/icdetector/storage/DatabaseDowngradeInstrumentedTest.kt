@@ -36,6 +36,16 @@ class DatabaseDowngradeInstrumentedTest {
         } finally {
             helper.close()
         }
+        // 3.1.0 (#47) — Por el único punto de apertura: sin excepción, con el estado publicado.
+        DatabaseGate.resetForTest()
+        val gated = CellDbHelper(context, file.absolutePath)
+        try {
+            org.junit.Assert.assertFalse(gated.openThroughGate())
+            assertEquals(DatabaseGate.State.NewerSchema(newer, CellDbHelper.DATABASE_VERSION), DatabaseGate.state.value)
+        } finally {
+            gated.close()
+            DatabaseGate.resetForTest()
+        }
         SQLiteDatabase.openDatabase(file.path, null, SQLiteDatabase.OPEN_READONLY).use { db ->
             assertEquals(newer, db.version)
             db.rawQuery("SELECT COUNT(*) FROM sqlite_master WHERE name = 'future_table'", null).use { it.moveToFirst(); assertEquals(1, it.getInt(0)) }

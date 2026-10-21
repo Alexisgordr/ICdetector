@@ -354,6 +354,19 @@ class CellDbHelper(
         throw DatabaseDowngradeException(oldVersion, newVersion)
     }
 
+    /**
+     * 3.1.0 (#47) — Único punto de apertura ([DatabaseGate]): abre la base (y la migra si hace
+     * falta). False si es de una versión más nueva; el estado del gate lo dice y nada se lanza.
+     * Lo llaman la actividad y el servicio antes de leer o escribir nada. Cualquier otro fallo de
+     * apertura no bloquea aquí: sigue su camino de siempre en la primera escritura (CollectionHealth).
+     */
+    fun openThroughGate(): Boolean = try {
+        DatabaseGate.open { writableDatabase }
+    } catch (e: Exception) {
+        android.util.Log.w("CellDbHelper", "Apertura fallida (${e.javaClass.simpleName}); se reintenta al escribir.")
+        true
+    }
+
     override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {
         if (oldVersion < 2) db.execSQL("ALTER TABLE $TABLE_HISTORY ADD COLUMN $COLUMN_VERIFIED TEXT DEFAULT 'PENDING'")
         if (oldVersion < 3) db.execSQL("ALTER TABLE $TABLE_HISTORY ADD COLUMN $COLUMN_MCC TEXT DEFAULT 'N/A'")

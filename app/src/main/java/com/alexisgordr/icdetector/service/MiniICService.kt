@@ -375,7 +375,8 @@ class MiniICService : Service() {
 
     /**
      * 3.0 — True si el servicio se arrancó con la pregunta de la primera apertura pendiente o con una
-     * restauración a medias: no ha abierto la base ni recoge nada, y se detiene.
+     * restauración a medias: no ha abierto la base ni recoge nada, y se detiene. 3.1.0 (#47) —
+     * También con una base de una versión más nueva (DatabaseGate).
      */
     @Volatile var collectionBlocked = false
         private set
@@ -387,6 +388,14 @@ class MiniICService : Service() {
         if (!com.alexisgordr.icdetector.backup.FirstRun.allowsCollection(this)) {
             collectionBlocked = true
             Log.w("MiniIC", "Monitorización bloqueada: falta la decisión inicial o hay una restauración pendiente.")
+            stopSelf()
+            return
+        }
+        // 3.1.0 (#47) — Único punto de apertura de la base: si es de una versión más nueva no se
+        // toca, no se recoge nada y la app lo explica (DatabaseGate). Antes, crash en bucle.
+        if (!CellDbHelper.getInstance(this).openThroughGate()) {
+            collectionBlocked = true
+            Log.w("MiniIC", "Monitorización bloqueada: la base de datos es de una versión más nueva.")
             stopSelf()
             return
         }

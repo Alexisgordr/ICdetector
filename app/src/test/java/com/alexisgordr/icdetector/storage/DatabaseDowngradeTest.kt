@@ -12,16 +12,21 @@ import java.io.File
  * (DatabaseDowngradeInstrumentedTest).
  */
 class DatabaseDowngradeTest {
-    @Test fun `the message names both versions and what to do`() {
+    @Test fun `it carries both versions and a log-only message`() {
         val e = DatabaseDowngradeException(27, 26)
         assertTrue(e is IllegalStateException)
         assertFalse("no es una SQLiteException", e.javaClass.name.contains("SQLite"))
         assertEquals(27, e.storedVersion)
         assertEquals(26, e.supportedVersion)
-        val message = e.message!!
-        assertTrue(message.contains("esquema 27") && message.contains("usa el 26"))
-        assertTrue(message.contains("No se ha modificado nada"))
-        assertTrue(message.contains("restaura una copia de seguridad"))
+        // El texto para la persona va en el diálogo localizado (DatabaseGate); este es para el log.
+        assertEquals("Database schema 27 is newer than the supported 26; nothing was changed.", e.message)
+        DatabaseDowngradeException.requireSupported(26, 26)
+        try {
+            DatabaseDowngradeException.requireSupported(27, 26)
+            org.junit.Assert.fail()
+        } catch (expected: DatabaseDowngradeException) {
+            assertEquals(27, expected.storedVersion)
+        }
     }
 
     @Test fun `the helper overrides onDowngrade with it`() {
@@ -29,5 +34,6 @@ class DatabaseDowngradeTest {
             .resolve("com/alexisgordr/icdetector/storage/CellDbHelper.kt").readText()
         assertTrue(helper.contains("override fun onDowngrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {\n" +
             "        throw DatabaseDowngradeException(oldVersion, newVersion)\n    }"))
+        assertTrue(helper.contains("DatabaseGate.open { writableDatabase }"))
     }
 }

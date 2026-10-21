@@ -69,6 +69,11 @@ Version code 40. A local build; not published yet.
   *Monitoring stopped — open the app to resume*, the failure is recorded (time and exception class) as
   a collection-health event that the next start writes in the terminal, and the main screen shows the
   stopped state with a **Resume** button instead of the normal status.
+- **An older app on newer data crashed on every start (#47).** Installing an older version over data
+  written by a newer one made the first database access throw, uncaught, so the app crashed in a
+  loop. The database is now opened at a single point that turns this case into a blocking dialog
+  (*Data from a newer version*: the database version, the newest one this app supports, and what to
+  do). Nothing is changed and monitoring does not start.
 - **H6 read GSM Timing Advance index 0 as 0 m (#47).** The GSM index comes in 554 m steps, so 0 means
   "closer than 554 m" and cannot show the 100 m of the proximity check; any strong GSM cell at index
   0 failed H6. H6 is now `N/A` on GSM, stored as `H6(ta_gsm)`. **Dataset cut** for H6 on GSM rows
