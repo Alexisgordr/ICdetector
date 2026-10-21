@@ -222,6 +222,8 @@ fun MainScreenContent(dbHelper: CellDbHelper, service: MiniICService?) {
     val rsrqHistory by rsrqFlow.collectAsStateWithLifecycle()
     val geoHistory by geoFlow.collectAsStateWithLifecycle()
     val serviceState by serviceStateFlow.collectAsStateWithLifecycle()
+    // 3.1.0 (#42) — El servicio en primer plano no pudo arrancar: la pantalla lo dice.
+    val monitoringStopped by com.alexisgordr.icdetector.core.MonitoringStop.state.collectAsStateWithLifecycle()
     
     var refreshing by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
@@ -303,6 +305,7 @@ fun MainScreenContent(dbHelper: CellDbHelper, service: MiniICService?) {
                     // v2.1 — Una sola verdad en pantalla: el color de la cabecera sale del score,
                     // por la misma función que usa el panel de auditoría.
                     val (statusText, statusColor) = when {
+                        monitoringStopped != null -> stringResource(R.string.monitoring_stopped_title) to Color(0xFFCF6679)
                         active == null -> stringResource(R.string.searching_signal) to Color(0xFF888888)
                         active.isSuspicious -> stringResource(R.string.network_anomaly_confirmed) to Color(0xFFCF6679)
                         active.securityScore >= SCORE_SAFE -> stringResource(R.string.no_anomalies) to securityScoreColor(active.securityScore)
@@ -310,6 +313,8 @@ fun MainScreenContent(dbHelper: CellDbHelper, service: MiniICService?) {
                         else -> stringResource(R.string.unconfirmed_anomaly_score, active.securityScore) to securityScoreColor(active.securityScore)
                     }
 
+                    // 3.1.0 (#42) — Monitoreo detenido por un fallo de arranque: antes que nada.
+                    MonitoringStoppedNotice(monitoringStopped)
                     // 3.0 (#35) — Si las alarmas están silenciadas, decirlo antes que nada.
                     AlarmMutedWarning()
                     // 3.0 — Fallo interno del análisis: el resultado de abajo es el anterior.
@@ -893,6 +898,41 @@ private fun BaselineMaturityRow(
  * canal de alertas silenciado. La app no puede reactivar el sonido; abre los ajustes del canal. Se
  * vuelve a comprobar cada vez que la pantalla vuelve al primer plano.
  */
+/**
+ * 3.1.0 (#42) — El servicio en primer plano no pudo arrancar ([com.alexisgordr.icdetector.core.MonitoringStop]):
+ * no se está registrando nada. Con un botón para reanudar.
+ */
+@Composable
+internal fun MonitoringStoppedNotice(
+    stopped: com.alexisgordr.icdetector.core.MonitoringStop.Stopped?,
+    onResume: (() -> Unit)? = null
+) {
+    if (stopped == null) return
+    val context = LocalContext.current
+    val resume: () -> Unit = onResume ?: { (context as? MainActivity)?.resumeMonitoring() }
+    val color = Color(0xFFCF6679)
+    Card(
+        modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
+        colors = CardDefaults.cardColors(containerColor = color.copy(alpha = 0.08f)),
+        border = BorderStroke(1.dp, color.copy(alpha = 0.5f)),
+        shape = RoundedCornerShape(4.dp)
+    ) {
+        Column(modifier = Modifier.padding(12.dp)) {
+            Text(
+                stringResource(R.string.monitoring_stopped_title),
+                color = color, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Bold, fontSize = 12.sp
+            )
+            Text(
+                stringResource(R.string.monitoring_stopped_body, stopped.errorClass),
+                color = Color(0xFFBBBBBB), fontFamily = FontFamily.Monospace, fontSize = 11.sp
+            )
+            TextButton(onClick = resume) {
+                Text(stringResource(R.string.monitoring_stopped_resume), color = Color.White, fontFamily = FontFamily.Monospace)
+            }
+        }
+    }
+}
+
 /**
  * 3.0 — Aviso mientras el ciclo de análisis falla (ver AnalysisHealth): el resultado visible es el
  * último válido, no uno actualizado. No es una alarma ni dice nada de la red.

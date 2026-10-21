@@ -109,6 +109,12 @@ comparisons with tower-database coordinates.
 If a permission is unavailable, ICdetection continues with the remaining information, and the
 affected rules report `N/A`.
 
+From 3.1.0 the app also declares **RECEIVE_BOOT_COMPLETED**, a normal permission with no dialog. It
+is only used by **Settings → Start monitoring after a reboot**, which is off by default: with it on,
+monitoring starts again after the phone restarts, but only if it was on when the phone shut down
+(the **Stop** button of the notification turns that off). On Android 14 or later Android may refuse
+to start location monitoring at boot unless location access is set to *Allow all the time*.
+
 ### Background monitoring and battery
 
 For longer sessions:
@@ -117,6 +123,13 @@ For longer sessions:
 2. Exclude it from Android and manufacturer battery optimisation:
    **Settings → Apps → ICdetection → Battery → Battery optimization → Don't optimize**.
 3. Confirm that its persistent monitoring notification remains visible.
+
+**If monitoring could not start.** Android can refuse to start the monitoring service (for example
+on Android 12 or later when the app is not allowed to start a foreground service at that moment, or
+on Android 14 or later without location permission). From 3.1.0 this is never silent: a regular
+notification says **Monitoring stopped — open the app to resume**, the main screen shows the same
+message with the reason (the exception class) and a **Resume** button, and the next start writes it
+in the terminal. Nothing is recorded while monitoring is stopped.
 
 While the monitoring service runs, ICdetection keeps a GPS-only location stream and the collection
 loop active, including with the screen off, so H11, H13 and H16 have contemporaneous positions. This

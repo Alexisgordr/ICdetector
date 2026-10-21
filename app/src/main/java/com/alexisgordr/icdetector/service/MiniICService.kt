@@ -563,21 +563,32 @@ class MiniICService : Service() {
         }
 
         notificationController.createChannels()
+        // 3.1.0 (#42) — Un fallo del arranque anterior queda en el terminal de este.
+        CollectionHealthController.foregroundStartFailure(prefs)?.let {
+            appendLog("[SYS]", com.alexisgordr.icdetector.core.MonitoringStop.terminalLine(it))
+        }
         // En Android 14+ es obligatorio pasar el foregroundServiceType en startForeground.
         // Además, startForeground puede lanzar excepción (p. ej. ForegroundServiceStartNotAllowed
         // o SecurityException) si el permiso de ubicación no está concedido o el SO reinicia el
         // servicio en un estado restringido. Si eso ocurre, paramos limpiamente en vez de crashear.
-        try {
+        // 3.1.0 (#42) — Y ya no en silencio: notificación normal, evento y estado en la pantalla
+        // (MonitoringStop).
+        val foregroundStarted = com.alexisgordr.icdetector.core.MonitoringStop.startForeground(
+            MonitoringStopSink(this), System.currentTimeMillis()
+        ) {
             if (Build.VERSION.SDK_INT >= 34) {
                 startForeground(NOTIFICATION_ID, notificationController.foregroundNotification(getString(R.string.monitoring_active)), ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION)
             } else {
                 startForeground(NOTIFICATION_ID, notificationController.foregroundNotification(getString(R.string.monitoring_active)))
             }
-        } catch (e: Exception) {
-            Log.e("MiniIC", "No se pudo iniciar el servicio en primer plano: ${e.message}", e)
+        }
+        if (!foregroundStarted) {
+            Log.e("MiniIC", "No se pudo iniciar el servicio en primer plano")
             stopSelf()
             return
         }
+        // 3.1.0 (#42) — Para el arranque tras reiniciar (BootStart): el monitoreo está activado.
+        prefs.edit().putBoolean(com.alexisgordr.icdetector.core.BootStart.PREF_MONITORING_ENABLED, true).apply()
 
         // 3.0 — Solo en modo continuo; el adaptativo lo anota applyLocationMode().
         if (locationMode == com.alexisgordr.icdetector.core.LocationMode.CONTINUOUS) {
@@ -854,6 +865,9 @@ class MiniICService : Service() {
             return START_NOT_STICKY
         }
         if (intent?.action == ACTION_STOP) {
+            // 3.1.0 (#42) — Detenido por el usuario: no se vuelve a arrancar tras un reinicio.
+            getSharedPreferences("miniic_prefs", MODE_PRIVATE).edit()
+                .putBoolean(com.alexisgordr.icdetector.core.BootStart.PREF_MONITORING_ENABLED, false).apply()
             stopSelf()
             return START_NOT_STICKY
         }

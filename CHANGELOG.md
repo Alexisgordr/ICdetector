@@ -18,6 +18,9 @@ Version code 40. A local build; not published yet.
   `ChurnMotion`), shown in the terminal as `[H17 sombra]`. H17 is never evaluated (`N/A`, stored as
   `H17(sombra)`), has no points or likelihood ratio and is not evidence, so no score changes. Its
   thresholds will come from the campaign data (3.2).
+- **Start monitoring after a reboot (#42).** A setting, off by default, restarts monitoring when the
+  phone boots, only if it was on when the phone shut down (the notification's **Stop** turns it
+  off). It adds the `RECEIVE_BOOT_COMPLETED` permission (normal, no dialog) and no other.
 
 ### Fixed
 
@@ -56,6 +59,13 @@ Version code 40. A local build; not published yet.
   neighbours, and no neighbours is exactly when the density factor damps the most (×0.5), so its
   3.5 always became 2.25, in a city too. H1 is now damped only by reputation, like H6. **Dataset
   cut for the anomaly confidence only**: the score, the rules and the alarms do not change.
+- **The monitoring service could stop without a trace (#42).** If Android refused to start the
+  foreground service (`ForegroundServiceStartNotAllowedException` on Android 12+, a
+  `SecurityException` without location permission on Android 14+, or any other error), the service
+  stopped silently and the app kept looking as if it were monitoring. Now a regular notification says
+  *Monitoring stopped — open the app to resume*, the failure is recorded (time and exception class) as
+  a collection-health event that the next start writes in the terminal, and the main screen shows the
+  stopped state with a **Resume** button instead of the normal status.
 - **One stray Timing Advance value disabled the stub detection for good (#43).** The first non-zero
   TA of a technology marked it as "reports real values" forever, and the mark was saved, so a single
   spurious value let an always-zero modem feed H6 as if it measured. The decision now uses the last

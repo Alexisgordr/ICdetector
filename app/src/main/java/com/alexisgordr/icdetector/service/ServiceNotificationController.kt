@@ -230,6 +230,39 @@ internal class ServiceNotificationController(
         const val NOTIFICATION_ID = 202
         const val LEGACY_NETWORK_NOTIFICATION_ID = 204
         const val CONFIRMED_ALARM_NOTIFICATION_ID = 205
+        /** 3.1.0 (#42) — «Monitoreo detenido»: notificación normal, no la del servicio en primer plano. */
+        const val MONITORING_STOPPED_NOTIFICATION_ID = 206
+
+        /**
+         * 3.1.0 (#42) — El servicio en primer plano no pudo arrancar. Notificación normal (no de
+         * primer plano, que es justo lo que falló) en el canal de monitoreo, que abre la app.
+         */
+        fun notifyMonitoringStopped(context: Context, preferences: android.content.SharedPreferences) {
+            val localized = LocaleController.localizedContext(context)
+            val manager = context.getSystemService(NotificationManager::class.java) ?: return
+            manager.createNotificationChannel(
+                NotificationChannel(CHANNEL_ID, localized.getString(R.string.channel_monitoring_name), NotificationManager.IMPORTANCE_LOW)
+            )
+            val openApp = PendingIntent.getActivity(
+                context, 2, Intent(context, MainActivity::class.java),
+                PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
+            )
+            val error = preferences.getString(com.alexisgordr.icdetector.core.MonitoringStop.PREF_STOPPED_ERROR, null).orEmpty()
+            val notification = NotificationCompat.Builder(context, CHANNEL_ID)
+                .setContentTitle(localized.getString(R.string.monitoring_stopped_title))
+                .setContentText(localized.getString(R.string.monitoring_stopped_body, error))
+                .setStyle(NotificationCompat.BigTextStyle().bigText(localized.getString(R.string.monitoring_stopped_body, error)))
+                .setSmallIcon(android.R.drawable.ic_menu_info_details)
+                .setContentIntent(openApp)
+                .setAutoCancel(true)
+                .build()
+            // Sin permiso de notificaciones no se muestra: el estado sigue en la app y en el terminal.
+            try { manager.notify(MONITORING_STOPPED_NOTIFICATION_ID, notification) } catch (_: SecurityException) {}
+        }
+
+        fun cancelMonitoringStopped(context: Context) {
+            context.getSystemService(NotificationManager::class.java)?.cancel(MONITORING_STOPPED_NOTIFICATION_ID)
+        }
 
         /** 3.0 (#35) — ¿Sonaría ahora la notificación de una alarma confirmada? */
         fun alarmAudibility(context: Context): AlarmAudibility.AlarmSound {

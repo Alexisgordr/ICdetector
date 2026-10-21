@@ -39,6 +39,9 @@
     <!-- Mantiene el bucle de recolección activo con la pantalla apagada. Es un permiso normal:
          no muestra diálogo ni concede acceso adicional a datos. -->
     <uses-permission android:name="android.permission.WAKE_LOCK" />
+    <!-- 3.1.0 (#42) — Arranque tras reiniciar el teléfono, solo si se activa en Ajustes (desactivado
+         por defecto) y el monitoreo estaba activado al apagar. Permiso normal, sin diálogo. -->
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
 
     <!-- memtagMode="sync" enforces MTE on GrapheneOS / MTE devices to prevent memory corruption attacks -->
     <application
@@ -79,6 +82,15 @@
             android:enabled="true"
             android:exported="false"
             tools:ignore="ForegroundServicePermission" />
+
+        <!-- 3.1.0 (#42) — Ver BootStart. Lo envía el sistema: no hace falta exportarlo. -->
+        <receiver
+            android:name="com.alexisgordr.icdetector.service.BootReceiver"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+            </intent-filter>
+        </receiver>
 
     </application>
 

@@ -2,6 +2,7 @@ package com.alexisgordr.icdetector.service
 
 import android.content.SharedPreferences
 import com.alexisgordr.icdetector.core.CollectionHealth
+import com.alexisgordr.icdetector.core.MonitoringStop
 
 /**
  * Owns persistence and user-visible state for database write continuity.
@@ -50,6 +51,26 @@ internal class CollectionHealthController(
     }
 
     companion object {
+        /**
+         * 3.1.0 (#42) — Evento de collection-health: el servicio en primer plano no pudo arrancar
+         * (hora y clase de la excepción). Lo borra el siguiente arranque correcto.
+         */
+        fun recordForegroundStartFailure(preferences: SharedPreferences, stopped: MonitoringStop.Stopped) {
+            preferences.edit()
+                .putLong(MonitoringStop.PREF_STOPPED_AT_MS, stopped.atMs)
+                .putString(MonitoringStop.PREF_STOPPED_ERROR, stopped.errorClass)
+                .apply()
+        }
+
+        fun foregroundStartFailure(preferences: SharedPreferences): MonitoringStop.Stopped? = MonitoringStop.fromStored(
+            preferences.getLong(MonitoringStop.PREF_STOPPED_AT_MS, 0L),
+            preferences.getString(MonitoringStop.PREF_STOPPED_ERROR, null)
+        )
+
+        fun clearForegroundStartFailure(preferences: SharedPreferences) {
+            preferences.edit().remove(MonitoringStop.PREF_STOPPED_AT_MS).remove(MonitoringStop.PREF_STOPPED_ERROR).apply()
+        }
+
         private const val KEY_LAST_SUCCESSFUL_WRITE = "last_successful_write_ms"
         private const val INTERRUPTION_NOTICE_MS = 10L * 60_000L
     }

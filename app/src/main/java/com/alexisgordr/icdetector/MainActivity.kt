@@ -59,6 +59,13 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         dbHelper = CellDbHelper.getInstance(this)
         firstRunPending = com.alexisgordr.icdetector.backup.FirstRun.isPending(this)
+        // 3.1.0 (#42) — Un fallo de arranque del servicio (también de un proceso anterior, p. ej.
+        // tras reiniciar) se enseña en la pantalla principal hasta que el servicio arranque bien.
+        com.alexisgordr.icdetector.core.MonitoringStop.restore(
+            com.alexisgordr.icdetector.service.CollectionHealthController.foregroundStartFailure(
+                getSharedPreferences(com.alexisgordr.icdetector.service.MonitoringStopSink.PREFS_FILE, MODE_PRIVATE)
+            )
+        )
         // 3.0 — Un aviso silencioso de Stable-Site abre su episodio. Solo en la primera creación:
         // al girar la pantalla el destino ya está fijado (o cerrado) y no se vuelve a abrir.
         if (savedInstanceState == null) com.alexisgordr.icdetector.ui.StableSiteNoticeTarget.consume(intent)
@@ -118,7 +125,27 @@ class MainActivity : ComponentActivity() {
             isBinding = false
             stopService(intent)
             android.util.Log.e("MainActivity", "No se pudo iniciar/enlazar el servicio: ${e.message}", e)
+            // 3.1.0 (#42) — No en silencio: notificación, evento y estado en la pantalla.
+            com.alexisgordr.icdetector.core.MonitoringStop.fail(
+                com.alexisgordr.icdetector.service.MonitoringStopSink(this), System.currentTimeMillis(), e
+            )
         }
+    }
+
+    /**
+     * 3.1.0 (#42) — Botón «Reanudar» del aviso de monitoreo detenido: suelta el servicio que no
+     * llegó a arrancar en primer plano (si sigue enlazado) y lo vuelve a arrancar.
+     */
+    fun resumeMonitoring() {
+        if (restoreInProgress) return
+        if (isBound || isBinding) {
+            try { unbindService(connection) } catch (_: IllegalArgumentException) {}
+            isBound = false
+            isBinding = false
+        }
+        service = null
+        stopService(Intent(this, MiniICService::class.java))
+        startAndBindService()
     }
 
     /**

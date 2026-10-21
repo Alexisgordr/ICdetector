@@ -28,6 +28,7 @@ import androidx.compose.material.icons.filled.Favorite
 import com.alexisgordr.icdetector.service.MiniICService
 import com.alexisgordr.icdetector.R
 import com.alexisgordr.icdetector.util.LocaleController
+import com.alexisgordr.icdetector.core.BootStart
 import com.alexisgordr.icdetector.core.LegacyNetworkAlertMode
 import com.alexisgordr.icdetector.core.StableSiteNotices
 import com.alexisgordr.icdetector.core.LocationMode
@@ -53,6 +54,11 @@ fun SettingsPanel(
     // 3.0 — Avisos silenciosos de Stable-Site: activados por defecto; si se apagan, siguen apagados.
     var stableSiteNotices by remember {
         mutableStateOf(prefs.getBoolean(StableSiteNotices.PREF_ENABLED, StableSiteNotices.DEFAULT_ENABLED))
+    }
+
+    // 3.1.0 (#42) — Arranque tras reiniciar: desactivado por defecto (BootStart).
+    var startOnBoot by remember {
+        mutableStateOf(prefs.getBoolean(BootStart.PREF_ENABLED, BootStart.DEFAULT_ENABLED))
     }
 
     val scrollState = rememberScrollState()
@@ -168,6 +174,29 @@ fun SettingsPanel(
                 )
             }
 
+            // 3.1.0 (#42) — Iniciar el monitoreo al reiniciar el teléfono (BootReceiver).
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(stringResource(R.string.start_on_boot_title), color = Color.White,
+                        fontSize = 14.sp, fontFamily = FontFamily.Monospace)
+                    Text(stringResource(R.string.start_on_boot_description), color = Color(0xFF888888),
+                        fontSize = 11.sp, fontFamily = FontFamily.Monospace, lineHeight = 15.sp)
+                }
+                Spacer(Modifier.width(8.dp))
+                Switch(
+                    checked = startOnBoot,
+                    onCheckedChange = { startOnBoot = it },
+                    colors = SwitchDefaults.colors(
+                        checkedThumbColor = Color.White,
+                        checkedTrackColor = Color(0xFF4CAF50)
+                    )
+                )
+            }
+
             Button(
                 onClick = {
                     val selectedMode = selectedLocationMode
@@ -176,6 +205,7 @@ fun SettingsPanel(
                         putString(LocationMode.PREF_KEY, selectedMode.storedValue)
                         putString(LegacyNetworkAlertMode.PREF_KEY, legacyMode.storedValue)
                         putBoolean(StableSiteNotices.PREF_ENABLED, stableSiteNotices)
+                        putBoolean(BootStart.PREF_ENABLED, startOnBoot)
                     }
                     service?.locationMode = selectedMode
                     service?.legacyNetworkAlertMode = legacyMode

@@ -541,6 +541,12 @@
     <!-- 3.0 — Avisos silenciosos de Stable-Site -->
     <string name="stable_site_notices_title">Avisos silenciosos de Stable-Site</string>
     <string name="stable_site_notices_description">Disponibles cuando la referencia del lugar esté preparada. No activan alarmas.</string>
+    <!-- 3.1.0 (#42) — Servicio en primer plano que no pudo arrancar; arranque tras reiniciar. -->
+    <string name="monitoring_stopped_title">Monitoreo detenido — abre la app para reanudar</string>
+    <string name="monitoring_stopped_body">Android no permitió arrancar el servicio de monitoreo (%1$s). No se está registrando nada.</string>
+    <string name="monitoring_stopped_resume">Reanudar</string>
+    <string name="start_on_boot_title">Iniciar el monitoreo al reiniciar</string>
+    <string name="start_on_boot_description">Solo si el monitoreo estaba activado al apagar el teléfono. En Android 14 o posterior, sin acceso a la ubicación \"Permitir todo el tiempo\", Android puede negarlo; entonces verás la notificación \"Monitoreo detenido\".</string>
     <string name="channel_stable_site_name">Avisos silenciosos de Stable-Site</string>
     <string name="channel_stable_site_description">Un aviso silencioso por cada cambio de celda inusual en un lugar conocido. Sin sonido, sin vibración y sin alarmas.</string>
     <string name="notif_stable_site_title">Cambio inusual en este lugar</string>

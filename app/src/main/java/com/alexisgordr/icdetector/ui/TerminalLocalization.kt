@@ -77,6 +77,10 @@ private val replacements = linkedMapOf(
     "edad desconocida" to "unknown age",
     "Historial NO borrado: hay una restauración en curso." to "History NOT deleted: a restore is in progress.",
     "Historial NO borrado: error " to "History NOT deleted: error ",
+    // 3.1.0 (#42) — MonitoringStop.terminalLine.
+    "⚠ El monitoreo se detuvo: Android no permitió el servicio en primer plano (" to
+        "⚠ Monitoring stopped: Android did not allow the foreground service (",
+    "). No se recogió nada hasta este arranque." to "). Nothing was recorded until this start.",
     "Historial borrado: captura forense, episodios y cachés reiniciados." to "History deleted: forensic capture, episodes and caches reset.",
     "se omite el relleno" to "coordinate backfill skipped",
     "espera al fix preciso" to "waiting for a precise fix",

@@ -18,7 +18,9 @@ object BackupSettings {
         // 3.0 — Avisos de red 2G/3G (LegacyNetworkAlertMode).
         "legacy_network_alert_mode" to Type.STRING,
         // 3.0 — Avisos silenciosos de Stable-Site (StableSiteNotices.PREF_ENABLED).
-        "stable_site_silent_notices" to Type.BOOLEAN
+        "stable_site_silent_notices" to Type.BOOLEAN,
+        // 3.1.0 (#42) — Iniciar el monitoreo al reiniciar (BootStart.PREF_ENABLED).
+        "start_on_boot" to Type.BOOLEAN
     )
 
     /**
@@ -28,7 +30,8 @@ object BackupSettings {
      */
     val DEFAULTS_FOR_MISSING: Map<String, Any> = mapOf(
         "legacy_network_alert_mode" to "NOTIFY",
-        "stable_site_silent_notices" to true
+        "stable_site_silent_notices" to true,
+        "start_on_boot" to false
     )
 
     enum class Type { STRING, BOOLEAN }
