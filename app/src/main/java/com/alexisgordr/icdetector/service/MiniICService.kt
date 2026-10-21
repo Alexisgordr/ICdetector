@@ -700,14 +700,21 @@ class MiniICService : Service() {
      * esas mismas colas y, por último, se olvida todo el estado derivado del historial.
      */
     suspend fun clearHistory() {
+        var cleared = false
         cellProcessingMutex.withLock {
             // Bajo el cerrojo de la época: ningún resultado empezado antes se aplica después.
             historyEpoch.invalidate()
             withContext(forensicDispatcher) {
                 forensicRecorder.reset()
-                withContext(historyWriteDispatcher) { dbHelper.clear() }
+                // 3.1.0 (#41) — También el borrado pasa por la puerta de escrituras: con una
+                // restauración en curso (puerta cerrada) no se toca la base que se está copiando.
+                writeGate.launch(scope, historyWriteDispatcher) { dbHelper.clear(); cleared = true }?.join()
             }
             withContext(Dispatchers.Main) { forgetHistoryDerivedState() }
+        }
+        if (!cleared) {
+            appendLog("[SYS]", "Historial NO borrado: hay una restauración en curso.")
+            return
         }
         appendLog("[SYS]", "Historial borrado: captura forense, episodios y cachés reiniciados.")
     }

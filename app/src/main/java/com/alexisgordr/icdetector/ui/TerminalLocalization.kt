@@ -75,6 +75,7 @@ private val replacements = linkedMapOf(
     "Analizando nueva celda activa" to "Analyzing new serving cell",
     "Fix disponible pero no lo bastante fresco" to "Fix available but not fresh enough",
     "edad desconocida" to "unknown age",
+    "Historial NO borrado: hay una restauración en curso." to "History NOT deleted: a restore is in progress.",
     "se omite el relleno" to "coordinate backfill skipped",
     "espera al fix preciso" to "waiting for a precise fix",
     "sin confirmar; sin tono" to "unconfirmed; no alert tone",

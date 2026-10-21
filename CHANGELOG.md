@@ -15,6 +15,11 @@ Version code 40. A local build; not published yet.
   clock set ahead a fresh fix was skipped, and with it set behind an old fix was used. The age now
   comes from the monotonic clock; the fix time is still what matches it to the rows.
 
+- **Writes during a restore (#41).** Every database write of the service goes through the write gate
+  that a restore closes and drains. The one that did not — the external verification's status update
+  — was removed with it, and *Delete history* now goes through the gate too: while a restore is in
+  progress it does nothing and says so in the terminal.
+
 ### Removed
 
 - **External verification (OpenCellID).** The optional lookup of the serving cell in OpenCellID is
