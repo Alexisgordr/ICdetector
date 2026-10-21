@@ -854,8 +854,12 @@ No individual rule proves the presence of a rogue base station.
 
 **Cell isolation and neighbours (H1, H4, H5, H7).** A strong serving cell without coherent neighbours
 can be suspicious, but rural coverage, indoor deployments, modem limitations and temporary network
-conditions look similar. H4 (MNC) and H5 (TAC) need neighbours that report their identity; many
-modems report only frequency, PCI and signal, so these rules can stay `N/A` permanently.
+conditions look similar. H4 (MNC) and H5 (TAC) only produce data when the modem fills in the
+identity (MCC, MNC, TAC) of the neighbours it reports. That depends on the phone — its modem and
+firmware — not on the technology: the same LTE network can come with full neighbour identities on
+one phone and with only frequency, PCI and signal on another. Most phones report neighbours the
+second way, so on most phones H4 and H5 stay `N/A` almost all the time. That is a limit of what the
+phone exposes, not a sign of anything about the network, and the other rules are unaffected.
 
 **Femtocells (CSG).** When the serving cell declares a closed subscriber group, it is a femtocell:
 isolated, strong, a few metres away and on its own TAC by design. The indicator is broadcast by the
