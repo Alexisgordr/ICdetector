@@ -12,7 +12,8 @@ Version code 40. A local build; not published yet.
 
 - **H17, cell churn, in shadow mode.** Distinct serving cells and serving changes over 15 minutes,
   with the phone's motion from a GPS fix of 60 s or less (`UNKNOWN` otherwise), restarted after a
-  service loss or a gap. Stored in every history row (database schema 26 adds three columns; older
+  service loss or a gap. Every reading counts, including one whose analysis is dropped because a
+  newer reading arrived. Stored in every history row (database schema 26 adds three columns; older
   rows keep them empty) and at the end of the CSV (`ChurnCells15m`, `ChurnChanges15m`,
   `ChurnMotion`), shown in the terminal as `[H17 sombra]`. H17 is never evaluated (`N/A`, stored as
   `H17(sombra)`), has no points or likelihood ratio and is not evidence, so no score changes. Its
@@ -27,7 +28,8 @@ Version code 40. A local build; not published yet.
 - **Writes during a restore (#41).** Every database write of the service goes through the write gate
   that a restore closes and drains. The one that did not — the external verification's status update
   — was removed with it, and *Delete history* now goes through the gate too: while a restore is in
-  progress it does nothing and says so in the terminal.
+  progress it does nothing and says so in the terminal; if the deletion itself fails, the terminal
+  reports the error instead of a restore.
 - **Write-ahead logging (#39).** The database now uses WAL: the service's writes no longer block the
   screens' reads, and an interrupted write is discarded whole when the database reopens. A backup
   checkpoints passively before copying, copies the `-wal` with the main file and consolidates the copy
