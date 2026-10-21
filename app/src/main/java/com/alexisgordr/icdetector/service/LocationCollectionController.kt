@@ -21,6 +21,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import androidx.core.content.edit
 
 /**
  * GPS-only acquisition. Listener ownership and timers are confined to Main; reference validation
@@ -337,9 +338,11 @@ internal class LocationCollectionController(
             lastPersistedLocationTime = candidate.time
             // 3.0 (V3) — Con su tiempo monotónico y el número de arranque: tras reiniciar el
             // servicio en el mismo arranque la edad sigue siendo demostrable; tras otro, no.
-            prefs.edit().putString(KEY_LAST_LOCATION, StoredReference.serialize(
-                candidate.latitude, candidate.longitude, candidate.time,
-                candidate.elapsedRealtimeNanos / 1_000_000L, bootCount())).apply()
+            prefs.edit {
+                putString(KEY_LAST_LOCATION, StoredReference.serialize(
+                    candidate.latitude, candidate.longitude, candidate.time,
+                    candidate.elapsedRealtimeNanos / 1_000_000L, bootCount()))
+            }
         }
         true
     }

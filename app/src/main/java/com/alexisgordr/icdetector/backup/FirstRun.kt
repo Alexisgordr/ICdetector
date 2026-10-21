@@ -4,6 +4,7 @@ import android.annotation.SuppressLint
 import android.content.Context
 import com.alexisgordr.icdetector.storage.CellDbHelper
 import java.io.File
+import androidx.core.content.edit
 
 /** 3.0 — Lado Android de [FirstRunPolicy]. */
 // commit() a propósito: estas escrituras deben estar en disco antes del paso siguiente (reinicio del
@@ -20,9 +21,9 @@ object FirstRun {
     fun resolveAtStart(context: Context, restoreOutcome: RestoreEngine.RestoreOutcome) {
         val p = prefs(context)
         val (decision, store) = FirstRunPolicy.resolveAtStart(p.getString(FirstRunPolicy.PREF_DECISION, null), p.all.keys)
-        if (store) p.edit().putString(FirstRunPolicy.PREF_DECISION, decision.name).commit()
+        if (store) p.edit(commit = true) { putString(FirstRunPolicy.PREF_DECISION, decision.name) }
         FirstRunPolicy.afterRestore(decision, restoreOutcome)?.let {
-            p.edit().putString(FirstRunPolicy.PREF_DECISION, it.name).commit()
+            p.edit(commit = true) { putString(FirstRunPolicy.PREF_DECISION, it.name) }
         }
     }
 

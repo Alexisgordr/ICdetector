@@ -1,7 +1,6 @@
 package com.alexisgordr.icdetector.ui
 
 import android.content.Intent
-import android.net.Uri
 import androidx.compose.foundation.layout.size
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Map
@@ -14,6 +13,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.res.stringResource
 import com.alexisgordr.icdetector.R
+import androidx.core.net.toUri
 
 @Composable
 fun LocationButton(lat: Double?, lon: Double?, cellId: String) {
@@ -25,7 +25,7 @@ fun LocationButton(lat: Double?, lon: Double?, cellId: String) {
     IconButton(
         onClick = {
             // Abrir OpenStreetMap en el navegador (libre, sin API key)
-            val uri = Uri.parse("https://www.openstreetmap.org/?mlat=$lat&mlon=$lon&zoom=15")
+            val uri = "https://www.openstreetmap.org/?mlat=$lat&mlon=$lon&zoom=15".toUri()
             // v2.10.8 — Sin navegador instalado, startActivity lanzaba una excepción y cerraba la app.
             runCatching { context.startActivity(Intent(Intent.ACTION_VIEW, uri)) }
         },

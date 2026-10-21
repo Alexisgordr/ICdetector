@@ -8,6 +8,7 @@ import com.alexisgordr.icdetector.core.AppBuildId
 import com.alexisgordr.icdetector.storage.CellDbHelper
 import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
+import androidx.core.content.edit
 
 /**
  * 3.0 — Operaciones de copia de seguridad que lanza la interfaz. Todas bloquean: se llaman desde
@@ -59,9 +60,9 @@ object BackupController {
             discardStaged(context)
             return result
         }
-        RestoreStartup.prefs(context).edit()
-            .putString(RestoreStartup.PREF_PRE_BACKUP_NAME, displayName(context, preBackupUri) ?: "")
-            .commit()
+        RestoreStartup.prefs(context).edit(commit = true) {
+            putString(RestoreStartup.PREF_PRE_BACKUP_NAME, displayName(context, preBackupUri) ?: "")
+        }
         RestoreStartup.engine(context).requestInstall()
         return result
     }

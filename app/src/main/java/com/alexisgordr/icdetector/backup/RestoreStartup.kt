@@ -4,6 +4,7 @@ import android.annotation.SuppressLint
 import android.content.Context
 import com.alexisgordr.icdetector.storage.CellDbHelper
 import java.io.File
+import androidx.core.content.edit
 
 /**
  * 3.0 — Al arrancar el proceso principal (ICDetectionApp.onCreate), antes de que nada abra la base:
@@ -35,18 +36,18 @@ object RestoreStartup {
             RestoreEngine.RestoreOutcome.NOTHING -> null
             RestoreEngine.RestoreOutcome.DISCARDED -> null
         }
-        if (text != null) prefs(context).edit().putString(PREF_LAST_RESULT, text).commit()
+        if (text != null) prefs(context).edit(commit = true) { putString(PREF_LAST_RESULT, text) }
         // 3.0 — Un historial restaurado (quizá de otro teléfono) no arranca el perfil local.
         // La opción experimental del perfil local no viaja en las copias y vuelve a estar desactivada:
         // las referencias restauradas pueden ser de otro teléfono. Si estaba activa, se anota.
         if (restoreOutcome == RestoreEngine.RestoreOutcome.RESTORED) {
             val p = prefs(context)
             val wasOn = p.getBoolean(com.alexisgordr.icdetector.core.profile.LocalProfileOption.PREF_KEY, false)
-            val editor = p.edit()
-                .putBoolean(FirstRunPolicy.PREF_HISTORY_RESTORED, true)
-                .putBoolean(com.alexisgordr.icdetector.core.profile.LocalProfileOption.PREF_KEY, false)
-            if (wasOn) editor.putBoolean(FirstRunPolicy.PREF_PROFILE_OFF_BY_RESTORE, true)
-            editor.commit()
+            p.edit(commit = true) {
+                putBoolean(FirstRunPolicy.PREF_HISTORY_RESTORED, true)
+                putBoolean(com.alexisgordr.icdetector.core.profile.LocalProfileOption.PREF_KEY, false)
+                if (wasOn) putBoolean(FirstRunPolicy.PREF_PROFILE_OFF_BY_RESTORE, true)
+            }
         }
         return result
     }
@@ -57,20 +58,20 @@ object RestoreStartup {
      */
     internal fun applySettings(context: Context, file: File) {
         val values = BackupSettings.fromJson(runCatching { file.readText() }.getOrNull())
-        val editor = prefs(context).edit()
-        values.forEach { (key, value) ->
-            when (value) {
-                is String -> editor.putString(key, value)
-                is Boolean -> editor.putBoolean(key, value)
+        prefs(context).edit(commit = true) {
+            values.forEach { (key, value) ->
+                when (value) {
+                    is String -> putString(key, value)
+                    is Boolean -> putBoolean(key, value)
+                }
             }
+            // 3.0 — Los episodios de Stable-Site restaurados nunca avisan: se borra el episodio pendiente
+            // de aviso (ver StableSiteNotices). Ese dato es interno y no viaja en la copia.
+            remove(com.alexisgordr.icdetector.core.StableSiteNotices.PREF_PENDING_EPISODE)
+            // 3.0 (G3) — Un viaje restaurado no tiene continuidad demostrable con este arranque: sin su
+            // ancla monotónica, el servicio lo cierra en su última hora observada.
+            remove(com.alexisgordr.icdetector.core.MobilityTripAnchor.PREF_KEY)
         }
-        // 3.0 — Los episodios de Stable-Site restaurados nunca avisan: se borra el episodio pendiente
-        // de aviso (ver StableSiteNotices). Ese dato es interno y no viaja en la copia.
-        editor.remove(com.alexisgordr.icdetector.core.StableSiteNotices.PREF_PENDING_EPISODE)
-        // 3.0 (G3) — Un viaje restaurado no tiene continuidad demostrable con este arranque: sin su
-        // ancla monotónica, el servicio lo cierra en su última hora observada.
-        editor.remove(com.alexisgordr.icdetector.core.MobilityTripAnchor.PREF_KEY)
-        editor.commit()
     }
 
     fun prefs(context: Context) =

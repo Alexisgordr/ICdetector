@@ -36,6 +36,7 @@ import kotlin.time.Duration.Companion.milliseconds
 import java.text.SimpleDateFormat
 import java.util.*
 import java.util.concurrent.CopyOnWriteArrayList
+import androidx.core.content.edit
 
 class MiniICService : Service() {
 
@@ -157,7 +158,7 @@ class MiniICService : Service() {
         private val prefs = getSharedPreferences(com.alexisgordr.icdetector.backup.BackupSettings.PREFS_FILE, MODE_PRIVATE)
         override fun load() = com.alexisgordr.icdetector.core.MobilityTripAnchor.parse(prefs.getString(com.alexisgordr.icdetector.core.MobilityTripAnchor.PREF_KEY, null))
         override fun save(anchor: com.alexisgordr.icdetector.core.MobilityTripAnchor?) {
-            prefs.edit().apply { if (anchor == null) remove(com.alexisgordr.icdetector.core.MobilityTripAnchor.PREF_KEY) else putString(com.alexisgordr.icdetector.core.MobilityTripAnchor.PREF_KEY, anchor.serialize()) }.apply()
+            prefs.edit { if (anchor == null) remove(com.alexisgordr.icdetector.core.MobilityTripAnchor.PREF_KEY) else putString(com.alexisgordr.icdetector.core.MobilityTripAnchor.PREF_KEY, anchor.serialize()) }
         }
     }
 
@@ -546,7 +547,7 @@ class MiniICService : Service() {
         )
         // Ajustes de servicios externos retirados (ver LegacyPreferences): se borran los secretos
         // y el estado que pudieran quedar de versiones anteriores.
-        prefs.edit().apply { com.alexisgordr.icdetector.core.LegacyPreferences.KEYS.forEach(::remove) }.apply()
+        prefs.edit { com.alexisgordr.icdetector.core.LegacyPreferences.KEYS.forEach(::remove) }
         // v2.3.3 — Continuidad de la recolección. Si el proceso murió (reinicio del móvil, OTA,
         // batería agotada) nadie lo anunciaba: la notificación se iba con el proceso y la
         // recolección quedaba parada sin dejar rastro. Ahora el hueco se calcula al arrancar y se
@@ -597,7 +598,7 @@ class MiniICService : Service() {
             return
         }
         // 3.1.0 (#42) — Para el arranque tras reiniciar (BootStart): el monitoreo está activado.
-        prefs.edit().putBoolean(com.alexisgordr.icdetector.core.BootStart.PREF_MONITORING_ENABLED, true).apply()
+        prefs.edit { putBoolean(com.alexisgordr.icdetector.core.BootStart.PREF_MONITORING_ENABLED, true) }
 
         // 3.0 — Solo en modo continuo; el adaptativo lo anota applyLocationMode().
         if (locationMode == com.alexisgordr.icdetector.core.LocationMode.CONTINUOUS) {
@@ -875,8 +876,9 @@ class MiniICService : Service() {
         }
         if (intent?.action == ACTION_STOP) {
             // 3.1.0 (#42) — Detenido por el usuario: no se vuelve a arrancar tras un reinicio.
-            getSharedPreferences("miniic_prefs", MODE_PRIVATE).edit()
-                .putBoolean(com.alexisgordr.icdetector.core.BootStart.PREF_MONITORING_ENABLED, false).apply()
+            getSharedPreferences("miniic_prefs", MODE_PRIVATE).edit {
+                putBoolean(com.alexisgordr.icdetector.core.BootStart.PREF_MONITORING_ENABLED, false)
+            }
             stopSelf()
             return START_NOT_STICKY
         }
@@ -1698,7 +1700,7 @@ class MiniICService : Service() {
         val pending = prefs.getString(notices.PREF_PENDING_EPISODE, null)
         val next = notices.pendingAfterObservation(pending, observation, siteAtStart)
         if (next == pending) return
-        prefs.edit().apply { if (next == null) remove(notices.PREF_PENDING_EPISODE) else putString(notices.PREF_PENDING_EPISODE, next) }.commit()
+        prefs.edit(commit = true) { if (next == null) remove(notices.PREF_PENDING_EPISODE) else putString(notices.PREF_PENDING_EPISODE, next) }
     }
 
     /**
@@ -1722,7 +1724,7 @@ class MiniICService : Service() {
         // pendiente) y escribe en disco en segundo plano. Si el proceso muriera justo antes de esa
         // escritura, el siguiente arranque podría repetir el aviso; usa el mismo id de notificación
         // por episodio (StableSiteNotices.notificationId), así que reemplaza al anterior, no suma otro.
-        prefs.edit().remove(notices.PREF_PENDING_EPISODE).apply()
+        prefs.edit { remove(notices.PREF_PENDING_EPISODE) }
         if (action == com.alexisgordr.icdetector.core.StableSiteNotices.Action.CONSUME_SILENTLY) {
             appendLog("[SITE]", notices.LOG_DISABLED)
             return

@@ -27,7 +27,7 @@ class StableSiteNoticesWiringTest {
         assertFalse("ya no hay observación sin anotar el inicio", cycle.contains("dbHelper.observeStableSiteEpisode(activeRaw"))
         val start = service.substringAfter("private fun recordStableSiteEpisodeStart(").substringBefore("private fun maybeNotifyStableSite(")
         assertTrue(start.contains("notices.pendingAfterObservation(pending, observation, siteAtStart)"))
-        assertTrue(start.contains(".commit()"))
+        assertTrue(start.contains("prefs.edit(commit = true) {"))
         // La evaluación no lee los episodios: cambiar el orden no cambia el veredicto.
         val evaluator = src("storage/CellDbHelper.kt").substringAfter("fun evaluateStableSiteCandidate(").substringBefore("fun observeStableSiteEpisode(")
         assertFalse(evaluator.contains("TABLE_SITE_SHADOW_TRIGGERS"))
@@ -46,9 +46,9 @@ class StableSiteNoticesWiringTest {
         assertTrue(notify.contains("notices.decide(decision, enabled, pending)"))
         assertTrue(notify.contains("prefs.getBoolean(notices.PREF_ENABLED, notices.DEFAULT_ENABLED)"))
         // 3.1.0 (#47) — apply(), no commit(): corre en el hilo principal.
-        val consume = notify.indexOf("prefs.edit().remove(notices.PREF_PENDING_EPISODE).apply()")
+        val consume = notify.indexOf("prefs.edit { remove(notices.PREF_PENDING_EPISODE) }")
         assertTrue("se consume antes de publicar", consume in 0 until notify.indexOf("showStableSiteNotice("))
-        assertFalse("sin escritura síncrona en el hilo principal", notify.contains(".commit()"))
+        assertFalse("sin escritura síncrona en el hilo principal", notify.contains(".commit()") || notify.contains("commit = true"))
         assertTrue(notify.contains("} catch (e: CancellationException) {\n            throw e\n        } catch (e: Exception) {"))
         // El terminal dice lo que pasó DESPUÉS de intentarlo: publicado, bloqueado o fallido.
         val logPosted = notify.indexOf("notices.LOG_POSTED")
@@ -129,7 +129,8 @@ class StableSiteNoticesWiringTest {
     @Test fun `a restore clears the pending episode so restored episodes never notify`() {
         val restore = src("backup/RestoreStartup.kt")
         val apply = restore.substringAfter("internal fun applySettings(").substringBefore("fun prefs(")
-        assertTrue(apply.indexOf("editor.remove(com.alexisgordr.icdetector.core.StableSiteNotices.PREF_PENDING_EPISODE)") in 0 until apply.indexOf("editor.commit()"))
+        assertTrue(apply.contains("prefs(context).edit(commit = true) {"))
+        assertTrue(apply.indexOf("remove(com.alexisgordr.icdetector.core.StableSiteNotices.PREF_PENDING_EPISODE)") > apply.indexOf("edit(commit = true) {"))
     }
 
     @Test fun `recorded in shadow keeps its original meaning and the open episode is reported`() {

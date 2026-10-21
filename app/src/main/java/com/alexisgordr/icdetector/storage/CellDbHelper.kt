@@ -1,3 +1,9 @@
+// 3.1.0 (lint UseKtx) — Las transacciones de la base se dejan con begin/try/finally explícito en vez
+// de `SQLiteDatabase.transaction {}`. El orden (setTransactionSuccessful al final del try,
+// endTransaction en el finally) se lee en el código y hay pruebas que lo comprueban; con
+// `transaction {}`, un `return` anticipado dentro del bloque desharía la transacción sin avisar.
+@file:Suppress("UseKtx")
+
 package com.alexisgordr.icdetector.storage
 
 import android.content.ContentValues

@@ -89,7 +89,7 @@ class ProfileAlgorithmVersionConflictTest {
         assertTrue(bootstrap.contains("LocalProfileStore.insertEvaluationChecked(db, step.record)"))
         assertTrue(bootstrap.contains("check(written != com.alexisgordr.icdetector.core.profile.ProfileEvaluationWrite.Outcome.FAILED)"))
         assertTrue("se marca después de cerrar la transacción con éxito",
-            bootstrap.indexOf("prefs.edit().putBoolean(key, true)") > bootstrap.indexOf("db.endTransaction()"))
+            bootstrap.indexOf("prefs.edit { putBoolean(key, true) }") > bootstrap.indexOf("db.endTransaction()"))
         assertTrue(bootstrap.indexOf("db.setTransactionSuccessful()") < bootstrap.indexOf("} finally {"))
         val model = main.resolve("com/alexisgordr/icdetector/core/profile/LocalProfileModel.kt").readText()
         assertTrue(model.contains("const val ALGORITHM_VERSION = 2"))

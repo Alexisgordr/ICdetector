@@ -4,6 +4,7 @@ import android.content.Context
 import android.content.res.Configuration
 import android.content.res.Resources
 import java.util.Locale
+import androidx.core.content.edit
 
 /** Keeps the explicitly selected app language independent from the system language. */
 object LocaleController {
@@ -22,10 +23,7 @@ object LocaleController {
 
     fun selectLanguage(context: Context, languageTag: String) {
         require(languageTag in AppLanguage.supported)
-        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-            .edit()
-            .putString(KEY, languageTag)
-            .apply()
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit { putString(KEY, languageTag) }
     }
 
     fun localizedContext(context: Context): Context {

@@ -3,6 +3,7 @@ package com.alexisgordr.icdetector.service
 import android.content.SharedPreferences
 import com.alexisgordr.icdetector.core.CollectionHealth
 import com.alexisgordr.icdetector.core.MonitoringStop
+import androidx.core.content.edit
 
 /**
  * Owns persistence and user-visible state for database write continuity.
@@ -35,7 +36,7 @@ internal class CollectionHealthController(
     fun noteWrite(rowId: Long, nowMs: Long = System.currentTimeMillis()): Change {
         val changed = health.noteWrite(rowId, nowMs)
         if (rowId != -1L) {
-            preferences.edit().putLong(KEY_LAST_SUCCESSFUL_WRITE, health.lastSuccessMs).apply()
+            preferences.edit { putLong(KEY_LAST_SUCCESSFUL_WRITE, health.lastSuccessMs) }
         }
         return when {
             !changed -> Change.NONE
@@ -56,10 +57,10 @@ internal class CollectionHealthController(
          * (hora y clase de la excepción). Lo borra el siguiente arranque correcto.
          */
         fun recordForegroundStartFailure(preferences: SharedPreferences, stopped: MonitoringStop.Stopped) {
-            preferences.edit()
-                .putLong(MonitoringStop.PREF_STOPPED_AT_MS, stopped.atMs)
-                .putString(MonitoringStop.PREF_STOPPED_ERROR, stopped.errorClass)
-                .apply()
+            preferences.edit {
+                putLong(MonitoringStop.PREF_STOPPED_AT_MS, stopped.atMs)
+                putString(MonitoringStop.PREF_STOPPED_ERROR, stopped.errorClass)
+            }
         }
 
         fun foregroundStartFailure(preferences: SharedPreferences): MonitoringStop.Stopped? = MonitoringStop.fromStored(
@@ -68,7 +69,7 @@ internal class CollectionHealthController(
         )
 
         fun clearForegroundStartFailure(preferences: SharedPreferences) {
-            preferences.edit().remove(MonitoringStop.PREF_STOPPED_AT_MS).remove(MonitoringStop.PREF_STOPPED_ERROR).apply()
+            preferences.edit { remove(MonitoringStop.PREF_STOPPED_AT_MS); remove(MonitoringStop.PREF_STOPPED_ERROR) }
         }
 
         private const val KEY_LAST_SUCCESSFUL_WRITE = "last_successful_write_ms"

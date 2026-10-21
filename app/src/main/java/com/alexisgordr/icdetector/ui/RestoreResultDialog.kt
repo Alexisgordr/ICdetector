@@ -12,6 +12,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import com.alexisgordr.icdetector.R
 import com.alexisgordr.icdetector.backup.RestoreStartup
+import androidx.core.content.edit
 
 /** 3.0 — Tras reiniciar por una restauración, dice una vez cómo ha terminado. */
 @Composable
@@ -34,7 +35,7 @@ fun RestoreResultDialog() {
         text = { Text(text) },
         confirmButton = {
             TextButton(onClick = {
-                prefs.edit().remove(RestoreStartup.PREF_LAST_RESULT).remove(RestoreStartup.PREF_PRE_BACKUP_NAME).apply()
+                prefs.edit { remove(RestoreStartup.PREF_LAST_RESULT); remove(RestoreStartup.PREF_PRE_BACKUP_NAME) }
                 result = null
             }) { Text("OK") }
         }

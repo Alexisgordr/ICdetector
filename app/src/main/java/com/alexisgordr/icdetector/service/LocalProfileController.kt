@@ -1,3 +1,9 @@
+// 3.1.0 (lint UseKtx) — Las transacciones de la base se dejan con begin/try/finally explícito en vez
+// de `SQLiteDatabase.transaction {}`. El orden (setTransactionSuccessful al final del try,
+// endTransaction en el finally) se lee en el código y hay pruebas que lo comprueban; con
+// `transaction {}`, un `return` anticipado dentro del bloque desharía la transacción sin avisar.
+@file:Suppress("UseKtx")
+
 package com.alexisgordr.icdetector.service
 
 import android.content.SharedPreferences
@@ -13,6 +19,7 @@ import com.alexisgordr.icdetector.core.profile.ProfileMode
 import com.alexisgordr.icdetector.core.profile.Provenance
 import com.alexisgordr.icdetector.storage.CellDbHelper
 import com.alexisgordr.icdetector.storage.LocalProfileStore
+import androidx.core.content.edit
 
 /**
  * 3.0 — Perfil local en sombra. Se llama DESPUÉS de guardar cada fila del historial, en la misma
@@ -102,7 +109,7 @@ internal class LocalProfileController(
         } finally {
             db.endTransaction()
         }
-        prefs.edit().putBoolean(key, true).apply()
+        prefs.edit { putBoolean(key, true) }
     }
 
     /**
@@ -112,11 +119,11 @@ internal class LocalProfileController(
     fun recordFailure(where: String, e: Throwable) {
         val now = clock()
         val text = LocalProfileHealth.describe(where, e)
-        prefs.edit()
-            .putInt(LocalProfileHealth.PREF_ERROR_COUNT, prefs.getInt(LocalProfileHealth.PREF_ERROR_COUNT, 0) + 1)
-            .putString(LocalProfileHealth.PREF_LAST_ERROR, text)
-            .putLong(LocalProfileHealth.PREF_LAST_ERROR_MS, now)
-            .apply()
+        prefs.edit {
+            putInt(LocalProfileHealth.PREF_ERROR_COUNT, prefs.getInt(LocalProfileHealth.PREF_ERROR_COUNT, 0) + 1)
+            putString(LocalProfileHealth.PREF_LAST_ERROR, text)
+            putLong(LocalProfileHealth.PREF_LAST_ERROR_MS, now)
+        }
         if (LocalProfileHealth.shouldLog(lastLoggedMs, now)) {
             lastLoggedMs = now
             android.util.Log.w("LocalProfile", text, e)
@@ -132,7 +139,7 @@ internal class LocalProfileController(
     fun logSwitchOffByRestore() {
         if (!prefs.getBoolean(com.alexisgordr.icdetector.backup.FirstRunPolicy.PREF_PROFILE_OFF_BY_RESTORE, false)) return
         LocalProfileStore.recordModeEvent(dbHelper.writableDatabase, null, appVersion, clock())
-        prefs.edit().remove(com.alexisgordr.icdetector.backup.FirstRunPolicy.PREF_PROFILE_OFF_BY_RESTORE).apply()
+        prefs.edit { remove(com.alexisgordr.icdetector.backup.FirstRunPolicy.PREF_PROFILE_OFF_BY_RESTORE) }
     }
 
     private fun observation(r: ProfileBootstrap.Row) =
