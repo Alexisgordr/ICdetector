@@ -14,7 +14,7 @@ import java.io.File
 class DatabaseDowngradeTest {
     @Test fun `it carries both versions and a log-only message`() {
         val e = DatabaseDowngradeException(27, 26)
-        assertTrue(e is IllegalStateException)
+        assertEquals("hereda de IllegalStateException, no de SQLiteException", IllegalStateException::class.java, e.javaClass.superclass)
         assertFalse("no es una SQLiteException", e.javaClass.name.contains("SQLite"))
         assertEquals(27, e.storedVersion)
         assertEquals(26, e.supportedVersion)
