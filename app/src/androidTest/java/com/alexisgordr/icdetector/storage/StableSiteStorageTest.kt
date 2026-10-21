@@ -55,6 +55,9 @@ class StableSiteStorageTest {
         legacy.execSQL("CREATE TABLE forensic_cases(id INTEGER PRIMARY KEY)")
         legacy.execSQL("CREATE TABLE forensic_samples(id INTEGER PRIMARY KEY,case_id INTEGER)")
         legacy.execSQL("INSERT INTO forensic_cases(id) VALUES(9)")
+        // 3.1.0 (#47) — Una base real de esquema 15 ya tiene cell_transitions (la crea el 15), y la
+        // migración al 17 ya no se traga el «no such table» de su ALTER.
+        legacy.execSQL("CREATE TABLE cell_transitions(from_identity TEXT NOT NULL,to_identity TEXT NOT NULL,observations INTEGER NOT NULL,trusted_observations INTEGER NOT NULL,last_status TEXT NOT NULL,last_seen_ms INTEGER NOT NULL,PRIMARY KEY(from_identity,to_identity))")
         legacy.version=15; legacy.close()
         db=CellDbHelper(context); val upgraded=db.writableDatabase
         assertEquals(1,count(upgraded,"SELECT COUNT(*) FROM history"))
@@ -165,6 +168,9 @@ class StableSiteStorageTest {
     @Test fun openingSchema18RemovesOnlyTechnicallyInvalidRfFingerprints(){
         db.close();context.deleteDatabase(NAME)
         val existing=context.openOrCreateDatabase(NAME,Context.MODE_PRIVATE,null)
+        // 3.1.0 (#47) — Una base real de esquema 18 tiene history, y la migración al 19 ya no se
+        // traga el «no such table» de su ALTER.
+        existing.execSQL("CREATE TABLE history(id INTEGER PRIMARY KEY,cid TEXT)")
         existing.execSQL("CREATE TABLE site_rf_neighbours(site_key TEXT NOT NULL,fingerprint TEXT NOT NULL,radio TEXT NOT NULL,arfcn INTEGER NOT NULL,pci INTEGER NOT NULL,mcc TEXT,mnc TEXT,tac TEXT,first_seen_ms INTEGER NOT NULL,last_seen_ms INTEGER NOT NULL,observations INTEGER NOT NULL,PRIMARY KEY(site_key,fingerprint))")
         existing.execSQL("CREATE TABLE site_rf_neighbour_days(site_key TEXT NOT NULL,fingerprint TEXT NOT NULL,day TEXT NOT NULL,PRIMARY KEY(site_key,fingerprint,day))")
         existing.execSQL("INSERT INTO site_rf_neighbours VALUES('s','RFCTX:v1:LTE:0:503','LTE',0,503,NULL,NULL,NULL,1,1,2)")

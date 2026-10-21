@@ -112,13 +112,10 @@ class WalModeTest {
             val exported = BackupExporter.export(context, src, source, "3.1.0+test", out, Instant.EPOCH)
             assertTrue(exported.toString(), exported is BackupExporter.Result.Ok)
 
-            // El checkpoint PASIVO no pudo vaciar el -wal: el fichero principal solo no tiene las filas nuevas.
+            // El checkpoint PASIVO no pudo vaciar el -wal: las filas nuevas siguen solo en él. (El
+            // fichero principal por sí solo no sirve de copia: tras un checkpoint parcial SQLite
+            // puede darlo por corrupto, así que no se abre aquí.)
             assertTrue("el -wal sigue con contenido", File(source.path + "-wal").length() > 0)
-            val mainOnly = File(dir, "main-only.db")
-            source.copyTo(mainOnly)
-            SQLiteDatabase.openDatabase(mainOnly.path, null, SQLiteDatabase.OPEN_READWRITE).use { db ->
-                db.rawQuery("SELECT COUNT(*) FROM history WHERE cid = '222'", null).use { it.moveToFirst(); assertEquals(0, it.getInt(0)) }
-            }
 
             // La copia, restaurada, tiene todas: las 4 filas escritas tras abrir la foto vienen del -wal.
             helper(target).close()
