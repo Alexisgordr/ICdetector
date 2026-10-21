@@ -123,6 +123,7 @@ data class HeuristicReport(
         csgCell && id in CSG_RULES -> CSG_ABSTENTION_CODE
         id == "H11" && mobileCellIdFixTooOld -> H11_FIX_ABSTENTION_CODE
         id == "H11" && mobileCellIdFixImprecise -> H11_FIX_IMPRECISE_CODE
+        id == "H12" -> H12_RETIRED_CODE
         id == "H17" -> H17_SHADOW_CODE
         else -> null
     }
@@ -133,6 +134,7 @@ data class HeuristicReport(
         csgCell && id in CSG_RULES -> CSG_ABSTENTION_TEXT
         id == "H11" && mobileCellIdFixTooOld -> H11_FIX_ABSTENTION_TEXT
         id == "H11" && mobileCellIdFixImprecise -> H11_FIX_IMPRECISE_TEXT
+        id == "H12" -> H12_RETIRED_TEXT
         id == "H17" -> H17_SHADOW_TEXT
         else -> null
     }
@@ -160,6 +162,13 @@ data class HeuristicReport(
         /** 3.1.0 (#46) — H11 con un fix sin precisión conocida o de más de 100 m (ver core/MobileCellIdFixAge). */
         const val H11_FIX_IMPRECISE_CODE = "fix_impreciso"
         const val H11_FIX_IMPRECISE_TEXT = "fix GPS sin precisión conocida o de más de 100 m"
+
+        /**
+         * 3.1.0 — H12 retirada: siempre N/A. Con código propio para no confundirla con el `H12` de
+         * las filas 3.0, que era una abstención real (p. ej. por Wi-Fi o sin medida de latencia).
+         */
+        const val H12_RETIRED_CODE = "retirada"
+        const val H12_RETIRED_TEXT = "regla retirada en 3.1.0"
 
         /** 3.1.0 — H17 en sombra: se calcula y se guarda, pero no se evalúa (ver core/CellChurn). */
         const val H17_SHADOW_CODE = "sombra"

@@ -19,9 +19,11 @@ before 3.1.0 have them empty.
 
 ## Rules that are always listed as not evaluated from 3.1.0
 
-`NotEvaluatedHeuristics` lists H12 and `H17(sombra)` in every row from 3.1.0: the latency + RF
-correlation was retired with the latency probe, and the cell churn runs in shadow mode. Rows from
-earlier versions list H12 only when it was not evaluated then, and never H17.
+`NotEvaluatedHeuristics` lists `H12(retirada)` and `H17(sombra)` in every row from 3.1.0: the
+latency + RF correlation was retired with the latency probe, and the cell churn runs in shadow mode.
+Rows from earlier versions list a bare `H12` only when it abstained then (for example on Wi-Fi or
+without a latency measurement), never `H12(retirada)`, and never H17. The code keeps the two cases
+apart in a mixed dataset.
 
 ## Columns that are always empty from 3.1.0
 

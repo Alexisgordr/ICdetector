@@ -1184,7 +1184,8 @@ ObservationId, ChurnCells15m, ChurnChanges15m, ChurnMotion
   (`roaming`, `frontera`, `sin_sim`, `sin_servicestate`, `sin_mcc_servidora`); on a CSG cell with
   local history, H1, H2, H5, H6 and H7 (`csg`); H11 with a GPS fix older than 60 s or of unknown
   age (`fix_viejo`) or, from 3.1.0, without a known accuracy of 100 m or better (`fix_impreciso`); and,
-  from 3.1.0, H17 (`sombra`, shadow mode). For example `H1(csg);H3(roaming);H9;H11(fix_viejo);H12;H17(sombra)`.
+  from 3.1.0, H12 (`retirada`, retired; a bare `H12` is a 3.0 row where it abstained) and H17
+  (`sombra`, shadow mode). For example `H1(csg);H3(roaming);H9;H11(fix_viejo);H12(retirada);H17(sombra)`.
 - `GpsAccuracyM` is the accuracy of the row's fix in metres; filter large values before analysing
   geometry.
 - `AppVersion` is the version that recorded the row; use it to apply dataset cuts per row. From

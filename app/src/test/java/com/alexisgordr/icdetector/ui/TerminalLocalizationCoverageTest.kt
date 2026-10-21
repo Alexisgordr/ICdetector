@@ -60,6 +60,7 @@ class TerminalLocalizationCoverageTest {
         "[H17 sombra] 15 min: 3 celdas distintas, 4 cambios; movimiento MOVING (sin evaluar)",
         com.alexisgordr.icdetector.core.DiagnosticEngine.H17_SHADOW_EXPLANATION,
         com.alexisgordr.icdetector.core.DiagnosticEngine.H12_RETIRED_EXPLANATION,
+        "[HEUR] 12. Correlación Latencia + RF: N/A (regla retirada en 3.1.0)",
         "[AUDIT] 6. Proximidad por Timing Advance: NO EVALUADA",
         "[AUDIT] 7. Espectro Fantasma: SUPERADA",
         "[AUDIT] 9. Cifrado Hardware: NO EVALUADA",

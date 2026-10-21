@@ -44,15 +44,20 @@ class EvaluationCoverageTest {
             mnc = "07", tac = "100", dbm = -60, mcc = "214", rsrq = -18, sinr = -2,
             radioTech = com.alexisgordr.icdetector.models.RadioTech.LTE)
         val report = ThreatAnalyzer.analyzeThreats(cell, emptyList(), emptyList(), null).heuristicReport
-        assertTrue("H12" in report.notEvaluatedIds().split(";"))
+        // Con código propio: un `H12` sin código es el de una fila 3.0 que se abstuvo (p. ej. por Wi-Fi).
+        assertTrue("H12(retirada)" in report.notEvaluatedIds().split(";"))
+        assertFalse("H12" in report.notEvaluatedIds().split(";"))
+        assertEquals(HeuristicReport.H12_RETIRED_CODE, report.abstentionCode("H12"))
+        assertTrue(report.snapshot().contains("H12=NOT_EVALUATED(retirada)"))
         assertFalse(report.failedCount > 0 && report.latencyCorrelation == FAILED)
     }
 
     @Test fun `all rules evaluated is an explicit NONE, not an empty value`() {
         assertEquals(HeuristicReport.NONE_NOT_EVALUATED, allPassed().notEvaluatedIds())
         // Un informe sin calcular dice la verdad: no se evaluó ninguna.
-        // H17 (en sombra) lleva su código: `H17(sombra)`.
-        assertEquals((1..16).joinToString(";") { "H$it" } + ";H17(sombra)", HeuristicReport().notEvaluatedIds())
+        // H12 (retirada) y H17 (en sombra) llevan su código.
+        assertEquals((1..16).joinToString(";") { if (it == 12) "H12(retirada)" else "H$it" } + ";H17(sombra)",
+            HeuristicReport().notEvaluatedIds())
     }
 
     @Test fun `the csv exports both columns at the end and leaves them empty for legacy rows`() {

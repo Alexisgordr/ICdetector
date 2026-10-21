@@ -311,8 +311,9 @@ private val replacements = linkedMapOf(
     " celdas distintas, " to " distinct cells, ",
     " cambios; movimiento " to " changes; motion ",
     " (sin evaluar)" to " (not evaluated)",
-    // 3.1.0 — H12 retirada (DiagnosticEngine.H12_RETIRED_EXPLANATION).
+    // 3.1.0 — H12 retirada (DiagnosticEngine.H12_RETIRED_EXPLANATION, HeuristicReport.H12_RETIRED_TEXT).
     "regla retirada en 3.1.0 (la correlación de latencia necesitaba conexión a Internet)" to "rule retired in 3.1.0 (the latency correlation needed an Internet connection)",
+    "regla retirada en 3.1.0" to "rule retired in 3.1.0",
     // 3.0 (corte de campaña) — H9 reservada.
     "Android no expone el estado de cifrado a aplicaciones sin privilegios; regla reservada" to "Android does not expose ciphering status to unprivileged apps; reserved rule",
     "todavía no existe una secuencia temporal utilizable" to "no usable temporal sequence exists yet",

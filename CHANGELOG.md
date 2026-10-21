@@ -70,7 +70,8 @@ Version code 40. A local build; not published yet.
   no points, no likelihood ratio and no episode family, like H9. Where latency detection had been
   enabled, H12 could subtract 20 points and add a 1.8 likelihood ratio; from 3.1.0 it never does,
   so **H12, the security score and the anomaly confidence are a dataset cut** for those rows (with
-  latency detection off, its default, nothing changes). `NotEvaluatedHeuristics` always lists H12.
+  latency detection off, its default, nothing changes). `NotEvaluatedHeuristics` always lists it as
+  `H12(retirada)`, so it is not confused with the bare `H12` of a 3.0 row where it abstained.
   The forensic `latency_state` column stays, empty for new samples. The latency setting of an
   older backup is ignored, and a stored one is deleted the first time 3.1.0 runs.
 - **Internet permission.** With no network code left, the app no longer requests
