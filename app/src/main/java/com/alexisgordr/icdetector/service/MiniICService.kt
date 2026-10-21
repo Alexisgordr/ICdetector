@@ -1066,6 +1066,10 @@ class MiniICService : Service() {
             val changeTimeMs = System.currentTimeMillis()
             if (activeRaw != null) {
                 cellChanges.observe(com.alexisgordr.icdetector.core.ServingIdentityChange.of(activeRaw), changeTimeMs)
+                // 3.1.0 (H17, en sombra) — Con el mismo criterio, el churn de 15 min también registra
+                // aquí cada servidora, con el reloj monotónico de la entrega: un ciclo descartado deja
+                // su cambio. La foto (snapshot) se toma en el análisis.
+                cellChurn.observe(com.alexisgordr.icdetector.core.ServingIdentityChange.of(activeRaw), deliveredAtElapsedMs)
             }
             val cellChangeHistory = cellChanges.snapshot()
 
@@ -1095,17 +1099,15 @@ class MiniICService : Service() {
                     prevRegisteredDbm = null
                     recentRegisteredDbmTrend.clear()
                     // 3.1.0 — H17: el churn de antes de la pérdida o del hueco no se suma al de después.
-                    cellChurn.reset()
+                    // Esta entrega (y las posteriores) ya están observadas: solo se olvida lo anterior.
+                    cellChurn.restartAt(deliveredAtElapsedMs, servedAtMs = activeRaw != null)
                 }
                 val currentLocation = deliveryLocation
                 // Edad del fix en la ENTREGA (reloj monotónico); sin marca monotónica, desconocida.
                 val deliveryFixAgeMs = currentLocation?.elapsedRealtimeNanos?.takeIf { it > 0 }
                     ?.let { deliveredAtElapsedMs - it / 1_000_000L }
-                // 3.1.0 (H17, en sombra) — Churn de 15 min: se guarda en la fila y se anota en el
-                // terminal; no se evalúa ni puntúa (CellChurn).
-                if (activeRaw != null) {
-                    cellChurn.observe(com.alexisgordr.icdetector.core.ServingIdentityChange.of(activeRaw), deliveredAtElapsedMs)
-                }
+                // 3.1.0 (H17, en sombra) — Churn de 15 min (observado al recibir la entrega): se guarda
+                // en la fila y se anota en el terminal; no se evalúa ni puntúa (CellChurn).
                 val churn = cellChurn.snapshot(deliveredAtElapsedMs, currentLocation?.takeIf { it.hasSpeed() }?.speed, deliveryFixAgeMs)
                 if (activeRaw != null) {
                     val churnLog = "15 min: ${churn.distinctCells15m} celdas distintas, ${churn.changes15m} cambios; movimiento ${churn.motion.name} (sin evaluar)"

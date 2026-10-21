@@ -44,7 +44,7 @@ class CellChurnShadowTest {
         assertFalse("el analizador no recibe el churn", analyzer.substringAfter("fun analyzeThreats(").substringBefore("): CellData").contains("churn", ignoreCase = true))
         val service = src("service/MiniICService.kt")
         assertTrue(service.contains("stableSiteDecision\n                        ).copy(churn = churn)"))
-        assertTrue("reinicio tras pérdida o hueco", service.substringAfter("if (continuityBroken) {").substringBefore("}").contains("cellChurn.reset()"))
+        assertTrue("reinicio tras pérdida o hueco", service.substringAfter("if (continuityBroken) {").substringBefore("}").contains("cellChurn.restartAt(deliveredAtElapsedMs, servedAtMs = activeRaw != null)"))
         assertTrue(service.contains("appendLog(\"[H17 sombra]\", churnLog)"))
         assertTrue(src("service/ObservationPersistenceController.kt").contains("churn = cell.churn"))
     }

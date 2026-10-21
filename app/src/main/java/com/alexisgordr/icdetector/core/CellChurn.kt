@@ -20,8 +20,8 @@ data class ChurnSnapshot(val distinctCells15m: Int, val changes15m: Int, val mot
  *
  * Un cambio es el de [ServingIdentityChange]: identidad completa; un campo desconocido o un CID
  * ilegible no cuentan. Las identidades distintas incluyen la que servía al empezar la ventana.
- * [reset] tras una pérdida de servicio o un hueco ([CoverageContinuity]): lo de antes no se suma
- * a lo de después. Tiempos en un reloj monotónico (el servicio usa `elapsedRealtime`).
+ * [restartAt] tras una pérdida de servicio o un hueco ([CoverageContinuity]): lo de antes no se
+ * suma a lo de después. Tiempos en un reloj monotónico (el servicio usa `elapsedRealtime`).
  *
  * Puro, sin Android.
  */
@@ -43,11 +43,28 @@ internal class CellChurn(private val windowMs: Long = WINDOW_MS) {
         prune(nowMs)
     }
 
-    /** Pérdida de servicio o hueco: empieza de cero. */
+    /** Borrado del historial: empieza de cero. */
     @Synchronized
     fun reset() {
         segments.clear()
         previous = null
+    }
+
+    /**
+     * 3.1.0 — Pérdida de servicio o hueco detectados al analizar la entrega de [atMs]. Las lecturas
+     * se observan al recibirlas (antes del análisis), así que la de [atMs], y las que hayan llegado
+     * después mientras se analizaba, ya están dentro: se olvida lo anterior a [atMs] y la servidora
+     * de ese instante pasa a ser la primera (no un cambio). Lo posterior se conserva. Con
+     * [servedAtMs] = false esa entrega no traía servidora: no queda ninguna de antes.
+     */
+    @Synchronized
+    fun restartAt(atMs: Long, servedAtMs: Boolean) {
+        val current = segments.lastOrNull { it.startMs <= atMs }.takeIf { servedAtMs }
+        val later = segments.filter { it.startMs > atMs }
+        segments.clear()
+        if (current != null) segments.addLast(Segment(current.key, atMs, isChange = false))
+        later.forEachIndexed { i, s -> segments.addLast(if (i == 0 && current == null) s.copy(isChange = false) else s) }
+        if (segments.isEmpty()) previous = null
     }
 
     /**
@@ -58,9 +75,11 @@ internal class CellChurn(private val windowMs: Long = WINDOW_MS) {
     fun snapshot(nowMs: Long, speedMps: Float?, fixAgeMs: Long?): ChurnSnapshot {
         prune(nowMs)
         val since = nowMs - windowMs
+        // Una lectura recibida después de [nowMs] (mientras se analizaba esta) no entra en su foto.
+        val upToNow = segments.filter { it.startMs <= nowMs }
         return ChurnSnapshot(
-            distinctCells15m = segments.map { it.key }.toSet().size,
-            changes15m = segments.count { it.isChange && it.startMs >= since },
+            distinctCells15m = upToNow.map { it.key }.toSet().size,
+            changes15m = upToNow.count { it.isChange && it.startMs >= since },
             motion = motionOf(speedMps, fixAgeMs)
         )
     }
