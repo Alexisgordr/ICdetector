@@ -50,35 +50,39 @@
 > [!IMPORTANT]
 > **Project status**
 >
-> - **Stable — 3.0.0.** Published on [GitHub Releases](https://github.com/Alexisgordr/ICdetector/releases).
->   More accurate rule inputs, stricter confirmation, a fully audited engine, backup and restore. The
->   field-collection campaign runs on this release, with its campaign cut, from a fresh database
->   ([IMPORTANT.md](IMPORTANT.md)). **3.0 needs a clean install** from v2.10.x.
-> - **Previous release — v2.10.10.** Still on GitHub Releases; 3.0.0 replaces it.
+> - **Stable — 3.1.0.** Published on [GitHub Releases](https://github.com/Alexisgordr/ICdetector/releases).
+>   A design update together with a security update that fixes bugs. **It needs a full reinstall**
+>   (see below). The field-collection campaign restarts on it from a fresh install
+>   ([IMPORTANT.md](IMPORTANT.md)).
+> - **Previous release — 3.0.0.** Still on GitHub Releases; 3.1.0 replaces it.
 >
 > Details: [Status.md](Status.md) · [CHANGELOG.md](CHANGELOG.md)
 
 > [!NOTE]
-> **Third and final audit: the app is ready for the field.**
+> **3.1.0: a design update, a security update — and, I am sorry, a full reinstall.**
 >
-> This is the third full audit of the app, and there will be no more. I reviewed the whole app, part
-> by part: the inputs of every rule, scoring, temporal confirmation, local learning, geometry, the
-> analysis cycle, storage and the data the engine learns from. The resulting fixes, and the final
-> campaign cut, are in 3.0.0 ([CHANGELOG.md](CHANGELOG.md)). From here on the plan is to
-> collect field data and let the evidence speak.
+> 3.1.0 is a design update together with a security update that fixes bugs found after 3.0.0. I am
+> truly sorry to have to do this: several of those fixes change how rules are evaluated (the dataset
+> cuts are listed in [Status.md](Status.md)), so data recorded with 3.0.0 is not comparable with data
+> recorded with 3.1.0, and the dataset has to start again. **3.1.0 needs a full reinstall of the
+> app:** export anything you want to keep (history CSV, forensic cases), uninstall the app, install
+> 3.1.0 and start collecting from scratch. Reinstalling also clears the settings and the internal
+> state left by 3.0, so every phone starts from the same point.
 >
-> **Start from a clean install.** This last update changes how several rules are evaluated and,
-> together with the dataset cuts of the 3.0 betas ([Status.md](Status.md) lists them), data
-> recorded before it is not comparable with data recorded after it. Export anything you want to
-> keep, uninstall the app, install 3.0.0 and start collecting from scratch — and enjoy the app. To keep your settings (such as the location mode), *History → Delete history* gives the same
-> clean start without uninstalling.
+> **No Internet, by decision.** I have decided that ICdetection works without Internet. The app no
+> longer declares Android's Internet permission, so nothing can leave the phone through it. Three
+> things are gone for that reason:
 >
-> - **You can also just update.** On a 3.0 beta, 3.0.0 installs over it, migrates the database and
->   keeps working. In that case, **note the date you updated**: rows recorded before it
->   belong to an earlier dataset. Each row's `AppVersion` (version and build commit) lets you
->   separate them later.
+> - **Orbot** — the Tor/SOCKS proxy setting, which only existed to hide the two connections below.
+> - **Latency detection (H12)** — it sent requests to third-party servers, and network latency
+>   depends on much more than the cell you are on. H12 keeps its number and is always `N/A`.
+> - **OpenCellID** — the lookup sent the cells you observed to an external database. It never
+>   changed the score.
 >
-> Coming from v2.10.x, 3.0 still needs a clean install (see [Getting started](#-getting-started)).
+> A tool that watches the mobile network should not leave traces of its own on the network, and
+> everything the detector needs is what the phone itself observes.
+>
+> The same full reinstall applies when coming from v2.10.x or 3.0 (see [Getting started](#-getting-started)).
 
 ---
 
@@ -162,15 +166,14 @@ imposed by Android.
 
 ## 🚀 Getting started
 
-1. **Download** 3.0.0 from [GitHub Releases](https://github.com/Alexisgordr/ICdetector/releases).
-   Every release is the same app (`com.alexisgordr.icdetector`), so a newer version installs over an
-   older one and keeps its data.
-2. **Coming from v2.10.x?** 3.0 changes the database and the methodology, so it needs a clean
-   install: export what you want to keep and uninstall v2.10.x first.
-   To build it yourself instead:
+1. **Download** 3.1.0 from [GitHub Releases](https://github.com/Alexisgordr/ICdetector/releases).
+   **3.1.0 needs a full reinstall:** export what you want to keep, uninstall the app, then install
+   3.1.0 (see the note above). Every release is the same app (`com.alexisgordr.icdetector`), so
+   later versions install over an earlier one and keep its data.
+2. **Build it yourself** instead, if you prefer:
 
    ```bash
-   git clone -b v3.0.0 https://github.com/Alexisgordr/ICdetector.git
+   git clone -b v3.1.0 https://github.com/Alexisgordr/ICdetector.git
    cd ICdetector
    ./gradlew assembleDebug    # APK in app/build/outputs/apk/debug/
    ```
@@ -226,8 +229,8 @@ reports a real TAC; placeholder values some modems report (TAC `65535`) are read
 
 #### Timing Advance Proximity (H6)
 Fails when the Timing Advance implies the phone is within about 100 m of the transmitter while the
-signal is very strong (≥ −60 dBm). The app has no tower position in the scoring path (public-database
-coordinates are only shown as a distance), so H6 does not compare TA with a tower location. A missing TA is only taken from a duplicate of the same cell, never from another transmitter. Modems
+signal is very strong (≥ −60 dBm). The app has no tower positions (it queries no public database),
+so H6 does not compare TA with a tower location. A missing TA is only taken from a duplicate of the same cell, never from another transmitter. Modems
 that always report zero are detected per technology (`STUB_ZERO`) and excluded from geometry. TA on
 5G NR is not converted to distance, and on GSM (554 m steps) H6 is `N/A`.
 
@@ -504,8 +507,9 @@ restore only backups you made yourself. See the [manual](MANUAL.md#backup-and-re
 transitions, service-state events, Stable-Site learning and route-familiarity trips in a single
 transaction, safely even while monitoring is running.
 
-**No Internet permission.** ICdetection does not request Android's Internet permission; the only
-connections it could make (the optional OpenCellID lookup and latency probe) were removed in 3.1.0.
+**No Internet permission.** ICdetection works without Internet by design. It does not request
+Android's Internet permission; the only connections it could make — the optional OpenCellID lookup,
+the latency probe and the Orbot (Tor/SOCKS) proxy that could carry them — were removed in 3.1.0.
 
 ---
 
@@ -697,8 +701,8 @@ These limitations are inherent to Android userland restrictions.
 |---|---|
 | [MANUAL.md](MANUAL.md) | How to install and use the app: screens, rules, phases, exports and troubleshooting |
 | [CHANGELOG.md](CHANGELOG.md) | Every release in detail, including each dataset cut |
-| [Status.md](Status.md) | Current versions, the 3.0 roadmap, dataset cuts in 3.0 and open items |
-| [IMPORTANT.md](IMPORTANT.md) | The field-collection campaign on 3.0: Day 1, dataset cuts, recommended reset and the earlier v2.10.x stage |
+| [Status.md](Status.md) | Current versions, the 3.0 roadmap, dataset cuts in 3.0 and 3.1.0, and open items |
+| [IMPORTANT.md](IMPORTANT.md) | The field-collection campaign on 3.1.0: Day 1, the full reinstall, dataset cuts and the earlier stages |
 | [docs/history/](docs/history/) | Archived per-release status notes, including the v2.1 field notes |
 
 ---
@@ -761,19 +765,6 @@ Kotlin/Android implementation.
 Questions, corrections and bug reports are welcome — please
 **[open an issue](https://github.com/Alexisgordr/ICdetector/issues)**. Every report is reviewed and
 addressed where possible.
-
-> **Nota para los usuarios:** esta es la tercera auditoría completa de la aplicación y no habrá
-> más: a partir de aquí toca reunir datos de campo. Esta última actualización cambia cómo se evalúan
-> varias reglas y, sumada a los cortes del dataset de las betas de la 3.0, separa los datos de antes
-> y de después. **Lo que recomiendo** es empezar desde una instalación limpia: exportad lo que
-> queráis conservar, desinstalad la app, instalad la 3.0.0 (GitHub Releases) y empezad a
-> recoger datos desde cero. Y a disfrutar de la app. Si queréis conservar los ajustes (como el modo de ubicación),
-> *Historial → Borrar historial* deja la base igual de limpia sin desinstalar. **También podéis
-> simplemente actualizar** desde una beta de la 3.0: la app migra la base y os seguirá funcionando,
-> pero **apuntad la fecha en que actualizasteis**, porque las filas anteriores pertenecen a otro
-> dataset (la columna `AppVersion` de cada fila permite separarlas). Desde v2.10.x, la 3.0 sigue
-> necesitando una instalación limpia. Todos los detalles están en [Status.md](Status.md),
-> [IMPORTANT.md](IMPORTANT.md) y [CHANGELOG.md](CHANGELOG.md).
 
 <div align="center">
 

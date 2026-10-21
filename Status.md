@@ -8,16 +8,21 @@ The current state of the project in one page. What changed in each release is in
 
 | | Version | Version code | DB schema | Where |
 |---|---|---|---|---|
-| **In preparation** | 3.1.0 | 40 | 26 | Local branch `ICdetection-v3.1.0`, not published ([docs/3.1.0-progress.md](docs/3.1.0-progress.md)) |
-| **Stable release** | 3.0.0 | 39 | 25 | GitHub Releases |
-| **Field campaign** | 3.0.0 | 39 | 25 | Day 1 = a fresh database on 3.0.0 ([IMPORTANT.md](IMPORTANT.md)) |
-| **Previous stable release** | v2.10.10 | 38 | 19 | GitHub Releases |
-| **Previous campaign stage** | v2.10.5 | 33 | 19 | Baseline of the v2.10.x stage, closed |
+| **Stable release** | 3.1.0 | 40 | 26 | GitHub Releases ([docs/3.1.0-progress.md](docs/3.1.0-progress.md)) |
+| **Previous stable release** | 3.0.0 | 39 | 25 | GitHub Releases |
+| **Field campaign** | 3.1.0 | 40 | 26 | Day 1 = a full reinstall of 3.1.0, with a fresh database ([IMPORTANT.md](IMPORTANT.md)) |
+| **Previous campaign stage** | 3.0.0 | 39 | 25 | Closed by 3.1.0 |
+| **Last v2.10.x release** | v2.10.10 | 38 | 19 | GitHub Releases |
+| **Earlier campaign stage** | v2.10.5 | 33 | 19 | Baseline of the v2.10.x stage, closed |
 
 - **App identity:** `com.alexisgordr.icdetector`, *ICdetection*, for every release, so a newer
   version installs over an older one.
-- **3.0 needs a clean install** from v2.10.x (export, uninstall, install). From 3.0 on, every version
-  updates the previous one.
+- **3.0 needs a clean install** from v2.10.x (export, uninstall, install), and so does **3.1.0** from
+  3.0.0 (below).
+- **Version code 40** is 3.1.0: a design update together with a security update that fixes bugs.
+  It needs a **full reinstall** (export, uninstall, install, *Start from scratch*), and the campaign
+  restarts on it; the 3.1.0 dataset cuts (below) explain why. From 3.1.0 the app works without
+  Internet (no Internet permission; Orbot, latency detection and OpenCellID removed).
 - **Version code 39** is 3.0.0. The 3.0 betas used it too, with `versionName` 3.0.0-beta1 to
   3.0.0-beta4.
 
@@ -82,7 +87,7 @@ change no rule and are not cuts.
 
 ## Dataset cuts in 3.1.0
 
-3.1.0 (version code 40, in preparation) changes the rules below. Rows record `AppVersion`, so the
+3.1.0 (version code 40) changes the rules below. Rows record `AppVersion`, so the
 cut can be applied per row; the commit is the one that introduces each change.
 
 | Area | What changed | Commit |
@@ -137,12 +142,18 @@ Run by CI on pull requests to `main`, on `main` and on release tags:
 
 - JVM unit tests (`testDebugUnitTest`), Android lint and the release build.
 - Instrumented storage, migration and backup tests on an emulator (schemas 15–19 → 20 and every
-  later step up to 25; backups from schemas 23 and 24 restored on 25).
+  later step up to 25; backups from schemas 23 and 24 restored on 25), including the 3.1.0 checks:
+  WAL backups, a database from a newer version and the monitoring-stopped notice. The 25 → 26 step
+  is tested with SQLite in the JVM (`SchemaV26MigrationTest`).
 - `tools/check_export.py` regression tests, SQL affinity and query-plan checks, `when` exhaustiveness.
 
-## Publishing 3.0.0
+## Publishing 3.1.0
 
-1. Merge PR #34 into `main`, tag `v3.0.0` and attach the signed APK to the GitHub release.
-2. F-Droid is reviewing version code 39 (3.0.0); its release notes are
-   `fastlane/metadata/android/*/changelogs/39.txt`.
-3. Collect field data on 3.0.0 and test it on more devices.
+1. Push `main` (a fast-forward from the `ICdetection-v3.1.0` branch), let CI pass, push the tag
+   `v3.1.0` and attach the signed APK to the GitHub release. The release notes must say that a
+   full reinstall is required.
+2. F-Droid: not published there yet, so its first version (3.1.0, version code 40) is a fresh install
+   for everyone. Its release notes are `fastlane/metadata/android/*/changelogs/40.txt`.
+3. Close the issues resolved in 3.1.0 ([docs/3.1.0-progress.md](docs/3.1.0-progress.md) lists them
+   with their commits); #44 stays open.
+4. Restart field collection on 3.1.0 and test it on more devices.

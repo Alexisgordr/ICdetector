@@ -79,9 +79,15 @@ first.
 CSV, forensic cases), **uninstall v2.10.x** and then install 3.0. History and settings start
 empty. Installing 3.0 over v2.10.x would still upgrade the old database safely
 (old rows keep the new fields empty), but mixing data from both sides of the 3.0 methodology changes
-is not supported. From 3.0 on, every version updates the previous one normally.
+is not supported.
 
-> The field-collection campaign runs on 3.0.0 from a fresh database; see
+**3.1.0 needs a full reinstall as well.** It is a design update together with a security update
+that fixes bugs, and several of the fixes change how rules are evaluated, so data from 3.0 and 3.1.0
+cannot be mixed. Export what you want to keep, uninstall the app, install 3.1.0 and choose **Start
+from scratch** on the first start (restoring a 3.0 backup would bring the old data back). Set the
+location mode again afterwards.
+
+> The field-collection campaign restarts on 3.1.0 from a full reinstall; see
 > [IMPORTANT.md](IMPORTANT.md).
 
 **First start.** A new install first asks *"Do you want to restore a backup?"* with two
@@ -103,8 +109,8 @@ on this phone (it has its own settings, which never travel in backups or transfe
 ### Permissions
 
 Grant the permissions the app requests. Location permission is essential because Android protects
-cellular identifiers as location-sensitive data; GPS also enables geographic consistency checks and
-comparisons with tower-database coordinates.
+cellular identifiers as location-sensitive data; GPS also enables geographic consistency checks
+against where each cell was seen before.
 
 If a permission is unavailable, ICdetection continues with the remaining information, and the
 affected rules report `N/A`.
@@ -680,9 +686,8 @@ The diagnostics view shows the state and explanation of each rule:
 - **N/A:** the rule could not make a defensible decision with the available data.
 
 Common reasons for `N/A`: the modem does not expose the measurement; GPS is unavailable or
-inaccurate; external tower coordinates are unavailable; the baseline is not mature; too few
-observations exist; a network request is pending or failed; the serving cell is a CSG femtocell
-(H1, H2, H5, H6 and H7); the rule is reserved (H9). `N/A` is an honest abstention, not a defect — the
+inaccurate; the baseline is not mature; too few observations exist; the serving cell is a CSG
+femtocell (H1, H2, H5, H6 and H7); the rule is reserved (H9), retired (H12) or in shadow mode (H17). `N/A` is an honest abstention, not a defect — the
 explanation names the missing prerequisite.
 
 **H1 (isolated cell)** with no neighbours and strong signal shows *"pending confirmation (x/3
@@ -916,8 +921,8 @@ also cause abrupt shifts. Weaker-than-usual readings are not treated as suspicio
 
 **Timing Advance proximity (H6).** When Timing Advance has a known unit, H6 checks proximity only:
 it fails when TA implies about 100 m or less while the signal is −60 dBm or stronger. It does not
-compare TA with a tower position: no tower coordinates reach the score (public-database coordinates
-are only displayed as a distance), and the phone's own position is never used as the tower's. A missing TA is only taken from a duplicate of the same cell (same
+compare TA with a tower position: the app has no tower coordinates (it queries no public database),
+and the phone's own position is never used as the tower's. A missing TA is only taken from a duplicate of the same cell (same
 technology and physical cell), never from another transmitter. Many modems omit TA or always return
 zero; that "always 0" behaviour is detected per technology and never read as a real distance of zero
 metres. From 3.1.0 the decision uses the last 200 readings of each technology: they are a real

@@ -4,9 +4,15 @@ Every notable change to ICdetection, newest first. Releases inside the field-col
 fix bugs; a fix that changes how a rule is evaluated is marked as a **dataset cut** for that rule.
 Version numbers follow the app's `versionName`; the Android `versionCode` is given where it matters.
 
-## 3.1.0 (in preparation)
+## 3.1.0
 
-Version code 40. A local build; not published yet.
+Version code 40, database schema 26. A design update together with a security update that fixes
+bugs found after 3.0.0. Several fixes change how rules are evaluated (the dataset cuts are listed
+below and in [Status.md](Status.md)), so **3.1.0 needs a full reinstall** (export, uninstall,
+install, *Start from scratch*) and the field-collection campaign restarts on it
+([IMPORTANT.md](IMPORTANT.md)). The app now works without Internet: it no longer declares the
+Internet permission, and Orbot (the Tor/SOCKS proxy), latency detection (H12) and the OpenCellID
+lookup are removed.
 
 ### Added
 
@@ -96,7 +102,7 @@ Version code 40. A local build; not published yet.
 ### Removed
 
 - **External verification (OpenCellID).** The optional lookup of the serving cell in OpenCellID is
-  gone, with its API token, the SOCKS5/Tor proxy setting, the verification badges and the
+  gone, with its API token, the SOCKS5/Tor proxy setting (Orbot), the verification badges and the
   REGISTERED / NOT FOUND statistics. It never changed the score, so no rule changes. A token or
   proxy setting stored by an earlier version is deleted the first time 3.1.0 runs, and the proxy
   setting of an older backup is ignored. The `Verified`, `ApiLat` and `ApiLon` columns stay in the

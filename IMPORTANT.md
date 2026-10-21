@@ -4,15 +4,16 @@
 >
 > | | |
 > |---|---|
-> | **Campaign build** | 3.0.0 (version code 39), from GitHub Releases; it includes the whole campaign cut |
-> | **Day 1** | A fresh database on 3.0.0 |
-> | **Database schema** | 25 |
+> | **Campaign build** | 3.1.0 (version code 40), from GitHub Releases |
+> | **Day 1** | A full reinstall of 3.1.0, with a fresh database |
+> | **Database schema** | 26 |
 > | **Duration** | Approximately three months |
-> | **Previous stage** | v2.10.x, dataset baseline v2.10.5, schema 19 (closed; see [below](#previous-stage-the-v210x-campaign)) |
+> | **Previous stages** | 3.0.0, schema 25 (closed by 3.1.0; see [below](#previous-stage-300)); v2.10.x, dataset baseline v2.10.5, schema 19 (closed; see [below](#previous-stage-the-v210x-campaign)) |
 >
-> **The campaign moves to 3.0.** After a full audit of the app, collection restarts on 3.0.0.
-> That release changes how many rules are evaluated, and the 3.0 betas brought several dataset cuts
-> of their own, so data from before it is not comparable with data from after it.
+> **The campaign restarts on 3.1.0.** 3.1.0 is a design update together with a security update that
+> fixes bugs found after 3.0.0. Several of those fixes change how rules are evaluated, so data from
+> 3.0.0 is not comparable with data from 3.1.0. I am sorry to restart the dataset once more: 3.1.0
+> needs a full reinstall of the app.
 
 ICdetection is in a **three-month field-collection and stabilization period**. The priority is no
 longer adding features, heuristics, screens or new detection ideas. It is to **leave the methodology
@@ -26,7 +27,8 @@ positives and validate the current design over time.**
 A detector cannot be meaningfully evaluated if its methodology changes continuously while data is
 being collected. During the campaign the following will **not** be added:
 
-- new detection heuristics or H17+ rules
+- new scored detection heuristics (H17, added in 3.1.0 before this Day 1, only records data in
+  shadow mode: it is never evaluated and never scores)
 - new anomaly weights or detection thresholds
 - major scoring changes or experimental detection features
 - large architectural features that alter the dataset semantics
@@ -62,33 +64,48 @@ changes how evidence is weighed; it was made once, early, so that the rest of th
 single method. [Status.md](Status.md#dataset-cuts-in-30) lists what changed and how to tell rows from
 before and after it.
 
+**The 3.1.0 restart.** 3.1.0 changed several rules at once (H6, H11, H12, H14, the Timing Advance
+stub detection and the anomaly confidence; [Status.md](Status.md#dataset-cuts-in-310) lists them).
+With that many cuts, a cut per rule would leave little comparable data, so the campaign restarts on
+3.1.0 with a full reinstall instead.
+
 Every later fix that changes how a rule is evaluated will be listed in [CHANGELOG.md](CHANGELOG.md)
 and [Status.md](Status.md) as a cut for that rule. Each row records the app version and build commit
 that observed it (`AppVersion`), so cuts can be applied per row.
 
 ---
 
-## Recommended database reset
+## Required reinstall
 
-For a clean dataset, start from a **fresh local database on 3.0.0** (GitHub Releases). It
-includes the whole campaign cut and the fixes made with it.
+3.1.0 needs a **full reinstall**. Updating over 3.0.0 is not the supported path for the campaign: it
+would mix data recorded with both methods in one database.
 
-> **How to reset:** export anything you want to keep, then open **History → Delete history** and
-> type `DELETE` (English interface) or `BORRAR` (Spanish interface) to confirm.
+> **How to reinstall:**
 >
-> This removes antenna history, incidents, forensic cases, transitions, service-state events,
-> Stable-Site learning, the route-familiarity trips and the local profile in a single
-> all-or-nothing transaction.
->
-> Uninstalling and reinstalling (or *Settings → Apps → ICdetection → Storage → Clear data*) remains a
-> valid alternative, but it also removes app settings such as the location mode.
+> 1. Export anything you want to keep: the history CSV and forensic cases (*History*), and, if you
+>    like, a backup (*Settings → Backup*) as an archive of the 3.0.0 data.
+> 2. Uninstall ICdetection.
+> 3. Install 3.1.0 from GitHub Releases.
+> 4. On the first start, choose **Start from scratch**. Restoring a 3.0.0 backup would bring the old
+>    dataset back.
 
-**Updating without a reset also works.** Installing 3.0.0 over a 3.0 beta migrates the database and
-the app keeps working. In that case, **note the date you updated**: rows recorded
-before it belong to an earlier dataset and can be separated by `AppVersion`. Coming from v2.10.x,
-3.0 needs a clean install anyway.
+Reinstalling also clears the settings and the internal state left by 3.0.0 (for example the stored
+Timing Advance evidence and the removed OpenCellID and proxy settings), so every phone starts the
+campaign from the same point. Set the location mode again after installing.
 
-> **Day 1 = 3.0.0, schema 25, a fresh database and the audited detection baseline.**
+> **Day 1 = 3.1.0, schema 26, a full reinstall and a fresh database.**
+
+**No Internet.** From 3.1.0 the app works without Internet and does not declare Android's Internet
+permission. Orbot (the Tor/SOCKS proxy), latency detection (H12) and the OpenCellID lookup are gone:
+nothing the campaign records leaves the phone unless you export it.
+
+---
+
+## Previous stage: 3.0.0
+
+Collection restarted on 3.0.0 (schema 25) after the third full audit of the app, with the campaign
+cut described above. 3.1.0 closes that stage. Its data stays valid for what it measured and is not
+comparable with 3.1.0 data; each row's `AppVersion` tells them apart.
 
 ---
 
@@ -184,7 +201,8 @@ Android documentation does not describe: carrier aggregation, modem handovers, m
 identities, Timing Advance limits and vendor-specific reporting. I preferred to document and correct
 those problems rather than carry them into the data. For the same reason the whole app was audited
 before the campaign moved to 3.0: better to fix what the audit found before Day 1 than to carry it
-through three months of data. Thank you for your patience with the update rate.
+through three months of data. The design and security fixes of 3.1.0 restart it once more, and I am
+sorry for the extra reinstall. Thank you for your patience with the update rate.
 
 ICdetection is an Android userland cellular anomaly auditor, not definitive proof of an IMSI catcher
 or surveillance system. The goal of this stage is not to claim perfection, but to find out how well

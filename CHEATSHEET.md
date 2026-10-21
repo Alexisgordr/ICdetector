@@ -1,7 +1,7 @@
 # ICdetection cheat sheet: the rules on one page
 
 A quick reference to what each rule watches, how many points it takes and when it abstains.
-Values match the 3.0 code. For the full explanation, see [MANUAL.md](MANUAL.md).
+Values match the 3.1.0 code. For the full explanation, see [MANUAL.md](MANUAL.md).
 
 ## The idea in three sentences
 
