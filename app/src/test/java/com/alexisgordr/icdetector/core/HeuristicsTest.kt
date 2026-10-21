@@ -160,6 +160,418 @@ class HeuristicsTest {
         }
     }
 
+    // ---------- H1: Celda aislada ----------
+    @Test fun `H1 dispara sin vecinas y senal fuerte`() {
+        assertFalse(analyze(active(dbm = -70), neighbors = emptyList()).isolatedCellPassed)
+    }
+    @Test fun `H1 no dispara con vecinas presentes`() {
+        assertTrue(analyze(active(dbm = -70), neighbors = listOf(neighbor(-95))).isolatedCellPassed)
+    }
+    @Test fun `H1 no dispara con senal debil aunque no haya vecinas`() {
+        assertTrue(analyze(active(dbm = -100), neighbors = emptyList()).isolatedCellPassed)
+    }
+
+    // ---------- H2: Salto de potencia (>35 dB) ----------
+    @Test fun `H2 dispara con salto mayor de 35dB sobre la vecina mas fuerte`() {
+        // activa -60, vecina más fuerte -100 -> delta 40 > 35
+        assertFalse(analyze(active(dbm = -60), neighbors = listOf(neighbor(-100))).powerJumpPassed)
+    }
+    @Test fun `H2 no dispara con delta moderado`() {
+        // activa -60, vecina -80 -> delta 20
+        assertTrue(analyze(active(dbm = -60), neighbors = listOf(neighbor(-80))).powerJumpPassed)
+    }
+
+    // ---------- H3: Consistencia MCC (3.0 (corte de campaña): servidora frente a SIM) ----------
+    private fun service(sim: String? = "21407", network: String? = "21407", roaming: Boolean = false) =
+        ServiceStateSnapshot(
+            timestampMs = NOW, state = ServiceRegistrationState.IN_SERVICE,
+            roaming = roaming, operatorNumeric = network, simOperator = sim
+        )
+
+    private fun analyzeMcc(active: CellData, neighbors: List<CellData>, service: ServiceStateSnapshot?) =
+        ThreatAnalyzer.analyzeThreats(
+            active = active, neighbors = neighbors, cellChangeHistory = emptyList(), currentLocation = null, nowMs = NOW, serviceState = service
+        )
+
+    @Test fun `H3 pasa si la servidora tiene el MCC de la SIM, aunque las vecinas sean de otro pais`() {
+        // Antes esto fallaba (vecina 208): ahora las vecinas no se consultan si coincide con la SIM.
+        val cell = analyzeMcc(active(mcc = "214"), listOf(neighbor(-90, mcc = "208")), service())
+        assertEquals(HeuristicStatus.PASSED, cell.heuristicReport.mccConsistency)
+        assertNull(cell.heuristicReport.mccAbstention)
+        assertEquals(100, cell.securityScore)
+    }
+
+    @Test fun `H3 compara el MCC como numero`() {
+        val cell = analyzeMcc(active(mcc = "0214"), emptyList(), service(sim = "21407"))
+        assertEquals(HeuristicStatus.PASSED, cell.heuristicReport.mccConsistency)
+    }
+
+    @Test fun `H3 falla con MCC extranjero sin roaming y sin vecinas de ese MCC, con el motivo exacto`() {
+        val cell = analyzeMcc(active(mcc = "208"), listOf(neighbor(-90, mcc = "214")), service(sim = "21407", network = "20801"))
+        assertEquals(HeuristicStatus.FAILED, cell.heuristicReport.mccConsistency)
+        assertEquals(
+            "Inconsistencia MCC: servidora 208 ≠ SIM 214, sin roaming ni vecinas con ese MCC",
+            cell.suspiciousReason
+        )
+        assertEquals(70, cell.securityScore)
+        // Sin vecinas tampoco hay frontera que lo explique.
+        assertEquals(HeuristicStatus.FAILED,
+            analyzeMcc(active(mcc = "208"), emptyList(), service(sim = "21407")).heuristicReport.mccConsistency)
+    }
+
+    @Test fun `H3 queda N-A con roaming declarado`() {
+        val report = analyzeMcc(active(mcc = "208"), emptyList(), service(sim = "21407", roaming = true)).heuristicReport
+        assertEquals(HeuristicStatus.NOT_EVALUATED, report.mccConsistency)
+        assertEquals(MccAbstention.ROAMING, report.mccAbstention)
+        assertTrue(report.notEvaluatedIds().split(";").contains("H3(roaming)"))
+    }
+
+    @Test fun `H3 queda N-A en frontera, con vecinas del mismo MCC extranjero`() {
+        val cell = analyzeMcc(active(mcc = "208"), listOf(neighbor(-90, mcc = "208"), neighbor(-95, mcc = "214")), service(sim = "21407"))
+        assertEquals(HeuristicStatus.NOT_EVALUATED, cell.heuristicReport.mccConsistency)
+        assertEquals(MccAbstention.BORDER, cell.heuristicReport.mccAbstention)
+        assertEquals("PLMN extranjero con vecinas coherentes (frontera)", MccAbstention.BORDER.text)
+        assertTrue(cell.heuristicReport.notEvaluatedIds().split(";").contains("H3(frontera)"))
+        assertNull(cell.suspiciousReason)
+        assertEquals(100, cell.securityScore)
+    }
+
+    @Test fun `H3 queda N-A sin ServiceState, sin SIM o sin MCC de servidora, sin volver a la regla antigua`() {
+        val foreignNeighbour = listOf(neighbor(-90, mcc = "208"))
+        fun abstention(active: CellData, service: ServiceStateSnapshot?) =
+            analyzeMcc(active, foreignNeighbour, service).heuristicReport.also {
+                assertEquals(HeuristicStatus.NOT_EVALUATED, it.mccConsistency)
+            }.mccAbstention
+        assertEquals(MccAbstention.NO_SERVICE_STATE, abstention(active(mcc = "214"), null))
+        assertEquals(MccAbstention.NO_SIM, abstention(active(mcc = "214"), service(sim = null)))
+        assertEquals(MccAbstention.NO_SIM, abstention(active(mcc = "214"), service(sim = "")))
+        assertEquals(MccAbstention.NO_SERVING_MCC, abstention(active(mcc = "N/A"), service(network = null)))
+    }
+
+    @Test fun `H3 usa el MCC del ServiceState si la celda no lo informa`() {
+        val report = analyzeMcc(active(mcc = "N/A"), emptyList(), service(sim = "21407", network = "20801")).heuristicReport
+        assertEquals(HeuristicStatus.FAILED, report.mccConsistency)
+    }
+
+    // ---------- H4: Multitud de MNCs (>4) ----------
+    @Test fun `H4 dispara con mas de 4 MNCs distintos`() {
+        val n = listOf(
+            neighbor(-90, mnc = "02"), neighbor(-91, mnc = "03"),
+            neighbor(-92, mnc = "04"), neighbor(-93, mnc = "05")
+        ) // activa "01" + 4 distintos = 5 > 4
+        assertFalse(analyze(active(mnc = "01"), neighbors = n).mncCountPassed)
+    }
+    @Test fun `H4 no dispara con 4 o menos MNCs`() {
+        val n = listOf(neighbor(-90, mnc = "02"), neighbor(-91, mnc = "03"))
+        assertTrue(analyze(active(mnc = "01"), neighbors = n).mncCountPassed)
+    }
+
+    // ---------- H3/H4 sin identidad de vecinas ----------
+    // Caso real de campo (Pixel 9a): el módem solo da EARFCN/PCI/potencia de las vecinas. Sin
+    // MCC/MNC que comparar, H3 y H4 deben abstenerse, no darse por superadas.
+    // 3.0 (corte de campaña) — H3 ya no depende de las vecinas: aquí es N/A porque no hay ServiceState.
+    @Test fun `H3 y H4 no se evaluan si ninguna vecina trae MCC ni MNC`() {
+        val n = listOf(neighbor(-90, mcc = "N/A", mnc = "N/A"), neighbor(-95, mcc = "N/A", mnc = "N/A"))
+        val report = analyze(active(), neighbors = n)
+        assertEquals(HeuristicStatus.NOT_EVALUATED, report.mccConsistency)
+        assertEquals(HeuristicStatus.NOT_EVALUATED, report.mncCount)
+    }
+
+    // ---------- H5: Desviación TAC ----------
+    @Test fun `H5 dispara si el TAC activo no esta entre las vecinas`() {
+        assertFalse(analyze(active(tac = "100"), neighbors = listOf(neighbor(-90, tac = "200"))).tacDeviationPassed)
+    }
+    @Test fun `H5 no dispara si el TAC coincide con alguna vecina`() {
+        assertTrue(analyze(active(tac = "100"), neighbors = listOf(neighbor(-90, tac = "100"))).tacDeviationPassed)
+    }
+
+    // 3.0 (#11) — Caso de campo (Redmi/MediaTek): todas las vecinas con TAC 65535 de relleno.
+    @Test fun `H5 queda N-A si todas las vecinas traen el TAC de relleno`() {
+        val placeholder = NeighbourPlaceholders.lteTac(65_535, registered = false)
+        val report = analyze(active(tac = "16486"), neighbors = List(3) { neighbor(-100, tac = placeholder) })
+        assertEquals(HeuristicStatus.NOT_EVALUATED, report.tacDeviation)
+    }
+
+    // ---------- H6: Timing Advance (rama de proximidad, sin tower coords) ----------
+    @Test fun `H6 dispara por proximidad anomala (TA bajo, senal muy fuerte, no verificada)`() {
+        assertFalse(
+            analyze(active(dbm = -55, timingAdvance = 0, verified = VerificationStatus.PENDING)).taDistancePassed
+        )
+    }
+    /**
+     * v2.1 — H6 dispara igual esté la celda verificada o no.
+     *
+     * Este test afirmaba lo contrario: que una celda VERIFIED se libraba de la penalización de
+     * proximidad. Esa excepción era la última vía por la que el estado de verificación entraba en
+     * la puntuación, y en silencio. Se quitó para que el detector y la etiqueta externa sean
+     * ortogonales y puedan cruzarse al final de la fase de recolección sin circularidad.
+     * Ver VerificationNeutralityTest.
+     */
+    @Test fun `H6 dispara igual aunque la celda este verificada`() {
+        assertFalse(
+            analyze(active(dbm = -55, timingAdvance = 0, verified = VerificationStatus.VERIFIED)).taDistancePassed
+        )
+    }
+
+    // ---------- H6 y la unidad del Timing Advance ----------
+    private val TA_UNKNOWN = com.alexisgordr.icdetector.models.TimingAdvanceUnit.UNKNOWN
+    private val TA_NR_RAW = com.alexisgordr.icdetector.models.TimingAdvanceUnit.NR_RAW
+    private val TA_LTE = com.alexisgordr.icdetector.models.TimingAdvanceUnit.LTE_INDEX
+
+    @Test fun `H6 NO juzga si la unidad del TA es desconocida`() {
+        // Valor raspado del toString() del fabricante: no se sabe si es índice o microsegundos.
+        // Abstenerse es lo correcto — inventar la unidad erraba por un factor cercano a 2.
+        assertTrue(
+            "con unidad desconocida H6 debe abstenerse, no penalizar",
+            analyze(active(dbm = -55, timingAdvance = 0, timingAdvanceUnit = TA_UNKNOWN,
+                verified = VerificationStatus.PENDING)).taDistancePassed
+        )
+    }
+
+    @Test fun `H6 NO juzga con un TA de NR (conversion no defendible)`() {
+        // v2.1: el valor de getTimingAdvanceMicros() no admite una conversión defendible —su
+        // documentación declara microsegundos pero con el rango de un índice LTE (0..1282) y
+        // citando una especificación de LTE, y llega por reflexión. H6 se abstiene, igual que con
+        // una unidad desconocida.
+        assertTrue(
+            "NR no debe producir geometría mientras la conversión no sea verificable",
+            analyze(active(dbm = -55, timingAdvance = 0, timingAdvanceUnit = TA_NR_RAW,
+                verified = VerificationStatus.PENDING)).taDistancePassed
+        )
+        assertTrue(
+            analyze(active(dbm = -55, timingAdvance = 3, timingAdvanceUnit = TA_NR_RAW,
+                verified = VerificationStatus.PENDING)).taDistancePassed
+        )
+    }
+
+    @Test fun `H6 conserva el comportamiento LTE exacto de v2 1 (TA 0 y 1 disparan, 2 no)`() {
+        // El umbral pasó de `ta <= 1` a `metros <= 100`. En LTE son equivalentes: 0 m, 78 m, 156 m.
+        assertFalse(analyze(active(dbm = -55, timingAdvance = 0, timingAdvanceUnit = TA_LTE,
+            verified = VerificationStatus.PENDING)).taDistancePassed)
+        assertFalse(analyze(active(dbm = -55, timingAdvance = 1, timingAdvanceUnit = TA_LTE,
+            verified = VerificationStatus.PENDING)).taDistancePassed)
+        assertTrue(analyze(active(dbm = -55, timingAdvance = 2, timingAdvanceUnit = TA_LTE,
+            verified = VerificationStatus.PENDING)).taDistancePassed)
+    }
+
+    @Test fun `solo las unidades con conversion firme producen metros`() {
+        val gsm = com.alexisgordr.icdetector.models.TimingAdvanceUnit.GSM_INDEX
+
+        // LTE: 16·Ts de ida y vuelta ≈ 78,12 m por índice. El extremo del rango (1282) da los
+        // ~100 km que son el radio máximo real de una celda LTE: la física encaja.
+        assertEquals(0, TA_LTE.toMeters(0)!!)
+        assertEquals(78, TA_LTE.toMeters(1)!!)
+        assertEquals(99_996, TA_LTE.toMeters(1282)!!)   // ≈100 km, el radio máximo de una celda LTE
+
+        // GSM: periodo de bit de 3,69 µs ida y vuelta ≈ 554 m.
+        assertEquals(554, gsm.toMeters(1)!!)
+
+        // NR y desconocida: sin conversión defendible, no hay metros. Ninguna cantidad de
+        // ingenio en la heurística arregla un número cuya unidad no se puede afirmar.
+        assertNull("NR no debe convertirse mientras la unidad no sea verificable",
+            TA_NR_RAW.toMeters(1))
+        assertNull(TA_NR_RAW.toMeters(1282))
+        assertNull(TA_UNKNOWN.toMeters(5))
+
+        // Un TA negativo no es físico en ninguna unidad.
+        assertNull("un TA negativo no es físico", TA_LTE.toMeters(-1))
+        assertNull(gsm.toMeters(-1))
+
+        // Y la propiedad que las heurísticas usan para preguntarlo de un vistazo.
+        assertTrue(TA_LTE.isUsableForGeometry)
+        assertTrue(gsm.isUsableForGeometry)
+        assertFalse(TA_NR_RAW.isUsableForGeometry)
+        assertFalse(TA_UNKNOWN.isUsableForGeometry)
+    }
+
+    // ---------- H7: Vecinos fantasma ----------
+    @Test fun `H7 dispara con activa fuerte y todas las vecinas casi muertas`() {
+        // activa -60 (>= -65) y vecina <= -110
+        assertFalse(analyze(active(dbm = -60), neighbors = listOf(neighbor(-115))).ghostNeighborsPassed)
+    }
+    @Test fun `H7 no dispara si alguna vecina tiene senal razonable`() {
+        assertTrue(analyze(active(dbm = -60), neighbors = listOf(neighbor(-95))).ghostNeighborsPassed)
+    }
+
+    // ---------- H8: Sanity de ARFCN ----------
+    @Test fun `H8 dispara con EARFCN LTE fuera del maximo teorico`() {
+        assertFalse(analyze(active(networkType = "4G LTE", arfcn = 300000)).arfcnSanityPassed)
+    }
+    @Test fun `H8 NO dispara con EARFCN 0 en LTE (Banda 1 valida)`() {
+        assertTrue(analyze(active(networkType = "4G LTE", arfcn = 0)).arfcnSanityPassed)
+    }
+    @Test fun `H8 dispara con NR-ARFCN 0 en 5G (no valido)`() {
+        assertFalse(analyze(active(networkType = "5G", radioTech = RadioTech.NR, arfcn = 0)).arfcnSanityPassed)
+    }
+    @Test fun `H8 no dispara con EARFCN valido`() {
+        assertTrue(analyze(active(networkType = "4G LTE", arfcn = 1500)).arfcnSanityPassed)
+    }
+
+    // ---------- Celda CSG (3.0, corte de campaña): H1, H2, H5, H6 y H7 no se evalúan ----------
+    // TA 0 en LTE: a menos de 78 m, con −55 dBm; justo lo que hace fallar H6 sin el indicador.
+    private fun femto(csg: Boolean) = active(dbm = -55, tac = "999", timingAdvance = 0).copy(
+        csg = com.alexisgordr.icdetector.models.CsgInfo(indicator = csg, identity = 7, homeNodebName = "Casa")
+    )
+
+    // 3.0 (corte de campaña) — La exención exige historial local previo de la celda (CsgExemption).
+    private fun reputation(observations: Int, days: Int) =
+        com.alexisgordr.icdetector.models.CellReputation(observations, days, cleanRatio = 0.0, trustScore = 0)
+    private val known = reputation(observations = 40, days = 3)
+
+    @Test fun `una celda CSG deja H1, H2, H5, H6 y H7 en N-A con su motivo`() {
+        val weakMacro = listOf(neighbor(-112, tac = "100"), neighbor(-115, tac = "100"))
+        val cell = ThreatAnalyzer.analyzeThreats(
+            active = femto(csg = true), neighbors = weakMacro,
+            cellChangeHistory = emptyList(), currentLocation = null, nowMs = NOW, reputation = known
+        )
+        val r = cell.heuristicReport
+        listOf(r.isolatedCell, r.powerJump, r.tacDeviation, r.taDistance, r.ghostNeighbors).forEach {
+            assertEquals(HeuristicStatus.NOT_EVALUATED, it)
+        }
+        val ids = r.notEvaluatedIds().split(";")
+        assertTrue(ids.containsAll(listOf("H1(csg)", "H2(csg)", "H5(csg)", "H6(csg)", "H7(csg)")))
+        // El estado completo (incidentes, caja negra) lleva los mismos motivos.
+        assertTrue(r.snapshot().split(";").containsAll(listOf("H1=NOT_EVALUATED(csg)", "H6=NOT_EVALUATED(csg)", "H4=PASSED")))
+        assertNull(cell.suspiciousReason)
+        assertEquals(100, cell.securityScore)
+        // Las demás reglas siguen igual: H4 (MNC) se evalúa con las mismas vecinas.
+        assertEquals(HeuristicStatus.PASSED, r.mncCount)
+    }
+
+    @Test fun `la misma celda sin indicador CSG hace fallar H2, H5, H6 y H7`() {
+        val weakMacro = listOf(neighbor(-112, tac = "100"), neighbor(-115, tac = "100"))
+        val r = ThreatAnalyzer.analyzeThreats(
+            active = femto(csg = false), neighbors = weakMacro,
+            cellChangeHistory = emptyList(), currentLocation = null, nowMs = NOW
+        ).heuristicReport
+        listOf(r.powerJump, r.tacDeviation, r.taDistance, r.ghostNeighbors).forEach { assertEquals(HeuristicStatus.FAILED, it) }
+        assertFalse(r.notEvaluatedIds().contains("(csg)"))
+    }
+
+    @Test fun `una CSG aislada no hace fallar H1`() {
+        fun h1(csg: Boolean) = ThreatAnalyzer.analyzeThreats(
+            active = femto(csg), neighbors = emptyList(),
+            cellChangeHistory = emptyList(), currentLocation = null, nowMs = NOW, reputation = known
+        ).heuristicReport
+        assertEquals(HeuristicStatus.FAILED, h1(false).isolatedCell)
+        assertEquals(HeuristicStatus.NOT_EVALUATED, h1(true).isolatedCell)
+        assertEquals("H1(csg)", h1(true).notEvaluatedIds().split(";").first())
+    }
+
+    @Test fun `una CSG nueva, sin historial previo, se evalua como cualquier celda`() {
+        val weakMacro = listOf(neighbor(-112, tac = "100"), neighbor(-115, tac = "100"))
+        fun report(reputation: com.alexisgordr.icdetector.models.CellReputation?) = ThreatAnalyzer.analyzeThreats(
+            active = femto(csg = true), neighbors = weakMacro,
+            cellChangeHistory = emptyList(), currentLocation = null, nowMs = NOW, reputation = reputation
+        ).heuristicReport
+        listOf(null, reputation(9, 3), reputation(40, 1)).forEach { rep ->
+            val r = report(rep)
+            listOf(r.powerJump, r.tacDeviation, r.taDistance, r.ghostNeighbors).forEach {
+                assertEquals("reputación $rep", HeuristicStatus.FAILED, it)
+            }
+            assertFalse(r.notEvaluatedIds().contains("(csg)"))
+        }
+        // Justo en el umbral (10 observaciones en 2 días) ya queda exenta.
+        assertEquals(HeuristicStatus.NOT_EVALUATED, report(reputation(10, 2)).powerJump)
+        assertTrue(CsgExemption.applies(true, reputation(10, 2)))
+        assertFalse("sin indicador no hay exención", CsgExemption.applies(false, known))
+    }
+
+    // ---------- H9: reservada (3.0, corte de campaña) ----------
+    @Test fun `H9 es siempre N-A y no resta puntos`() {
+        val cell = ThreatAnalyzer.analyzeThreats(
+            active = active(), neighbors = listOf(neighbor(-95)),
+            cellChangeHistory = emptyList(), currentLocation = null, nowMs = NOW
+        )
+        assertEquals(HeuristicStatus.NOT_EVALUATED, cell.heuristicReport.hardwareCiphering)
+        assertFalse(cell.heuristicReport.hardwareCipheringAvailable)
+        assertTrue(cell.heuristicReport.notEvaluatedIds().split(";").contains("H9"))
+    }
+
+    // ---------- H8: ARFCN (v2.10.10) ----------
+    @Test fun `H8 queda N-A si el modem no entrega la frecuencia`() {
+        listOf(RadioTech.LTE, RadioTech.NR).forEach { tech ->
+            val report = analyze(active().copy(radioTech = tech, arfcn = Int.MAX_VALUE))
+            assertEquals("$tech", HeuristicStatus.NOT_EVALUATED, report.arfcnSanity)
+        }
+    }
+    @Test fun `H8 sigue fallando con una frecuencia medida imposible`() {
+        assertEquals(HeuristicStatus.FAILED, analyze(active().copy(radioTech = RadioTech.LTE, arfcn = 262_144)).arfcnSanity)
+        assertEquals(HeuristicStatus.FAILED, analyze(active().copy(radioTech = RadioTech.NR, arfcn = 3_279_166)).arfcnSanity)
+    }
+    @Test fun `H8 acepta EARFCN 0 y frecuencias validas`() {
+        assertEquals(HeuristicStatus.PASSED, analyze(active().copy(radioTech = RadioTech.LTE, arfcn = 0)).arfcnSanity)
+        assertEquals(HeuristicStatus.PASSED, analyze(active().copy(radioTech = RadioTech.LTE, arfcn = 1301)).arfcnSanity)
+        assertEquals(HeuristicStatus.PASSED, analyze(active().copy(radioTech = RadioTech.NR, arfcn = 632_628)).arfcnSanity)
+    }
+    // ---------- H8: aviso de calidad de dato (3.0, corte de campaña) ----------
+    @Test fun `H8 failing is kept in the row but subtracts no points and adds no confidence`() {
+        fun run(arfcn: Int) = ThreatAnalyzer.analyzeThreats(
+            active = active().copy(radioTech = RadioTech.LTE, arfcn = arfcn), neighbors = emptyList(),
+            cellChangeHistory = emptyList(), currentLocation = null
+        )
+        val valid = run(1301)
+        val invalid = run(262_144)
+        assertEquals(HeuristicStatus.FAILED, invalid.heuristicReport.arfcnSanity)
+        assertEquals("sin puntos", valid.securityScore, invalid.securityScore)
+        assertEquals("sin LR", valid.anomalyConfidence, invalid.anomalyConfidence, 0f)
+        assertNull("no se muestra como sospecha", invalid.suspiciousReason)
+        assertEquals("pero sí va a la fila", ThreatAnalyzer.H8_LTE_REASON, invalid.dataQualityReason)
+        assertEquals(ThreatAnalyzer.H8_LTE_REASON,
+            com.alexisgordr.icdetector.models.StoredReasons.forRow(invalid.suspiciousReason, invalid.dataQualityReason))
+        assertNull(valid.dataQualityReason)
+        val nr = ThreatAnalyzer.analyzeThreats(
+            active = active().copy(radioTech = RadioTech.NR, arfcn = 3_279_166), neighbors = emptyList(),
+            cellChangeHistory = emptyList(), currentLocation = null
+        )
+        assertNull(nr.suspiciousReason)
+        assertEquals(ThreatAnalyzer.H8_NR_REASON, nr.dataQualityReason)
+    }
+    @Test fun `H8 alone never opens a multi-signal episode family`() {
+        val report = HeuristicReport(arfcnSanity = HeuristicStatus.FAILED, tacDeviation = HeuristicStatus.FAILED)
+        var now = 0L
+        val tracker = ThreatEpisodeTracker { now }
+        val cell = active().copy(heuristicReport = report)
+        tracker.apply(cell, 1L)
+        now += 5_000
+        val second = tracker.apply(cell, 2L)
+        assertEquals("solo IDENTITY (H5); H8 no es familia", setOf(ThreatEpisodeTracker.Family.IDENTITY), second.families)
+        assertFalse(second.promoted)
+    }
+    @Test fun `H8 no disponible no resta puntos`() {
+        val unavailable = ThreatAnalyzer.analyzeThreats(
+            active = active().copy(radioTech = RadioTech.LTE, arfcn = Int.MAX_VALUE), neighbors = emptyList(),
+            cellChangeHistory = emptyList(), currentLocation = null
+        )
+        val valid = ThreatAnalyzer.analyzeThreats(
+            active = active().copy(radioTech = RadioTech.LTE, arfcn = 1301), neighbors = emptyList(),
+            cellChangeHistory = emptyList(), currentLocation = null
+        )
+        assertEquals(valid.securityScore, unavailable.securityScore)
+    }
+
+    // ---------- H10: Ping-Pong ----------
+    // La decisión con velocidad conocida se prueba en PingPongRuleTest, sin Android: aquí no se
+    // construye android.location.Location (en los tests JVM de Gradle sus métodos no existen).
+    @Test fun `H10 no dispara con menos de 3 cambios`() {
+        val history = listOf("A" to NOW - 2_000L, "B" to NOW - 1_000L)
+        assertTrue(analyze(active(), cellChangeHistory = history).pingPongPassed)
+    }
+    // v2.10.9 — Sin GPS no se sabe si estás parado: N/A, nunca "en parado" por defecto.
+    @Test fun `H10 queda N-A con cambios rapidos y sin GPS`() {
+        val history = listOf("A" to NOW - 3_000L, "B" to NOW - 2_000L, "A" to NOW - 1_000L)
+        val report = analyze(active(), cellChangeHistory = history)
+        assertEquals(HeuristicStatus.NOT_EVALUATED, report.pingPong)
+    }
+    // v2.10.9 — Una ráfaga antigua ya no cuenta: el servicio solo poda el historial al llegar otro
+    // cambio.
+    @Test fun `H10 ignora una rafaga de hace mas de 10 s`() {
+        val burst = listOf("A" to NOW - 4_000L, "B" to NOW - 3_000L, "A" to NOW - 2_000L)
+        assertEquals(HeuristicStatus.NOT_EVALUATED, analyze(active(), cellChangeHistory = burst).pingPong)
+        val later = analyze(active(), cellChangeHistory = burst, nowMs = NOW + 3_600_000L)
+        assertEquals(HeuristicStatus.PASSED, later.pingPong)
+    }
+
     // ---------- H11: Geográfica (solo casos "no dispara" en JUnit puro) ----------
     @Test fun `H11 pasa cuando no hay ubicacion ni historial`() {
         // currentLocation = null en analyze() -> analyzeMobileCellId devuelve passed
