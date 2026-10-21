@@ -28,6 +28,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -305,6 +306,8 @@ fun HistoryPanel(
             }
             Column(modifier = Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 val context = LocalContext.current
+                // 3.1.0 — Recursos que siguen la configuración (idioma) para el plural del aviso.
+                val resources = LocalResources.current
                 val exportLauncher = rememberLauncherForActivityResult(
                     contract = ActivityResultContracts.CreateDocument("text/csv")
                 ) { uri ->
@@ -322,7 +325,7 @@ fun HistoryPanel(
                             }
                             result.fold(
                                 onSuccess = { filas ->
-                                    Toast.makeText(context, context.resources.getQuantityString(R.plurals.csv_exported_format, filas, filas), Toast.LENGTH_LONG).show()
+                                    Toast.makeText(context, resources.getQuantityString(R.plurals.csv_exported_format, filas, filas), Toast.LENGTH_LONG).show()
                                 },
                                 onFailure = { error ->
                                     Toast.makeText(

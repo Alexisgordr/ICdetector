@@ -15,6 +15,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
@@ -152,6 +153,8 @@ fun RadioContextCard(active: CellData, serviceState: ServiceStateSnapshot?) {
 @SuppressLint("LocalContextGetResourceValueCall")
 fun RadioPanel(dbHelper: CellDbHelper, service: MiniICService?, modifier: Modifier = Modifier) {
     val context = LocalContext.current
+    // 3.1.0 — Recursos que siguen la configuración (idioma) para el plural del aviso.
+    val resources = LocalResources.current
     val scope = rememberCoroutineScope()
     val cellFlow = remember(service) { service?.cellFlow ?: MutableStateFlow<List<CellData>>(emptyList()) }
     val serviceFlow = remember(service) { service?.serviceState ?: MutableStateFlow<ServiceStateSnapshot?>(null) }
@@ -186,7 +189,7 @@ fun RadioPanel(dbHelper: CellDbHelper, service: MiniICService?, modifier: Modifi
                         )
                 }
                 result.onSuccess { n ->
-                    Toast.makeText(context, context.resources.getQuantityString(R.plurals.radio_export_done, n, n), Toast.LENGTH_LONG).show()
+                    Toast.makeText(context, resources.getQuantityString(R.plurals.radio_export_done, n, n), Toast.LENGTH_LONG).show()
                 }.onFailure { error ->
                     Toast.makeText(context, context.getString(R.string.radio_export_failed, error.message ?: "?"), Toast.LENGTH_LONG).show()
                 }
