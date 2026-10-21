@@ -88,7 +88,8 @@ cut can be applied per row; the commit is the one that introduces each change.
 | Area | What changed | Commit |
 |---|---|---|
 | H12, score, anomaly confidence | H12 retired: always `N/A`, no points, no likelihood ratio. Changes only rows where latency detection had been enabled | b1de2a9 |
-| H14, score, anomaly confidence | A serving reading without a channel no longer erases the known band of the same cell (#37): H14 can now be evaluated (and fail) on the next handover where it used to be `N/A` | f025d59 |
+| H14, score, anomaly confidence | A serving reading without a channel no longer erases the known band of the same cell (#37): H14 can now be evaluated (and fail) on the next handover where it used to be `N/A` | f27d44e |
+| Local cell confidence | Without a valid ARFCN, a valid PCI is compared with every PCI learned for the cell (#38): a reading without a channel can now mark a mature cell `CHANGED` (and, with a failed H11 or H16, an alarm candidate) | (#38 commit) |
 
 ## Known limitations and open items
 

@@ -32,6 +32,12 @@ Version code 40. A local build; not published yet.
   and a service loss or gap clears it. **Dataset cut** for H14 (and, through it, the score and the
   anomaly confidence).
 
+- **Local cell confidence ignored the PCI of a reading without a channel (#38).** For LTE and NR the
+  PCI was only compared with the PCIs learned on the same carrier, so without a valid ARFCN it was
+  not compared at all and a new PCI went unnoticed. It is now compared with every PCI learned for the
+  cell. **Dataset cut** for local cell confidence (a mature cell can become `CHANGED`) and, through
+  the alarm candidate (an RF change together with a failed H11 or H16), for alarms.
+
 ### Removed
 
 - **External verification (OpenCellID).** The optional lookup of the serving cell in OpenCellID is

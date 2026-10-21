@@ -73,6 +73,13 @@ object LocalCellTrustEngine {
                 if (!accepted && pci != null && carrierPcis != null && pci !in carrierPcis) {
                     contradictions += "PCI"
                 }
+                // 3.1.0 (#38) — Sin ARFCN válido no se sabe la portadora, pero un PCI válido sí se
+                // puede comparar con todos los aprendidos de la celda. Antes no se comparaba nada: una
+                // lectura sin canal ocultaba un PCI nuevo.
+                if (pci != null && arfcn == null) {
+                    val anyCarrier = evidence.knownPcis + evidence.knownPcisByArfcn.values.flatten()
+                    if (anyCarrier.isNotEmpty() && pci !in anyCarrier) contradictions += "PCI"
+                }
             } else {
                 if (pci != null && evidence.knownPcis.isNotEmpty() && pci !in evidence.knownPcis) {
                     contradictions += "PCI"

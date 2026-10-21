@@ -48,10 +48,31 @@ class LocalTrustRfValidationTest {
     }
 
     @Test fun `a valid change is still detected next to an invalid other value`() {
-        // ARFCN inválido: no se puede buscar la portadora, así que el PCI tampoco se compara.
-        assertEquals(emptySet<String>(), contradictions(cell(311, Int.MAX_VALUE)))
+        // 3.1.0 (#38) — ARFCN inválido: no se sabe la portadora, pero el PCI se compara con todos
+        // los aprendidos de la celda (antes no se comparaba).
+        assertEquals(setOf("PCI"), contradictions(cell(311, Int.MAX_VALUE)))
+        assertEquals(emptySet<String>(), contradictions(cell(10, Int.MAX_VALUE)))
         // PCI inválido en una portadora desconocida: el ARFCN nuevo sí es un cambio.
         assertEquals(setOf("ARFCN"), contradictions(cell(Int.MAX_VALUE, 6400)))
+    }
+
+    /** 3.1.0 (#38) — Sin ARFCN, un PCI válido se compara con los conocidos de cualquier portadora. */
+    @Test fun `without ARFCN a valid PCI is compared with every known PCI of the cell`() {
+        val twoCarriers = mature(mapOf(2850 to setOf(10), 6400 to setOf(11)))
+        listOf(null, Int.MAX_VALUE, -1).forEach { noArfcn ->
+            assertEquals("PCI de otra portadora de la celda", emptySet<String>(), contradictions(cell(11, noArfcn), twoCarriers))
+            assertEquals("PCI nuevo", setOf("PCI"), contradictions(cell(311, noArfcn), twoCarriers))
+        }
+        // Un PCI inválido sigue sin ser contradicción; y con ARFCN conocido manda su portadora.
+        assertEquals(emptySet<String>(), contradictions(cell(504, null), twoCarriers))
+        assertEquals(setOf("PCI"), contradictions(cell(11, 2850), twoCarriers))
+        // Una celda sin perfil maduro nunca acusa.
+        val young = twoCarriers.copy(distinctDays = 3)
+        assertEquals(emptySet<String>(), contradictions(cell(311, null), young))
+        // NR igual.
+        val nr = mature(mapOf(632_448 to setOf(12)))
+        assertEquals(setOf("PCI"), contradictions(cell(500, null, RadioTech.NR), nr))
+        assertEquals(LocalCellTrustState.CHANGED, LocalCellTrustEngine.apply(cell(311, null), twoCarriers).localCellTrust.state)
     }
 
     @Test fun `cell data keeps the original values so H8 can still fail them`() {
