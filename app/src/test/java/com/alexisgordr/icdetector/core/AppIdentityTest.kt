@@ -11,9 +11,9 @@ import java.io.File
  * poder actualizar de una beta a la release. La 3.0 pide instalación limpia; después, cada
  * versión actualiza a la anterior.
  *
- * Las betas no se publican: todas usan el versionCode 39, el siguiente a la 2.10.10 (38), que es
- * el que conserva la 3.0. Las notas de la tienda (F-Droid) van por versionCode: no puede quedar
- * una nota de beta con un número mayor, porque la cogería una 3.0.x futura.
+ * Las betas de la 3.0 usaron el versionCode 39, el siguiente a la 2.10.10 (38), y la 3.0.0 lo
+ * conservó. 3.1.0 es el 40. Las notas de la tienda (F-Droid) van por versionCode: la nota del
+ * código actual tiene que existir y ninguna puede ir por delante de él.
  */
 class AppIdentityTest {
     private fun locate(path: String) =
@@ -46,9 +46,9 @@ class AppIdentityTest {
         assertFalse("sin guardas muertas de API 31", controller.contains("VERSION_CODES.S"))
     }
 
-    @Test fun `3_0 follows 2_10_10 and no store note is ahead of it`() {
+    @Test fun `3_1 follows 3_0 and no store note is ahead of it`() {
         val code = Regex("versionCode = (\\d+)").find(gradle())!!.groupValues[1].toInt()
-        assertEquals(39, code)
+        assertEquals(40, code)
         val fastlane = listOf(File("fastlane"), File("../fastlane")).first { it.isDirectory }
         for (locale in listOf("en-US", "es-ES")) {
             val dir = File(fastlane, "metadata/android/$locale/changelogs")

@@ -1,0 +1,7 @@
+3.1.0 — fully offline: no Internet permission.
+
+• OpenCellID verification and latency detection (H12) removed; H12 keeps its number, never evaluated.
+• New shadow rule H17 (cell churn): recorded per row, no points, no alarms.
+• GPS fix age on the monotonic clock; H11 needs a fix of 100 m or better.
+• H14 keeps the previous band across a missing ARFCN; local trust checks PCIs without ARFCN.
+• Faster database (WAL), safe with backups.

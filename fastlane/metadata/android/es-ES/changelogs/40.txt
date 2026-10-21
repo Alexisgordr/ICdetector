@@ -1,0 +1,7 @@
+3.1.0 — totalmente sin conexión: sin permiso de Internet.
+
+• Retiradas la verificación con OpenCellID y la detección de latencia (H12); H12 conserva su número y no se evalúa.
+• Nueva regla en sombra H17 (cambios de celda): se guarda por fila, sin puntos ni alarmas.
+• Edad del fix GPS con reloj monotónico; H11 exige un fix de 100 m o mejor.
+• H14 conserva la banda anterior si falta el ARFCN; la confianza local comprueba PCI sin ARFCN.
+• Base de datos más rápida (WAL), segura con las copias.
