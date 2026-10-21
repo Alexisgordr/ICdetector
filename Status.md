@@ -93,6 +93,7 @@ cut can be applied per row; the commit is the one that introduces each change.
 | Local cell confidence | Without a valid ARFCN, a valid PCI is compared with every PCI learned for the cell (#38): a reading without a channel can now mark a mature cell `CHANGED` (and, with a failed H11 or H16, an alarm candidate) | c866e46 |
 | H11, score, anomaly confidence | H11 uses the fix only with a known accuracy of 100 m or better (#46); otherwise `N/A`, stored as `H11(fix_impreciso)` | cb1951d |
 | `TAUnit`, H6, score, anomaly confidence | Timing Advance stub detection uses a window of the last 200 readings per technology instead of a one-way mark (#43): a stray non-zero value no longer makes an always-zero modem count as measuring, so more rows are `STUB_ZERO` and H6 is `N/A` there | 60df718 |
+| H6, score, anomaly confidence | H6 is `N/A` while the Timing Advance of the technology has no verdict yet (`H6(ta_sin_verificar)`, #43): a strong cell at TA 0 before the stub detection decides no longer fails; `STUB_ZERO` rows say `H6(ta_stub)` | R2-3 |
 | H6 on GSM, score, anomaly confidence | H6 is `N/A` on GSM (`H6(ta_gsm)`): index 0 means closer than 554 m, not 0 m, so a strong GSM cell at index 0 no longer fails (#47e). LTE and NR rows do not change | 07359c1 |
 | Anomaly confidence only | H1's likelihood ratio is no longer damped by neighbour density (#45), only by reputation: with H1 failing it was always halved. Score and alarms unchanged | 9945ef8 |
 

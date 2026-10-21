@@ -62,6 +62,11 @@ class TerminalLocalizationCoverageTest {
         com.alexisgordr.icdetector.core.DiagnosticEngine.H12_RETIRED_EXPLANATION,
         // 3.1.0 (#47) — H6 con TA de GSM.
         com.alexisgordr.icdetector.core.DiagnosticEngine.H6_GSM_TA_EXPLANATION,
+        // 3.1.0 (#43) — H6 con STUB_ZERO y con la unidad sin veredicto.
+        com.alexisgordr.icdetector.core.DiagnosticEngine.H6_TA_STUB_EXPLANATION,
+        com.alexisgordr.icdetector.core.DiagnosticEngine.H6_TA_UNVERIFIED_EXPLANATION,
+        "[HEUR] 6. Proximidad por Timing Advance: N/A (el módem devuelve 0 sin medir el TA)",
+        "[HEUR] 6. Proximidad por Timing Advance: N/A (TA aún sin verificar: no se sabe si el módem lo mide)",
         "[HEUR] 6. Proximidad por Timing Advance: N/A (TA de GSM: el paso es de 554 m y no permite afirmar menos de 100 m)",
         "[HEUR] 12. Correlación Latencia + RF: N/A (regla retirada en 3.1.0)",
         "[AUDIT] 6. Proximidad por Timing Advance: NO EVALUADA",

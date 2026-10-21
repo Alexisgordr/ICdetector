@@ -44,7 +44,7 @@ another one keeps watching.
 |---|---|---|---|
 | **H1** Isolated cell | No neighbours at all and serving signal ≥ −80 dBm, confirmed over 3 deliveries | −15 | Wi-Fi on, CSG cell, or still confirming |
 | **H2** Power jump | Serving ≥ −75 dBm and more than 35 dB above the strongest neighbour of the same technology | −20 | No same-technology neighbour, Wi-Fi on, or CSG cell |
-| **H6** Timing Advance | TA puts the tower 100 m away or closer, with signal ≥ −60 dBm | −15 | No TA or unknown TA unit (never on NR), or CSG cell |
+| **H6** Timing Advance | TA puts the tower 100 m away or closer, with signal ≥ −60 dBm | −15 | No TA or unknown TA unit (never on NR), CSG cell, GSM (`ta_gsm`), a modem that returns 0 without measuring (`ta_stub`), or while it is not yet known whether the modem measures TA (`ta_sin_verificar`) |
 | **H13** Signal baseline | The cell is much stronger than its own history at this spot: ≥ 18 dB and ≥ 3σ above the mean (and above its P99 with ≥ 20 samples), with signal ≥ −95 dBm | −12 / −18 / −25 | Wi-Fi on, cell not yet trusted (5 clean observations on 2 days), or fewer than 5 samples within 500 m |
 | **H13** RSRQ/SINR branch | RSRQ and SINR both far from the cell's fingerprint. Only counts if the power branch did not fail | −15 | Fewer than 30 samples within 1 km in 90 days |
 

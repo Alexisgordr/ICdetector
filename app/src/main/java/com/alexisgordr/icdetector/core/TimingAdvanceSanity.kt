@@ -168,6 +168,19 @@ class TimingAdvanceSanity {
         if (timingAdvance == 0 && isStub(declared)) TimingAdvanceUnit.STUB_ZERO else declared
 
     /**
+     * 3.1.0 (#43) — La celda con su unidad efectiva ([effectiveUnit]) y marcada como
+     * [CellData.timingAdvanceUnverified] si trae TA y su unidad aún no tiene veredicto: mientras no
+     * se sepa si el módem mide o devuelve un 0 de relleno, H6 no juzga la proximidad (`ta_sin_verificar`).
+     */
+    fun annotate(cell: CellData): CellData {
+        val declared = cell.timingAdvanceUnit
+        val effective = effectiveUnit(declared, cell.timingAdvance)
+        val pending = cell.timingAdvance != null && declared in EVIDENCE_UNITS && verdict(declared) == Verdict.UNKNOWN
+        return if (effective == declared && pending == cell.timingAdvanceUnverified) cell
+        else cell.copy(timingAdvanceUnit = effective, timingAdvanceUnverified = pending)
+    }
+
+    /**
      * Resumen de la ventana de [unit] para guardarlo entre arranques: `v2|VEREDICTO|tramos`, con
      * cada tramo `recuento,0|1,clave` (observaciones seguidas de la misma celda y del mismo tipo)
      * separados por `;`. Cabe en pocos bytes: en uso normal la ventana son unos pocos tramos largos.

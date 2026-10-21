@@ -1055,10 +1055,8 @@ class MiniICService : Service() {
                 // proceso, y el historial dejaba de ser autoconsistente (medido: 319 vs 394 filas).
                 // 3.0 (#33) — Evidencia por unidad: un LTE que reporta no oculta un GSM/NR a cero.
                 if (taSanity.observe(current.timingAdvanceUnit, taKey, current.timingAdvance)) persistTaSanityEvidence()
-                val effectiveUnit = taSanity.effectiveUnit(current.timingAdvanceUnit, current.timingAdvance)
-                if (effectiveUnit != current.timingAdvanceUnit) {
-                    list[activeIndex] = current.copy(timingAdvanceUnit = effectiveUnit)
-                }
+                // Unidad efectiva (STUB_ZERO si se concluyó) y, 3.1.0 (#43), si el veredicto sigue pendiente.
+                list[activeIndex] = taSanity.annotate(current)
             }
 
             // 3.0 — Vecinas para el análisis (H1-H5, H7, H11, H16, densidad bayesiana, Stable-Site

@@ -19,6 +19,11 @@ data class CellData(
      */
     val timingAdvanceUnit: TimingAdvanceUnit = TimingAdvanceUnit.UNKNOWN,
     /**
+     * 3.1.0 (#43) — El TA de esta lectura viene de una unidad sin veredicto todavía (ni REAL ni
+     * STUB, ver core/TimingAdvanceSanity.annotate): H6 no juzga la proximidad con él.
+     */
+    val timingAdvanceUnverified: Boolean = false,
+    /**
      * Tecnología de radio según la CLASE de `CellInfo` de la que se leyó la celda — v2.1.
      *
      * No confundir con [networkType], que viene de `TelephonyDisplayInfo` y describe el icono de la

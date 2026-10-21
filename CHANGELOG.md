@@ -74,6 +74,12 @@ Version code 40. A local build; not published yet.
   loop. The database is now opened at a single point that turns this case into a blocking dialog
   (*Data from a newer version*: the database version, the newest one this app supports, and what to
   do). Nothing is changed and monitoring does not start.
+- **H6 judged a Timing Advance of 0 before knowing whether the modem measures it (#43).** Until the
+  stub detection decides, a 0 could be a filler; a strong cell at TA 0 on the first one or two sites
+  failed H6. H6 is now `N/A` while the technology has no verdict, stored as `H6(ta_sin_verificar)`,
+  and a modem found to return only zeros is stored as `H6(ta_stub)` instead of a bare `H6`.
+  **Dataset cut** for H6 (and the score and anomaly confidence through it) on rows recorded before
+  the verdict.
 - **H6 read GSM Timing Advance index 0 as 0 m (#47).** The GSM index comes in 554 m steps, so 0 means
   "closer than 554 m" and cannot show the 100 m of the proximity check; any strong GSM cell at index
   0 failed H6. H6 is now `N/A` on GSM, stored as `H6(ta_gsm)`. **Dataset cut** for H6 on GSM rows

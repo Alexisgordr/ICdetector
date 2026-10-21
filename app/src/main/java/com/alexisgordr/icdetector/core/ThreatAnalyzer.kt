@@ -342,7 +342,13 @@ object ThreatAnalyzer {
         // fallaba con cualquier GSM fuerte a índice 0). H6 queda N/A con su motivo (`H6(ta_gsm)`).
         val taGsmCoarse = !csgCell && active.timingAdvance != null &&
             active.timingAdvanceUnit == com.alexisgordr.icdetector.models.TimingAdvanceUnit.GSM_INDEX
-        val taMeters = active.timingAdvance?.takeUnless { csgCell || taGsmCoarse }?.let { active.timingAdvanceUnit.toMeters(it) }
+        // 3.1.0 (#43) — Un 0 que el módem no rellena (STUB_ZERO) no da distancia: N/A con su motivo
+        // (`ta_stub`). Y mientras la unidad no tiene veredicto (TimingAdvanceSanity.annotate), H6 se
+        // abstiene (`ta_sin_verificar`): un 0 de relleno de las primeras celdas no puede fallar H6.
+        val taStub = !csgCell && active.timingAdvance != null &&
+            active.timingAdvanceUnit == com.alexisgordr.icdetector.models.TimingAdvanceUnit.STUB_ZERO
+        val taUnverified = !csgCell && !taGsmCoarse && !taStub && active.timingAdvance != null && active.timingAdvanceUnverified
+        val taMeters = active.timingAdvance?.takeUnless { csgCell || taGsmCoarse || taUnverified }?.let { active.timingAdvanceUnit.toMeters(it) }
         eTa = taMeters != null
         //
         // 3.0 — Solo queda la rama de PROXIMIDAD (TA + señal). Había otra rama "geométrica" que
@@ -718,6 +724,8 @@ object ThreatAnalyzer {
             mobileCellIdFixTooOld = h11FixTooOld,
             mobileCellIdFixImprecise = h11FixImprecise,
             taDistanceGsmCoarse = taGsmCoarse,
+            taDistanceStub = taStub,
+            taDistanceUnverified = taUnverified,
             mncCount = status(eMncCount, hMncCount),
             tacDeviation = status(eTac, hTac),
             taDistance = status(eTa, hTa),

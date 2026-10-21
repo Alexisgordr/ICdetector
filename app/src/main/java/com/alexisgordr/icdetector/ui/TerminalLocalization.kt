@@ -309,6 +309,13 @@ private val replacements = linkedMapOf(
     "en GSM el Timing Advance va en pasos de 554 m; el índice 0 significa a menos de 554 m, no 0 m, y no permite afirmar que estés a menos de 100 m" to
         "on GSM the Timing Advance comes in 554 m steps; index 0 means closer than 554 m, not 0 m, and cannot show that you are within 100 m",
     "TA de GSM: el paso es de 554 m y no permite afirmar menos de 100 m" to "GSM TA: the step is 554 m and cannot show less than 100 m",
+    // 3.1.0 (#43) — H6 con STUB_ZERO y con la unidad sin veredicto.
+    "el módem devuelve 0 en celdas distintas sin medir el Timing Advance; ese 0 no es una distancia" to
+        "the modem returns 0 on different cells without measuring the Timing Advance; that 0 is not a distance",
+    "todavía no se sabe si el módem mide el Timing Advance o devuelve un 0 de relleno; H6 espera a tenerlo claro" to
+        "it is not yet known whether the modem measures the Timing Advance or returns a filler 0; H6 waits until it is clear",
+    "el módem devuelve 0 sin medir el TA" to "the modem returns 0 without measuring the TA",
+    "TA aún sin verificar: no se sabe si el módem lo mide" to "TA not verified yet: unknown whether the modem measures it",
     // 3.1.0 — H17 en sombra (HeuristicReport.H17_SHADOW_TEXT, DiagnosticEngine.H17_SHADOW_EXPLANATION, servicio).
     "en sombra; se registran las celdas distintas y los cambios de 15 min, sin evaluar hasta calibrarla con datos de campaña" to
         "shadow mode; the distinct cells and changes over 15 min are recorded, not evaluated until calibrated with campaign data",
