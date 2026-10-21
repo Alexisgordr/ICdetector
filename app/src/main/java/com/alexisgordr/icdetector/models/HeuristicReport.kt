@@ -40,7 +40,9 @@ data class HeuristicReport(
     /** 3.0 (corte de campaña) — La servidora es CSG (femtocelda): H1, H2, H5, H6 y H7 no se evalúan. */
     val csgCell: Boolean = false,
     /** 3.0 (corte de campaña) — H11 se abstuvo porque el fix GPS era demasiado viejo o de edad desconocida. */
-    val mobileCellIdFixTooOld: Boolean = false
+    val mobileCellIdFixTooOld: Boolean = false,
+    /** 3.1.0 (#46) — H11 se abstuvo porque el fix no tenía precisión conocida o pasaba de 100 m. */
+    val mobileCellIdFixImprecise: Boolean = false
 ) {
     // Compatibilidad: una regla que se abstiene no debe activar una alarma.
     val isolatedCellPassed get() = isolatedCell.passed
@@ -120,6 +122,7 @@ data class HeuristicReport(
         id == "H3" -> mccAbstention?.code
         csgCell && id in CSG_RULES -> CSG_ABSTENTION_CODE
         id == "H11" && mobileCellIdFixTooOld -> H11_FIX_ABSTENTION_CODE
+        id == "H11" && mobileCellIdFixImprecise -> H11_FIX_IMPRECISE_CODE
         id == "H17" -> H17_SHADOW_CODE
         else -> null
     }
@@ -129,6 +132,7 @@ data class HeuristicReport(
         id == "H3" -> mccAbstention?.text
         csgCell && id in CSG_RULES -> CSG_ABSTENTION_TEXT
         id == "H11" && mobileCellIdFixTooOld -> H11_FIX_ABSTENTION_TEXT
+        id == "H11" && mobileCellIdFixImprecise -> H11_FIX_IMPRECISE_TEXT
         id == "H17" -> H17_SHADOW_TEXT
         else -> null
     }
@@ -152,6 +156,10 @@ data class HeuristicReport(
         /** 3.0 (corte de campaña) — H11 sin fix reciente (ver core/MobileCellIdFixAge). */
         const val H11_FIX_ABSTENTION_CODE = "fix_viejo"
         const val H11_FIX_ABSTENTION_TEXT = "fix GPS de más de 60 s o sin edad conocida"
+
+        /** 3.1.0 (#46) — H11 con un fix sin precisión conocida o de más de 100 m (ver core/MobileCellIdFixAge). */
+        const val H11_FIX_IMPRECISE_CODE = "fix_impreciso"
+        const val H11_FIX_IMPRECISE_TEXT = "fix GPS sin precisión conocida o de más de 100 m"
 
         /** 3.1.0 — H17 en sombra: se calcula y se guarda, pero no se evalúa (ver core/CellChurn). */
         const val H17_SHADOW_CODE = "sombra"

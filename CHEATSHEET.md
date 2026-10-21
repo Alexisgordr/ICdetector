@@ -68,7 +68,7 @@ another one keeps watching.
 |---|---|---|---|
 | **H7** Ghost neighbours | Serving ≥ −65 dBm while every same-technology neighbour looks dead (≤ −110) | −25 | No same-technology neighbour, Wi-Fi on, or CSG cell |
 | **H10** Ping-pong | 3 or more cell changes within 10 s while not moving fast (< 8 m/s) | −25 | No GPS speed |
-| **H11** Geographic | You are far from where this cell was seen before (≥ 2 records and ≥ 30 % of them); more points if PCI or channel also differ | −10 to −65 | No GPS fix ≤ 60 s (`H11(fix_viejo)`) or no located history |
+| **H11** Geographic | You are far from where this cell was seen before (≥ 2 records and ≥ 30 % of them); more points if PCI or channel also differ | −10 to −65 | No GPS fix ≤ 60 s (`H11(fix_viejo)`), accuracy unknown or worse than 100 m (`H11(fix_impreciso)`), or no located history |
 | **H16** Transition coherence | One handover is physically impossible: you barely moved (≤ 1 km), but the two cells were learned ≥ 10 km apart and you are in the old cell's zone | −15 | Handover longer than 120 s, missing fix ≤ 10 s at either end, accuracy worse than 75 m, or fewer than 4 learned positions per cell |
 
 H16 shows each handover result for 20 s, then returns to `N/A` until the next handover. It only gets

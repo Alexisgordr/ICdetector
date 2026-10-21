@@ -1351,6 +1351,8 @@ class MiniICService : Service() {
                             // 3.0 — La velocidad de H10 solo vale con un fix reciente; sin marca monotónica, vieja.
                             // Edad en la ENTREGA, no tras esperar al mutex del análisis.
                             locationFixAgeMs = deliveryFixAgeMs,
+                            // 3.1.0 (#46) — La precisión que se guarda en la fila (GpsAccuracyM).
+                            locationAccuracyM = observationContext.fix?.accuracyM,
                             // 3.0 (corte de campaña) — H3 (servidora frente a SIM) usa el ServiceState de ESTA
                             // lectura, el mismo que se guarda en la fila.
                             serviceState = observationContext.service

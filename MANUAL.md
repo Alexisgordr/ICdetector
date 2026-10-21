@@ -954,7 +954,9 @@ learned. That is by design, not a sampling issue.
 
 H11 uses the current position only if the GPS fix is 60 s old or less, measured on the monotonic
 clock. With an older fix, or one of unknown age, H11 is `N/A` (stored as `H11(fix_viejo)`): in a
-moving vehicle an old position can be kilometres from where the cell is seen.
+moving vehicle an old position can be kilometres from where the cell is seen. From 3.1.0 the fix also
+needs a known accuracy of 100 m or better — the same value stored in the row's `GpsAccuracyM`;
+otherwise H11 is `N/A`, stored as `H11(fix_impreciso)`.
 
 **Retired rules.** H9 (hardware ciphering) is reserved: Android does not expose the ciphering state to
 an app. H12 (latency + RF correlation) was retired in 3.1.0 with the latency probe, because it needed
@@ -1180,8 +1182,9 @@ ObservationId, ChurnCells15m, ChurnChanges15m, ChurnMotion
 - `NotEvaluatedHeuristics` lists the rules that could not be evaluated (`H1;H6;H9`), or `NONE`. A
   rule listed here neither passed nor failed. Some rules carry the reason in parentheses: H3
   (`roaming`, `frontera`, `sin_sim`, `sin_servicestate`, `sin_mcc_servidora`); on a CSG cell with
-  local history, H1, H2, H5, H6 and H7 (`csg`); and H11 with a GPS fix older than 60 s or of unknown
-  age (`fix_viejo`). For example `H1(csg);H3(roaming);H9;H11(fix_viejo)`.
+  local history, H1, H2, H5, H6 and H7 (`csg`); H11 with a GPS fix older than 60 s or of unknown
+  age (`fix_viejo`) or, from 3.1.0, without a known accuracy of 100 m or better (`fix_impreciso`); and,
+  from 3.1.0, H17 (`sombra`, shadow mode). For example `H1(csg);H3(roaming);H9;H11(fix_viejo);H12;H17(sombra)`.
 - `GpsAccuracyM` is the accuracy of the row's fix in metres; filter large values before analysing
   geometry.
 - `AppVersion` is the version that recorded the row; use it to apply dataset cuts per row. From

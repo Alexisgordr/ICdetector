@@ -21,4 +21,15 @@ internal object MobileCellIdFixAge {
 
     /** ¿Vale el fix para H11? [fixAgeMs] null = edad desconocida, no vale. */
     fun usable(fixAgeMs: Long?): Boolean = fixAgeMs != null && fixAgeMs in 0..MAX_AGE_MS
+
+    /**
+     * 3.1.0 (#46) — Precisión máxima del fix para H11 (radio de 100 m al 68 %, el mismo límite con el
+     * que la ubicación acepta un fix). H11 compara la posición con muestras de la celda a kilómetros;
+     * un fix de precisión desconocida o peor que 100 m puede estar lejos de donde se vio la celda.
+     */
+    const val MAX_ACCURACY_M = 100f
+
+    /** ¿Es lo bastante preciso? Null (sin precisión), no finito o negativo: no. */
+    fun accurate(accuracyM: Float?): Boolean =
+        accuracyM != null && accuracyM.isFinite() && accuracyM >= 0f && accuracyM <= MAX_ACCURACY_M
 }

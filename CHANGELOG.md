@@ -42,6 +42,10 @@ Version code 40. A local build; not published yet.
   99th percentile of 0 dBm is applied instead of being skipped. Baselines always store a computed
   value, so no row is expected to change in practice.
 
+- **H11 used fixes of any accuracy (#46).** H11 now needs a known accuracy of 100 m or better — the
+  value stored in the row's `GpsAccuracyM`; otherwise it is `N/A`, stored as `H11(fix_impreciso)`.
+  **Dataset cut** for H11 (and the score and anomaly confidence through it).
+
 ### Removed
 
 - **External verification (OpenCellID).** The optional lookup of the serving cell in OpenCellID is

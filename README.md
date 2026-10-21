@@ -249,7 +249,8 @@ Cell ID or technology) within 10 s while the phone is not moving fast. Without a
 #### Geographic Consistency Analysis (H11)
 Validates Cell IDs against a local GPS history built from the device's own clean observations, spread
 across days, revealing the same Cell ID appearing from physically inconsistent locations. It uses
-only a GPS fix of 60 s or less, and does not rely on public tower databases.
+only a GPS fix of 60 s or less with a known accuracy of 100 m or better, and does not rely on public
+tower databases.
 
 #### Latency Correlation (H12, retired in 3.1.0)
 Compared network latency with the cell's own reference, which needed requests to third-party servers.

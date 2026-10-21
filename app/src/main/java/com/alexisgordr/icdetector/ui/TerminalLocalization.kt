@@ -295,6 +295,10 @@ private val replacements = linkedMapOf(
     // 3.0 (corte de campaña) — Celda CSG: H1/H2/H5/H6/H7 no se evalúan.
     "celda CSG (femtocelda): las reglas de dominancia, proximidad e identidad local no aplican a una celda diseñada para ser aislada" to "CSG cell (femtocell): the dominance, proximity and local-identity rules do not apply to a cell designed to be isolated",
     "celda CSG (femtocelda)" to "CSG cell (femtocell)",
+    // 3.1.0 (#46) — H11 con un fix impreciso.
+    "el fix GPS no tiene precisión conocida o es peor que 100 m; la posición podría estar lejos de donde se vio la celda" to
+        "the GPS fix has no known accuracy or is worse than 100 m; the position could be far from where the cell was seen",
+    "fix GPS sin precisión conocida o de más de 100 m" to "GPS fix without known accuracy or worse than 100 m",
     // 3.1.0 — H17 en sombra (HeuristicReport.H17_SHADOW_TEXT, DiagnosticEngine.H17_SHADOW_EXPLANATION, servicio).
     "en sombra; se registran las celdas distintas y los cambios de 15 min, sin evaluar hasta calibrarla con datos de campaña" to
         "shadow mode; the distinct cells and changes over 15 min are recorded, not evaluated until calibrated with campaign data",

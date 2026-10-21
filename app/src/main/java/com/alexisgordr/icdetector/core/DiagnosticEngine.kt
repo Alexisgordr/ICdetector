@@ -79,6 +79,7 @@ object DiagnosticEngine {
                 explanation(r.mobileCellId, when {
                     // 3.0 (corte de campaña) — Fix demasiado viejo para H11 (ver MobileCellIdFixAge).
                     r.mobileCellIdFixTooOld -> H11_FIX_TOO_OLD_EXPLANATION
+                    r.mobileCellIdFixImprecise -> H11_FIX_IMPRECISE_EXPLANATION
                     !i.locationAvailable -> "N/A: falta una posición GPS reciente."
                     i.historyWithLocation == 0 -> "N/A: aún no hay observaciones previas geolocalizadas de esta celda."
                     else -> "N/A: identidad celular insuficiente para comparar."
@@ -108,6 +109,8 @@ object DiagnosticEngine {
     /** 3.0 (corte de campaña) — H8 es un aviso de calidad de dato (ver ThreatAnalyzer, regla 8). */
     /** 3.0 (corte de campaña) — H11 con un fix de más de 60 s o sin edad conocida. */
     const val H11_FIX_TOO_OLD_EXPLANATION = "N/A: el fix GPS tiene más de 60 s (o no se sabe su edad); en movimiento, la posición ya no sería la de esta lectura."
+    /** 3.1.0 (#46) — H11 con un fix sin precisión conocida o peor que 100 m. */
+    const val H11_FIX_IMPRECISE_EXPLANATION = "N/A: el fix GPS no tiene precisión conocida o es peor que 100 m; la posición podría estar lejos de donde se vio la celda."
     /** 3.1.0 — H12 retirada: necesitaba sondas de red y la app ya no sale a Internet. */
     const val H12_RETIRED_EXPLANATION = "N/A: regla retirada en 3.1.0 (la correlación de latencia necesitaba conexión a Internet)."
     /** 3.1.0 — H17 en sombra: se calcula y se guarda, no se evalúa. */

@@ -175,6 +175,11 @@ object ThreatAnalyzer {
          */
         locationFixAgeMs: Long? = null,
         /**
+         * 3.1.0 (#46) — Precisión (m) del fix de [currentLocation], la misma que se guarda en la fila
+         * (`GpsAccuracyM`). H11 solo usa la posición con 100 m o menos; null = desconocida, no la usa.
+         */
+        locationAccuracyM: Float? = currentLocation?.takeIf { it.hasAccuracy() }?.accuracy,
+        /**
          * 3.0 — Velocidad que decide H10: la del fix si es reciente ([PingPongRule.liveSpeed]).
          * Es un parámetro para que los escenarios de la JVM puedan recorrer H10 (Location es de
          * Android); el servicio no lo pasa y usa siempre este valor por defecto.
@@ -427,7 +432,9 @@ object ThreatAnalyzer {
         // movimiento, una posición vieja hacía parecer lejana una celda que estaba donde debía.
         // Con un fix más viejo o sin edad, H11 se abstiene y lo deja escrito (`H11(fix_viejo)`).
         val h11FixTooOld = currentLocation != null && !MobileCellIdFixAge.usable(locationFixAgeMs)
-        val h11Location = currentLocation.takeUnless { h11FixTooOld }
+        // 3.1.0 (#46) — Y solo con una precisión conocida de 100 m o menos (`H11(fix_impreciso)`).
+        val h11FixImprecise = currentLocation != null && !h11FixTooOld && !MobileCellIdFixAge.accurate(locationAccuracyM)
+        val h11Location = currentLocation.takeUnless { h11FixTooOld || h11FixImprecise }
         eMobileCellId = h11Location != null && active.cellId != "N/A" &&
             preloadedHistory.any { it.lat != null && it.lon != null }
         val (hMobileOk, hMobilePenalty, hMobileReason) = analyzeMobileCellId(
@@ -703,6 +710,7 @@ object ThreatAnalyzer {
             mccAbstention = mccResult.abstention,
             csgCell = csgCell,
             mobileCellIdFixTooOld = h11FixTooOld,
+            mobileCellIdFixImprecise = h11FixImprecise,
             mncCount = status(eMncCount, hMncCount),
             tacDeviation = status(eTac, hTac),
             taDistance = status(eTa, hTa),
