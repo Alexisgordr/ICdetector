@@ -1790,10 +1790,27 @@ class MiniICService : Service() {
             // 3.0 (#33) — Una clave por unidad. Las claves globales de versiones anteriores
             // (ta_seen_real_value, ta_zero_only_cells) no dicen de qué tecnología vinieron y NO se
             // leen: cada unidad empieza vacía y se rederiva en unos minutos de uso.
+            // 3.1.0 (#43) — Ventana por unidad (ta_window_<unidad>). Sin ella, se migra la evidencia
+            // de 3.0: las celdas a cero sí, el latch «reportó alguna vez» no (un valor espurio no
+            // fuerza REAL). Las claves de 3.0 se borran.
+            val legacy = p.edit()
+            var migrated = false
             com.alexisgordr.icdetector.core.TimingAdvanceSanity.EVIDENCE_UNITS.forEach { unit ->
-                val seenReal = p.getBoolean(KEY_TA_SEEN_REAL_PREFIX + unit.name, false)
-                val cells = p.getStringSet(KEY_TA_ZERO_CELLS_PREFIX + unit.name, emptySet()).orEmpty()
-                if (seenReal || cells.isNotEmpty()) taSanity.restore(unit, seenReal, cells)
+                val window = p.getString(KEY_TA_WINDOW_PREFIX + unit.name, null)
+                if (window != null) {
+                    taSanity.restore(unit, window)
+                } else {
+                    val cells = p.getStringSet(KEY_TA_ZERO_CELLS_PREFIX + unit.name, emptySet()).orEmpty()
+                    if (cells.isNotEmpty()) taSanity.restoreLegacy(unit, cells)
+                }
+                if (p.contains(KEY_TA_SEEN_REAL_PREFIX + unit.name) || p.contains(KEY_TA_ZERO_CELLS_PREFIX + unit.name)) {
+                    legacy.remove(KEY_TA_SEEN_REAL_PREFIX + unit.name).remove(KEY_TA_ZERO_CELLS_PREFIX + unit.name)
+                    migrated = true
+                }
+            }
+            if (migrated) {
+                legacy.apply()
+                persistTaSanityEvidence()
             }
             if (taSanity.anyStub) {
                 appendLog(
@@ -1805,13 +1822,12 @@ class MiniICService : Service() {
         } catch (_: Exception) {}
     }
 
-    /** Guarda la evidencia de TA. Se llama solo cuando [TimingAdvanceSanity.observe] dice que cambió. */
+    /** Guarda la ventana de TA. Se llama cuando [TimingAdvanceSanity.observe] lo pide (veredicto nuevo o cada 30). */
     private fun persistTaSanityEvidence() {
         try {
             val editor = getSharedPreferences("miniic_prefs", MODE_PRIVATE).edit()
             com.alexisgordr.icdetector.core.TimingAdvanceSanity.EVIDENCE_UNITS.forEach { unit ->
-                editor.putBoolean(KEY_TA_SEEN_REAL_PREFIX + unit.name, taSanity.hasSeenRealValue(unit))
-                    .putStringSet(KEY_TA_ZERO_CELLS_PREFIX + unit.name, taSanity.zeroOnlyCellKeys(unit))
+                editor.putString(KEY_TA_WINDOW_PREFIX + unit.name, taSanity.summary(unit))
             }
             editor.apply()
         } catch (_: Exception) {}
@@ -2094,9 +2110,12 @@ class MiniICService : Service() {
         const val ACTION_STOP = "com.alexisgordr.icdetector.STOP"
         // v2.5 — Evidencia del diagnóstico de Timing Advance, superviviente a reinicios del
         // servicio. Ver TimingAdvanceSanity: se guarda la evidencia, nunca el veredicto.
-        // 3.0 (#33) — Por unidad: ta_seen_real_LTE_INDEX, ta_zero_cells_GSM_INDEX, …
+        // 3.0 (#33) — Por unidad: ta_seen_real_LTE_INDEX, ta_zero_cells_GSM_INDEX, … Desde 3.1.0
+        // (#43) solo se leen para migrarlas y se borran.
         private const val KEY_TA_SEEN_REAL_PREFIX = "ta_seen_real_"
         private const val KEY_TA_ZERO_CELLS_PREFIX = "ta_zero_cells_"
+        /** 3.1.0 (#43) — Resumen de la ventana por unidad (TimingAdvanceSanity.summary). */
+        private const val KEY_TA_WINDOW_PREFIX = "ta_window_"
         // Ciclos consecutivos de sospecha necesarios para confirmar una alarma.
         private const val CONFIRMATION_CYCLES = 3
         private const val INTENSIVE_MONITORING_TAIL_MS = 60_000L

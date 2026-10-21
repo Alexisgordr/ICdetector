@@ -901,7 +901,11 @@ compare TA with a tower position: no tower coordinates reach the score (public-d
 are only displayed as a distance), and the phone's own position is never used as the tower's. A missing TA is only taken from a duplicate of the same cell (same
 technology and physical cell), never from another transmitter. Many modems omit TA or always return
 zero; that "always 0" behaviour is detected per technology and never read as a real distance of zero
-metres. TA on 5G NR is not converted to distance, so H6 is `N/A` there. Only values in range are
+metres. From 3.1.0 the decision uses the last 200 readings of each technology: they are a real
+measurement when more than 5 % are non-zero across at least two cells, and an unfilled field
+(`STUB_ZERO`) when they come from three or more cells and none is non-zero; otherwise the previous
+decision stands. A single stray non-zero value no longer switches the detection off for good, and
+both changes can happen if the data justify them. TA on 5G NR is not converted to distance, so H6 is `N/A` there. Only values in range are
 used: LTE index 0–1282, GSM index 0–219 (also when converting older rows). LTE TA comes only from
 Android's getter, never from the manufacturer's text, so some phones report little or no TA. NR TA comes from Android's public getter (Android 14+): despite its name it is the raw 3GPP
 T_A index (0–3846), not microseconds, and it is kept as raw context without a distance;

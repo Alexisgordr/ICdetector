@@ -92,6 +92,7 @@ cut can be applied per row; the commit is the one that introduces each change.
 | H14, score, anomaly confidence | A reading of the same cell with an unreadable Cell ID no longer erases the base station of the known band: a band change between sectors of the same eNB stays exempt instead of failing | eecc3d7 |
 | Local cell confidence | Without a valid ARFCN, a valid PCI is compared with every PCI learned for the cell (#38): a reading without a channel can now mark a mature cell `CHANGED` (and, with a failed H11 or H16, an alarm candidate) | c866e46 |
 | H11, score, anomaly confidence | H11 uses the fix only with a known accuracy of 100 m or better (#46); otherwise `N/A`, stored as `H11(fix_impreciso)` | cb1951d |
+| `TAUnit`, H6, score, anomaly confidence | Timing Advance stub detection uses a window of the last 200 readings per technology instead of a one-way mark (#43): a stray non-zero value no longer makes an always-zero modem count as measuring, so more rows are `STUB_ZERO` and H6 is `N/A` there | #43 |
 | Anomaly confidence only | H1's likelihood ratio is no longer damped by neighbour density (#45), only by reputation: with H1 failing it was always halved. Score and alarms unchanged | 9945ef8 |
 
 ## Known limitations and open items

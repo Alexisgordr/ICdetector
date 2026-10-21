@@ -21,14 +21,21 @@ import com.alexisgordr.icdetector.models.TimingAdvanceUnit
  * -15 indefinidamente. Sería un falso positivo perpetuo cuyo origen no es la red, sino el firmware
  * del propio teléfono. Esta clase existe para que eso no ocurra.
  *
- * LA REGLA, deliberadamente asimétrica:
+ * LA REGLA (3.1.0, #43): una ventana de las últimas [WINDOW] observaciones de cada unidad.
  *
- *  - **Un solo TA distinto de cero demuestra que el módem SÍ reporta.** Esa conclusión se queda
- *    fijada para siempre: a partir de ahí, un 0 posterior es una medida legítima y se trata como
- *    tal. Demostrar que algo funciona necesita una prueba; nada más.
- *  - **Sospechar de un campo vacío necesita más.** Hacen falta [MIN_DISTINCT_CELLS] identidades de
- *    celda distintas, todas reportando 0, para concluir que es un stub. Con una sola celda no se
- *    puede afirmar: quizá de verdad la tienes encima.
+ *  - **REAL** si más del [REAL_MIN_SHARE] de la ventana son valores distintos de cero, repartidos
+ *    en al menos [MIN_REAL_CELLS] celdas distintas: el módem mide de verdad.
+ *  - **STUB** si la ventana tiene [MIN_DISTINCT_CELLS] o más celdas distintas y ningún valor
+ *    distinto de cero: estar a menos de un paso de TA de tres emplazamientos no ocurre.
+ *  - Si no se cumple ninguna, se mantiene el veredicto anterior (al principio, ninguno: el cero se
+ *    trata como medida, igual que antes). Así un tramo largo en una sola celda no cambia nada.
+ *
+ * Hasta 3.0 era un latch de un sentido: el primer TA distinto de cero fijaba «reporta de verdad»
+ * para siempre, se guardaba, y desde ahí ningún cero volvía a ser sospechoso. Un solo valor espurio
+ * (un módem que publica un TA basura una vez, o una celda vecina mal atribuida) desactivaba la
+ * detección del stub de forma permanente. Con la ventana, un valor aislado es menos del 5 % y de
+ * una sola celda: no basta. Y las dos transiciones son posibles (STUB→REAL→STUB) si los datos lo
+ * justifican, por ejemplo tras una actualización del firmware del módem.
  *
  * ── v2.5: LA EVIDENCIA SE PERSISTE, EL VEREDICTO NO ─────────────────────────────────────────
  *
@@ -42,10 +49,11 @@ import com.alexisgordr.icdetector.models.TimingAdvanceUnit
  * en una campaña de tres meses eso no se arregla después: no hay forma de saber, mirando una fila
  * vieja, si el `LTE_INDEX` significa "medida real" o "todavía no había pruebas suficientes".
  *
- * La solución conserva el argumento original: se persiste la EVIDENCIA (el latch de que el módem
- * reportó alguna vez, y las identidades vistas con cero), nunca la conclusión. [isStub] se sigue
- * derivando de la evidencia en cada consulta, así que un cambio futuro de [MIN_DISTINCT_CELLS]
- * reevalúa el pasado en lugar de heredar un veredicto congelado.
+ * La solución conserva el argumento original: se persiste la EVIDENCIA. Desde 3.1.0 (#43) es el
+ * resumen de la ventana ([summary]: tramos de celda + cero/no cero + recuento) y, solo para el caso
+ * indeciso, el último veredicto; al restaurar, si la ventana decide por sí misma, manda la ventana,
+ * así que un cambio futuro de los umbrales reevalúa el pasado. La evidencia de 3.0 (latch y celdas a
+ * cero) se migra sin el latch ([restoreLegacy]): un latch antiguo no fuerza REAL.
  *
  * ── 3.0 (#33): LA EVIDENCIA ES POR TECNOLOGÍA / UNIDAD ─────────────────────────────────────
  *
@@ -71,71 +79,84 @@ import com.alexisgordr.icdetector.models.TimingAdvanceUnit
  */
 class TimingAdvanceSanity {
 
-    /** Evidencia de una unidad: el latch de "reporta de verdad" y las celdas vistas solo a 0. */
+    /** 3.1.0 (#43) — Veredicto de una unidad. UNKNOWN: todavía sin datos que decidan. */
+    enum class Verdict { UNKNOWN, REAL, STUB }
+
+    /** Una observación de la ventana: la celda ([evidenceKey], null si ilegible) y si el TA no era 0. */
+    private data class Obs(val key: String?, val nonZero: Boolean)
+
+    /** Ventana de una unidad y el veredicto vigente. */
     private class Evidence {
-        var hasSeenRealValue = false
-        val zeroOnlyCells = HashSet<String>()
-        val isStub: Boolean get() = !hasSeenRealValue && zeroOnlyCells.size >= MIN_DISTINCT_CELLS
+        val window = ArrayDeque<Obs>()
+        var verdict = Verdict.UNKNOWN
+        var sincePersist = 0
+
+        /** Lo que dice la ventana por sí sola, o null si no decide. */
+        fun decide(): Verdict? {
+            if (window.isEmpty()) return null
+            val nonZero = window.count { it.nonZero }
+            if (nonZero == 0) {
+                val cells = window.mapNotNullTo(HashSet()) { it.key }
+                return if (cells.size >= MIN_DISTINCT_CELLS) Verdict.STUB else null
+            }
+            val realCells = window.filter { it.nonZero }.mapNotNullTo(HashSet()) { it.key }
+            return if (nonZero.toDouble() / window.size > REAL_MIN_SHARE && realCells.size >= MIN_REAL_CELLS) Verdict.REAL else null
+        }
+
+        fun add(obs: Obs) {
+            window.addLast(obs)
+            while (window.size > WINDOW) window.removeFirst()
+        }
     }
 
     private val evidence = HashMap<TimingAdvanceUnit, Evidence>()
 
     private fun of(unit: TimingAdvanceUnit): Evidence = evidence.getOrPut(unit) { Evidence() }
 
-    /** Latched por unidad: en cuanto esa unidad demuestra que reporta de verdad, deja de estar bajo sospecha. */
-    fun hasSeenRealValue(unit: TimingAdvanceUnit): Boolean = evidence[unit]?.hasSeenRealValue == true
+    /** Veredicto vigente de la unidad. */
+    fun verdict(unit: TimingAdvanceUnit): Verdict = evidence[unit]?.verdict ?: Verdict.UNKNOWN
 
     /** ¿Concluimos que el TA de esta unidad es un campo sin rellenar? */
-    fun isStub(unit: TimingAdvanceUnit): Boolean = evidence[unit]?.isStub == true
+    fun isStub(unit: TimingAdvanceUnit): Boolean = verdict(unit) == Verdict.STUB
 
     /** ¿Alguna unidad es un campo sin rellenar? (diagnóstico) */
-    val anyStub: Boolean get() = evidence.values.any { it.isStub }
+    val anyStub: Boolean get() = evidence.values.any { it.verdict == Verdict.STUB }
 
-    /** Nº de celdas distintas vistas reportando solo 0 en esta unidad (diagnóstico). */
-    fun zeroOnlyCellCount(unit: TimingAdvanceUnit): Int = evidence[unit]?.zeroOnlyCells?.size ?: 0
+    /** Nº de celdas distintas de la ventana que solo han dado 0 en esta unidad (diagnóstico). */
+    fun zeroOnlyCellCount(unit: TimingAdvanceUnit): Int = evidence[unit]?.let(::zeroOnlyCells)?.size ?: 0
 
     /** El mayor recuento entre unidades, para el diagnóstico general del terminal. */
-    val zeroOnlyCellCount: Int get() = evidence.values.maxOfOrNull { it.zeroOnlyCells.size } ?: 0
+    val zeroOnlyCellCount: Int get() = evidence.values.maxOfOrNull { zeroOnlyCells(it).size } ?: 0
 
-    /** Evidencia de una unidad, para que quien llama la guarde entre arranques. Copia defensiva. */
-    fun zeroOnlyCellKeys(unit: TimingAdvanceUnit): Set<String> = evidence[unit]?.zeroOnlyCells?.toSet().orEmpty()
-
-    /**
-     * Restaura la evidencia de una unidad de un arranque anterior. Devuelve true si su estado
-     * visible cambió. No restaura un veredicto: [isStub] se recalcula a partir de lo restaurado.
-     */
-    fun restore(unit: TimingAdvanceUnit, hasSeenRealValue: Boolean, zeroOnlyCellKeys: Set<String>): Boolean {
-        if (unit !in EVIDENCE_UNITS) return false
-        val e = of(unit)
-        val before = e.isStub
-        if (hasSeenRealValue) {
-            e.hasSeenRealValue = true
-            e.zeroOnlyCells.clear()
-        } else {
-            e.zeroOnlyCells.addAll(zeroOnlyCellKeys.mapNotNull(::normalizeStoredKey).take(MAX_PERSISTED_CELLS))
-        }
-        return before != e.isStub
+    private fun zeroOnlyCells(e: Evidence): Set<String> {
+        val nonZero = e.window.filter { it.nonZero }.mapNotNullTo(HashSet()) { it.key }
+        return e.window.mapNotNullTo(HashSet()) { it.key } - nonZero
     }
+
+    /** Observaciones en la ventana de la unidad (diagnóstico y pruebas). */
+    fun windowSize(unit: TimingAdvanceUnit): Int = evidence[unit]?.window?.size ?: 0
 
     /**
      * Registra una observación con la unidad que declaró el parser. [cellKey] es [evidenceKey] de la
-     * celda; null (CID ilegible, LTE sin red conocida) solo impide contar un cero, nunca un TA real.
+     * celda; null (CID ilegible, LTE sin red conocida) cuenta en los porcentajes pero no como celda.
      * Un TA null no aporta evidencia y se ignora.
      *
-     * Devuelve true si la EVIDENCIA cambió y conviene volver a guardarla en disco.
+     * Devuelve true si conviene volver a guardar la evidencia: al cambiar el veredicto y, si no, cada
+     * [PERSIST_EVERY] observaciones (la ventana cambia en cada una; guardarla siempre sería escribir
+     * en disco cada ciclo).
      */
     fun observe(unit: TimingAdvanceUnit, cellKey: String?, timingAdvance: Int?): Boolean {
         if (timingAdvance == null || unit !in EVIDENCE_UNITS) return false
         val e = of(unit)
-        if (timingAdvance != 0) {
-            if (e.hasSeenRealValue) return false
-            e.hasSeenRealValue = true
-            e.zeroOnlyCells.clear()
+        e.add(Obs(cellKey, timingAdvance != 0))
+        val before = e.verdict
+        e.verdict = e.decide() ?: e.verdict
+        e.sincePersist++
+        if (e.verdict != before || e.sincePersist >= PERSIST_EVERY) {
+            e.sincePersist = 0
             return true
         }
-        if (e.hasSeenRealValue || cellKey == null) return false
-        if (e.zeroOnlyCells.size >= MAX_PERSISTED_CELLS) return false
-        return e.zeroOnlyCells.add(cellKey)
+        return false
     }
 
     /**
@@ -146,26 +167,90 @@ class TimingAdvanceSanity {
     fun effectiveUnit(declared: TimingAdvanceUnit, timingAdvance: Int?): TimingAdvanceUnit =
         if (timingAdvance == 0 && isStub(declared)) TimingAdvanceUnit.STUB_ZERO else declared
 
+    /**
+     * Resumen de la ventana de [unit] para guardarlo entre arranques: `v2|VEREDICTO|tramos`, con
+     * cada tramo `recuento,0|1,clave` (observaciones seguidas de la misma celda y del mismo tipo)
+     * separados por `;`. Cabe en pocos bytes: en uso normal la ventana son unos pocos tramos largos.
+     */
+    fun summary(unit: TimingAdvanceUnit): String {
+        val e = evidence[unit] ?: return "$SUMMARY_VERSION|${Verdict.UNKNOWN}|"
+        val runs = ArrayList<Triple<Int, Boolean, String?>>()
+        e.window.forEach { o ->
+            val last = runs.lastOrNull()
+            if (last != null && last.second == o.nonZero && last.third == o.key) runs[runs.size - 1] = last.copy(first = last.first + 1)
+            else runs += Triple(1, o.nonZero, o.key)
+        }
+        return "$SUMMARY_VERSION|${e.verdict}|" + runs.joinToString(";") { (n, nz, key) -> "$n,${if (nz) 1 else 0},${key.orEmpty()}" }
+    }
+
+    /**
+     * Restaura la ventana guardada con [summary]. Si la ventana decide por sí sola, manda ella; si
+     * no, se conserva el veredicto guardado. Un resumen ilegible se ignora (se empieza de cero).
+     * Devuelve true si el estado visible ([isStub]) cambió.
+     */
+    fun restore(unit: TimingAdvanceUnit, summary: String): Boolean {
+        if (unit !in EVIDENCE_UNITS) return false
+        val parts = summary.split("|", limit = 3)
+        if (parts.size != 3 || parts[0] != SUMMARY_VERSION) return false
+        val stored = runCatching { Verdict.valueOf(parts[1]) }.getOrNull() ?: return false
+        val obs = ArrayList<Obs>()
+        if (parts[2].isNotEmpty()) for (run in parts[2].split(";")) {
+            val f = run.split(",", limit = 3)
+            val n = f.getOrNull(0)?.toIntOrNull()?.takeIf { it in 1..WINDOW } ?: return false
+            val nonZero = when (f.getOrNull(1)) { "1" -> true; "0" -> false; else -> return false }
+            val key = f.getOrNull(2)?.takeIf { it.isNotEmpty() }?.let { normalizeStoredKey(it) ?: return false }
+            repeat(n) { obs += Obs(key, nonZero) }
+        }
+        val e = of(unit)
+        val before = e.verdict
+        e.window.clear()
+        obs.takeLast(WINDOW).forEach(e::add)
+        e.verdict = e.decide() ?: stored
+        e.sincePersist = 0
+        return (before == Verdict.STUB) != (e.verdict == Verdict.STUB)
+    }
+
+    /**
+     * Migración de la evidencia de 3.0 (#33): las celdas guardadas como «solo a 0» entran en la
+     * ventana como un cero cada una. El latch antiguo («reportó alguna vez») NO se migra: era
+     * justo lo que un valor espurio fijaba para siempre. Devuelve true si [isStub] cambió.
+     */
+    fun restoreLegacy(unit: TimingAdvanceUnit, zeroOnlyCellKeys: Set<String>): Boolean {
+        if (unit !in EVIDENCE_UNITS) return false
+        val e = of(unit)
+        val before = e.verdict
+        zeroOnlyCellKeys.mapNotNull(::normalizeStoredKey).distinct().take(WINDOW).forEach { e.add(Obs(it, false)) }
+        e.verdict = e.decide() ?: e.verdict
+        return (before == Verdict.STUB) != (e.verdict == Verdict.STUB)
+    }
+
     fun reset() {
         evidence.clear()
     }
 
     companion object {
+        /** 3.1.0 (#43) — Observaciones de la ventana por unidad. A 10 s por lectura, unos 33 min. */
+        const val WINDOW = 200
+
+        /** Proporción de valores distintos de cero que hace falta superar para concluir REAL. */
+        const val REAL_MIN_SHARE = 0.05
+
+        /** Celdas distintas en las que deben aparecer esos valores: uno solo de una celda no basta. */
+        const val MIN_REAL_CELLS = 2
+
         /**
-         * Claves de evidencia distintas ([evidenceKey]) que deben reportar 0 antes de concluir que
-         * el campo no se rellena. En LTE son tres eNodeB: estar a menos de 78 m de tres
-         * emplazamientos distintos no ocurre. En las demás tecnologías son tres CID (no se puede
-         * deducir el emplazamiento), lo que puede incluir sectores de uno mismo. Es lo bastante bajo
-         * como para resolverse en los primeros minutos de uso en movimiento.
+         * Claves de evidencia distintas ([evidenceKey]) que deben reportar 0, sin ningún valor
+         * distinto de cero en la ventana, antes de concluir que el campo no se rellena. En LTE son
+         * tres eNodeB: estar a menos de 78 m de tres emplazamientos distintos no ocurre. En las demás
+         * tecnologías son tres CID (no se puede deducir el emplazamiento), lo que puede incluir
+         * sectores de uno mismo.
          */
         const val MIN_DISTINCT_CELLS = 3
 
-        /**
-         * Tope de identidades guardadas en disco por unidad. La conclusión queda fijada a las
-         * [MIN_DISTINCT_CELLS], así que acumular más no cambia nada: solo hincharía las
-         * preferencias durante una campaña larga.
-         */
-        const val MAX_PERSISTED_CELLS = 64
+        /** Cada cuántas observaciones sin cambio de veredicto se vuelve a guardar la ventana. */
+        const val PERSIST_EVERY = 30
+
+        const val SUMMARY_VERSION = "v2"
 
         /**
          * 3.0 — Qué identifica un emplazamiento «distinto» para la evidencia del stub: el eNodeB en

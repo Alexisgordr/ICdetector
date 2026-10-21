@@ -56,6 +56,14 @@ Version code 40. A local build; not published yet.
   neighbours, and no neighbours is exactly when the density factor damps the most (×0.5), so its
   3.5 always became 2.25, in a city too. H1 is now damped only by reputation, like H6. **Dataset
   cut for the anomaly confidence only**: the score, the rules and the alarms do not change.
+- **One stray Timing Advance value disabled the stub detection for good (#43).** The first non-zero
+  TA of a technology marked it as "reports real values" forever, and the mark was saved, so a single
+  spurious value let an always-zero modem feed H6 as if it measured. The decision now uses the last
+  200 readings of each technology: real when more than 5 % are non-zero across at least two cells,
+  `STUB_ZERO` when three or more cells report only zero, unchanged otherwise; both changes are
+  possible. The window summary is saved instead of the mark; a mark saved by 3.0 is not carried
+  over. **Dataset cut** for `TAUnit` (`STUB_ZERO` against `LTE_INDEX`/`GSM_INDEX`) and, through H6,
+  for the score and the anomaly confidence.
 
 ### Removed
 
