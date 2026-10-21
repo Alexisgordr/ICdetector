@@ -463,8 +463,10 @@ object ThreatAnalyzer {
             // celdas con cola alta legítima (que ocasionalmente se ven fuertes sin ataque),
             // reduciendo falsos positivos. Con pocas muestras el percentil no es fiable, así
             // que NO se aplica y el comportamiento es idéntico al anterior.
-            if (significant && base.sampleCount >= 20 && base.p99Dbm != 0) {
-                significant = active.dbm > base.p99Dbm
+            // 3.1.0 (#40) — Sin P99 calculado (null) no se aplica; un P99 de 0 dBm sí es un valor.
+            val p99 = base.p99Dbm
+            if (significant && base.sampleCount >= 20 && p99 != null) {
+                significant = active.dbm > p99
             }
             if (!isWifiActive && significant && active.dbm >= -95) {
                 hSignalBaseline = false

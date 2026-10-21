@@ -38,6 +38,10 @@ Version code 40. A local build; not published yet.
   cell. **Dataset cut** for local cell confidence (a mature cell can become `CHANGED`) and, through
   the alarm candidate (an RF change together with a failed H11 or H16), for alarms.
 
+- **H13's 99th percentile used 0 as "not calculated" (#40).** `p99Dbm` is now nullable: a real
+  99th percentile of 0 dBm is applied instead of being skipped. Baselines always store a computed
+  value, so no row is expected to change in practice.
+
 ### Removed
 
 - **External verification (OpenCellID).** The optional lookup of the serving cell in OpenCellID is
