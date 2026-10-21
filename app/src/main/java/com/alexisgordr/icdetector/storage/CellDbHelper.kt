@@ -345,6 +345,15 @@ class CellDbHelper(
         applySchemaV26(db)
     }
 
+    /**
+     * 3.1.0 (#47) — Base de una versión más nueva: falla con un mensaje claro
+     * ([DatabaseDowngradeException]) en vez de la SQLiteException genérica de SQLiteOpenHelper.
+     * No se toca nada.
+     */
+    override fun onDowngrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {
+        throw DatabaseDowngradeException(oldVersion, newVersion)
+    }
+
     override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {
         if (oldVersion < 2) db.execSQL("ALTER TABLE $TABLE_HISTORY ADD COLUMN $COLUMN_VERIFIED TEXT DEFAULT 'PENDING'")
         if (oldVersion < 3) db.execSQL("ALTER TABLE $TABLE_HISTORY ADD COLUMN $COLUMN_MCC TEXT DEFAULT 'N/A'")
