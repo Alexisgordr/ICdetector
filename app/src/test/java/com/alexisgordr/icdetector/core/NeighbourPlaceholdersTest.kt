@@ -39,7 +39,7 @@ class NeighbourPlaceholdersTest {
             File("src/main/java/com/alexisgordr/icdetector/telephony/CellParser.kt"),
             File("app/src/main/java/com/alexisgordr/icdetector/telephony/CellParser.kt")
         ).first { it.exists() }.readText()
-        assertTrue(parser.contains("NeighbourPlaceholders.lteCellId(id.ci, reg)"))
-        assertTrue(parser.contains("NeighbourPlaceholders.lteTac(id.tac, reg)"))
+        assertTrue(parser.contains("NeighbourPlaceholders.lteCellId(r.ci, reg)"))
+        assertTrue(parser.contains("NeighbourPlaceholders.lteTac(r.tac, reg)"))
     }
 }

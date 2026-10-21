@@ -74,11 +74,12 @@ class H11RfComparisonTest {
         listOf(0, -1, 600, 300_000, 3_279_166, 1300).forEach { assertEquals(it, RadioChannels.unavailableToNull(it)) }
         val parser = listOf(File("src/main/java"), File("app/src/main/java")).first { it.exists() }
             .walkTopDown().first { it.name == "CellParser.kt" }.readText()
-        listOf("arfcn = RadioChannels.unavailableToNull(id.earfcn), pci = RadioChannels.unavailableToNull(id.pci)",
-            "arfcn = RadioChannels.unavailableToNull(id.nrarfcn), pci = RadioChannels.unavailableToNull(id.pci)",
-            "arfcn = RadioChannels.unavailableToNull(id.uarfcn), pci = RadioChannels.unavailableToNull(id.psc)",
-            "arfcn = RadioChannels.unavailableToNull(id.arfcn))").forEach { assertTrue(it, parser.contains(it)) }
-        assertFalse(Regex("""arfcn = id\.\w+[,)]|pci = id\.\w+[,)]""").containsMatchIn(parser))
+        // 3.1.0 (#47) — El parser interpreta lecturas (`r`); CellParserFixturesTest lo prueba con valores.
+        listOf("arfcn = RadioChannels.unavailableToNull(r.earfcn), pci = RadioChannels.unavailableToNull(r.pci)",
+            "arfcn = RadioChannels.unavailableToNull(r.nrarfcn), pci = RadioChannels.unavailableToNull(r.pci)",
+            "arfcn = RadioChannels.unavailableToNull(r.uarfcn), pci = RadioChannels.unavailableToNull(r.psc)",
+            "arfcn = RadioChannels.unavailableToNull(r.arfcn))").forEach { assertTrue(it, parser.contains(it)) }
+        assertFalse(Regex("""arfcn = (?:id|r)\.\w+[,)]|pci = (?:id|r)\.\w+[,)]""").containsMatchIn(parser))
     }
 
     @Test fun `H8 still fails a measured out-of-range channel and stays N-A without one`() {

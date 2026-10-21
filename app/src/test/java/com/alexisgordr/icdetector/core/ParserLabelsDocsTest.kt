@@ -21,7 +21,7 @@ class ParserLabelsDocsTest {
 
     @Test fun `NR keeps SS-RSRP and the comments are accurate`() {
         val parser = src("CellParser.kt")
-        assertTrue(parser.contains("val dbm = strength.ssRsrp.let { if (it == Int.MAX_VALUE) strength.dbm else it }"))
+        assertTrue(parser.contains("val dbm = r.ssRsrp.let { if (it == Int.MAX_VALUE) r.dbm else it }"))
         assertFalse(parser.contains("csiRsrp"))
         assertTrue(parser.contains("NO es una medida alternativa garantizada"))
         assertFalse(parser.contains("dbm\n                // normalizado del framework"))

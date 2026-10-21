@@ -77,15 +77,20 @@ class TimingAdvanceInputTest {
     @Test fun `the parser no longer scrapes LTE text and reads NR through the public API`() {
         val parser = listOf(File("src/main/java"), File("app/src/main/java")).first { it.exists() }
             .walkTopDown().first { it.name == "CellParser.kt" }.readText()
-        val lte = parser.substringAfter("is CellInfoLte -> {").substringBefore("is CellInfoNr -> {")
-        assertFalse(lte.contains("cellSignalStrength.toString") || lte.contains("Regex("))
-        assertTrue(lte.contains("TimingAdvanceInput.lte(info.cellSignalStrength.timingAdvance)"))
-        val nr = parser.substringAfter("is CellInfoNr -> {").substringBefore("is CellInfoWcdma -> {")
-        assertFalse(nr.contains("getMethod("))
-        assertTrue(nr.contains("Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE"))
-        assertTrue(nr.contains("TimingAdvanceInput.nr(strength.timingAdvanceMicros)"))
-        assertTrue(nr.contains("TimingAdvanceInput.scrapedNr(info.toString())"))
-        assertTrue(parser.contains("TimingAdvanceInput.gsm(info.cellSignalStrength.timingAdvance)"))
+        // 3.1.0 (#47) — Lectura de los getters (…Reading.of) e interpretación (parse) por separado;
+        // CellParserFixturesTest prueba la interpretación con valores.
+        val lteRead = parser.substringAfter("internal data class LteReading(").substringBefore("internal data class NrReading(")
+        val lte = parser.substringAfter("internal fun parse(r: LteReading").substringBefore("internal fun parse(r: NrReading")
+        assertFalse((lteRead + lte).contains(".toString(") || lte.contains("Regex("))
+        assertTrue(lte.contains("TimingAdvanceInput.lte(r.timingAdvance)"))
+        val nrRead = parser.substringAfter("internal data class NrReading(").substringBefore("internal data class WcdmaReading(")
+        val nr = parser.substringAfter("internal fun parse(r: NrReading").substringBefore("internal fun parse(r: WcdmaReading")
+        assertFalse((nrRead + nr).contains("getMethod("))
+        assertTrue(nrRead.contains("Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE"))
+        assertTrue(nrRead.contains("try { ss.timingAdvanceMicros } catch (_: Exception) { null }"))
+        assertTrue(nr.contains("r.timingAdvanceMicros?.let { TimingAdvanceInput.nr(it) }"))
+        assertTrue(nr.contains("TimingAdvanceInput.scrapedNr(r.text)"))
+        assertTrue(parser.contains("TimingAdvanceInput.gsm(r.timingAdvance)"))
     }
 
     @Test fun `getter and manufacturer text stay separate`() {
@@ -94,11 +99,10 @@ class TimingAdvanceInputTest {
         assertEquals(0..3846, TimingAdvanceInput.NR_TEXT_RANGE)
         val parser = listOf(File("src/main/java"), File("app/src/main/java")).first { it.exists() }
             .walkTopDown().first { it.name == "CellParser.kt" }.readText()
-        val nr = parser.substringAfter("is CellInfoNr -> {").substringBefore("is CellInfoWcdma -> {")
-        val getter = nr.substringAfter("TimingAdvanceInput.nr(strength.timingAdvanceMicros)").substringBefore("if (ta == null)")
-        assertTrue(getter.contains("taUnit = TimingAdvanceUnit.NR_RAW"))
-        val text = nr.substringAfter("TimingAdvanceInput.scrapedNr(info.toString())").substringBefore("val rsrq")
+        val nr = parser.substringAfter("internal fun parse(r: NrReading").substringBefore("internal fun parse(r: WcdmaReading")
+        val getter = nr.substringAfter("TimingAdvanceInput.nr(it)").substringBefore("if (ta == null)")
+        assertTrue(getter.contains("var taUnit = if (ta != null) TimingAdvanceUnit.NR_RAW else TimingAdvanceUnit.UNKNOWN"))
+        val text = nr.substringAfter("TimingAdvanceInput.scrapedNr(r.text)").substringBefore("val rsrq")
         assertFalse("el texto nunca es NR_RAW", text.contains("NR_RAW"))
-        assertTrue(nr.contains("var taUnit = TimingAdvanceUnit.UNKNOWN"))
     }
 }
