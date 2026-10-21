@@ -45,8 +45,10 @@ class StableSiteNoticesWiringTest {
         val notify = service.substringAfter("private fun maybeNotifyStableSite(").substringBefore("private fun onAnalysisFailed(")
         assertTrue(notify.contains("notices.decide(decision, enabled, pending)"))
         assertTrue(notify.contains("prefs.getBoolean(notices.PREF_ENABLED, notices.DEFAULT_ENABLED)"))
-        val consume = notify.indexOf("prefs.edit().remove(notices.PREF_PENDING_EPISODE).commit()")
+        // 3.1.0 (#47) — apply(), no commit(): corre en el hilo principal.
+        val consume = notify.indexOf("prefs.edit().remove(notices.PREF_PENDING_EPISODE).apply()")
         assertTrue("se consume antes de publicar", consume in 0 until notify.indexOf("showStableSiteNotice("))
+        assertFalse("sin escritura síncrona en el hilo principal", notify.contains(".commit()"))
         assertTrue(notify.contains("} catch (e: CancellationException) {\n            throw e\n        } catch (e: Exception) {"))
         // El terminal dice lo que pasó DESPUÉS de intentarlo: publicado, bloqueado o fallido.
         val logPosted = notify.indexOf("notices.LOG_POSTED")

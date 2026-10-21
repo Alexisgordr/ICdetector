@@ -1708,9 +1708,13 @@ class MiniICService : Service() {
         val action = notices.decide(decision, enabled, pending)
         if (action == com.alexisgordr.icdetector.core.StableSiteNotices.Action.NONE) return
         val episodeId = decision.episodeId ?: return
-        // Se consume ANTES de intentar publicar (commit síncrono): como mucho un aviso por episodio,
-        // aunque el proceso muera justo después.
-        prefs.edit().remove(notices.PREF_PENDING_EPISODE).commit()
+        // Se consume ANTES de intentar publicar: como mucho un aviso por episodio. 3.1.0 (#47) —
+        // apply(), no commit(): esto corre en el hilo principal y commit() escribía en disco aquí.
+        // apply() cambia la memoria al momento (ninguna lectura de este proceso vuelve a ver el
+        // pendiente) y escribe en disco en segundo plano. Si el proceso muriera justo antes de esa
+        // escritura, el siguiente arranque podría repetir el aviso; usa el mismo id de notificación
+        // por episodio (StableSiteNotices.notificationId), así que reemplaza al anterior, no suma otro.
+        prefs.edit().remove(notices.PREF_PENDING_EPISODE).apply()
         if (action == com.alexisgordr.icdetector.core.StableSiteNotices.Action.CONSUME_SILENTLY) {
             appendLog("[SITE]", notices.LOG_DISABLED)
             return
