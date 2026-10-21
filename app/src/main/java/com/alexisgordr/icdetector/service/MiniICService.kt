@@ -1685,8 +1685,10 @@ class MiniICService : Service() {
     /**
      * 3.0 — Ciclo de análisis (IO, bajo cellProcessingMutex): si este ciclo abrió un episodio,
      * anota si empezó con el sitio maduro (ver StableSiteNotices.pendingAfterObservation). commit():
-     * el pendiente debe estar en disco antes de que el ciclo pueda avisar.
+     * el pendiente debe estar en disco antes de que el ciclo pueda avisar. Corre en el hilo del
+     * análisis (IO), no en el principal: de ahí la supresión del aviso de lint.
      */
+    @android.annotation.SuppressLint("ApplySharedPref")
     private fun recordStableSiteEpisodeStart(
         observation: com.alexisgordr.icdetector.core.StableSiteEpisodeObservation,
         siteAtStart: com.alexisgordr.icdetector.core.StableSiteDecision

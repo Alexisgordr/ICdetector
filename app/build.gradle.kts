@@ -100,6 +100,16 @@ android {
         // acotada al elemento concreto del manifiesto y con su justificación al lado.
     }
 
+    // 3.1.0 — La app cambia de idioma por dentro (Ajustes → Idioma, LocaleController). En un App
+    // Bundle, Google Play reparte los idiomas por separado y el teléfono solo descarga el suyo:
+    // al elegir el otro faltarían sus textos. Sin el reparto, los dos idiomas van siempre. No
+    // afecta a los APK (F-Droid, GitHub).
+    bundle {
+        language {
+            enableSplit = false
+        }
+    }
+
     packaging {
         // 3.0 — libandroidx.graphics.path.so viene de Compose (androidx.graphics:graphics-path) ya
         // compilada. Sin NDK instalado, Gradle no puede quitarle los símbolos, avisa en cada build y
