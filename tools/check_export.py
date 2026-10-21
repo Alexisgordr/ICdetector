@@ -62,6 +62,9 @@ EXPECTED_COLUMNS_V30_PROFILE = EXPECTED_COLUMNS_V30_LOCATION + PROFILE_COLUMNS
 # una misma lectura (periódica o de handover, y alarma confirmada). Vacío antes del esquema 24.
 ID_COLUMNS = ["RowId", "ObservationId"]
 EXPECTED_COLUMNS_V30_IDS = EXPECTED_COLUMNS_V30_PROFILE + ID_COLUMNS
+# 3.1.0 (esquema 26) — Churn de celdas de 15 min (H17, en sombra), al final. Vacías en filas anteriores.
+CHURN_COLUMNS = ["ChurnCells15m", "ChurnChanges15m", "ChurnMotion"]
+EXPECTED_COLUMNS_V31 = EXPECTED_COLUMNS_V30_IDS + CHURN_COLUMNS
 PROFILE_MODES = ("SHADOW", "EXPERIMENTAL_DISPLAY")
 PROFILE_LEVELS = ("NONE", "LOW", "MODERATE", "HIGH", "ABSTAIN")
 # Cortes de dataset: a partir de esta versión cambió cómo se evalúa la regla indicada.
@@ -69,8 +72,12 @@ DATASET_CUTS = [
     ("2.10.9", "H10 (Ping-Pong)"),
     ("2.10.10", "H8 (frecuencia)"),
     ("3.0.0", "instante UTC y cobertura por fila (metodología)"),
+    ("3.1.0", "H12 retirada; H6, H11, H14, TAUnit y confianza de anomalía (ver Status.md)"),
 ]
-HEURISTIC_IDS = [f"H{i}" for i in range(1, 17)]
+# 3.1.0 — H17 (churn de celdas) en sombra: nunca se evalúa ni falla, pero figura en NotEvaluatedHeuristics.
+HEURISTIC_IDS = [f"H{i}" for i in range(1, 18)]
+# 3.1.0 — Reglas retiradas: la app ya no escribe su motivo; se conserva para leer filas anteriores.
+RETIRED_RULE_IDS = {"H12"}
 # 3.0 (corte de campaña) — Comienzo de cada motivo que ThreatAnalyzer guarda en FailedHeuristics,
 # por regla (un test lo compara con ThreatAnalyzer.kt). H8 lleva también el texto anterior al
 # corte; H9 nunca ha escrito un motivo. Prefijos como `[sub-umbral]` o `[2/3 ciclos confirmando]`

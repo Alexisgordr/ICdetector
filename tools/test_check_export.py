@@ -7,7 +7,7 @@ import sys
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from check_export import (
     LTE_EARFCN_RANGES, bands_outside_table, calendar_period_stats, dataset_cut_summary, evaluation_coverage, gps_accuracy_issues, abstention_reasons, failure_rates, failed_rules, RULE_REASON_PREFIXES,
-    instant_issues, location_mode_summary, profile_summary, profile_row_issue, EXPECTED_COLUMNS_V30_IDS, observation_summary, PROFILE_ABSTAIN_REASONS, radio_context_summary, row_instant, version_key,
+    instant_issues, location_mode_summary, profile_summary, profile_row_issue, EXPECTED_COLUMNS_V30_IDS, EXPECTED_COLUMNS_V31, RETIRED_RULE_IDS, observation_summary, PROFILE_ABSTAIN_REASONS, radio_context_summary, row_instant, version_key,
     ta_consistency_issues, ta_unit_diagnostic
 )
 
@@ -134,6 +134,9 @@ class EvaluationCoverageTest(unittest.TestCase):
         self.assertEqual((2, 3), coverage["H1"])
         self.assertEqual((1, 3), coverage["H9"])
         self.assertEqual((3, 3), coverage["H5"])
+        # 3.1.0 — H17 cuenta como una regla más (en sombra).
+        self.assertEqual((3, 3), coverage["H17"])
+        self.assertEqual((0, 1), evaluation_coverage([{"NotEvaluatedHeuristics": "H12(retirada);H17(sombra)"}])["H17"])
 
     def test_a_rule_with_its_abstention_reason_is_still_that_rule(self):
         rows = [
@@ -189,12 +192,14 @@ class EvaluationCoverageTest(unittest.TestCase):
         ]
         detail = re.findall(r'"(Inconsistencia RF[^"]*|Celda detectada a distancia anómala)', analyzer)
         texts = literals + constants + detail
-        self.assertGreaterEqual(len(literals), 12)
+        # 3.1.0 — 11: el motivo de H12 («RF anómalo + latencia») se retiró con la regla.
+        self.assertGreaterEqual(len(literals), 11)
         for text in texts:
             self.assertEqual(1, len(failed_rules(text)), text)
         # Cada regla con motivo tiene al menos uno de esos textos (H9 no escribe ninguno).
         covered = set().union(*(failed_rules(t) for t in texts))
-        self.assertEqual(set(RULE_REASON_PREFIXES), covered)
+        # H12, retirada en 3.1.0, conserva su motivo solo para leer filas anteriores.
+        self.assertEqual(set(RULE_REASON_PREFIXES) - RETIRED_RULE_IDS, covered)
 
     def test_no_rows_with_the_column_means_unknown_not_evaluated(self):
         coverage = evaluation_coverage([{"NotEvaluatedHeuristics": ""}, {}])
@@ -243,6 +248,7 @@ class DatasetCutTest(unittest.TestCase):
         by_cut = {cut: (before, after) for cut, _, before, after in cuts}
         self.assertEqual((0, 3), by_cut["3.0.0"])
         self.assertEqual((0, 3), by_cut["2.10.10"])
+        self.assertEqual((2, 1), by_cut["3.1.0"])
 
 
 class LteBandTableTest(unittest.TestCase):
@@ -333,7 +339,9 @@ class LteBandTableTest(unittest.TestCase):
         kotlin = (Path(__file__).resolve().parent.parent /
                   "app/src/main/java/com/alexisgordr/icdetector/utils/ExportUtils.kt").read_text(encoding="utf-8")
         header = "".join(re.findall(r'"([^"]*)"', kotlin.split("const val CSV_HEADER =")[1].split("const val")[0]))
-        self.assertEqual(EXPECTED_COLUMNS_V30_IDS, header.split(","))
+        # 3.1.0 — Las columnas de 3.0 en su orden, y las tres de churn (H17) al final.
+        self.assertEqual(EXPECTED_COLUMNS_V31, header.split(","))
+        self.assertEqual(EXPECTED_COLUMNS_V30_IDS, header.split(",")[:len(EXPECTED_COLUMNS_V30_IDS)])
 
     def test_rows_of_the_same_reading_are_grouped(self):
         rows = [
