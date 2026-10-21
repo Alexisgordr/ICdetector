@@ -134,13 +134,13 @@ kotlin {
 }
 
 dependencies {
-    implementation("androidx.core:core-ktx:1.18.0")
-    implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.10.0")
-    implementation("androidx.lifecycle:lifecycle-runtime-compose:2.10.0")
+    implementation("androidx.core:core-ktx:1.19.1")
+    implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.11.0")
+    implementation("androidx.lifecycle:lifecycle-runtime-compose:2.11.0")
     implementation("androidx.activity:activity-compose:1.13.0")
 
     // Compose
-    implementation(platform("androidx.compose:compose-bom:2026.05.01"))
+    implementation(platform("androidx.compose:compose-bom:2026.09.00"))
     implementation("androidx.compose.ui:ui")
     implementation("androidx.compose.ui:ui-graphics")
     implementation("androidx.compose.ui:ui-tooling-preview")
@@ -152,13 +152,13 @@ dependencies {
     // 3.0 — org.json solo para las pruebas JVM: en el teléfono la app usa el org.json de Android
     // (las clases del framework se cargan antes que las de cualquier JAR), y en android.jar son
     // stubs que no sirven en la JVM. Todas las llamadas usadas existen en Android desde la API 1.
-    testImplementation("org.json:json:20260522")
+    testImplementation("org.json:json:20260814")
     // 3.0 — Solo para pruebas: SQLite en la JVM para probar las migraciones de esquema contra
     // un esquema anterior real. No entra en el APK.
-    testImplementation("org.xerial:sqlite-jdbc:3.46.1.3")
+    testImplementation("org.xerial:sqlite-jdbc:3.53.4.0")
     androidTestImplementation("androidx.test.ext:junit:1.3.0")
     androidTestImplementation("androidx.test.espresso:espresso-core:3.7.0")
-    androidTestImplementation(platform("androidx.compose:compose-bom:2026.05.01"))
+    androidTestImplementation(platform("androidx.compose:compose-bom:2026.09.00"))
     androidTestImplementation("androidx.compose.ui:ui-test-junit4")
 
     debugImplementation("androidx.compose.ui:ui-tooling")
