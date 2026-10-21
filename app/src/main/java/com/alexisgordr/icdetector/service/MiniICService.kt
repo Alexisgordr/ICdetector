@@ -1903,8 +1903,12 @@ class MiniICService : Service() {
             // real del momento: ante una clonación de Cell ID, la H11/H13 comparan contra estas
             // coordenadas, así que una posición vieja podría enmascarar la incoherencia. Si no hay
             // fix tan fresco, se omite y lo cubre el fix forzado (fresco por definición).
-            val coordAgeMs = System.currentTimeMillis() - loc.time
-            if (coordAgeMs < 15000L) {
+            // 3.1.0 (#36) — La edad sale del reloj monotónico, no de la hora civil: con la hora del
+            // teléfono adelantada se descartaba un fix recién llegado, y con la hora atrasada se
+            // aceptaba uno viejo (edad negativa). `loc.time` se sigue usando para casar el fix con
+            // la hora de las filas (fixTimeMs), que se guardan en hora civil.
+            val coordAgeMs = com.alexisgordr.icdetector.core.GpsFixAge.ageMs(SystemClock.elapsedRealtime(), loc.elapsedRealtimeNanos)
+            if (com.alexisgordr.icdetector.core.GpsFixAge.usableForBackfill(coordAgeMs)) {
                 locationController.resolvePendingCoordinates()
                 writeGate.launch(scope, Dispatchers.IO) {
                     val updated = dbHelper.updateNullCoordinates(
@@ -1923,7 +1927,7 @@ class MiniICService : Service() {
                     }
                 }
             } else {
-                appendLog("[GPS]", "Fix disponible pero no lo bastante fresco (${coordAgeMs / 1000}s) — se omite el relleno; espera al fix preciso")
+                appendLog("[GPS]", "Fix disponible pero no lo bastante fresco (${coordAgeMs?.let { "${it / 1000}s" } ?: "edad desconocida"}) — se omite el relleno; espera al fix preciso")
             }
         }
     }

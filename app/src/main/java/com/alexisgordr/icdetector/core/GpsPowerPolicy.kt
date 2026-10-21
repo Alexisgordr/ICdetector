@@ -179,4 +179,22 @@ object GpsFixAge {
 
     fun isRecent(nowElapsedMs: Long, fixElapsedMs: Long, maxAgeMs: Long): Boolean =
         nowElapsedMs - fixElapsedMs in 0 until maxAgeMs
+
+    /**
+     * 3.1.0 (#36) — Edad máxima del fix con que se rellenan las coordenadas de filas sin GPS al
+     * volver el GPS (15 s, la cadencia del stream).
+     */
+    const val BACKFILL_MAX_AGE_MS = 15_000L
+
+    /**
+     * 3.1.0 (#36) — Edad del fix con el reloj monotónico (`Location.elapsedRealtimeNanos` frente a
+     * `SystemClock.elapsedRealtime`), o null si no se puede saber: sin marca monotónica (0) o con
+     * una marca del futuro. La hora civil del fix (`Location.time`) no sirve para esto: cambiar la
+     * hora del teléfono la hace parecer vieja o nueva.
+     */
+    fun ageMs(nowElapsedMs: Long, fixElapsedNanos: Long): Long? =
+        if (fixElapsedNanos <= 0L) null else (nowElapsedMs - fixElapsedNanos / 1_000_000L).takeIf { it >= 0L }
+
+    /** 3.1.0 (#36) — ¿Vale el fix para rellenar coordenadas? Edad desconocida: no. */
+    fun usableForBackfill(ageMs: Long?): Boolean = ageMs != null && ageMs < BACKFILL_MAX_AGE_MS
 }

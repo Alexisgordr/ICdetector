@@ -8,6 +8,13 @@ Version numbers follow the app's `versionName`; the Android `versionCode` is giv
 
 Version code 40. A local build; not published yet.
 
+### Fixed
+
+- **GPS fix age when filling coordinates (#36).** When the GPS came back, rows without a position
+  were filled only with a fix younger than 15 s, but that age came from the phone's clock: with the
+  clock set ahead a fresh fix was skipped, and with it set behind an old fix was used. The age now
+  comes from the monotonic clock; the fix time is still what matches it to the rows.
+
 ### Removed
 
 - **External verification (OpenCellID).** The optional lookup of the serving cell in OpenCellID is
