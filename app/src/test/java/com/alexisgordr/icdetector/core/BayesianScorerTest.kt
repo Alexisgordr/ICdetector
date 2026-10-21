@@ -229,4 +229,27 @@ class BayesianScorerTest {
         val both = BayesianScorer.calculate(listOf("h11", "taDistance"), "PENDING")
         assertTrue("grupos distintos: H11 y H6 suman (fenómenos distintos)", both > h11)
     }
+
+    /**
+     * 3.1.0 (#45) — H1 (isolated) ya no se amortigua por densidad: solo falla con 0 vecinas, así que
+     * la densidad la reducía siempre a ×0,5. Sigue amortiguándose por reputación, como H6.
+     */
+    @Test
+    fun `isolated is not damped by density, only by reputation`() {
+        val prior = BayesianScorer.calculate(emptyList(), "PENDING")
+        val zero = BayesianScorer.calculate(listOf("isolated"), "PENDING", neighborCount = 0)
+        val unknown = BayesianScorer.calculate(listOf("isolated"), "PENDING", neighborCount = -1)
+        assertEquals("con 0 vecinas, la LR entera (3,5)", unknown, zero, 0f)
+        val odds = prior / (100f - prior) * 3.5f
+        assertEquals(odds / (1f + odds) * 100f, zero, 0.01f)
+        // Reputación: sí amortigua (≥ 80: 3,5 → 2,5).
+        val trusted = BayesianScorer.calculate(listOf("isolated"), "PENDING", neighborCount = 0, trustScore = 85)
+        val trustedOdds = prior / (100f - prior) * 2.5f
+        assertEquals(trustedOdds / (1f + trustedOdds) * 100f, trusted, 0.01f)
+        // powerJump y ghostCells siguen amortiguadas por densidad.
+        assertTrue(BayesianScorer.calculate(listOf("powerJump"), "PENDING", neighborCount = 0) <
+            BayesianScorer.calculate(listOf("powerJump"), "PENDING", neighborCount = 12))
+        assertTrue(BayesianScorer.calculate(listOf("ghostCells"), "PENDING", neighborCount = 0) <
+            BayesianScorer.calculate(listOf("ghostCells"), "PENDING", neighborCount = 12))
+    }
 }

@@ -28,8 +28,10 @@ another one keeps watching.
    - **Mobility:** H10, H11, H15, H16
    - **Weak identity:** H4, H5
    - **Independent:** H3
-6. **Damping applies to the probability, not to the points.** H1, H2 and H7 weigh less where few
+6. **Damping applies to the probability, not to the points.** H2 and H7 weigh less where few
    neighbours are visible, and H1, H2, H6 and H7 weigh less on cells with a long clean history.
+   (H1 is not damped by density from 3.1.0: it only fails with no neighbours, so density always
+   halved it.)
    No other rule is ever damped.
 
 > **In one sentence:** two different symptoms at the same time, for three cycles in a row.

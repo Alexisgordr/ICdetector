@@ -130,13 +130,17 @@ object BayesianScorer {
     // el campo. Suavizamos SOLO estas según la densidad del entorno (nº de vecinas visibles).
     // NO se tocan las físicamente sólidas en cualquier contexto (MCC, H11,
     // H13/signalBaseline, H14/bandDowngrade, H15): esas valen igual en ciudad o campo.
-    private val ENV_SENSITIVE = setOf("isolated", "powerJump", "ghostCells")
+    // 3.1.0 (#45) — Sin "isolated" (H1): H1 solo falla con 0 vecinas, así que la densidad la
+    // amortiguaba SIEMPRE al mínimo (×0,5, LR 3,5 → 2,25), también en ciudad. Su propia condición la
+    // debilitaba: no medía el entorno, era una LR más baja escrita de otra forma. Queda solo con la
+    // reputación (TRUST_ONLY_SENSITIVE), como H6.
+    private val ENV_SENSITIVE = setOf("powerJump", "ghostCells")
 
     // 3.0 — H6 la amortigua la REPUTACIÓN pero no la densidad: la proximidad no depende de cuántas
     // vecinas haya, pero quien vive al lado de una antena con semanas de historial limpio no debe
     // llevarse cada día la LR entera (con confianza ≥ 80: 7,0 → 4,6, posterior 8,6 %). Si en campo
     // sigue saltando a diario en celdas de confianza, bajar la LR a 5,0.
-    private val TRUST_ONLY_SENSITIVE = setOf("taDistance")
+    private val TRUST_ONLY_SENSITIVE = setOf("taDistance", "isolated")
 
     // Factor [0..1] que escala la FUERZA de la evidencia (LR) de las heurísticas sensibles.
     // 1.0 = sin cambios (urbano/denso o densidad desconocida). <1.0 = evidencia suavizada
@@ -152,7 +156,7 @@ object BayesianScorer {
     // Factor de reputación: una celda con historial limpio probado durante semanas merece
     // menos sensibilidad en las heurísticas DÉBILES (ya ha demostrado ser legítima). Solo
     // amortigua (<=1.0), nunca amplifica. trustScore < 0 (desconocida) o bajo -> sin cambios.
-    // Se aplica a ENV_SENSITIVE (junto con la densidad) y a TRUST_ONLY_SENSITIVE (H6, solo esto).
+    // Se aplica a ENV_SENSITIVE (junto con la densidad) y a TRUST_ONLY_SENSITIVE (H6 y H1, solo esto).
     private fun trustFactor(trustScore: Int): Float = when {
         trustScore < 0    -> 1.0f   // desconocida -> sin cambios
         trustScore >= 80  -> 0.6f   // celda muy probada -> suaviza ruido débil

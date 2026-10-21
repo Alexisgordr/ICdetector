@@ -46,6 +46,11 @@ Version code 40. A local build; not published yet.
   value stored in the row's `GpsAccuracyM`; otherwise it is `N/A`, stored as `H11(fix_impreciso)`.
   **Dataset cut** for H11 (and the score and anomaly confidence through it).
 
+- **H1's likelihood ratio was always halved by the density factor (#45).** H1 only fails with no
+  neighbours, and no neighbours is exactly when the density factor damps the most (×0.5), so its
+  3.5 always became 2.25, in a city too. H1 is now damped only by reputation, like H6. **Dataset
+  cut for the anomaly confidence only**: the score, the rules and the alarms do not change.
+
 ### Removed
 
 - **External verification (OpenCellID).** The optional lookup of the serving cell in OpenCellID is
