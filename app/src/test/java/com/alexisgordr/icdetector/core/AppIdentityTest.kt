@@ -59,4 +59,17 @@ class AppIdentityTest {
             assertEquals(locale, code, latest)
         }
     }
+
+    /** 3.1.0 — Límites de los metadatos de F-Droid, en todos los idiomas y en todos los changelogs. */
+    @Test fun `fastlane metadata stays within the store limits`() {
+        val fastlane = listOf(File("fastlane"), File("../fastlane")).first { it.isDirectory }
+        for (locale in listOf("en-US", "es-ES")) {
+            val dir = File(fastlane, "metadata/android/$locale")
+            fun len(name: String) = File(dir, name).readText().trimEnd().length
+            assertTrue("$locale título", len("title.txt") in 1..50)
+            assertTrue("$locale descripción corta", len("short_description.txt") in 1..80)
+            assertTrue("$locale descripción completa", len("full_description.txt") in 1..4000)
+            File(dir, "changelogs").listFiles()!!.forEach { assertTrue("$locale/${it.name}", it.readText().length <= 500) }
+        }
+    }
 }

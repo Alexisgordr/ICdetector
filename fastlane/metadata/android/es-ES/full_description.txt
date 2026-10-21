@@ -1,20 +1,16 @@
-ICdetection es una herramienta abierta y defensiva para auditar el entorno celular desde Android.
+ICdetection es una herramienta abierta para auditar el entorno celular desde Android, sin root.
 
-La aplicación muestra información proporcionada por las API públicas de telefonía de Android, como la identidad de la celda, MCC, MNC, TAC, PCI, ARFCN, potencia, calidad de señal y Timing Advance cuando el teléfono lo proporciona.
+Muestra lo que dan las API públicas de telefonía de Android (identidad de la celda, MCC, MNC, TAC, PCI, ARFCN, señal y Timing Advance cuando existe) y combina heurísticas conservadoras para señalar comportamientos anómalos. Las alertas necesitan confirmación temporal para reducir falsos positivos.
 
-Su motor compara múltiples observaciones y heurísticas conservadoras para identificar comportamientos celulares anómalos. Las alertas requieren confirmación temporal para reducir falsos positivos.
+No garantiza detectar IMSI-catchers: una app de Android no puede inspeccionar el tráfico RRC o NAS ni el módem. Una alerta es una anomalía que merece revisión, no una prueba de vigilancia.
 
-ICdetection no garantiza la detección de IMSI-catchers. Android no permite a las aplicaciones normales inspeccionar completamente el tráfico RRC, NAS ni el interior del módem. Una alerta indica una anomalía que merece revisión, no una prueba definitiva de vigilancia.
-
-La aplicación funciona sin root y almacena el historial localmente en el dispositivo. No contiene publicidad, analítica ni rastreadores.
-
-La aplicación no tiene permiso de Internet ni hace conexiones de red: todo lo que registra se queda en el dispositivo salvo que el usuario lo exporte.
+Funciona sin Internet: sin permiso de Internet, sin publicidad, analítica ni rastreadores. El historial se queda en el dispositivo salvo que lo exportes.
 
 Permisos:
+• Ubicación: Android la exige para la información de celdas; también se usa en comprobaciones geográficas.
+• Estado del teléfono: lee la red y las celdas visibles.
+• Estado de la red: solo para saber si los datos van por Wi-Fi o datos móviles.
+• Servicio en primer plano, notificaciones y wake lock: mantienen la monitorización activa y visible.
+• Ejecutar al iniciar: solo para el aviso opcional tras reiniciar (desactivado por defecto).
 
-• Ubicación: Android la exige para acceder a determinada información celular y se utiliza en comprobaciones geográficas.
-• Estado del teléfono: necesario para consultar la red y las celdas visibles.
-• Estado de la red: solo para saber si los datos van por Wi-Fi o por datos móviles; no da acceso a Internet.
-• Servicio en primer plano y notificaciones: permiten mantener la monitorización visible y controlable.
-
-La cantidad y calidad de la telemetría dependen del teléfono, el módem, el firmware y la versión de Android.
+Los resultados dependen del teléfono, el módem, el firmware y la versión de Android. Requiere Android 12 o posterior.

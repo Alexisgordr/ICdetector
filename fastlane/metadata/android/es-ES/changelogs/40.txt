@@ -1,8 +1,8 @@
-3.1.0 — sin conexión: sin permiso de Internet.
+3.1.0 — actualización de diseño y seguridad. Funciona sin Internet.
 
-• Retiradas la verificación con OpenCellID y la latencia (H12).
+• Sin permiso de Internet: fuera Orbot, la detección de latencia (H12) y OpenCellID.
 • Nueva regla en sombra H17 (cambios de celda): se guarda, sin puntos ni alarmas.
-• TA sin rellenar: ventana de 200 lecturas; H6 N/A en GSM.
+• TA más estricto; H6 N/A en GSM.
 • H11 exige un fix de 100 m o mejor; H14 conserva la banda sin ARFCN.
-• Si Android impide arrancar el monitoreo, la app lo avisa; aviso opcional tras reiniciar.
+• Avisa si el monitoreo no arranca; aviso opcional tras reiniciar.
 • Base de datos más rápida (WAL), segura con las copias.

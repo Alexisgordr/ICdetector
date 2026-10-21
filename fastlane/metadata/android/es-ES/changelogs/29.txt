@@ -1,3 +1,1 @@
-Corregido el aprendizaje de vecinos de Stable Site en dispositivos que muestran contexto RF de vecinos sin un Cell ID completo. Stable Site puede aprender fingerprints conservadoras de vecinos solo RF mediante RAT + ARFCN + PCI, sin tratarlas como identidades celulares completas. Esto evita que `neighbour_distinct_days` permanezca siempre a cero en los dispositivos afectados. Timing Advance continúa siendo independiente del aprendizaje de vecinos.
-
-La evidencia RF histórica de vecinos no puede reconstruirse retroactivamente; la madurez RF de vecinos comienza a acumularse después de actualizar.
+Corregido el aprendizaje de vecinos de Stable Site en móviles que dan contexto RF de vecinos sin Cell ID completo. Ahora aprende huellas solo RF (RAT + ARFCN + PCI), sin tratarlas como identidades completas, y los días de vecinos ya no se quedan a cero. La evidencia anterior no se reconstruye: se acumula tras actualizar.

@@ -1,20 +1,16 @@
-ICdetection is an open-source defensive tool for auditing the cellular environment from Android.
+ICdetection is an open-source tool for auditing the cellular environment from Android, without root.
 
-The application displays information provided by Android's public telephony APIs, including cell identity, MCC, MNC, TAC, PCI, ARFCN, signal strength, signal quality and Timing Advance when supported by the device.
+It shows what Android's public telephony APIs report (cell identity, MCC, MNC, TAC, PCI, ARFCN, signal and Timing Advance when available) and combines conservative heuristics to flag anomalous behaviour. Alerts need temporal confirmation to reduce false positives.
 
-Its detection engine combines multiple conservative observations and heuristics to identify anomalous cellular behaviour. Alerts require temporal confirmation to reduce false positives.
+It does not guarantee IMSI-catcher detection: Android apps cannot inspect RRC or NAS traffic or the modem. An alert is an anomaly worth reviewing, not proof of surveillance.
 
-ICdetection does not guarantee IMSI-catcher detection. Standard Android applications cannot fully inspect RRC or NAS traffic or access internal baseband information. An alert indicates an anomaly that deserves investigation, not definitive proof of surveillance.
-
-The application works without root and stores its history locally on the device. It contains no advertising, analytics or tracking libraries.
-
-The application has no Internet permission and makes no network connections: everything it records stays on the device unless the user exports it.
+Works without Internet: no Internet permission, no ads, analytics or trackers. History stays on the device unless you export it.
 
 Permissions:
+• Location: Android requires it for cell information; also used for geographic checks.
+• Phone state: reads the network and visible cells.
+• Network state: only to know if data uses Wi-Fi or mobile data.
+• Foreground service, notifications and wake lock: keep monitoring running and visible.
+• Run at startup: only for the optional reminder after a reboot (off by default).
 
-• Location: required by Android for access to certain cellular information and used for geographical consistency checks.
-• Phone state: required to inspect cellular network and cell information.
-• Network state: only to know whether data goes over Wi-Fi or mobile data; it gives no Internet access.
-• Foreground service and notifications: keep persistent monitoring visible and controllable.
-
-The amount and quality of telemetry depend on the phone, modem, firmware and Android version.
+Results depend on the phone, modem, firmware and Android version. Requires Android 12 or later.

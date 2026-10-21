@@ -4,5 +4,5 @@
 • Entradas de las reglas más fiables y confirmación más estricta; motor auditado.
 • H3 mira la SIM; H8 es calidad de dato; femtoceldas conocidas exentas.
 • Copias de seguridad, modos de ubicación, perfil local (sombra).
-• Sin token de OpenCellID, la comprobación de base pública aparece desactivada.
+• Sin token de OpenCellID, la base pública queda desactivada.
 • Requiere Android 12 o posterior.

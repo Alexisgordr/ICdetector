@@ -1,1 +1,1 @@
-Cellular anomaly auditor and radio telemetry monitor for Android
+Offline cellular anomaly auditor and radio monitor for Android
