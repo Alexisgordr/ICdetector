@@ -23,7 +23,7 @@ class EvaluationCoverageTest {
         tacDeviation = PASSED, taDistance = PASSED, ghostNeighbors = PASSED, arfcnSanity = PASSED,
         hardwareCiphering = PASSED, pingPong = PASSED, mobileCellId = PASSED,
         latencyCorrelation = PASSED, signalBaseline = PASSED, bandDowngrade = PASSED,
-        rfStability = PASSED, transitionCoherence = PASSED
+        rfStability = PASSED, transitionCoherence = PASSED, cellChurn = PASSED
     )
 
     @Test fun `not evaluated rules are listed by id in order`() {
@@ -51,7 +51,8 @@ class EvaluationCoverageTest {
     @Test fun `all rules evaluated is an explicit NONE, not an empty value`() {
         assertEquals(HeuristicReport.NONE_NOT_EVALUATED, allPassed().notEvaluatedIds())
         // Un informe sin calcular dice la verdad: no se evaluó ninguna.
-        assertEquals((1..16).joinToString(";") { "H$it" }, HeuristicReport().notEvaluatedIds())
+        // H17 (en sombra) lleva su código: `H17(sombra)`.
+        assertEquals((1..16).joinToString(";") { "H$it" } + ";H17(sombra)", HeuristicReport().notEvaluatedIds())
     }
 
     @Test fun `the csv exports both columns at the end and leaves them empty for legacy rows`() {

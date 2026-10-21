@@ -125,7 +125,15 @@ data class HistoryRecord(
      * periódica o de handover y la de alarma confirmada), que comparten este valor. Null en filas
      * anteriores al esquema 24.
      */
-    val observationId: String? = null
+    val observationId: String? = null,
+    /**
+     * 3.1.0 (esquema 26) — Churn de celdas de 15 min (H17, en sombra; ver core/CellChurn):
+     * identidades distintas, cambios y movimiento (`STILL`, `MOVING`, `UNKNOWN`). Null en filas
+     * anteriores al esquema 26.
+     */
+    val churnCells15m: Int? = null,
+    val churnChanges15m: Int? = null,
+    val churnMotion: String? = null
 )
 
 /**

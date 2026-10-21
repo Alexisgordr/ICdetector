@@ -10,20 +10,20 @@ import java.io.File
 /** 3.0 (#7, O2) — Las tres maneras de nombrar una regla coinciden con la lista canónica. */
 class HeuristicCatalogTest {
 
-    @Test fun `ids follow H1 to H16 in the report order`() {
-        assertEquals((1..16).map { "H$it" }, HeuristicCatalog.values().map { it.id })
+    @Test fun `ids follow H1 to H17 in the report order`() {
+        assertEquals((1..17).map { "H$it" }, HeuristicCatalog.values().map { it.id })
         val snapshotIds = HeuristicReport().snapshot().split(";").map { it.substringBefore("=") }
         assertEquals(snapshotIds, HeuristicCatalog.values().map { it.id })
     }
 
     @Test fun `each rule reads its own status from the report`() {
         HeuristicCatalog.values().forEachIndexed { index, rule ->
-            val statuses = MutableList(16) { HeuristicStatus.PASSED }
+            val statuses = MutableList(17) { HeuristicStatus.PASSED }
             statuses[index] = HeuristicStatus.FAILED
             val report = HeuristicReport(
                 statuses[0], statuses[1], statuses[2], statuses[3], statuses[4], statuses[5], statuses[6],
                 statuses[7], statuses[8], statuses[9], statuses[10], statuses[11], statuses[12],
-                statuses[13], statuses[14], statuses[15]
+                statuses[13], statuses[14], statuses[15], statuses[16]
             )
             assertEquals(rule.id, HeuristicStatus.FAILED, rule.status(report))
         }
@@ -35,7 +35,7 @@ class HeuristicCatalogTest {
         assertTrue(keys.containsAll(BayesianScorer.groupedKeys))
     }
 
-    @Test fun `H8 is a data-quality flag, H9 is reserved and H12 is retired, none is evidence`() {
+    @Test fun `H8 is a data-quality flag, H9 is reserved, H12 is retired and H17 is shadow, none is evidence`() {
         val h8 = HeuristicCatalog.ARFCN_SANITY
         assertEquals(false, h8.isEvidence)
         assertEquals(ThreatEpisodeTracker.Family.DATA_QUALITY, h8.episodeFamily)
@@ -56,7 +56,15 @@ class HeuristicCatalogTest {
         assertEquals(ThreatEpisodeTracker.Family.UNAVAILABLE, h12.episodeFamily)
         assertEquals(BayesianScorer.Group.NOT_SCORED, BayesianScorer.groupOf(h12.scorerKey))
         assertTrue("sin LR", h12.scorerKey !in BayesianScorer.weightedKeys)
-        assertEquals(listOf("H8", "H9", "H12"), HeuristicCatalog.entries.filter { !it.isEvidence }.map { it.id })
+        // 3.1.0 — H17 en sombra: al final del catálogo, familia de movilidad, sin LR ni evidencia.
+        val h17 = HeuristicCatalog.CELL_CHURN
+        assertEquals("H17", h17.id)
+        assertEquals("H17 va al final", HeuristicCatalog.entries.size - 1, h17.ordinal)
+        assertEquals(false, h17.isEvidence)
+        assertEquals(ThreatEpisodeTracker.Family.MOBILITY, h17.episodeFamily)
+        assertEquals(BayesianScorer.Group.NOT_SCORED, BayesianScorer.groupOf(h17.scorerKey))
+        assertTrue("sin LR", h17.scorerKey !in BayesianScorer.weightedKeys)
+        assertEquals(listOf("H8", "H9", "H12", "H17"), HeuristicCatalog.entries.filter { !it.isEvidence }.map { it.id })
         // El recuento de fallos del informe usa la misma lista.
         assertEquals(HeuristicCatalog.entries.filter { !it.isEvidence }.map { it.id }.toSet(), HeuristicReport.NON_EVIDENCE_IDS)
     }
@@ -96,7 +104,7 @@ class HeuristicCatalogTest {
 
     @Test fun `family and scorer group differ only in the three documented rules`() {
         val differing = HeuristicCatalog.entries.filter { !corresponds(it.episodeFamily, it.scorerGroup) }
-        assertEquals(listOf("H6", "H14", "H15"), differing.map { it.id })
+        assertEquals(listOf("H6", "H14", "H15", "H17"), differing.map { it.id })
         differing.forEach { assertTrue("${it.id} debe explicar por qué", !it.familyDiffersFromScorer.isNullOrBlank()) }
         HeuristicCatalog.entries.filter { corresponds(it.episodeFamily, it.scorerGroup) }
             .forEach { assertEquals("${it.id} no tiene excepción que explicar", null, it.familyDiffersFromScorer) }

@@ -37,7 +37,10 @@ object ExportUtils {
         // (cruza con profile_evaluations.history_id y con una copia de seguridad) y ObservationId,
         // la lectura de origen: dos filas de la misma lectura (periódica y alarma confirmada) lo
         // comparten. ObservationId vacío en filas anteriores al esquema 24.
-        "RowId,ObservationId"
+        "RowId,ObservationId," +
+        // 3.1.0 (esquema 26) — Churn de celdas de 15 min (H17, en sombra): identidades distintas,
+        // cambios y movimiento (STILL / MOVING / UNKNOWN). Al final; vacías en filas anteriores.
+        "ChurnCells15m,ChurnChanges15m,ChurnMotion"
 
     /** Cabecera del CSV de eventos de servicio (pestaña Radio). */
     const val SERVICE_STATE_CSV_HEADER = "TimestampUtc,State,DataRegistered,VoiceRegistered,Searching," +
@@ -164,7 +167,10 @@ object ExportUtils {
         item.profile?.let { if (it.learned) 1 else 0 } ?: "",
         item.profile?.let { if (it.holdout) 1 else 0 } ?: "",
         item.rowId ?: "",
-        item.observationId ?: ""
+        item.observationId ?: "",
+        item.churnCells15m ?: "",
+        item.churnChanges15m ?: "",
+        item.churnMotion ?: ""
     ).joinToString(",") { csvEscape(it) }
 
     /** Una fila del CSV de eventos de servicio. Pura: se puede probar sin Android. */

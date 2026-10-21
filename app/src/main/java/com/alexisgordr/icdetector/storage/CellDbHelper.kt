@@ -72,7 +72,7 @@ class CellDbHelper(
             }
 
         const val DATABASE_NAME = "icdetector_history.db"
-        const val DATABASE_VERSION = SchemaV25.VERSION
+        const val DATABASE_VERSION = SchemaV26.VERSION
         const val TABLE_HISTORY = "history"
         const val COLUMN_ID = "id"
         const val COLUMN_TIMESTAMP = "timestamp"
@@ -132,6 +132,10 @@ class CellDbHelper(
         const val COLUMN_LOCATION_MODE = SchemaV21.COLUMN_LOCATION_MODE
         /** 3.0 (L2) — Ver [SchemaV24]. */
         const val COLUMN_OBSERVATION_ID = "observation_id"
+        /** 3.1.0 — Churn de celdas de 15 min (H17, en sombra). Ver [SchemaV26]. */
+        const val COLUMN_CHURN_CELLS = SchemaV26.COLUMN_CHURN_CELLS
+        const val COLUMN_CHURN_CHANGES = SchemaV26.COLUMN_CHURN_CHANGES
+        const val COLUMN_CHURN_MOTION = SchemaV26.COLUMN_CHURN_MOTION
         // v2.10.4 — Contexto de radio (schema 19). Solo recolección: ninguna consulta de
         // detección lee estas columnas. NULL en filas anteriores = "no se recogía", no "no había".
         const val COLUMN_CONN_STATUS = "conn_status"
@@ -325,6 +329,7 @@ class CellDbHelper(
         applySchemaV23(db)
         applySchemaV24(db)
         applySchemaV25(db)
+        applySchemaV26(db)
     }
 
     override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {
@@ -417,6 +422,7 @@ class CellDbHelper(
         if (oldVersion < 23) applySchemaV23(db)
         if (oldVersion < 24) applySchemaV24(db)
         if (oldVersion < 25) applySchemaV25(db)
+        if (oldVersion < 26) applySchemaV26(db)
     }
 
     /**
@@ -488,6 +494,22 @@ class CellDbHelper(
             }
         }
         if (markerCreated) SchemaV25.BACKFILL.forEach(db::execSQL)
+    }
+
+    /**
+     * 3.1.0 — Esquema 26 (ver [SchemaV26]): churn de celdas en `history`. Solo añade columnas (NULL en
+     * las filas anteriores); una columna que ya existe se acepta y cualquier otro fallo se propaga,
+     * como en [applySchemaV24].
+     */
+    private fun applySchemaV26(db: SQLiteDatabase) {
+        applySchemaV25(db)
+        SchemaV26.STATEMENTS.forEach { sql ->
+            try {
+                db.execSQL(sql)
+            } catch (e: android.database.sqlite.SQLiteException) {
+                if (e.message?.contains("duplicate column", ignoreCase = true) != true) throw e
+            }
+        }
     }
 
     /** 3.0 — Esquema 21 (ver [SchemaV21]); mismas reglas que [applySchemaV20]. */
@@ -1627,7 +1649,9 @@ class CellDbHelper(
         /** 3.0 — Modo de ubicación con el que se observó (`CONTINUOUS` / `INTELLIGENT` / `ADAPTIVE`). */
         locationMode: String? = null,
         /** 3.0 (L2) — Identidad de la observación, igual en todas sus filas (esquema 24). */
-        observationId: String? = null
+        observationId: String? = null,
+        /** 3.1.0 — Churn de celdas de 15 min (H17, en sombra; esquema 26). Null = no calculado. */
+        churn: com.alexisgordr.icdetector.core.ChurnSnapshot? = null
     ): Long {
         val db = this.writableDatabase
         val values = ContentValues().apply {
@@ -1679,6 +1703,11 @@ class CellDbHelper(
             if (appVersion != null) put(COLUMN_APP_VERSION, appVersion)
             if (locationMode != null) put(COLUMN_LOCATION_MODE, locationMode)
             if (observationId != null) put(COLUMN_OBSERVATION_ID, observationId)
+            if (churn != null) {
+                put(COLUMN_CHURN_CELLS, churn.distinctCells15m)
+                put(COLUMN_CHURN_CHANGES, churn.changes15m)
+                put(COLUMN_CHURN_MOTION, churn.motion.name)
+            }
         }
         return db.insert(TABLE_HISTORY, null, values)
     }
@@ -1747,6 +1776,9 @@ class CellDbHelper(
         return HistoryRecord(
             rowId = if (rowIdIdx >= 0 && !cursor.isNull(rowIdIdx)) cursor.getLong(rowIdIdx) else null,
             observationId = if (observationIdIdx >= 0 && !cursor.isNull(observationIdIdx)) cursor.getString(observationIdIdx) else null,
+            churnCells15m = optInt(cursor, COLUMN_CHURN_CELLS),
+            churnChanges15m = optInt(cursor, COLUMN_CHURN_CHANGES),
+            churnMotion = optString(cursor, COLUMN_CHURN_MOTION),
             locationMode = if (locationModeIdx >= 0 && !cursor.isNull(locationModeIdx)) cursor.getString(locationModeIdx) else null,
             appVersion = if (appVersionIdx >= 0 && !cursor.isNull(appVersionIdx)) cursor.getString(appVersionIdx) else null,
             observedAtMs = if (observedIdx >= 0 && !cursor.isNull(observedIdx)) cursor.getLong(observedIdx) else null,

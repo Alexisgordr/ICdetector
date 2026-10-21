@@ -192,6 +192,7 @@ internal fun CellDbHelper.logObservation(row: ObservationRow, appVersion: String
         gpsAccuracyM = fix?.accuracyM,
         appVersion = appVersion,
         locationMode = row.context.locationMode,
-        observationId = row.context.observationId
+        observationId = row.context.observationId,
+        churn = cell.churn
     )
 }

@@ -93,7 +93,9 @@ object DiagnosticEngine {
                 explanation(r.rfStability, if (i.rfStabilityReadFailed) "N/A: no se pudo leer el historial RF en este ciclo."
                     else "N/A: historial RF insuficiente (${i.rfStability?.totalObservations ?: 0}/4 observaciones).")),
             HeuristicDiagnostic(16, "Coherencia de transición celular", r.transitionCoherence,
-                i.transitionCoherence.explanation)
+                i.transitionCoherence.explanation),
+            HeuristicDiagnostic(17, "Churn de celdas (sombra)", r.cellChurn,
+                explanation(r.cellChurn, H17_SHADOW_EXPLANATION))
         )
     }
 
@@ -108,6 +110,8 @@ object DiagnosticEngine {
     const val H11_FIX_TOO_OLD_EXPLANATION = "N/A: el fix GPS tiene más de 60 s (o no se sabe su edad); en movimiento, la posición ya no sería la de esta lectura."
     /** 3.1.0 — H12 retirada: necesitaba sondas de red y la app ya no sale a Internet. */
     const val H12_RETIRED_EXPLANATION = "N/A: regla retirada en 3.1.0 (la correlación de latencia necesitaba conexión a Internet)."
+    /** 3.1.0 — H17 en sombra: se calcula y se guarda, no se evalúa. */
+    const val H17_SHADOW_EXPLANATION = "N/A: en sombra; se registran las celdas distintas y los cambios de 15 min, sin evaluar hasta calibrarla con datos de campaña."
     /** 3.0 (corte de campaña) — H1, H2, H5, H6 y H7 en una celda CSG. */
     const val CSG_NA_EXPLANATION = "N/A: celda CSG (femtocelda): las reglas de dominancia, proximidad e identidad local no aplican a una celda diseñada para ser aislada."
     /** 3.0 (corte de campaña) — H9 está reservada: nunca se evalúa. */

@@ -110,6 +110,8 @@ class ScenarioTest {
             // 3.1.0 — H12 retirada: N/A en todos los ciclos de todos los escenarios, nunca fallida.
             assertEquals("H12 retirada", HeuristicStatus.NOT_EVALUATED, analyzed.heuristicReport.latencyCorrelation)
             assertTrue("H12 entre las no evaluadas", "H12" in analyzed.heuristicReport.notEvaluatedIds().split(";"))
+            // 3.1.0 — H17 en sombra: tampoco se evalúa ni falla en ningún escenario.
+            assertEquals("H17 en sombra", HeuristicStatus.NOT_EVALUATED, analyzed.heuristicReport.cellChurn)
             val key = PingPongRule.confirmationKey(
                 analyzed.identityKey, changes, nowMs,
                 pingPongFailed = analyzed.heuristicReport.pingPong == HeuristicStatus.FAILED

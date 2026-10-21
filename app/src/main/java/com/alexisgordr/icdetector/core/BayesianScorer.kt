@@ -176,8 +176,11 @@ object BayesianScorer {
      */
     internal val UNAVAILABLE_KEYS = setOf("ciphering", "latency")
 
-    /** Claves sin LR: ni calidad de dato ni reglas reservadas son evidencia. */
-    internal val NOT_SCORED_KEYS = DATA_QUALITY_KEYS + UNAVAILABLE_KEYS
+    /** 3.1.0 — Reglas en sombra, sin LR hasta calibrarlas: H17 (churn de celdas). */
+    internal val SHADOW_KEYS = setOf("cellChurn")
+
+    /** Claves sin LR: ni calidad de dato, ni reglas reservadas o retiradas, ni las de sombra son evidencia. */
+    internal val NOT_SCORED_KEYS = DATA_QUALITY_KEYS + UNAVAILABLE_KEYS + SHADOW_KEYS
 
     /** Grupo de una clave, para declararlo y comprobarlo en HeuristicCatalog. */
     internal fun groupOf(key: String): Group = when (key) {

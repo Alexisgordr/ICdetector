@@ -33,6 +33,8 @@ data class HeuristicReport(
     val bandDowngrade: HeuristicStatus = HeuristicStatus.NOT_EVALUATED,
     val rfStability: HeuristicStatus = HeuristicStatus.NOT_EVALUATED,
     val transitionCoherence: HeuristicStatus = HeuristicStatus.NOT_EVALUATED,
+    /** 3.1.0 — H17 (churn de celdas) está en sombra: siempre NOT_EVALUATED (ver core/CellChurn). */
+    val cellChurn: HeuristicStatus = HeuristicStatus.NOT_EVALUATED,
     /** 3.0 (corte de campaña) — Por qué H3 se abstuvo, si se abstuvo (ver [MccAbstention]). */
     val mccAbstention: MccAbstention? = null,
     /** 3.0 (corte de campaña) — La servidora es CSG (femtocelda): H1, H2, H5, H6 y H7 no se evalúan. */
@@ -87,7 +89,7 @@ data class HeuristicReport(
             "H7" to ghostNeighbors, "H8" to arfcnSanity, "H9" to hardwareCiphering,
             "H10" to pingPong, "H11" to mobileCellId, "H12" to latencyCorrelation,
             "H13" to signalBaseline, "H14" to bandDowngrade, "H15" to rfStability,
-            "H16" to transitionCoherence
+            "H16" to transitionCoherence, "H17" to cellChurn
         )
 
     /**
@@ -118,6 +120,7 @@ data class HeuristicReport(
         id == "H3" -> mccAbstention?.code
         csgCell && id in CSG_RULES -> CSG_ABSTENTION_CODE
         id == "H11" && mobileCellIdFixTooOld -> H11_FIX_ABSTENTION_CODE
+        id == "H17" -> H17_SHADOW_CODE
         else -> null
     }
 
@@ -126,6 +129,7 @@ data class HeuristicReport(
         id == "H3" -> mccAbstention?.text
         csgCell && id in CSG_RULES -> CSG_ABSTENTION_TEXT
         id == "H11" && mobileCellIdFixTooOld -> H11_FIX_ABSTENTION_TEXT
+        id == "H17" -> H17_SHADOW_TEXT
         else -> null
     }
 
@@ -135,10 +139,10 @@ data class HeuristicReport(
 
         /**
          * 3.0 (corte de campaña) — Reglas que no son evidencia: H8 (calidad de dato) y H9 (reservada).
-         * 3.1.0 — Y H12 (retirada). Debe coincidir con HeuristicCatalog.isEvidence; HeuristicCatalogTest
-         * lo comprueba.
+         * 3.1.0 — Y H12 (retirada) y H17 (en sombra). Debe coincidir con HeuristicCatalog.isEvidence;
+         * HeuristicCatalogTest lo comprueba.
          */
-        val NON_EVIDENCE_IDS = setOf("H8", "H9", "H12")
+        val NON_EVIDENCE_IDS = setOf("H8", "H9", "H12", "H17")
 
         /** 3.0 (corte de campaña) — Reglas que no se evalúan en una celda CSG. */
         val CSG_RULES = setOf("H1", "H2", "H5", "H6", "H7")
@@ -148,6 +152,10 @@ data class HeuristicReport(
         /** 3.0 (corte de campaña) — H11 sin fix reciente (ver core/MobileCellIdFixAge). */
         const val H11_FIX_ABSTENTION_CODE = "fix_viejo"
         const val H11_FIX_ABSTENTION_TEXT = "fix GPS de más de 60 s o sin edad conocida"
+
+        /** 3.1.0 — H17 en sombra: se calcula y se guarda, pero no se evalúa (ver core/CellChurn). */
+        const val H17_SHADOW_CODE = "sombra"
+        const val H17_SHADOW_TEXT = "en sombra hasta calibrarla con datos de campaña"
     }
 
     private val statuses: List<HeuristicStatus>
@@ -155,6 +163,6 @@ data class HeuristicReport(
             isolatedCell, powerJump, mccConsistency, mncCount, tacDeviation,
             taDistance, ghostNeighbors, arfcnSanity, hardwareCiphering, pingPong,
             mobileCellId, latencyCorrelation, signalBaseline, bandDowngrade, rfStability,
-            transitionCoherence
+            transitionCoherence, cellChurn
         )
 }

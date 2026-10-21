@@ -54,6 +54,12 @@ class TerminalLocalizationCoverageTest {
         "N/A: la posición está en la zona aprendida de la celda nueva, no en la de la anterior.",
         "N/A: la zona aprendida de la celda nueva no queda lo bastante lejos de la posición.",
         "[AUDIT] --- CICLO DE AUDITORÍA (16 REGLAS) · Celda 1234 (214-7-2801) ---",
+        // 3.1.0 — H17 en sombra y H12 retirada.
+        "[AUDIT] --- CICLO DE AUDITORÍA (17 REGLAS) · Celda 1234 (214-7-2801) ---",
+        "[HEUR] 17. Churn de celdas (sombra): N/A (en sombra hasta calibrarla con datos de campaña)",
+        "[H17 sombra] 15 min: 3 celdas distintas, 4 cambios; movimiento MOVING (sin evaluar)",
+        com.alexisgordr.icdetector.core.DiagnosticEngine.H17_SHADOW_EXPLANATION,
+        com.alexisgordr.icdetector.core.DiagnosticEngine.H12_RETIRED_EXPLANATION,
         "[AUDIT] 6. Proximidad por Timing Advance: NO EVALUADA",
         "[AUDIT] 7. Espectro Fantasma: SUPERADA",
         "[AUDIT] 9. Cifrado Hardware: NO EVALUADA",

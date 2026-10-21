@@ -8,6 +8,7 @@ The current state of the project in one page. What changed in each release is in
 
 | | Version | Version code | DB schema | Where |
 |---|---|---|---|---|
+| **In preparation** | 3.1.0 | 40 | 26 | Local branch `ICdetection-v3.1.0`, not published ([docs/3.1.0-progress.md](docs/3.1.0-progress.md)) |
 | **Stable release** | 3.0.0 | 39 | 25 | GitHub Releases |
 | **Field campaign** | 3.0.0 | 39 | 25 | Day 1 = a fresh database on 3.0.0 ([IMPORTANT.md](IMPORTANT.md)) |
 | **Previous stable release** | v2.10.10 | 38 | 19 | GitHub Releases |

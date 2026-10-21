@@ -82,7 +82,8 @@ class PingPongRuleTest {
         assertTrue(analyzer.contains("PingPongRule.evaluate(cellChangeHistory.map { it.second }, nowMs, pingPongSpeedMps)"))
         assertTrue("el servicio usa el valor por defecto", !src("service/MiniICService.kt").contains("pingPongSpeedMps"))
         val service = src("service/MiniICService.kt")
-        assertTrue(service.contains("locationFixAgeMs = currentLocation?.elapsedRealtimeNanos?.takeIf { it > 0 }"))
+        assertTrue(service.contains("locationFixAgeMs = deliveryFixAgeMs,"))
+        assertTrue(service.contains("val deliveryFixAgeMs = currentLocation?.elapsedRealtimeNanos?.takeIf { it > 0 }"))
         assertTrue("edad en la entrega", service.contains("?.let { deliveredAtElapsedMs - it / 1_000_000L }"))
     }
 

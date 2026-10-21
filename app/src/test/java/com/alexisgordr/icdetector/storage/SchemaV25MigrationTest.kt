@@ -212,7 +212,7 @@ class SchemaV25MigrationTest {
     @Test fun `CellDbHelper uses these exact statements and runs schema 25 on create and upgrade`() {
         val helper = listOf("app/src/main/java/com/alexisgordr/icdetector/storage/CellDbHelper.kt", "src/main/java/com/alexisgordr/icdetector/storage/CellDbHelper.kt")
             .map(::File).first { it.exists() }.readText()
-        assertTrue(helper.contains("const val DATABASE_VERSION = SchemaV25.VERSION"))
+        assertTrue(helper.contains("const val DATABASE_VERSION = SchemaV26.VERSION"))
         assertTrue(helper.contains("if (oldVersion < 25) applySchemaV25(db)"))
         assertTrue(helper.substringAfter("override fun onCreate(db: SQLiteDatabase) {").substringBefore("override fun onUpgrade").contains("applySchemaV25(db)"))
         val apply = helper.substringAfter("private fun applySchemaV25(db: SQLiteDatabase) {").substringBefore("\n    }\n")

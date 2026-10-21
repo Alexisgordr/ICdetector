@@ -188,10 +188,10 @@ The [Field Manual](MANUAL.md) covers setup, every screen, the rules and the expo
 ## 🧠 Detection engine
 
 ICdetection continuously performs multi-layer heuristic analysis during cell reselections, handovers,
-signal transitions, topology changes, mobility events and changes in local radio behaviour. Sixteen
-rules (H1–H16) are evaluated on every cycle; each one passes, fails or reports `N/A` with a reason.
-Thirteen of them count as evidence: H8 is a data-quality flag, H9 is reserved and H12 was retired in
-3.1.0.
+signal transitions, topology changes, mobility events and changes in local radio behaviour.
+Seventeen rules (H1–H17) are evaluated on every cycle; each one passes, fails or reports `N/A` with a
+reason. Thirteen of them count as evidence: H8 is a data-quality flag, H9 is reserved, H12 was retired
+in 3.1.0 and H17 (cell churn) runs in shadow mode.
 
 <details open>
 <summary><strong>Analysis layers</strong></summary>
@@ -278,6 +278,11 @@ where it learned both cells, visible neighbours and trusted previous transitions
 incoherent only while the phone is still in the previous cell's zone; between two large cells it is
 `N/A`. It has no fixed maximum tower distance, needs a recent fix at both ends, and its low weight
 cannot trigger an alert by itself.
+
+#### Cell Churn (H17, shadow mode)
+Counts the distinct serving cells and serving changes over the last 15 minutes, with the phone's
+motion from a recent GPS fix. Stored in every row (`ChurnCells15m`, `ChurnChanges15m`, `ChurnMotion`)
+but not evaluated: always `N/A`, no points, until its thresholds are set from campaign data.
 
 </details>
 

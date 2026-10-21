@@ -34,7 +34,7 @@ another one keeps watching.
 
 > **In one sentence:** two different symptoms at the same time, for three cycles in a row.
 
-## The 16 rules, by attack step
+## The 17 rules, by attack step
 
 ### 1. Pull in: the catcher has to "shout louder" than the real towers
 
@@ -81,6 +81,7 @@ regular coverage with **Continuous** GPS mode.
 | **H8** Data quality | Flags a channel (ARFCN) outside the 3GPP tables: the modem is reporting badly, not an attack |
 | **H9** Ciphering | Reserved. Always `N/A`, because Android does not expose the modem's ciphering state |
 | **H12** Latency + RF | Retired in 3.1.0 with the latency probe (it needed an Internet connection). Always `N/A` |
+| **H17** Cell churn | Shadow mode (3.1.0): distinct cells and changes over 15 min, with motion, stored in every row. Always `N/A` until calibrated |
 
 > **Remember:** H2 (against the neighbours, now) and H13 (against the cell's own history) look at
 > power from different references. H1 (no neighbours) and H7 (neighbours crushed) split the

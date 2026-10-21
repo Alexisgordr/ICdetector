@@ -4,7 +4,7 @@ import com.alexisgordr.icdetector.models.CellData
 import com.alexisgordr.icdetector.models.HeuristicStatus
 import com.alexisgordr.icdetector.models.TimingAdvanceUnit
 
-/** Formats the stable 16-rule audit trail without owning service lifecycle or detector state. */
+/** Formats the stable rule audit trail (H1–H17) without owning service lifecycle or detector state. */
 internal class AuditLogController(
     private val log: (String, String) -> Unit,
     private val publishStatus: (String) -> Unit,
@@ -12,7 +12,7 @@ internal class AuditLogController(
 ) {
     fun generate(cell: CellData) {
         publishStatus("Auditoría en curso...")
-        log("[AUDIT]", "--- CICLO DE AUDITORÍA (16 REGLAS) · Celda ${cell.cellId} (${cell.mcc}-${cell.mnc}-${cell.tac}) ---")
+        log("[AUDIT]", "--- CICLO DE AUDITORÍA (17 REGLAS) · Celda ${cell.cellId} (${cell.mcc}-${cell.mnc}-${cell.tac}) ---")
         val report = cell.heuristicReport
         linkedMapOf(
             "1. Celda Aislada" to report.isolatedCell,
@@ -30,7 +30,8 @@ internal class AuditLogController(
             "13. Potencia vs Histórico (Baseline + huella RSRQ/SINR)" to report.signalBaseline,
             "14. Downgrade de Banda (Intra-LTE)" to report.bandDowngrade,
             "15. Estabilidad de Identidad RF (PCI)" to report.rfStability,
-            "16. Coherencia de Transición" to report.transitionCoherence
+            "16. Coherencia de Transición" to report.transitionCoherence,
+            "17. Churn de celdas (sombra)" to report.cellChurn
         ).forEach { (rule, result) ->
             val status = when (result) {
                 HeuristicStatus.PASSED -> "PASSED"

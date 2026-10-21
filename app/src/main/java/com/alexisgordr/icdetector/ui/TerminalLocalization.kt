@@ -91,6 +91,7 @@ private val replacements = linkedMapOf(
     "CICLO DE AUDITORÍA" to "AUDIT CYCLE",
     "reglas evaluadas" to "rules evaluated",
     "16 REGLAS" to "16 RULES",
+    "17 REGLAS" to "17 RULES",
     "sin fallos" to "without failures",
     "Sin anomalías en las reglas que pudieron evaluarse" to "No anomalies in the rules that could be evaluated",
     "Sin alarma, pero con observaciones" to "No alarm, but observations remain",
@@ -292,6 +293,16 @@ private val replacements = linkedMapOf(
     // 3.0 (corte de campaña) — Celda CSG: H1/H2/H5/H6/H7 no se evalúan.
     "celda CSG (femtocelda): las reglas de dominancia, proximidad e identidad local no aplican a una celda diseñada para ser aislada" to "CSG cell (femtocell): the dominance, proximity and local-identity rules do not apply to a cell designed to be isolated",
     "celda CSG (femtocelda)" to "CSG cell (femtocell)",
+    // 3.1.0 — H17 en sombra (HeuristicReport.H17_SHADOW_TEXT, DiagnosticEngine.H17_SHADOW_EXPLANATION, servicio).
+    "en sombra; se registran las celdas distintas y los cambios de 15 min, sin evaluar hasta calibrarla con datos de campaña" to
+        "shadow mode; the distinct cells and changes over 15 min are recorded, not evaluated until calibrated with campaign data",
+    "en sombra hasta calibrarla con datos de campaña" to "shadow mode until calibrated with campaign data",
+    "17. Churn de celdas (sombra)" to "17. Cell churn (shadow)",
+    "Churn de celdas (sombra)" to "Cell churn (shadow)",
+    "[H17 sombra]" to "[H17 shadow]",
+    " celdas distintas, " to " distinct cells, ",
+    " cambios; movimiento " to " changes; motion ",
+    " (sin evaluar)" to " (not evaluated)",
     // 3.1.0 — H12 retirada (DiagnosticEngine.H12_RETIRED_EXPLANATION).
     "regla retirada en 3.1.0 (la correlación de latencia necesitaba conexión a Internet)" to "rule retired in 3.1.0 (the latency correlation needed an Internet connection)",
     // 3.0 (corte de campaña) — H9 reservada.

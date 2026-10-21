@@ -6,7 +6,7 @@ import com.alexisgordr.icdetector.models.HeuristicReport
 import com.alexisgordr.icdetector.models.HeuristicStatus
 
 /**
- * 3.0 (#7, O2) — Lista canónica de las 16 reglas.
+ * 3.0 (#7, O2) — Lista canónica de las reglas (16 hasta 3.0; H17, en sombra, desde 3.1.0).
  *
  * Hasta 2.10.x cada regla vivía con tres nombres en tres sitios: su id en [HeuristicReport]
  * (`H5`), su clave en [BayesianScorer] (`tacDev`) y su familia en [ThreatEpisodeTracker]
@@ -64,7 +64,11 @@ enum class HeuristicCatalog(
         "Celda nueva fuerte en banda baja: para el scorer, dominancia (absorbida por H2); para el episodio, cambio de celda.", { it.bandDowngrade }),
     RF_STABILITY("H15", "rfStability", Family.IDENTITY, G.MOBILITY,
         "Identidad RF inconsistente de la misma Cell ID: para el scorer, un fenómeno con H11; para el episodio, identidad.", { it.rfStability }),
-    TRANSITION_COHERENCE("H16", "transitionCoherence", Family.MOBILITY, G.MOBILITY, null, { it.transitionCoherence });
+    TRANSITION_COHERENCE("H16", "transitionCoherence", Family.MOBILITY, G.MOBILITY, null, { it.transitionCoherence }),
+    // Sombra hasta calibración con datos (3.2) — Churn de celdas (core/CellChurn): se calcula y se guarda en
+    // cada fila, pero no se evalúa, no puntúa ni cuenta como evidencia.
+    CELL_CHURN("H17", "cellChurn", Family.MOBILITY, G.NOT_SCORED,
+        "En sombra: su familia será movilidad cuando se evalúe; hasta entonces no tiene LR.", { it.cellChurn });
 
     fun status(report: HeuristicReport): HeuristicStatus = statusOf(report)
 

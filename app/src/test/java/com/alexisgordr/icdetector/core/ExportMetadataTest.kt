@@ -24,8 +24,9 @@ class ExportMetadataTest {
         assertEquals(listOf("AppVersion", "ExportDevice", "ExportAndroid", "LocationMode"), header.subList(app, app + 4))
         // 3.0 (esquema 22) — Las columnas del perfil local van después: no mueven ninguna anterior.
         // 3.0 — Y tras ellas, los identificadores de la fila y de su lectura.
-        assertTrue(header.drop(app + 4).dropLast(2).all { it.startsWith("Profile") })
-        assertEquals(listOf("RowId", "ObservationId"), header.takeLast(2))
+        assertTrue(header.drop(app + 4).dropLast(5).all { it.startsWith("Profile") })
+        // 3.1.0 (esquema 26) — Y tras ellas, el churn de celdas (H17 en sombra).
+        assertEquals(listOf("RowId", "ObservationId", "ChurnCells15m", "ChurnChanges15m", "ChurnMotion"), header.takeLast(5))
         val device = ExportUtils.ExportDevice("Google Pixel 8", "16 (API 36)")
         val row = ExportUtils.csvRow(base.copy(appVersion = "3.0.0-beta1"), device).split(",")
         assertEquals(header.size, row.size)

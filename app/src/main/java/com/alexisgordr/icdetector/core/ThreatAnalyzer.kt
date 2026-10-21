@@ -713,7 +713,8 @@ object ThreatAnalyzer {
             signalBaseline = status(eSignalBaseline, hSignalBaseline),
             bandDowngrade = status(eBandDowngrade, hBandDowngrade),
             rfStability = status(eRfStability, hRfStability),
-            transitionCoherence = status(eTransitionCoherence, hTransitionCoherence)
+            transitionCoherence = status(eTransitionCoherence, hTransitionCoherence),
+            cellChurn = HeuristicStatus.NOT_EVALUATED   // H17, en sombra (3.1.0)
         )
 
         return active.copy(

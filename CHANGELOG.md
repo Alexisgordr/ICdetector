@@ -26,6 +26,13 @@ Version code 40. A local build; not published yet.
   latency detection off, its default, nothing changes). `NotEvaluatedHeuristics` always lists H12.
   The forensic `latency_state` column stays, empty for new samples. The latency setting of an
   older backup is ignored, and a stored one is deleted the first time 3.1.0 runs.
+- **H17, cell churn, in shadow mode.** Distinct serving cells and serving changes over 15 minutes,
+  with the phone's motion from a GPS fix of 60 s or less (`UNKNOWN` otherwise), restarted after a
+  service loss or a gap. Stored in every history row (database schema 26 adds three columns; older
+  rows keep them empty) and at the end of the CSV (`ChurnCells15m`, `ChurnChanges15m`,
+  `ChurnMotion`), shown in the terminal as `[H17 sombra]`. H17 is never evaluated (`N/A`, stored as
+  `H17(sombra)`), has no points or likelihood ratio and is not evidence, so no score changes. Its
+  thresholds will come from the campaign data (3.2).
 - **Internet permission.** With no network code left, the app no longer requests
   `android.permission.INTERNET` (it is also removed from the merged manifest). It keeps
   `ACCESS_NETWORK_STATE` to know whether data goes over Wi-Fi.

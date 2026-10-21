@@ -44,8 +44,8 @@ While monitoring, it can:
 - Observe the serving cell and the cellular information exposed by Android.
 - Record MCC, MNC, Cell ID, TAC, PCI, channel, RSRP, RSRQ, SINR, radio technology and Timing Advance
   when available.
-- Evaluate sixteen heuristics (H1–H16) in every analysis cycle; thirteen count as evidence (H8 is a
-  data-quality flag, H9 is reserved and H12 was retired in 3.1.0).
+- Evaluate seventeen heuristics (H1–H17) in every analysis cycle; thirteen count as evidence (H8 is a
+  data-quality flag, H9 is reserved, H12 was retired in 3.1.0 and H17 runs in shadow mode).
 - Learn the historical behaviour of repeatedly observed cells.
 - Require suspicious behaviour to persist through three analysis phases, or two when two
   high-value historical or physical checks fail together (they can share data; see *Shared evidence*).
@@ -961,6 +961,18 @@ an app. H12 (latency + RF correlation) was retired in 3.1.0 with the latency pro
 an Internet connection. Both keep their number and position so the rule list and the CSV do not
 change; they are always `N/A`, never subtract points and never count as evidence.
 
+**Cell churn (H17, shadow mode from 3.1.0).** Over the last 15 minutes, how many distinct full serving
+identities (MCC, MNC, area, Cell ID and technology) served the phone and how many serving changes
+there were, with the phone's motion: `MOVING` or `STILL` from the speed of a GPS fix no older than
+60 s, `UNKNOWN` otherwise. A handover is the same as for H10, so an unknown field or an unreadable
+Cell ID is not a change. The count starts again after a service loss or a gap of more than 2 minutes.
+Many cells and changes are normal on the move; while still, they could be a transmitter pulling
+the phone back and forth. The values are stored in every row (`ChurnCells15m`, `ChurnChanges15m`,
+`ChurnMotion`) and the terminal shows them with the prefix `[H17 sombra]` (`[H17 shadow]` in
+English) when they change, but H17 is not evaluated yet: it is always `N/A`, stored as
+`H17(sombra)` in `NotEvaluatedHeuristics`, has no points, no likelihood ratio and is not evidence.
+Its thresholds will be set from the campaign data (3.2).
+
 **Band downgrade (H14).** Suspicious moves from high-frequency capacity bands to sub-GHz bands when
 the previous signal was strong and there was no progressive degradation. Every 3GPP LTE band is
 known; outside the table the band declared by the phone (Android 11+) is used. Band changes between
@@ -1142,12 +1154,14 @@ SecondaryCarriers, ServiceState, NetworkOperator, SimOperator, NetworkRoaming,
 ObservedAtUtc, NotEvaluatedHeuristics, GpsAccuracyM, AppVersion, ExportDevice, ExportAndroid,
 LocationMode, ProfileMode, ProfileLevel, ProfileScore, ProfileCoverage, ProfileAbstainReason,
 ProfileAlgorithm, ProfileRevision, ProfileEvidence, ProfileLearned, ProfileHoldout, RowId,
-ObservationId
+ObservationId, ChurnCells15m, ChurnChanges15m, ChurnMotion
 ```
 
 - `Lat` / `Lon` are the phone's own GPS position at the time of the observation.
 - `Verified`, `ApiLat` and `ApiLon` belong to the external verification removed in 3.1.0: from
   3.1.0, `Verified` is always `PENDING` and `ApiLat` / `ApiLon` are empty. Older rows keep their values.
+- `ChurnCells15m`, `ChurnChanges15m` and `ChurnMotion` (3.1.0, database schema 26) are the cell churn
+  of the 15 minutes before the observation (H17, in shadow mode); empty in earlier rows.
 - `Timestamp` is local time; `ObservedAtUtc` is the observation instant in UTC (ISO-8601).
 - `TA` is the raw Timing Advance, `TAUnit` how it was interpreted, and `TAMeters` is empty when a
   conversion is not defensible.

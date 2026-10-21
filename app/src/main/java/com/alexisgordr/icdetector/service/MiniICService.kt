@@ -308,6 +308,9 @@ class MiniICService : Service() {
     private val recentRegisteredDbmTrend = CopyOnWriteArrayList<Int>()
     // 3.0 (corte de campaña) — Cambios de servidora para H10, registrados al recibir cada lectura (ver CellChangeHistory).
     private val cellChanges = com.alexisgordr.icdetector.core.CellChangeHistory(ThreatAnalyzer.PING_PONG_WINDOW_MS)
+    // 3.1.0 — H17 en sombra: churn de 15 min (ver CellChurn). Reloj monotónico de la entrega.
+    private val cellChurn = com.alexisgordr.icdetector.core.CellChurn()
+    private var lastChurnLog: String? = null
 
     inner class LocalBinder : Binder() {
         fun getService(): MiniICService = this@MiniICService
@@ -731,6 +734,8 @@ class MiniICService : Service() {
         lastLoggedPromotion = null
         securityAlerts.resetAlarmEpisode()
         cellChanges.clear()
+        cellChurn.reset()
+        lastChurnLog = null
     }
 
     private fun registerScreenReceiver() {
@@ -1079,8 +1084,26 @@ class MiniICService : Service() {
                     prevNrArfcn = null
                     prevRegisteredDbm = null
                     recentRegisteredDbmTrend.clear()
+                    // 3.1.0 — H17: el churn de antes de la pérdida o del hueco no se suma al de después.
+                    cellChurn.reset()
                 }
                 val currentLocation = deliveryLocation
+                // Edad del fix en la ENTREGA (reloj monotónico); sin marca monotónica, desconocida.
+                val deliveryFixAgeMs = currentLocation?.elapsedRealtimeNanos?.takeIf { it > 0 }
+                    ?.let { deliveredAtElapsedMs - it / 1_000_000L }
+                // 3.1.0 (H17, en sombra) — Churn de 15 min: se guarda en la fila y se anota en el
+                // terminal; no se evalúa ni puntúa (CellChurn).
+                if (activeRaw != null) {
+                    cellChurn.observe(com.alexisgordr.icdetector.core.ServingIdentityChange.of(activeRaw), deliveredAtElapsedMs)
+                }
+                val churn = cellChurn.snapshot(deliveredAtElapsedMs, currentLocation?.takeIf { it.hasSpeed() }?.speed, deliveryFixAgeMs)
+                if (activeRaw != null) {
+                    val churnLog = "15 min: ${churn.distinctCells15m} celdas distintas, ${churn.changes15m} cambios; movimiento ${churn.motion.name} (sin evaluar)"
+                    if (churnLog != lastChurnLog) {
+                        lastChurnLog = churnLog
+                        appendLog("[H17 sombra]", churnLog)
+                    }
+                }
                 // Cellular polling only reads motion. New evidence enters from real Location
                 // callbacks, so a repeated lastKnownLocation cannot manufacture static time.
                 // 3.0 — Reloj monotónico, el mismo con que se sellan los fixes (no la hora civil).
@@ -1317,8 +1340,7 @@ class MiniICService : Service() {
                             isolatedCellConfirmed = isolatedCellConfirmed,
                             // 3.0 — La velocidad de H10 solo vale con un fix reciente; sin marca monotónica, vieja.
                             // Edad en la ENTREGA, no tras esperar al mutex del análisis.
-                            locationFixAgeMs = currentLocation?.elapsedRealtimeNanos?.takeIf { it > 0 }
-                                ?.let { deliveredAtElapsedMs - it / 1_000_000L },
+                            locationFixAgeMs = deliveryFixAgeMs,
                             // 3.0 (corte de campaña) — H3 (servidora frente a SIM) usa el ServiceState de ESTA
                             // lectura, el mismo que se guarda en la fila.
                             serviceState = observationContext.service
@@ -1327,7 +1349,7 @@ class MiniICService : Service() {
                             analyzed,
                             localTrustEvidence,
                             stableSiteDecision
-                        )
+                        ).copy(churn = churn)
                     } else {
                         // Las vecinas no se evalúan como amenaza; se mantienen como contexto.
                         cell

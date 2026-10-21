@@ -67,7 +67,7 @@ class SchemaV24MigrationTest {
         assertTrue(SchemaV24.STATEMENTS.all { it.startsWith("ALTER TABLE") || it.startsWith("CREATE UNIQUE INDEX IF NOT EXISTS") || it.startsWith("CREATE INDEX IF NOT EXISTS") })
         val helper = listOf(File("src/main/java/com/alexisgordr/icdetector/storage/CellDbHelper.kt"),
             File("app/src/main/java/com/alexisgordr/icdetector/storage/CellDbHelper.kt")).first { it.exists() }.readText()
-        assertTrue(helper.contains("const val DATABASE_VERSION = SchemaV25.VERSION"))
+        assertTrue(helper.contains("const val DATABASE_VERSION = SchemaV26.VERSION"))
         assertTrue(helper.contains("if (oldVersion < 24) applySchemaV24(db)"))
         assertTrue(helper.substringAfter("private fun applySchemaV24(db: SQLiteDatabase) {").substringBefore("SchemaV24.STATEMENTS").contains("applySchemaV23(db)"))
         assertTrue(helper.substringAfter("override fun onCreate(db: SQLiteDatabase) {").substringBefore("override fun onUpgrade").contains("applySchemaV24(db)"))

@@ -55,6 +55,8 @@ data class CellData(
     /** Revocable confidence learned only from this device's clean local history. */
     val localCellTrust: LocalCellTrust = LocalCellTrust(),
     val stableSiteDecision: com.alexisgordr.icdetector.core.StableSiteDecision = com.alexisgordr.icdetector.core.StableSiteDecision(),
+    /** 3.1.0 — Churn de celdas de 15 min (H17, en sombra): solo se guarda; null = no calculado. */
+    val churn: com.alexisgordr.icdetector.core.ChurnSnapshot? = null,
     // ── v2.10.4 — Contexto de radio. Solo recolección: ninguna heurística lee estos campos. ──
     /** Papel de la celda en la conexión (`CellInfo.getCellConnectionStatus()`). */
     val connectionState: CellConnectionState = CellConnectionState.UNKNOWN,
