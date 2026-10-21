@@ -67,6 +67,38 @@ class WalBackupCopyTest {
         assertFalse(File(copy.path + "-wal").exists() && File(copy.path + "-wal").length() > 0)
     }
 
+    /**
+     * 3.1.0 (remate) — Un lector con una foto abierta impide que el checkpoint PASIVO vuelque las
+     * filas escritas después: siguen solo en el `-wal`. La copia del fichero principal no las tiene;
+     * con el `-wal`, consolidada, sí. Es el caso que WalModeTest ejercita con el exportador real.
+     */
+    @Test fun `with a reader holding a snapshot the passive checkpoint leaves the later rows in the WAL`() {
+        connect(File(dir, "live.db")).use { reader ->
+            reader.autoCommit = false                     // BEGIN (diferido)
+            val seen = reader.createStatement().use { st -> st.executeQuery("SELECT COUNT(*) FROM history").use { it.next(); it.getInt(1) } }
+            assertEquals("la primera lectura fija la foto", 5, seen)
+            live.createStatement().use { st -> repeat(4) { i -> st.execute("INSERT INTO history (cid) VALUES ('late$i')") } }
+            live.createStatement().use { st ->
+                st.executeQuery("PRAGMA wal_checkpoint(PASSIVE)").use { rs ->
+                    rs.next()
+                    assertTrue("no vuelca todo el -wal", rs.getInt(3) < rs.getInt(2))
+                }
+            }
+            assertTrue(File(dir, "live.db-wal").length() > 0)
+            val mainOnly = copyLive("pinned-main-only.db", withWal = false)
+            connect(mainOnly).use { c -> c.createStatement().use { st ->
+                st.executeQuery("SELECT COUNT(*) FROM history WHERE cid LIKE 'late%'").use { it.next(); assertEquals(0, it.getInt(1)) }
+            } }
+            val copy = copyLive("pinned.db", withWal = true)
+            connect(copy).use { c -> c.createStatement().use { st ->
+                st.executeQuery("PRAGMA wal_checkpoint(TRUNCATE)").close()
+                st.executeQuery("PRAGMA journal_mode=DELETE").close()
+            } }
+            assertEquals(9, count(copy))
+            reader.rollback()
+        }
+    }
+
     @Test fun `the helper enables WAL and backup and restore handle its files`() {
         val helper = main.resolve("storage/CellDbHelper.kt").readText()
         assertTrue(helper.contains("init {\n        setWriteAheadLoggingEnabled(true)\n    }"))
