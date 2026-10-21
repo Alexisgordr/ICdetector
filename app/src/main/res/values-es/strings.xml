@@ -7,7 +7,6 @@
     <string name="save_settings">GUARDAR AJUSTES</string>
     <string name="technical_notice">AVISO TÉCNICO</string>
     <string name="technical_notice_body">La detección directa de cifrado nulo e IMSI Disclosure no está implementada para instalaciones Android estándar. Requiere APIs o permisos privilegiados que una app no-root no recibe; por eso esta regla se muestra como N/A cuando el sistema no expone el dato.</string>
-    <string name="support_project">APOYAR PROYECTO</string>
     <string name="signal_comparison">COMPARATIVA DE SEÑAL</string>
     <string name="active_cell_format">ACTIVA (%1$s)</string>
     <string name="neighbor_cell_format">VECINA (%1$s)</string>

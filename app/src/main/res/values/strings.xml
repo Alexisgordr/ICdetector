@@ -7,7 +7,6 @@
     <string name="save_settings">SAVE SETTINGS</string>
     <string name="technical_notice">TECHNICAL NOTICE</string>
     <string name="technical_notice_body">Direct detection of null encryption and IMSI disclosure is not implemented for standard Android installations. It requires privileged APIs or permissions that a non-root app does not receive, so this rule is shown as N/A when the system does not expose the data.</string>
-    <string name="support_project">SUPPORT PROJECT</string>
     <string name="signal_comparison">SIGNAL COMPARISON</string>
     <string name="active_cell_format">ACTIVE (%1$s)</string>
     <string name="neighbor_cell_format">NEIGHBOR (%1$s)</string>
