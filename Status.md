@@ -86,7 +86,7 @@ cut can be applied per row; the commit is the one that introduces each change.
 
 | Area | What changed | Commit |
 |---|---|---|
-| H12, score, anomaly confidence | H12 retired: always `N/A`, no points, no likelihood ratio. Changes only rows where latency detection had been enabled | B (latency removal) |
+| H12, score, anomaly confidence | H12 retired: always `N/A`, no points, no likelihood ratio. Changes only rows where latency detection had been enabled | b1de2a9 |
 
 ## Known limitations and open items
 

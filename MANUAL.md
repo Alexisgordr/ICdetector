@@ -1255,12 +1255,18 @@ If an event persists to `3/3` and remains concerning after reviewing its explana
 ICdetection data may reveal locations, travel patterns, observed networks, device characteristics and
 security events.
 
+**No Internet access.** From 3.1.0 the app does not request Android's Internet permission, so the
+system does not let it open any network connection: nothing it records can leave the phone except
+through an export or a backup that you make. It keeps `ACCESS_NETWORK_STATE`, which only tells it
+whether data goes over Wi-Fi or mobile data (several rules abstain on Wi-Fi). Earlier versions could
+connect for the optional OpenCellID lookup and the optional latency probe; both were removed.
+
 - Preserve original exports and analyse copies.
 - Record the SHA-256 digest of the original ZIP.
 - Do not edit files inside the original package.
 - Use encrypted storage for sensitive cases.
 - Redact GPS coordinates and credentials before public sharing.
-- Never publish API tokens, signing keys or private keystores.
+- Never publish signing keys or private keystores.
 - Android's automatic cloud backup and phone-to-phone transfer exclude every ICdetection file, so
   setting up a new phone does not bring the history with it. A vendor transfer tool that ignores
   Android's rules cannot be ruled out.

@@ -8,18 +8,13 @@ ICdetection does not guarantee IMSI-catcher detection. Standard Android applicat
 
 The application works without root and stores its history locally on the device. It contains no advertising, analytics or tracking libraries.
 
-OpenCellID verification is optional. Users provide their own token, and the application can operate without this service.
-
-Network connections (all optional):
-
-• OpenCellID (opencellid.org): cell verification, off until the user enters their own API token. It sends the serving cell's identity (MCC, MNC, TAC/LAC, Cell ID and radio type) and can be routed through a SOCKS5 proxy such as Tor/Orbot.
-• Latency detection (experimental setting): off by default. Only when the user enables it, and only while traffic leaves over mobile data (not over Wi-Fi, a VPN or the SOCKS5 proxy), the app sends an HTTPS HEAD request roughly every 30 seconds to each of these third-party endpoints: www.google.com/generate_204 (Google), one.one.one.one (Cloudflare) and dns.quad9.net (Quad9). These requests carry no cell or location data, but like any connection they reveal the device's IP address to those services.
+The application has no Internet permission and makes no network connections: everything it records stays on the device unless the user exports it.
 
 Permissions:
 
 • Location: required by Android for access to certain cellular information and used for geographical consistency checks.
 • Phone state: required to inspect cellular network and cell information.
-• Internet: used only for the optional OpenCellID verification and the optional latency detection described above.
+• Network state: only to know whether data goes over Wi-Fi or mobile data; it gives no Internet access.
 • Foreground service and notifications: keep persistent monitoring visible and controllable.
 
 The amount and quality of telemetry depend on the phone, modem, firmware and Android version.

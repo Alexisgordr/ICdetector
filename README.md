@@ -493,8 +493,8 @@ restore only backups you made yourself. See the [manual](MANUAL.md#backup-and-re
 transitions, service-state events, Stable-Site learning and route-familiarity trips in a single
 transaction, safely even while monitoring is running.
 
-**No network connections.** Since 3.1.0 the app makes no connection of its own: the external
-verification and the latency probe were removed.
+**No Internet permission.** ICdetection does not request Android's Internet permission; the only
+connections it could make (the optional OpenCellID lookup and latency probe) were removed in 3.1.0.
 
 ---
 

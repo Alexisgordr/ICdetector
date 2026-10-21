@@ -31,7 +31,11 @@
         tools:ignore="ForegroundServicePermission,ForegroundServiceType" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_LOCATION" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
-    <uses-permission android:name="android.permission.INTERNET" />
+    <!-- 3.1.0 — Sin permiso de Internet. La única conexión que quedaba (sonda de latencia, H12) y la
+         verificación externa se retiraron. tools:node="remove" lo quita también del manifiesto
+         fusionado si alguna dependencia lo declarara. ACCESS_NETWORK_STATE se conserva: solo lee el
+         tipo de red (Wi-Fi o datos móviles), que las reglas usan para abstenerse con Wi-Fi. -->
+    <uses-permission android:name="android.permission.INTERNET" tools:node="remove" />
     <!-- Mantiene el bucle de recolección activo con la pantalla apagada. Es un permiso normal:
          no muestra diálogo ni concede acceso adicional a datos. -->
     <uses-permission android:name="android.permission.WAKE_LOCK" />

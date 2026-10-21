@@ -26,6 +26,9 @@ Version code 40. A local build; not published yet.
   latency detection off, its default, nothing changes). `NotEvaluatedHeuristics` always lists H12.
   The forensic `latency_state` column stays, empty for new samples. The latency setting of an
   older backup is ignored, and a stored one is deleted the first time 3.1.0 runs.
+- **Internet permission.** With no network code left, the app no longer requests
+  `android.permission.INTERNET` (it is also removed from the merged manifest). It keeps
+  `ACCESS_NETWORK_STATE` to know whether data goes over Wi-Fi.
 
 ## 3.0.0
 
