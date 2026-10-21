@@ -25,6 +25,13 @@ Version code 40. A local build; not published yet.
   checkpoints passively before copying, copies the `-wal` with the main file and consolidates the copy
   into one file in DELETE mode, as before; a restore moves `-wal` and `-shm` with the database.
 
+- **H14 kept the previous band only while the reading had a channel (#37).** Many modems sometimes
+  publish the serving cell without its ARFCN; that reading erased the known band of the same cell, so
+  a handover right after it left H14 `N/A`. The band, and the base station it was measured on, are
+  now kept while the full serving identity does not change; a handover takes the new cell's context
+  and a service loss or gap clears it. **Dataset cut** for H14 (and, through it, the score and the
+  anomaly confidence).
+
 ### Removed
 
 - **External verification (OpenCellID).** The optional lookup of the serving cell in OpenCellID is

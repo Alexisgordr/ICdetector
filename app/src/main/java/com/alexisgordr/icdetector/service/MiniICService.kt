@@ -302,6 +302,8 @@ class MiniICService : Service() {
     private var prevBandSite: String? = null
     /** 3.0 (#8) — NR-ARFCN de la servidora anterior si era NR (H14 en 5G SA). */
     private var prevNrArfcn: Int? = null
+    /** 3.1.0 (#37) — De dónde salen [prevBand], [prevBandSite] y [prevNrArfcn] (ver BandContext). */
+    private var bandContext: com.alexisgordr.icdetector.core.BandContext? = null
     /** 3.0 (#20) — Continuidad de cobertura: pérdidas de señal y huecos sin lecturas. */
     private val coverageContinuity = com.alexisgordr.icdetector.core.CoverageContinuity()
     private var prevRegisteredDbm: Int? = null
@@ -1089,6 +1091,7 @@ class MiniICService : Service() {
                     prevBand = null
                     prevBandSite = null
                     prevNrArfcn = null
+                    bandContext = null
                     prevRegisteredDbm = null
                     recentRegisteredDbmTrend.clear()
                     // 3.1.0 — H17: el churn de antes de la pérdida o del hueco no se suma al de después.
@@ -1507,12 +1510,12 @@ class MiniICService : Service() {
 
                         // 2. Contexto de banda para la heurística 14 (tras el análisis, de modo que el
                         // PRÓXIMO ciclo compare contra estos valores).
-                        val isLteActive = active.radioTech == RadioTech.LTE
-                        prevBand = if (isLteActive) {
-                            active.band ?: active.arfcn?.let { com.alexisgordr.icdetector.core.BandPlan.earfcnToBandLte(it) }
-                        } else null
-                        prevBandSite = com.alexisgordr.icdetector.core.LteSite.key(active)
-                        prevNrArfcn = active.arfcn.takeIf { active.radioTech == RadioTech.NR }
+                        // 3.1.0 (#37) — Una lectura sin canal de la MISMA celda ya no borra su banda.
+                        val nextBand = com.alexisgordr.icdetector.core.BandContext.next(bandContext, active)
+                        bandContext = nextBand
+                        prevBand = nextBand.lteBand
+                        prevBandSite = nextBand.site
+                        prevNrArfcn = nextBand.nrArfcn
                         prevRegisteredDbm = active.dbm
                         if (active.dbm != Int.MAX_VALUE && active.dbm != -999) {
                             recentRegisteredDbmTrend.add(active.dbm)
