@@ -1,7 +1,8 @@
 3.1.0 — fully offline: no Internet permission.
 
-• OpenCellID verification and latency detection (H12) removed; H12 keeps its number, never evaluated.
-• New shadow rule H17 (cell churn): recorded per row, no points, no alarms.
-• GPS fix age on the monotonic clock; H11 needs a fix of 100 m or better.
-• H14 keeps the previous band across a missing ARFCN; local trust checks PCIs without ARFCN.
+• OpenCellID verification and latency detection (H12) removed.
+• New shadow rule H17 (cell churn): recorded, no points, no alarms.
+• Timing Advance stub detection on a 200-reading window; H6 is N/A on GSM.
+• H11 needs a GPS fix of 100 m or better; H14 keeps the band without ARFCN.
+• If Android refuses to start monitoring, the app now says so; optional start after reboot.
 • Faster database (WAL), safe with backups.

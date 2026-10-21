@@ -53,6 +53,8 @@ class AppIdentityTest {
         for (locale in listOf("en-US", "es-ES")) {
             val dir = File(fastlane, "metadata/android/$locale/changelogs")
             assertTrue("$locale/$code.txt", File(dir, "$code.txt").isFile)
+            // 3.1.0 — Límite de las notas de versión de F-Droid y Google Play.
+            assertTrue("$locale/$code.txt: 500 caracteres como mucho", File(dir, "$code.txt").readText().length <= 500)
             val latest = dir.listFiles()!!.mapNotNull { it.nameWithoutExtension.toIntOrNull() }.max()
             assertEquals(locale, code, latest)
         }
