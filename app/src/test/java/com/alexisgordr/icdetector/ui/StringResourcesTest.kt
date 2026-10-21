@@ -51,6 +51,44 @@ class StringResourcesTest {
         }
     }
 
+    /** 3.1.0 — Plurales: mismos nombres en los dos idiomas, cantidades completas y los mismos argumentos. */
+    private fun plurals(dir: String): Map<String, Map<String, String>> {
+        val doc = DocumentBuilderFactory.newInstance().newDocumentBuilder().parse(module("src/main/res/$dir/strings.xml"))
+        val nodes = doc.getElementsByTagName("plurals")
+        return (0 until nodes.length).associate { i ->
+            val node = nodes.item(i) as org.w3c.dom.Element
+            val items = node.getElementsByTagName("item")
+            node.getAttribute("name") to (0 until items.length).associate { j ->
+                val item = items.item(j) as org.w3c.dom.Element
+                item.getAttribute("quantity") to item.textContent
+            }
+        }
+    }
+
+    @Test fun `plurals exist in both languages with complete quantities and the same arguments`() {
+        val enP = plurals("values"); val esP = plurals("values-es")
+        assertEquals(enP.keys, esP.keys)
+        assertTrue("hay plurales", enP.keys.containsAll(listOf("csv_exported_format", "radio_export_done", "history_delete_warning_format",
+            "mobility_pending_edges_format", "profile_history_observation_rows", "stable_site_route_group_count", "stable_site_route_simple")))
+        val placeholder = Regex("%\\d+\\$[sd]")
+        enP.forEach { (name, items) ->
+            assertEquals("$name EN", setOf("one", "other"), items.keys)
+            // Español: «many» (números grandes compactos, CLDR) además de one/other.
+            assertEquals("$name ES", setOf("one", "many", "other"), esP.getValue(name).keys)
+            val args = items.values.map { placeholder.findAll(it).map { m -> m.value }.sorted().toList() }.toSet()
+                .plus(esP.getValue(name).values.map { placeholder.findAll(it).map { m -> m.value }.sorted().toList() })
+            assertEquals("$name: los mismos argumentos en todas las formas", 1, args.size)
+            assertFalse("$name también como <string>", en.containsKey(name) || es.containsKey(name))
+        }
+    }
+
+    /** 3.1.0 — Lint PluralsCandidate: ningún <string> con un %d seguido de una palabra (una unidad de una letra, «m», sí). */
+    @Test fun `no plain string puts a word right after a number`() {
+        // «X of Y», «X de Y» y la unidad dBm no son plurales (lint tampoco los marca).
+        val wordAfterNumber = Regex("%\\d+\\\$d (?!of\\b|de\\b|dBm\\b)[A-Za-zÁÉÍÓÚáéíóúñÑ]{2,}")
+        (en + es.mapKeys { "es:" + it.key }).forEach { (key, value) -> assertFalse(key, wordAfterNumber.containsMatchIn(value)) }
+    }
+
     @Test fun `history and geometry screens do not hard-code the confirmation word`() {
         listOf("HistoryScreen.kt", "GeometryScreen.kt").forEach { name ->
             val source = module("src/main/java/com/alexisgordr/icdetector/ui/$name").readText()

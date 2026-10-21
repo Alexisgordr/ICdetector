@@ -52,7 +52,7 @@
     <string name="export_forensic_title">Export forensic case</string>
     <string name="forensic_privacy_warning">The package may contain precise GPS location, radio data, device model and technical logs. Review it before sharing; it never contains API keys, IMSI or IMEI.</string>
     <string name="no_forensic_cases" tools:ignore="TypographyFractions">NO FORENSIC CASES\nCapture starts automatically at 1/3</string>
-    <string name="forensic_phase_format">Highest phase %1$d/3 · %2$d samples</string>
+    <string name="forensic_phase_format">Highest phase %1$d/3 · samples: %2$d</string>
     <string name="case_in_progress">IN PROGRESS</string>
     <string name="export_forensic_case">EXPORT FORENSIC CASE</string>
     <string name="automatic_capture_running">AUTOMATIC CAPTURE IN PROGRESS</string>
@@ -69,10 +69,10 @@
     <string name="parameter_audit">PARAMETER AUDIT</string>
     <string name="preparing_diagnostics">Preparing first-cycle diagnostics…</string>
     <string name="baseline_maturity">BASELINE MATURITY</string>
-    <string name="samples_format">%1$s · %2$d samples</string>
+    <string name="samples_format">%1$s · samples: %2$d</string>
     <string name="close">CLOSE</string>
     <string name="geometry_calculating">CALCULATING GEOMETRY…</string>
-    <string name="geometry_insufficient_format">INSUFFICIENT GEOMETRY\n\n%1$d profiled cell(s) out of %2$d seen with GPS.\nAt least %3$d geolocated samples per cell are required.\nIt fills as you repeat your usual routes.</string>
+    <string name="geometry_insufficient_format">INSUFFICIENT GEOMETRY\n\nCells with a profile / seen with GPS: %1$d/%2$d.\nGeolocated samples needed per cell: at least %3$d.\nIt fills as you repeat your usual routes.</string>
     <string name="geometry_disclaimer">OBSERVATION CENTRE · NOT THE ANTENNA POSITION · DOES NOT CHANGE THE SCORE</string>
     <string name="profiled">PROFILED</string><string name="sites">SITES</string><string name="routes">ROUTES</string><string name="review">REVIEW</string>
     <string name="geometry_legend_interactive">Pinch to zoom · drag to explore · double tap to zoom/reset · tap a node for details. Amber highlights the selected cell and its routes.</string>
@@ -86,7 +86,7 @@
     <string name="route_coherence_help">Cells handing the phone to each other overlap in coverage. The unexplained gap between centres minus both P90 radii should be zero or small. Ordered worst to best.</string>
     <string name="geolocated_samples">Geolocated samples</string><string name="observation_p90">Observation P90 radius</string><string name="site_enodeb">Site (eNodeB)</string><string name="incoming_outgoing">Incoming / outgoing routes</string>
     <string name="sector_format">%1$s · sector %2$s</string><string name="not_deducible_lte">not deducible (LTE only)</string>
-    <string name="coherent">COHERENT</string><string name="site_spread_format">%1$d sectors · separation %2$d–%3$d m</string>
+    <string name="coherent">COHERENT</string><string name="site_spread_format">Sectors: %1$d · separation (m): %2$d–%3$d</string>
     <string name="site_warning">Sectors grouped under this eNodeB appear far apart. This may indicate reused or anomalous identity, but also a distributed network; review it with the remaining evidence.</string>
     <string name="route_distance_format">centres %1$d m · unexplained %2$d m</string>
     <string name="monitoring_active">Monitoring active</string>
@@ -95,7 +95,6 @@
     <string name="monitor">MONITOR</string><string name="history">HISTORY</string>
     <string name="searching_signal">SEARCHING FOR SIGNAL…</string><string name="network_anomaly_confirmed">NETWORK ANOMALY CONFIRMED</string><string name="no_anomalies">NO ANOMALIES DETECTED</string>
     <string name="observing_score">OBSERVING — %1$d%%</string><string name="unconfirmed_anomaly_score">UNCONFIRMED ANOMALY — %1$d%%</string>
-    <string name="csv_exported_format">✅ CSV exported: %1$d rows</string>
     <string name="incident_observing">OBSERVING</string><string name="incident_confirmed">CONFIRMED</string><string name="incident_recovered">RECOVERED</string><string name="incident_interrupted">INTERRUPTED</string>
     <string name="critical_battery_gps_paused">Critical battery: continuous GPS paused</string><string name="no_signal_airplane">No signal / Airplane mode</string><string name="searching_network">Searching for network…</string>
     <string name="analysis_unavailable">Analysis temporarily unavailable</string>
@@ -107,13 +106,13 @@
     <string name="raw_terminal_output">RAW TERMINAL OUTPUT</string>
     <string name="current_technology">TECHNOLOGY</string><string name="signal_power">POWER</string><string name="radio_band">BAND</string>
     <string name="audit_updated">Security audit updated</string><string name="temporal_confirmed_format">TEMPORAL CONFIRMATION %1$s · CONFIRMED</string><string name="temporal_observing_format">TEMPORAL CONFIRMATION %1$s · OBSERVING</string>
-    <string name="heuristic_index">HEURISTIC INDEX · EVALUATED DATA ONLY</string><string name="evaluation_summary_format">%1$d/%2$d evaluated · %3$d failures · %4$d unavailable</string><string name="evaluation_short_format">%1$d/%2$d EVALUATED · %3$d FAILURES</string><string name="anomaly_confidence_format">Anomaly confidence (uncalibrated): %1$s%%</string>
+    <string name="heuristic_index">HEURISTIC INDEX · EVALUATED DATA ONLY</string><string name="evaluation_summary_format">Evaluated: %1$d/%2$d · failures: %3$d · unavailable: %4$d</string><string name="evaluation_short_format">EVALUATED %1$d/%2$d · FAILURES %3$d</string><string name="anomaly_confidence_format">Anomaly confidence (uncalibrated): %1$s%%</string>
     <string name="baseline_signal">RSRP power</string><string name="baseline_fingerprint">RSRQ/SINR fingerprint</string><string name="baseline_pci">PCI identity</string><string name="baseline_reputation">Local reputation</string>
     <string name="episode_watch_started">Initial evidence: temporary intensive monitoring enabled.</string>
     <string name="episode_promoted_format">Multi-signal episode: different families %1$s.</string>
     <string name="local_trust_title">LOCAL CELL CONFIDENCE</string>
     <string name="local_trust_format">%1$s · %2$d%%</string>
-    <string name="local_trust_progress">%1$d/%2$d days · %3$d/%4$d clean samples · %5$d h observed</string>
+    <string name="local_trust_progress">days %1$d/%2$d · clean samples %3$d/%4$d · observed (h): %5$d</string>
     <string name="local_trust_ceiling">Revocable local evidence · epistemic ceiling 98%</string>
     <string name="trust_state_new">NEW</string><string name="trust_state_learning">LEARNING</string><string name="trust_state_established">ESTABLISHED</string><string name="trust_state_changed">CHANGED</string><string name="trust_state_quarantined">QUARANTINED</string><string name="trust_state_site_unverified">SITE UNVERIFIED</string>
     <string name="trust_desc_new">Not enough clean history yet; no legitimacy claim is made.</string>
@@ -177,10 +176,9 @@
     <string name="radio_not_registered">not registered</string>
     <string name="radio_no_identity">no full identity (RF only)</string>
     <string name="radio_visible_cells">VISIBLE CELLS (%1$d)</string>
-    <string name="radio_service_events">SERVICE CHANGES (%1$d saved)</string>
+    <string name="radio_service_events">SERVICE CHANGES (saved: %1$d)</string>
     <string name="radio_no_events">No service changes recorded yet</string>
     <string name="radio_export_events">EXPORT CSV</string>
-    <string name="radio_export_done">%1$d service events exported</string>
     <string name="radio_export_failed">Export failed: %1$s</string>
     <string name="conn_primary">PRIMARY</string>
     <string name="conn_secondary">SECONDARY</string>
@@ -194,13 +192,12 @@
 
     <!-- v2.10.6 — Textos de History/Geometry que estaban fijos en el código y no seguían el idioma de la interfaz. -->
     <string name="delete_confirm_word">DELETE</string>
-    <string name="history_delete_warning_format">This will permanently delete %1$d cell records, their incidents and their forensic cases. There is no backup and it cannot be undone.</string>
     <string name="history_title_antennas">CELL HISTORY</string>
     <string name="history_title_incidents">INCIDENT BLACK BOX</string>
     <string name="history_title_forensics">FORENSIC LAB</string>
     <string name="history_title_topology">HANDOVER TOPOLOGY</string>
     <string name="history_title_geometry">CELL GEOMETRY</string>
-    <string name="history_showing_recent_format">Showing the %1$d most recent observations out of %2$d. The export includes the full history.</string>
+    <string name="history_showing_recent_format">Most recent observations shown: %1$d/%2$d. The export includes the full history.</string>
     <string name="export_failed_format">❌ Export failed: %1$s</string>
     <string name="unknown_error">unknown</string>
     <string name="export_error_format">Error: %1$s</string>
@@ -218,7 +215,7 @@
     <string name="topology_metric_handovers">HANDOVERS</string>
     <string name="topology_metric_trusted">LEARNED</string>
     <string name="topology_empty">NO ROUTES YET\nThe topology will appear after the first handovers</string>
-    <string name="topology_route_counts_format">%1$d observations · %2$d learned</string>
+    <string name="topology_route_counts_format">observations: %1$d · learned: %2$d</string>
     <string name="forensic_exporting_format">Exporting %1$s…</string>
     <string name="forensic_exported">Case exported successfully</string>
     <string name="forensic_window_note">Automatic window: 60 s before · full episode · 60 s after</string>
@@ -245,7 +242,6 @@
     <string name="mobility_prior_good_edges">Prior good edges</string>
     <string name="mobility_transitions_total">Accumulated observed transitions</string>
     <string name="mobility_max_trips_per_edge">Max. historical trips per edge</string>
-    <string name="mobility_pending_edges_format">The %1$d open edges do NOT count towards trip_count yet. If the trip closes valid: n → n+1.</string>
     <string name="geometry_not_available">NOT AVAILABLE</string>
     <string name="geometry_relevant_trips">Relevant trips</string>
     <string name="geometry_transitions_in_out">Transitions in/out</string>
@@ -386,7 +382,6 @@
     <string name="profile_history_holdout">Kept for evaluation only (not learned).</string>
     <string name="profile_history_learned">Learned after being evaluated.</string>
     <string name="profile_history_not_learned">Not learned (repeated, quarantined or not valid).</string>
-    <string name="profile_history_observation_rows">One evaluation for the %1$d history rows of this observation (for example the periodic row and a confirmed alarm).</string>
     <string name="profile_history_section_values">VALUES AND REFERENCE USED</string>
     <string name="profile_metric_dbm">Signal level (dBm)</string>
     <string name="profile_metric_rsrq">Signal quality (RSRQ)</string>
@@ -433,7 +428,7 @@
     <string name="stable_site_view_no_episodes">No episodes with this filter.</string>
     <string name="stable_site_view_role_serving">serving</string>
     <string name="stable_site_view_role_neighbour">neighbour</string>
-    <string name="stable_site_view_cell_counts">%1$d observations · %2$d days · last %3$s</string>
+    <string name="stable_site_view_cell_counts">observations: %1$d · days: %2$d · last %3$s</string>
     <string name="stable_site_view_episode_site">Site %1$s</string>
     <string name="stable_site_view_no_site">No associated site</string>
     <string name="stable_site_view_episode_period">Last seen %1$s · closed %2$s</string>
@@ -458,9 +453,8 @@
     <string name="stable_site_capability_rf_note">only RF fingerprints without Cell ID were seen.</string>
     <string name="stable_site_capability_none_note">the phone reported no usable neighbours at this site.</string>
     <string name="route_detail_last_seen">Last seen %1$s</string>
-    <string name="stable_site_route_group_count">%1$d episodes</string>
     <string name="route_detail_identities">From %1$s to %2$s</string>
-    <string name="route_detail_counts">%1$d handovers · %2$d learned · last verdict %3$s · %4$d trips</string>
+    <string name="route_detail_counts">handovers: %1$d · learned: %2$d · last verdict %3$s · trips: %4$d</string>
     <!-- Stable-Site en lenguaje sencillo -->
     <string name="stable_site_simple_title">STABLE-SITE: PLACES</string>
     <string name="stable_site_simple_intro">Each place shows whether ICdetection already has a reference of its usual cells and what is still missing. Nothing here is a security verdict.</string>
@@ -509,7 +503,6 @@
     <string name="stable_site_reason_hold">Reason: a hold for novelty was applied.</string>
     <string name="stable_site_reason_no_location">Reason: there was no reliable location.</string>
     <string name="stable_site_reason_no_site_data">Reason: there was no stored data for this place.</string>
-    <string name="stable_site_route_simple">Route seen %1$d times</string>
     <!-- Procedencia de los datos -->
     <string name="antenna_gps_accuracy">±%1$d m</string>
     <string name="antenna_gps_accuracy_unknown">accuracy not stored</string>
@@ -572,8 +565,37 @@
     <string name="route_not_evaluated_reason">Not evaluated: %1$s</string>
     <string name="route_last_evaluated">Last evaluated result: %1$s (%2$s). Not the current reading.</string>
     <string name="route_failures_complete">Failures recorded: %1$d</string>
-    <string name="route_failures_at_least">At least %1$d failure(s): one or more before failures were counted, %2$d since.</string>
+    <string name="route_failures_at_least">Failures: at least %1$d (one or more before they were counted; since then: %2$d).</string>
     <string name="route_failures_unknown">Failures since they are counted: %1$d. Earlier failures unknown.</string>
     <string name="route_review_note">REVIEW: routes with at least one FAILED recorded. N/A alone does not count.</string>
     <string name="arfcn_out_of_table">ARFCN outside the 3GPP table (data quality)</string>
+    <!-- 3.1.0 — Plurales (lint PluralsCandidate): frases con un solo número. Las de varios números van con etiquetas. -->
+    <plurals name="csv_exported_format">
+        <item quantity="one">✅ CSV exported: %1$d row</item>
+        <item quantity="other">✅ CSV exported: %1$d rows</item>
+    </plurals>
+    <plurals name="radio_export_done">
+        <item quantity="one">%1$d service event exported</item>
+        <item quantity="other">%1$d service events exported</item>
+    </plurals>
+    <plurals name="history_delete_warning_format">
+        <item quantity="one">This will permanently delete %1$d cell record, its incidents and its forensic cases. There is no backup and it cannot be undone.</item>
+        <item quantity="other">This will permanently delete %1$d cell records, their incidents and their forensic cases. There is no backup and it cannot be undone.</item>
+    </plurals>
+    <plurals name="mobility_pending_edges_format">
+        <item quantity="one">The %1$d open edge does NOT count towards trip_count yet. If the trip closes valid: n → n+1.</item>
+        <item quantity="other">The %1$d open edges do NOT count towards trip_count yet. If the trip closes valid: n → n+1.</item>
+    </plurals>
+    <plurals name="profile_history_observation_rows">
+        <item quantity="one">One evaluation for the %1$d history row of this observation.</item>
+        <item quantity="other">One evaluation for the %1$d history rows of this observation (for example the periodic row and a confirmed alarm).</item>
+    </plurals>
+    <plurals name="stable_site_route_group_count">
+        <item quantity="one">%1$d episode</item>
+        <item quantity="other">%1$d episodes</item>
+    </plurals>
+    <plurals name="stable_site_route_simple">
+        <item quantity="one">Route seen %1$d time</item>
+        <item quantity="other">Route seen %1$d times</item>
+    </plurals>
 </resources>

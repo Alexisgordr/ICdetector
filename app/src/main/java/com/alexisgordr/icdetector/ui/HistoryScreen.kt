@@ -3,6 +3,7 @@ package com.alexisgordr.icdetector.ui
 import android.annotation.SuppressLint
 import com.alexisgordr.icdetector.R
 import com.alexisgordr.icdetector.core.RowProvenance
+import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 
 import androidx.compose.foundation.BorderStroke
@@ -133,7 +134,7 @@ fun HistoryPanel(
             text = {
                 Column {
                     Text(
-                        stringResource(R.string.history_delete_warning_format, totalRecordCount),
+                        pluralStringResource(R.plurals.history_delete_warning_format, totalRecordCount, totalRecordCount),
                         color = Color(0xFF888888), fontFamily = FontFamily.Monospace
                     )
                     Spacer(modifier = Modifier.height(12.dp))
@@ -321,7 +322,7 @@ fun HistoryPanel(
                             }
                             result.fold(
                                 onSuccess = { filas ->
-                                    Toast.makeText(context, context.getString(R.string.csv_exported_format, filas), Toast.LENGTH_LONG).show()
+                                    Toast.makeText(context, context.resources.getQuantityString(R.plurals.csv_exported_format, filas, filas), Toast.LENGTH_LONG).show()
                                 },
                                 onFailure = { error ->
                                     Toast.makeText(

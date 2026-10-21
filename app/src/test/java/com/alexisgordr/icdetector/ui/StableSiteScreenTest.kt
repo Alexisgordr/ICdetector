@@ -137,7 +137,7 @@ class StableSiteScreenTest {
         }
         // Formatos iguales en ambos idiomas: «X de Y» con los mismos argumentos.
         listOf("stable_site_requirement_met", "stable_site_requirement_pending", "stable_site_state_then", "stable_site_motion_then",
-            "stable_site_simple_place_seen", "stable_site_route_simple").forEach { k ->
+            "stable_site_simple_place_seen").forEach { k ->
             val args = Regex("""%\d\$[sd]""")
             assertEquals(k, args.findAll(en.getValue(k)).map { it.value }.toList(), args.findAll(es.getValue(k)).map { it.value }.toList())
         }
@@ -168,7 +168,7 @@ class StableSiteScreenTest {
         assertTrue(card.contains("StableSitePresentation.simpleStateOf(e.featureStateAtEpisode)"))
         listOf("site.", "maturity", "StableSiteMaturityPolicy", "System.currentTimeMillis").forEach { assertFalse("la tarjeta usa $it", card.contains(it)) }
         // Las rutas conservan los grupos por sitio y «Sin sitio asociado».
-        assertTrue(route.contains("R.string.stable_site_view_no_site") && route.contains("R.string.stable_site_route_group_count"))
+        assertTrue(route.contains("R.string.stable_site_view_no_site") && route.contains("R.plurals.stable_site_route_group_count"))
     }
 
     @Test fun `private classes have unique names in the ui package`() {

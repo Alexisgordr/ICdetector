@@ -36,6 +36,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
@@ -500,7 +501,7 @@ fun RouteDetailPanel(
         item { BackRow(R.string.stable_site_view_back_topology, onBack) }
         item {
             Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                Text(stringResource(R.string.stable_site_route_simple, route.observations), color = Color.White, fontFamily = FontFamily.Monospace,
+                Text(pluralStringResource(R.plurals.stable_site_route_simple, route.observations, route.observations), color = Color.White, fontFamily = FontFamily.Monospace,
                     fontWeight = FontWeight.Bold, fontSize = 11.sp)
                 InfoLine(stringResource(R.string.route_detail_last_seen, formatMs(route.lastSeenMs) ?: "-"), Dim)
                 // 3.0 (UI2) — Estado de la última observación y, aparte, último evaluado y fallos.
@@ -536,7 +537,7 @@ fun RouteDetailPanel(
                 item(key = "header|${group.siteKey}") {
                     Text((group.siteKey?.let { stringResource(R.string.stable_site_view_episode_site, shortKey(it)) }
                         ?: stringResource(R.string.stable_site_view_no_site)) + " · " +
-                        stringResource(R.string.stable_site_route_group_count, group.episodes),
+                        pluralStringResource(R.plurals.stable_site_route_group_count, group.episodes, group.episodes),
                         color = Accent, fontFamily = FontFamily.Monospace, fontSize = 9.sp)
                 }
                 pagedItems(list, R.string.stable_site_view_no_episodes, key = { "${group.siteKey}|${it.episodeId}" },

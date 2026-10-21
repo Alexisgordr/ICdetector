@@ -27,6 +27,7 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import android.annotation.SuppressLint
 import androidx.compose.ui.text.font.FontFamily
@@ -560,7 +561,7 @@ private fun MobilityPanel(snapshot: MobilityGeometrySnapshot, onExport: () -> Un
             GeometryLine(stringResource(R.string.mobility_transitions_total), transitionTotal.toString())
             GeometryLine(stringResource(R.string.mobility_max_trips_per_edge), historicalTrips.toString())
             if(trip!=null && snapshot.pendingEdges.isNotEmpty()) {
-                Text(stringResource(R.string.mobility_pending_edges_format, snapshot.pendingEdges.size),color=Color(0xFFFFB300),fontFamily=FontFamily.Monospace,fontSize=8.sp,lineHeight=11.sp)
+                Text(pluralStringResource(R.plurals.mobility_pending_edges_format, snapshot.pendingEdges.size, snapshot.pendingEdges.size),color=Color(0xFFFFB300),fontFamily=FontFamily.Monospace,fontSize=8.sp,lineHeight=11.sp)
             }
         }
     }

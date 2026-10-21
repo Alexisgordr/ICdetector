@@ -186,7 +186,7 @@ fun RadioPanel(dbHelper: CellDbHelper, service: MiniICService?, modifier: Modifi
                         )
                 }
                 result.onSuccess { n ->
-                    Toast.makeText(context, context.getString(R.string.radio_export_done, n), Toast.LENGTH_LONG).show()
+                    Toast.makeText(context, context.resources.getQuantityString(R.plurals.radio_export_done, n, n), Toast.LENGTH_LONG).show()
                 }.onFailure { error ->
                     Toast.makeText(context, context.getString(R.string.radio_export_failed, error.message ?: "?"), Toast.LENGTH_LONG).show()
                 }

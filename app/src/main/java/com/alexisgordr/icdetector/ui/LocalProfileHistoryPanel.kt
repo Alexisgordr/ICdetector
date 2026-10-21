@@ -33,6 +33,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
@@ -264,7 +265,7 @@ private fun EvaluationDetail(entry: EvaluationEntry, beforeReset: Boolean, onOpe
         else -> R.string.profile_history_not_learned
     }))
     // 3.0 (L2) — Una evaluación para todas las filas de la misma observación.
-    if (entry.observationRows > 1) line(stringResource(R.string.profile_history_observation_rows, entry.observationRows), dim)
+    if (entry.observationRows > 1) line(pluralStringResource(R.plurals.profile_history_observation_rows, entry.observationRows, entry.observationRows), dim)
     if (beforeReset) line(stringResource(R.string.local_profile_previous), dim)
 
     // Valores y referencia: SOLO lo guardado en la evaluación. Sin evidencia no hay referencia.
