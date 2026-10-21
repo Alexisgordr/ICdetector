@@ -76,6 +76,8 @@ private val replacements = linkedMapOf(
     "Fix disponible pero no lo bastante fresco" to "Fix available but not fresh enough",
     "edad desconocida" to "unknown age",
     "Historial NO borrado: hay una restauración en curso." to "History NOT deleted: a restore is in progress.",
+    "Historial NO borrado: error " to "History NOT deleted: error ",
+    "Historial borrado: captura forense, episodios y cachés reiniciados." to "History deleted: forensic capture, episodes and caches reset.",
     "se omite el relleno" to "coordinate backfill skipped",
     "espera al fix preciso" to "waiting for a precise fix",
     "sin confirmar; sin tono" to "unconfirmed; no alert tone",

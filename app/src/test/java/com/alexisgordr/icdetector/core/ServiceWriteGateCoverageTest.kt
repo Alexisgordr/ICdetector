@@ -35,7 +35,7 @@ class ServiceWriteGateCoverageTest {
         }.toSet() - setOf("onOpen")
     }
 
-    /** ¿Está [index] dentro de un bloque cuya apertura es `writeGate.launch(` o `writeGate.launchSource(`? */
+    /** ¿Está [index] dentro de un bloque abierto por `writeGate.launch(`, `writeGate.launchSource(` o `HistoryClear.run(writeGate, …)`? */
     private fun insideGate(source: String, index: Int): Boolean {
         var depth = 0
         var i = index
@@ -46,7 +46,9 @@ class ServiceWriteGateCoverageTest {
                 '{' -> if (depth == 0) {
                     val lineStart = source.lastIndexOf('\n', i) + 1
                     val opener = source.substring(lineStart, i)
-                    if ("writeGate.launch(" in opener || "writeGate.launchSource(" in opener) return true
+                    // HistoryClear.run lanza el bloque con gate.launch (HistoryClearTest).
+                    if ("writeGate.launch(" in opener || "writeGate.launchSource(" in opener ||
+                        "HistoryClear.run(writeGate," in opener) return true
                 } else depth--
             }
         }

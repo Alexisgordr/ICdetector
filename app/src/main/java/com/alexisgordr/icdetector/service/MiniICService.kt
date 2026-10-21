@@ -702,7 +702,8 @@ class MiniICService : Service() {
      * esas mismas colas y, por último, se olvida todo el estado derivado del historial.
      */
     suspend fun clearHistory() {
-        var cleared = false
+        var outcome: com.alexisgordr.icdetector.core.HistoryClear.Outcome =
+            com.alexisgordr.icdetector.core.HistoryClear.Outcome.RestoreInProgress
         cellProcessingMutex.withLock {
             // Bajo el cerrojo de la época: ningún resultado empezado antes se aplica después.
             historyEpoch.invalidate()
@@ -710,15 +711,12 @@ class MiniICService : Service() {
                 forensicRecorder.reset()
                 // 3.1.0 (#41) — También el borrado pasa por la puerta de escrituras: con una
                 // restauración en curso (puerta cerrada) no se toca la base que se está copiando.
-                writeGate.launch(scope, historyWriteDispatcher) { dbHelper.clear(); cleared = true }?.join()
+                // Un error al borrar se informa como tal, no como restauración (HistoryClear).
+                outcome = com.alexisgordr.icdetector.core.HistoryClear.run(writeGate, scope, historyWriteDispatcher) { dbHelper.clear() }
             }
             withContext(Dispatchers.Main) { forgetHistoryDerivedState() }
         }
-        if (!cleared) {
-            appendLog("[SYS]", "Historial NO borrado: hay una restauración en curso.")
-            return
-        }
-        appendLog("[SYS]", "Historial borrado: captura forense, episodios y cachés reiniciados.")
+        appendLog("[SYS]", com.alexisgordr.icdetector.core.HistoryClear.logLine(outcome))
     }
 
     private fun forgetHistoryDerivedState() {
