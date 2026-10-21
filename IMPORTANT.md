@@ -81,7 +81,7 @@ includes the whole campaign cut and the fixes made with it.
 > all-or-nothing transaction.
 >
 > Uninstalling and reinstalling (or *Settings → Apps → ICdetection → Storage → Clear data*) remains a
-> valid alternative, but it also removes app settings such as your OpenCellID API key.
+> valid alternative, but it also removes app settings such as the location mode.
 
 **Updating without a reset also works.** Installing 3.0.0 over a 3.0 beta migrates the database and
 the app keeps working. In that case, **note the date you updated**: rows recorded

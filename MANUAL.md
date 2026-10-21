@@ -47,7 +47,6 @@ While monitoring, it can:
 - Evaluate sixteen heuristics (H1–H16) in every analysis cycle; fourteen count as evidence (H8 is a
   data-quality flag and H9 is reserved).
 - Learn the historical behaviour of repeatedly observed cells.
-- Cross-reference cells with OpenCellID when configured.
 - Require suspicious behaviour to persist through three analysis phases, or two when two
   high-value historical or physical checks fail together (they can share data; see *Shared evidence*).
 - Explain which checks passed, failed or could not run.
@@ -77,8 +76,8 @@ keeps its data; a build signed with your own key cannot update the published APK
 first.
 
 **Moving from v2.10.x to 3.0 requires a clean install.** Export anything you want to keep (history
-CSV, forensic cases), **uninstall v2.10.x** and then install 3.0. History, settings and the
-OpenCellID key start empty. Installing 3.0 over v2.10.x would still upgrade the old database safely
+CSV, forensic cases), **uninstall v2.10.x** and then install 3.0. History and settings start
+empty. Installing 3.0 over v2.10.x would still upgrade the old database safely
 (old rows keep the new fields empty), but mixing data from both sides of the 3.0 methodology changes
 is not supported. From 3.0 on, every version updates the previous one normally.
 
@@ -230,70 +229,25 @@ app never switches Airplane mode on by itself. Some devices also offer an **Allo
 on the manufacturer, Android version and operator, so the app does not link to it. The setting travels in backups; restoring a backup made before
 it existed sets *Notification only*.
 
-### External verification
+### External verification (removed in 3.1.0)
 
-OpenCellID is optional. Enter your own API token in Settings to enable cross-referencing. Without
-it, local and historical analysis still works, while database-dependent rules may report `N/A` or
-`PENDING`. A missing public-database record does not make a cell malicious: public datasets can be
-incomplete or outdated. Verification is a label and never changes the score.
+Up to 3.0, the app could look up the serving cell in OpenCellID with your own API token, optionally
+through a SOCKS5 proxy. **3.1.0 removes it**, together with the token and proxy settings: the app no
+longer queries any public database. The lookup never changed the score, so no rule depends on it.
+A token stored by an earlier version is deleted the first time 3.1.0 runs.
 
-### Retries and pauses
-
-A failed query is retried according to **why** it failed, using the HTTP status and the error code
-documented by OpenCellID (wiki pages *API* and *Access and limits*), never the wording of the reply:
-
-| Reply | Documented meaning | What the app does |
-|---|---|---|
-| code 2 (usually HTTP 401) | invalid API key | no more queries until you change the key |
-| code 4 (usually HTTP 403) | whitelisting required | no more queries until you change the settings |
-| HTTP 401 / 403 without code 2 or 4 | not documented (may come from a proxy or intermediary) | treated as temporary: 30 s, 1, 2… up to 15 min; the key is not blamed |
-| HTTP 503 / code 6, or HTTP 429 without code 7 | too many requests | pause: `Retry-After` if valid, otherwise 1, 2, 4… up to 30 min |
-| code 7 (usually HTTP 429) | daily limit | pause: `Retry-After` if valid, otherwise 24 h |
-| HTTP 400 / code 3 | invalid input | only that cell waits 1 h; no global pause |
-| HTTP 5xx / code 5, network, Tor down | temporary | pause 30 s, 1, 2… up to 15 min; any reply resets it |
-
-The pause is **global**: changing cells does not skip it, and local checks of cells already in the
-database keep working. The documentation gives 1,000 request credits per day but does not say when
-the day resets, so without `Retry-After` the app waits a full 24 hours instead of assuming
-midnight UTC. Pauses for the key, the rate limit and the daily quota survive a restart (measured
-with the monotonic clock within one boot, and bounded by their maximum after a reboot or a clock
-change). They belong to the key in use: a new key never inherits them, and a reply to a query made
-with earlier settings never pauses the new ones. A paused query shows **ERROR**, never NOT FOUND:
-a limit says nothing about the cell. The pause is stored as a truncated fingerprint of the key —
-never the key — and is not part of backups. Terminal lines never show the URL or the key.
-
-### Proxy
-
-If your threat model requires it, configure the SOCKS5 proxy and a compatible service such as Orbot,
-then check that verification requests still succeed.
-
-**What each query sends.** Your API key and the identity of the cell being checked: MCC, MNC, area
-code (LAC/TAC), Cell ID and technology. Nothing else — no position, no neighbour list. Tor hides your
-IP address from OpenCellID, but every query carries the same key, so OpenCellID can still link your
-queries to each other. With the proxy selected and Tor (Orbot) not running, queries fail and pause
-(see *Retries and pauses*): there is **no** fallback to a direct connection.
-
-**Latency and the proxy.** The latency probe and the proxy are incompatible (Tor would distort the
-measurement). If you enable latency while the proxy is selected, the app asks first: *"Enabling
-latency will turn off the OpenCellID proxy; queries may then go out directly over your
-connection."* Cancel keeps your previous choice. Without the proxy no question is asked. As with
-every setting on that screen, nothing changes until you tap **Save settings**.
-
-The API key and the proxy choice are applied **together** when you save Settings, and each query
-uses one consistent copy of both from start to end. Changing the route (proxy on or off) cancels
-queries still in progress; any change discards the results of queries started with the earlier
-settings, so they never fill the caches or pauses of the new ones. A new query never starts with
-settings that are no longer current. Saving waits for any reply that is being applied at that moment, so a reply
-from the earlier settings can never be applied after the save.
+The `Verified`, `ApiLat` and `ApiLon` columns stay in the database and the history CSV so the file
+format does not change: from 3.1.0, `Verified` is always `PENDING` and `ApiLat` / `ApiLon` are empty
+(see *Exporting antenna history*). Rows recorded by earlier versions keep the values they had.
 
 ### Latency detection (experimental)
 
 Off by default. When you enable it in Settings, and only while traffic leaves over mobile data (not
-over Wi-Fi, a VPN or the SOCKS5 proxy), the app sends an HTTPS `HEAD` request roughly every
+over Wi-Fi or a VPN), the app sends an HTTPS `HEAD` request roughly every
 30 seconds to three third-party endpoints: `www.google.com/generate_204` (Google),
 `one.one.one.one` (Cloudflare) and `dns.quad9.net` (Quad9). The requests carry no cell or location
-data, but they reveal your IP address to those services. Together with optional OpenCellID
-verification, these are the only network connections the app makes.
+data, but they reveal your IP address to those services. This is the only network connection the
+app makes.
 
 The network indicator on the main screen shows one of four states:
 
@@ -648,7 +602,7 @@ GPS evidence, stable RF identity and trusted handover routes. Reaching `ESTABLIS
 fourteen distinct days within a 90-day window; rapid sampling is capped and cannot accelerate trust.
 Detailed radio and coordinate analysis uses the latest 500 clean rows, within which at least eight
 located and ten RF observations are needed, so a long indoor period without GPS can delay
-eligibility. OpenCellID is shown separately and never increases local confidence.
+eligibility.
 
 The maximum is 98%. `ESTABLISHED` is not proof that a transmitter is genuine; it means the current
 observation matches a repeatedly observed local pattern. A changed parameter is shown immediately and
@@ -704,19 +658,10 @@ or Android did not provide the field.
 
 ### Verification states
 
-- **VERIFIED** (shown as *REGISTERED*): a configured external source returned a compatible record.
-  Context, not proof of legitimacy: a cloned identity can also be registered. The label is re-checked after 30 days.
-  Before accepting the record, its coordinates must be in range, not (0,0), not shared by three or
-  more unrelated areas, and within 50 km of a live GPS fix or 500 km of your last accepted position
-  if that position is at most 6 h old. That age is measured with the monotonic clock, so changing
-  the phone's time does not affect it, also for a position saved before the service restarted in
-  the same boot; a position saved before a reboot cannot prove its age and is not used. Without a usable position the record is still accepted, but the terminal says it was
-  found **without a distance check** — it does not confirm that the cell is where the database says.
-- **PENDING:** verification has not finished or is waiting for required data.
-- **NOT FOUND:** no matching public record. Common for new, indoor, rural or unmapped cells.
-- **ERROR / REJECTED:** credentials, connectivity, proxy configuration or the external service
-  prevented verification. A key, rate-limit or quota error pauses all queries (see *Retries and
-  pauses*); it never means the cell does not exist.
+The `Verified` column keeps the five values of the external verification used up to 3.0
+(`VERIFIED`, `NOT_FOUND`, `REJECTED`, `ERROR`, `PENDING`). That verification was removed in 3.1.0:
+every new row is `PENDING`, and only rows recorded by earlier versions can hold another value. None
+of them ever changed the score.
 
 ### Threat score
 
@@ -1101,7 +1046,6 @@ loading rows into memory. Its figures:
 | CELLS | distinct full cell identities (MCC-MNC-area-Cell ID-technology) |
 | OBSERVATIONS | history rows |
 | AVG SCORE | mean score of all observations |
-| REGISTERED / NOT FOUND | cells with at least one observation in that verification state |
 | SCORE < 70 | cells with at least one observation below the suspicious-score threshold — a low score in one cycle, **not** a confirmed alarm |
 | OBS. WITH GPS | observations (not cells) with a position |
 | WITH REASON | cells with a stored reason other than clean or sub-threshold, including alarms still being confirmed |
@@ -1213,8 +1157,9 @@ ProfileAlgorithm, ProfileRevision, ProfileEvidence, ProfileLearned, ProfileHoldo
 ObservationId
 ```
 
-- `Lat` / `Lon` are the phone's own GPS position at the time of the observation; `ApiLat` / `ApiLon`
-  are coordinates returned by OpenCellID.
+- `Lat` / `Lon` are the phone's own GPS position at the time of the observation.
+- `Verified`, `ApiLat` and `ApiLon` belong to the external verification removed in 3.1.0: from
+  3.1.0, `Verified` is always `PENDING` and `ApiLat` / `ApiLon` are empty. Older rows keep their values.
 - `Timestamp` is local time; `ObservedAtUtc` is the observation instant in UTC (ISO-8601).
 - `TA` is the raw Timing Advance, `TAUnit` how it was interpreted, and `TAMeters` is empty when a
   conversion is not defensible.
@@ -1341,9 +1286,9 @@ not satisfy legal requirements by itself.
 
 **Settings → Backup** saves all ICdetection data in one `.icdbackup` file: history, antennas and
 their learned trust, incidents, forensic cases, Stable-Site, trips, and the language, location mode,
-proxy, latency, 2G/3G alert and Stable-Site silent notice settings. A backup made before a setting
-existed restores that setting's default (*Notification only* and *on*). The OpenCelliD key is never
-included. The file is **not encrypted** and contains your location history: keep it private. The
+latency, 2G/3G alert and Stable-Site silent notice settings. A backup made before a setting
+existed restores that setting's default (*Notification only* and *on*); the proxy setting of older
+backups is ignored (3.1.0). The file is **not encrypted** and contains your location history: keep it private. The
 backup is consistent even while monitoring is running. Stable-Site episodes in a restored backup never
 produce a silent notice.
 
@@ -1437,7 +1382,7 @@ Why each exclusion exists, and how strong the reason is:
 
 | Rule | Kind | Reason | Assessment |
 |---|---|---|---|
-| H12 | Latency | The latency probe would measure the Wi-Fi path, not the cellular link (the same applies to a VPN or the proxy). | **Required.** Without cellular data traffic there is nothing to correlate. |
+| H12 | Latency | The latency probe would measure the Wi-Fi path, not the cellular link (the same applies to a VPN). | **Required.** Without cellular data traffic there is nothing to correlate. |
 | H1, H2, H7 | RF, neighbours | With data on Wi-Fi the modem usually stays idle on the cellular network; idle-mode neighbour reports are sparser and less frequent, which can look like an isolated cell, a power gap or weak "ghost" neighbours. | **Precaution, not validated.** The radio measurements still exist; the concern is reporting quality. |
 | H13 | RF, own history | Most of the baseline is learned with the phone in connected mode; idle readings may follow a different distribution. | **Precaution, not validated.** |
 
@@ -1505,9 +1450,6 @@ devices are less reliable; see the compatibility notes in the [README](README.md
 
 **A rule alternates between `N/A` and `PASS`.** Its input is intermittent. Check GPS, neighbour
 reporting, latency or API availability. This alone is not a threat.
-
-**A cell is `NOT FOUND`.** Public databases do not contain every cell. Check whether independent rules
-fail, whether the condition persists and whether local history stays consistent.
 
 **No forensic case appears.** A case starts at the first suspicious phase. Confirm that monitoring is
 running and check incident history; normal observations do not create cases.

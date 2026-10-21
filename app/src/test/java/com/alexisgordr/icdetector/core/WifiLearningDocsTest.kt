@@ -30,6 +30,6 @@ class WifiLearningDocsTest {
         val service = main.resolve("com/alexisgordr/icdetector/service/MiniICService.kt").readText()
         assertFalse("el KDoc ya no está sobre el companion object", service.contains("Escribe en el terminal el resultado de una celda"))
         val audit = main.resolve("com/alexisgordr/icdetector/service/AuditLogController.kt").readText()
-        assertTrue(audit.substringBefore("fun logVerificationOutcome(").trimEnd().endsWith("*/"))
+        assertTrue(audit.substringBefore("internal class AuditLogController").trimEnd().endsWith("*/"))
     }
 }

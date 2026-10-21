@@ -3,7 +3,6 @@ package com.alexisgordr.icdetector.storage
 import com.alexisgordr.icdetector.models.RadioTech
 import com.alexisgordr.icdetector.models.SUBTHRESHOLD_PREFIX
 import com.alexisgordr.icdetector.models.StoredReasons
-import com.alexisgordr.icdetector.models.VerificationStatus
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
@@ -59,7 +58,7 @@ class IntelStatsQueryTest {
     }
 
     // ── Réplica literal del cálculo anterior de IntelPanel ─────────────────────────────────
-    private data class Rec(val timestamp: String, val netType: String, val identityKey: String, val verified: VerificationStatus,
+    private data class Rec(val timestamp: String, val netType: String, val identityKey: String,
                            val score: Int, val failedHeuristics: String, val lat: Double?, val lon: Double?)
 
     /** getRecords(): orden NEWEST_FIRST, y readRecord con su NPE en textos nulos (se corta ahí). */
@@ -74,11 +73,10 @@ class IntelStatsQueryTest {
                     val (ts, net, cid, mnc, tac) = texts.map { it!! }
                     val mcc = texts[5]!!
                     val radio = rs.getString("radio")?.let { runCatching { RadioTech.valueOf(it) }.getOrNull() } ?: RadioTech.UNKNOWN
-                    val verified = runCatching { VerificationStatus.valueOf(rs.getString("verified")) }.getOrDefault(VerificationStatus.PENDING)
                     val score = rs.getInt("score")
                     val lat = rs.getDouble("lat").takeUnless { rs.wasNull() }
                     val lon = rs.getDouble("lon").takeUnless { rs.wasNull() }
-                    out += Rec(ts, net, "$mcc-$mnc-$tac-$cid-${radio.name}", verified, score, rs.getString("failed_heuristics") ?: "", lat, lon)
+                    out += Rec(ts, net, "$mcc-$mnc-$tac-$cid-${radio.name}", score, rs.getString("failed_heuristics") ?: "", lat, lon)
                 }
             }
         }
@@ -96,8 +94,6 @@ class IntelStatsQueryTest {
             cells = grouped.size.toLong(),
             averageScore = items.asSequence().map { it.score }.average(),
             lowScoreCells = grouped.count { (_, r) -> r.any { it.score < 70 } }.toLong(),
-            verifiedCells = grouped.count { (_, r) -> r.any { it.verified.name == "VERIFIED" } }.toLong(),
-            notFoundCells = grouped.count { (_, r) -> r.any { it.verified.name == "NOT_FOUND" } }.toLong(),
             observationsWithGps = items.count { it.lat != null && it.lon != null }.toLong(),
             cellsWithReason = grouped.count { (_, r) -> r.any { it.failedHeuristics.isNotBlank() && it.failedHeuristics != "OK" && !it.failedHeuristics.startsWith(SUBTHRESHOLD_PREFIX) } }.toLong(),
             mostSeen = grouped.maxByOrNull { it.second.size }?.let { it.first to it.second.size.toLong() },
@@ -181,7 +177,6 @@ class IntelStatsQueryTest {
         assertEquals(3L, s.cells)
         assertTrue(s.networkTypes.contains(null to 1L))
         assertEquals("2025-12-31", s.dateFrom)
-        assertEquals(1L, s.verifiedCells)
     }
 
     @Test fun `the identity matches HistoryRecord identityKey and the column names match CellDbHelper`() {

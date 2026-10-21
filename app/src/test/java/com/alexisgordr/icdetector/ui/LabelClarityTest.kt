@@ -38,21 +38,11 @@ class LabelClarityTest {
         assertTrue(history.contains("stringResource(R.string.topology_learned_note)"))
     }
 
-    @Test fun `a public database record reads as registered, not verified`() {
-        assertEquals("✅ REGISTRADA", es.getValue("verified_label"))
-        assertEquals("✅ REGISTERED", en.getValue("verified_label"))
-        assertEquals("REGISTRADAS", es.getValue("intel_verified"))
-        assertEquals("REGISTERED", en.getValue("intel_verified"))
-        assertTrue(es.getValue("public_db_registered").contains("no prueba legitimidad"))
-        assertTrue(en.getValue("public_db_registered").contains("does not prove legitimacy"))
-    }
-
     @Test fun `positive states keep saying what they do not prove`() {
         assertTrue(es.getValue("trust_desc_established").contains("no prueba de autenticidad"))
         assertTrue(en.getValue("trust_desc_established").contains("not proof of authenticity"))
         assertTrue(es.getValue("trust_desc_new").contains("no se afirma legitimidad"))
         assertTrue(es.getValue("stable_site_simple_ready_note").contains("no una protección activa"))
-        assertTrue(es.getValue("public_db_not_found").contains("no implica amenaza"))
         // Ninguna etiqueta afirma seguridad o legitimidad.
         listOf(es to listOf("es segura", "legítima", "sin ataques", "garantiza"), en to listOf("is safe", "is legitimate", "no attack", "guarantee"))
             .forEach { (m, words) -> m.forEach { (k, v) -> words.forEach { w ->

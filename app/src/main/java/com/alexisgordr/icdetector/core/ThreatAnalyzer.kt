@@ -341,9 +341,8 @@ object ThreatAnalyzer {
         // 3.0 — Solo queda la rama de PROXIMIDAD (TA + señal). Había otra rama "geométrica" que
         // comparaba el TA con la distancia entre el móvil y `active.lat/lon` como posición de la
         // antena, pero ningún flujo de producción rellena esas coordenadas en CellData (CellParser
-        // no las tiene; las de OpenCellID van a apiLocationCache y solo se MUESTRAN como distancia,
-        // fuera del score por diseño). Era código muerto y se retira; no se sustituye la antena por
-        // la ubicación del móvil ni se conecta OpenCellID al score.
+        // no las tiene). Era código muerto y se retira; no se sustituye la antena por la ubicación del
+        // móvil.
         //
         // Proximidad: solo el caso "estoy pegado al emisor". El umbral de 100 m equivale al
         // `ta <= 1` anterior en LTE (0 m y 78 m) y se expresa en metros para que signifique lo mismo
@@ -698,35 +697,9 @@ object ThreatAnalyzer {
             trustScore = reputation?.trustScore ?: -1
         )
 
-        // La verificación externa NO puntúa. Se observa y se registra — v2.1.
-        //
-        // Hasta aquí una celda verificada se llevaba +15 y una no encontrada -10. Las dos cifras
-        // han caído por el mismo motivo: **no medían la antena, medían la base de datos**.
-        //
-        //  - El -10 se aplicaba a cualquier celda que WiGLE/OpenCellID no conocieran, y esas bases
-        //    son colaborativas e irregulares: en una zona poco mapeada lo cobraban TODAS las
-        //    antenas, legítimas incluidas. Una penalización que le toca a todo el mundo no
-        //    distingue a nadie.
-        //  - El +15, en una celda limpia, no subía nada (ya estaba en 100): lo que hacía era dar un
-        //    colchón de 15 puntos contra penalizaciones reales de las heurísticas. Es decir, estar
-        //    en una base colaborativa excusaba un comportamiento de radio anómalo. Al revés de como
-        //    debería ser.
-        //
-        // Y hay una razón metodológica que pesa más que las dos: durante la fase de recolección
-        // queremos AVERIGUAR si el estado de verificación aporta señal. Eso no se puede medir si ya
-        // está metido dentro de la puntuación que sirve de referencia — se estaría contrastando el
-        // dato consigo mismo. Queda como etiqueta independiente (columna `Verified` del CSV) junto
-        // a un score que sale solo de las heurísticas locales. Al final de los tres meses se podrá
-        // cruzar una cosa con la otra y contestar la pregunta con datos.
-        //
-        // La ortogonalidad es completa: ninguna heurística lee `active.verified`. La última que lo
-        // hacía era H6 —una celda verificada no disparaba la rama de proximidad del TA— y se quitó
-        // por esto mismo. `VerificationNeutralityTest` lo comprueba con una celda que SÍ dispara
-        // esa rama, que es el caso donde el acoplamiento se escondía.
-        //
-        // El motivo tampoco se añade ya a `reasons`: sin penalización no es una observación sobre
-        // la antena, y aparecería en pantalla como si algo fuera mal. Dónde consta: en la columna
-        // `Verified` del historial y en la cabecera, que lo dice con todas las letras.
+        // El estado de verificación NO puntúa (v2.1): ninguna heurística lee `active.verified`
+        // (VerificationNeutralityTest). Una base colaborativa mide la base, no la antena. Desde
+        // 3.1.0 no hay verificación externa y el estado es siempre PENDING.
 
         val finalScore = score.coerceIn(0, 100)
         val isSuspicious = ScoreThreshold.isBelow(finalScore)

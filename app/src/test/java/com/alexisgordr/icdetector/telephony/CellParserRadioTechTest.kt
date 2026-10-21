@@ -13,8 +13,8 @@ import org.junit.Test
  *
  * Este test existe por un fallo real: al introducir [RadioTech] el mapeo se escribió a mano en cada
  * rama del parser y dos de las cuatro quedaron mal — GSM etiquetado como `UMTS` y WCDMA sin
- * tecnología. Consecuencia: una consulta GSM salía hacia OpenCellID pidiendo `radio=UMTS`, y una
- * WCDMA salía sin filtrar. Justo lo contrario de lo que el cambio pretendía.
+ * tecnología. Y la tecnología forma parte de la identidad de la celda: una GSM etiquetada como UMTS
+ * es, para la app, otra celda.
  *
  * Se comprueba sobre la CLASE y no sobre instancias porque las clases de telefonía de Android no se
  * pueden construir en un test de JVM. La clase es lo único que decide el resultado, así que es

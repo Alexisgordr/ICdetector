@@ -55,10 +55,11 @@ class BackupArchiveTest {
         assertFalse(json.contains("secret"))
         assertFalse(json.contains("last_accepted_loc"))
         // Sin la clave de avisos 2G/3G ni la de Stable-Site (copia anterior): sus valores predeterminados.
-        assertEquals(mapOf("location_mode" to "ADAPTIVE", "proxy_enabled" to true, "legacy_network_alert_mode" to "NOTIFY",
+        // 3.1.0 — El proxy de la verificación externa ya no es un ajuste: una copia que lo traiga lo ignora.
+        assertEquals(mapOf("location_mode" to "ADAPTIVE", "legacy_network_alert_mode" to "NOTIFY",
             "stable_site_silent_notices" to true), BackupSettings.fromJson(json))
         assertEquals(mapOf("legacy_network_alert_mode" to "NOTIFY", "stable_site_silent_notices" to true),
-            BackupSettings.fromJson("{\"opencellid_key\":\"x\"}"))
+            BackupSettings.fromJson("{\"opencellid_key\":\"x\",\"proxy_enabled\":true}"))
         assertEquals(emptyMap<String, Any>(), BackupSettings.fromJson("broken"))
     }
 

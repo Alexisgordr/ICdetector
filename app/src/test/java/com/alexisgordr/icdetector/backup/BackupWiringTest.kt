@@ -64,8 +64,7 @@ class BackupWiringTest {
         }
     }
 
-    @Test fun `the export never includes the API key`() {
-        assertEquals("opencellid_key", BackupSettings.NEVER_EXPORTED)
-        assertTrue(BackupSettings.NEVER_EXPORTED !in BackupSettings.KEYS)
+    @Test fun `no setting of the retired external services travels in the backup (3_1_0)`() {
+        com.alexisgordr.icdetector.core.LegacyPreferences.KEYS.forEach { assertTrue(it, it !in BackupSettings.KEYS) }
     }
 }

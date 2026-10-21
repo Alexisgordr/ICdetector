@@ -4,6 +4,20 @@ Every notable change to ICdetection, newest first. Releases inside the field-col
 fix bugs; a fix that changes how a rule is evaluated is marked as a **dataset cut** for that rule.
 Version numbers follow the app's `versionName`; the Android `versionCode` is given where it matters.
 
+## 3.1.0 (in preparation)
+
+Version code 40. A local build; not published yet.
+
+### Removed
+
+- **External verification (OpenCellID).** The optional lookup of the serving cell in OpenCellID is
+  gone, with its API token, the SOCKS5/Tor proxy setting, the verification badges and the
+  REGISTERED / NOT FOUND statistics. It never changed the score, so no rule changes. A token or
+  proxy setting stored by an earlier version is deleted the first time 3.1.0 runs, and the proxy
+  setting of an older backup is ignored. The `Verified`, `ApiLat` and `ApiLon` columns stay in the
+  database and the CSV: new rows are always `PENDING` and empty
+  ([docs/history-csv-columns.md](docs/history-csv-columns.md)).
+
 ## 3.0.0
 
 Published on GitHub Releases, version code 39 (the 3.0 betas used the same code). 3.0

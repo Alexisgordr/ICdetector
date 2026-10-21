@@ -19,7 +19,7 @@ class LocalProfileIsolationTest {
         val engine = root.walkTopDown().filter { it.isFile && it.extension == "kt" }.filter {
             val rel = it.relativeTo(root).path.replace('\\', '/')
             (rel.startsWith("core/") && !rel.startsWith("core/profile/")) || rel.startsWith("forensics/") ||
-                rel == "service/SecurityAlertController.kt" || rel == "service/ExternalVerificationController.kt"
+                rel == "service/SecurityAlertController.kt"
         }.toList()
         assertTrue(engine.size > 20)
         engine.forEach { f ->

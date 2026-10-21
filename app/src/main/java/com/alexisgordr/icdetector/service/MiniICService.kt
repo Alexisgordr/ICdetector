@@ -36,7 +36,6 @@ import kotlin.time.Duration.Companion.milliseconds
 import okhttp3.OkHttpClient
 import java.text.SimpleDateFormat
 import java.util.*
-import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.CopyOnWriteArrayList
 import java.util.concurrent.TimeUnit
 
@@ -168,19 +167,6 @@ class MiniICService : Service() {
         }
     }
 
-    /**
-     * 3.0 (V1) — Pausa de OpenCellID: preferencia interna (no está en BackupSettings.KEYS, no viaja en
-     * la copia). Guarda la huella truncada de la credencial, nunca la clave.
-     */
-    private fun verificationPauseStore() = object : com.alexisgordr.icdetector.core.VerificationPauseStore {
-        private val prefs = getSharedPreferences(com.alexisgordr.icdetector.backup.BackupSettings.PREFS_FILE, MODE_PRIVATE)
-        private val k = com.alexisgordr.icdetector.core.VerificationPauseGate.PREF_KEY
-        override fun load() = com.alexisgordr.icdetector.core.VerificationPauseState.parse(prefs.getString(k, null))
-        override fun save(state: com.alexisgordr.icdetector.core.VerificationPauseState?) {
-            prefs.edit().apply { if (state == null) remove(k) else putString(k, state.serialize()) }.apply()
-        }
-    }
-
     private fun appendLog(type: String, message: String) {
         val timestamp = SimpleDateFormat("HH:mm:ss.SSS", Locale.getDefault()).format(Date())
         val newLog = "[$timestamp] $type $message"
@@ -216,8 +202,6 @@ class MiniICService : Service() {
     private lateinit var locationController: LocationCollectionController
     private lateinit var telephonyController: TelephonyCollectionController
     private lateinit var auditController: AuditLogController
-    private lateinit var apiCoordinateValidator: ApiCoordinateValidator
-    private lateinit var verificationController: ExternalVerificationController
     private lateinit var observationPersistence: ObservationPersistenceController
     private lateinit var securityAlerts: SecurityAlertController
     private lateinit var telemetryHistory: TelemetryHistoryController
@@ -292,71 +276,18 @@ class MiniICService : Service() {
         )
     }
     private var cachedLocalTrustEvidence = com.alexisgordr.icdetector.models.LocalCellTrustEvidence()
-    // v2.1 — Posición de la antena (api_lat/api_lon) para mostrar la distancia. Solo display.
-    private val apiLocationCache = ConcurrentHashMap<String, Pair<Double, Double>>()
     private var cachedRfSignature = ""
     private var cachedRfTimestamp = 0L
     private var cacheTimestamp = 0L
     private val CELL_CACHE_TTL = 60_000L
 
-    /**
-     * 3.0 (V4) — Clave de OpenCellID y proxy, juntos e inmutables (ver VerificationConfigHolder). Se
-     * cambian a la vez con [updateVerificationSettings]; un cambio de ruta cancela lo que esté en curso.
-     */
-    private val verificationConfig = com.alexisgordr.icdetector.core.VerificationConfigHolder()
-
-    /** Proxy de OpenCellID activo (lectura de la configuración vigente). */
-    val isProxyEnabled: Boolean get() = verificationConfig.current().proxyEnabled
-
-    /**
-     * 3.0 — Hay token de OpenCellID. Sin él no se consulta la base pública y la pantalla, la
-     * notificación y el terminal lo dicen (ver PublicDbNote) en vez de "consultando".
-     */
-    private val _publicDbCheckEnabled = MutableStateFlow(false)
-    val publicDbCheckEnabled: StateFlow<Boolean> = _publicDbCheckEnabled
-
-    /** 3.0 (V4) — Ajustes guardados: clave y ruta se publican juntas. */
-    fun updateVerificationSettings(apiKey: String, proxyEnabled: Boolean) {
-        val change = verificationConfig.update(apiKey, proxyEnabled) {
-            // 3.0 (V4) — Dentro del candado de escritura de la configuración.
-            if (::verificationController.isInitialized) verificationController.onConfigChanged()
-        }
-        _publicDbCheckEnabled.value = verificationConfig.current().hasCredentials
-        if (change != com.alexisgordr.icdetector.core.VerificationConfigHolder.Change.NONE) {
-            appendLog("[API]", "Configuración de OpenCellID actualizada; las consultas anteriores se descartan.")
-        }
-    }
-
-    // Latency anomaly detection
-    private val client = OkHttpClient.Builder()
-        .connectTimeout(10, TimeUnit.SECONDS)
-        .readTimeout(10, TimeUnit.SECONDS)
-        .writeTimeout(10, TimeUnit.SECONDS)
-        .build()
-    // Cliente solo para los pings de latencia: timeout corto (4s) para que una medición
-    // no bloquee la coroutine. Reutiliza el connection pool del client general (eficiente).
-    private val latencyClient = client.newBuilder()
+    // 3.1.0 — Cliente HTTP solo para la detección de latencia (H12); la verificación externa
+    // se retiró. Timeout corto (4 s) para que una medición no bloquee la corrutina.
+    private val latencyClient = OkHttpClient.Builder()
         .connectTimeout(4, TimeUnit.SECONDS)
         .readTimeout(4, TimeUnit.SECONDS)
         .callTimeout(4, TimeUnit.SECONDS)
         .build()
-    private val verificationCache = ConcurrentHashMap<String, VerificationStatus>()
-    // Marca temporal del último ERROR por celda, para permitir reintentos sin saturar la API
-    private val lastVerificationErrorTime = ConcurrentHashMap<String, Long>()
-    // Marca temporal del último NOT_FOUND por celda. A diferencia de ERROR (fallo de red
-    // transitorio, reintento a 60s), NOT_FOUND es una respuesta afirmativa de la API ("no está
-    // en la base"). Reintentamos en vivo cada 1h por si una torre legítima recién desplegada se
-    // incorpora a OpenCellID y debe reclasificarse a VERIFIED. Una vez VERIFIED, el guard
-    // deja de consultarla para siempre (no hay reintento sobre celdas verificadas).
-    private val lastNotFoundTime = ConcurrentHashMap<String, Long>()
-    // TTL de reverificación de NOT_FOUND: 1h. En caliente, sin reiniciar la app.
-    private val NOT_FOUND_REVERIFY_TTL = 60L * 60L * 1000L
-    // REJECTED no es una negativa: es una consulta inconclusa. Se le da otra oportunidad antes,
-    // pero no cada ciclo de radio, para no consumir la cuota de ambas APIs en pocos minutos.
-    private val lastRejectedTime = ConcurrentHashMap<String, Long>()
-    // Durante la campaña, una respuesta inconclusa no debe consumir cuota cada 15 minutos.
-    // Una hora mantiene el reintento sin convertir un fallo persistente de una fuente en bucle.
-    private val REJECTED_REVERIFY_TTL = 60L * 60L * 1000L
 
     var alarmThreshold = -50f
     var isStrongSignalAlarmEnabled = true
@@ -521,12 +452,6 @@ class MiniICService : Service() {
             },
             locationMode = { locationMode }
         )
-        apiCoordinateValidator = ApiCoordinateValidator(
-            db = dbHelper,
-            currentLocation = { getCurrentLocation() },
-            lastAcceptedLocation = { locationController.lastAcceptedLocation() },
-            log = { appendLog("[API]", it) }
-        )
         telephonyController = TelephonyCollectionController(
             context = this,
             log = { appendLog("[SYS]", it) },
@@ -538,28 +463,7 @@ class MiniICService : Service() {
         auditController = AuditLogController(
             log = ::appendLog,
             publishStatus = { _auditStatus.value = it },
-            zeroOnlyCellCount = { taSanity.zeroOnlyCellCount },
-            hasCredentials = { verificationConfig.current().hasCredentials }
-        )
-        verificationController = ExternalVerificationController(
-            scope = scope,
-            db = dbHelper,
-            client = client,
-            coordinateValidator = apiCoordinateValidator,
-            config = verificationConfig,
-            currentLocation = { getCurrentLocation() },
-            cache = verificationCache,
-            errorTimes = lastVerificationErrorTime,
-            notFoundTimes = lastNotFoundTime,
-            rejectedTimes = lastRejectedTime,
-            log = { appendLog("[API]", it) },
-            publish = { cell, status, epoch -> updateFlowWithStatus(cell, status, epoch) },
-            cacheApiLocation = { key, lat, lon -> apiLocationCache[key] = lat to lon },
-            onVerified = { auditController.logVerificationOutcome(it) },
-            requestFreshCellInfo = ::requestFreshCellInfo,
-            historyEpoch = historyEpoch,
-            pauseGate = com.alexisgordr.icdetector.core.VerificationPauseGate(verificationPauseStore()),
-            clock = ::mobilityClock
+            zeroOnlyCellCount = { taSanity.zeroOnlyCellCount }
         )
         // 3.0 — `versionName+commit`: separa en los datos las filas de compilaciones distintas.
         val appVersion = com.alexisgordr.icdetector.core.AppBuildId.current(
@@ -650,21 +554,15 @@ class MiniICService : Service() {
             },
             writeFailureText = { getString(R.string.write_failure_notification) }
         )
-        // WiGLE ya no participa en la verificación. Elimina secretos y estado heredados.
-        prefs.edit()
-            .remove("wigle_api_name")
-            .remove("wigle_api_token")
-            .remove("wigle_rate_limited_until")
-            .apply()
+        // Ajustes de servicios externos retirados (ver LegacyPreferences): se borran los secretos
+        // y el estado que pudieran quedar de versiones anteriores.
+        prefs.edit().apply { com.alexisgordr.icdetector.core.LegacyPreferences.KEYS.forEach(::remove) }.apply()
         // v2.3.3 — Continuidad de la recolección. Si el proceso murió (reinicio del móvil, OTA,
         // batería agotada) nadie lo anunciaba: la notificación se iba con el proceso y la
         // recolección quedaba parada sin dejar rastro. Ahora el hueco se calcula al arrancar y se
         // deja escrito, para que una interrupción sea un hecho observable y no una sorpresa en
         // diciembre al ver un agujero en el CSV.
         collectionHealthController.restore()?.let { appendLog("[SYS]", it) }
-        // 3.0 (V4) — Clave y proxy se cargan juntos.
-        verificationConfig.update((prefs.getString("opencellid_key", "") ?: "").trim(), prefs.getBoolean("proxy_enabled", false))
-        _publicDbCheckEnabled.value = verificationConfig.current().hasCredentials
         isLatencyDetectionEnabled = prefs.getBoolean("latency_detection_enabled", false)
         locationMode = com.alexisgordr.icdetector.core.LocationMode.fromStored(
             prefs.getString(com.alexisgordr.icdetector.core.LocationMode.PREF_KEY, null)
@@ -772,8 +670,6 @@ class MiniICService : Service() {
                     } else {
                         if (wasAirplaneModeOn) {
                             appendLog("[SYS]", "Conexión restaurada. Analizando nueva celda activa...")
-                            // Limpiar cache no-verificada para forzar re-consulta a DB y APIs si corresponde
-                            verificationCache.entries.removeIf { it.value != VerificationStatus.VERIFIED }
                             wasAirplaneModeOn = false
                             // Al salir de modo avión forzamos un fix GPS fresco SÍ o SÍ (sin
                             // debounce): es un evento raro y crítico —si hubiera un IMSI-catcher
@@ -823,37 +719,10 @@ class MiniICService : Service() {
      */
     private fun pruneCaches(activeCellId: String?, activeCacheKey: String?) {
         val now = System.currentTimeMillis()
-        // Errores de verificación de más de 1 h: ya no deben bloquear reintentos.
-        lastVerificationErrorTime.entries.removeIf { now - it.value > 3_600_000L }
-        if (apiLocationCache.size > 256) {
-            if (activeCacheKey != null) {
-                apiLocationCache.keys.removeIf { it != activeCacheKey }
-            } else {
-                // Sin celda activa no hay una clave preferente. Reducir al límite en lugar de
-                // vaciar toda la caché evita perder de golpe todas las distancias conocidas.
-                apiLocationCache.keys.take(apiLocationCache.size - 256).forEach(apiLocationCache::remove)
-            }
-        }
-        // NOT_FOUND de más de 1h (el TTL): se retira la marca para acotar el mapa; al volver a
-        // observar la celda, el guard la reverificará (last ausente = fuera de ventana).
-        lastNotFoundTime.entries.removeIf { now - it.value > NOT_FOUND_REVERIFY_TTL }
-        // Las respuestas inconclusas tienen su propia ventana, más corta que una negativa real.
-        lastRejectedTime.entries.removeIf { now - it.value > REJECTED_REVERIFY_TTL }
         // Cap de seguridad: si se excede, se descarta el exceso (las celdas afectadas
-        // simplemente vuelven a aprender baseline / re-verificarse; sin impacto de correctitud).
-        // Estas son ConcurrentHashMap (sin orden de inserción), así que la purga por .take() es
-        // ARBITRARIA. Por eso EXCLUIMOS la celda activa, para no borrar justo su baseline / estado y
-        // forzar una re-verificación innecesaria en viajes largos (>MAX_TRACKED_CELLS celdas).
-        // OJO: cada caché usa una CLAVE distinta:
-        //   - latencyHistory   -> clave = identidad completa (v2.10.9; antes, el CID pelado)
-        //   - verificationCache -> clave = "mcc-mnc-tac-cellId" (compuesta)
-        // por eso se pasan y comparan las dos por separado.
+        // simplemente vuelven a aprender su línea base de latencia; sin impacto de correctitud).
+        // La celda activa se excluye para no borrar justo su estado en viajes largos.
         latencyMonitor.prune(activeCacheKey, MAX_TRACKED_CELLS)
-        if (verificationCache.size > MAX_TRACKED_CELLS) {
-            verificationCache.keys.filter { it != activeCacheKey }
-                .take(verificationCache.size - MAX_TRACKED_CELLS)
-                .forEach { verificationCache.remove(it) }
-        }
     }
 
     /**
@@ -893,12 +762,6 @@ class MiniICService : Service() {
         cachedTrustGate = null
         fingerprintLocation = null
         cachedLocalTrustEvidence = com.alexisgordr.icdetector.models.LocalCellTrustEvidence()
-        apiLocationCache.clear()
-        // Verificaciones: su resultado vivía también en las filas borradas.
-        verificationCache.clear()
-        lastVerificationErrorTime.clear()
-        lastNotFoundTime.clear()
-        lastRejectedTime.clear()
         // Episodios en curso: empiezan de cero, como en un arranque limpio.
         temporalConfidence.reset()
         threatEpisodeTracker.reset()
@@ -1442,15 +1305,6 @@ class MiniICService : Service() {
                         cachedTrustGate = dbHelper.hasTrustedBaselineGate(
                             activeRaw.cellId, activeRaw.mnc, activeRaw.tac, activeRaw.mcc, activeRaw.radioTech
                         )
-                        // v2.1 — Posición de la antena según las bases públicas, para poder
-                        // MOSTRAR la distancia de forma continua (no solo en el ciclo posterior a
-                        // la verificación). Misma caché por identidad de celda: una consulta más
-                        // cada 60 s como mucho.
-                        val apiLocation = dbHelper.getCellApiLocation(
-                            activeRaw.cellId, activeRaw.mnc, activeRaw.tac, activeRaw.mcc, activeRaw.radioTech
-                        )
-                        if (apiLocation != null) apiLocationCache[rfSig] = apiLocation
-                        else apiLocationCache.remove(rfSig)
                         // 3.0 — Lectura fallida de H15: null (H15 se abstiene este ciclo) y sin caché, para
                         // reintentar en el siguiente. Una línea al empezar la racha y otra al recuperarse;
                         // sin identificadores ni ubicación.
@@ -1524,18 +1378,6 @@ class MiniICService : Service() {
                 // misma. Además, el análisis de amenazas está pensado para la celda
                 // servidora, no para las vecinas (que solo son contexto). La activa nunca
                 // está dentro de `neighbors`, así que ya no hay auto-comparación.
-                // Distancia a la antena según las bases públicas. Se calcula DESPUÉS del análisis
-                // y no se le pasa a ninguna heurística: su precisión depende de lo buena que sea
-                // una coordenada colaborativa, que no es comparable con la geometría del TA.
-                // Mezclarlas sería juntar dos magnitudes de fiabilidad muy distinta.
-                val towerDistance: Int? = activeRaw?.identityKey?.let(apiLocationCache::get)?.let { (tLat, tLon) ->
-                    currentLocation?.let { loc ->
-                        val r = FloatArray(1)
-                        Location.distanceBetween(loc.latitude, loc.longitude, tLat, tLon, r)
-                        r[0].toInt()
-                    }
-                }
-
                 // The modem can briefly publish an empty neighbour list even in ordinary
                 // coverage. Do not let one such snapshot become H1 evidence that an episode can
                 // retain: require three fresh consecutive deliveries for the same serving cell.
@@ -1561,16 +1403,8 @@ class MiniICService : Service() {
                 // historial de otra celda.
                 val analyzedList = list.mapIndexed { index, cell ->
                     if (index == 0 && cell.isRegistered) {
-                        // El estado de verificación conocido (caché) se resuelve ANTES de analizar
-                        // solo para que la fila y el CSV lleven la etiqueta correcta del mismo ciclo.
-                        // Desde v2.1 no puntúa: no hay bonus por VERIFIED, ni penalización por
-                        // NOT_FOUND, ni ninguna heurística que lea `verified` (la antigua excepción de
-                        // H6 se quitó), y sus razones en el bayesiano son neutras (1.0). Una celda
-                        // nueva sigue siendo PENDING aquí (aún no verificada).
-                        val knownCk = cell.identityKey
-                        val knownVerified = verificationCache[knownCk] ?: VerificationStatus.PENDING
                         val analyzed = ThreatAnalyzer.analyzeThreats(
-                            active = cell.copy(verified = knownVerified),
+                            active = cell,
                             neighbors = neighbors,
                             cellChangeHistory = cellChangeHistory,
                             currentLocation = currentLocation,
@@ -1597,7 +1431,7 @@ class MiniICService : Service() {
                             // 3.0 (corte de campaña) — H3 (servidora frente a SIM) usa el ServiceState de ESTA
                             // lectura, el mismo que se guarda en la fila.
                             serviceState = observationContext.service
-                        ).copy(distanceToTowerMeters = towerDistance)
+                        )
                         com.alexisgordr.icdetector.core.LocalCellTrustEngine.apply(
                             analyzed,
                             localTrustEvidence,
@@ -1671,9 +1505,8 @@ class MiniICService : Service() {
                         val trustContradictionTransition = if (
                             stableSiteDecision.enforced && liveTrustContradiction == TrustContradictionSignal.NONE
                         ) TrustContradictionSignal.SITE_NOVELTY else liveTrustContradiction
-                        // 1. Obtener estado conocido (Caché o DB) para no mostrar PENDING si ya existe
+                        // Identidad completa de la servidora: incidentes y caja negra.
                         val cacheKey = active.identityKey
-                        val knownStatus = verificationCache[cacheKey] ?: VerificationStatus.PENDING
 
                         // Aplicar confirmación temporal antes de alertas
                         val episode = threatEpisodeTracker.apply(
@@ -1749,23 +1582,10 @@ class MiniICService : Service() {
                             baselineMaturity = com.alexisgordr.icdetector.core.DiagnosticEngine.maturity(diagnosticInputs)
                         )
                         // 3.0 — Orden de la publicación: primero lo que hace el ciclo visible y válido
-                        // (verificación lanzada, contexto del próximo ciclo, pantalla y salud) y
+                        // (contexto del próximo ciclo, pantalla y salud) y
                         // después sus efectos (incidentes, caja negra, historial y alertas). Antes las
                         // alertas y escrituras iban delante: un fallo en la cola dejaba una alarma
                         // enviada con la pantalla vieja y «análisis no disponible».
-
-                        // 1. Verificación externa: dispara trabajo aparte y no forma parte de los
-                        // invariantes del ciclo; un fallo suyo no puede tirar la publicación. Va antes
-                        // de leer finalStatus porque marca la celda como pendiente al instante.
-                        try {
-                            verificationController.verify(active)
-                        } catch (e: CancellationException) {
-                            throw e
-                        } catch (e: Exception) {
-                            Log.w("MiniIC", "No se pudo lanzar la verificación externa (${e.javaClass.simpleName}).")
-                        }
-
-                        val finalStatus = verificationCache[cacheKey] ?: knownStatus
 
                         // 2. Contexto de banda para la heurística 14 (tras el análisis, de modo que el
                         // PRÓXIMO ciclo compare contra estos valores).
@@ -1785,12 +1605,12 @@ class MiniICService : Service() {
                         // entre medias que pueda fallar: la pantalla nunca enseña un resultado nuevo
                         // con la salud del anterior.
                         _cellFlow.value = sorted.mapIndexed { index, cell ->
-                            if (index == 0) confirmedActive.copy(verified = finalStatus) else cell
+                            if (index == 0) confirmedActive else cell
                         }
                         val recovered = onAnalysisPublished(cycleTicket)
                         // La notificación es presentación: si falla, no es un fallo del análisis.
                         // Al recuperarse se fuerza, para que el aviso no quede por el límite de 2 s.
-                        publishNotification { updateNotification(confirmedActive.copy(verified = finalStatus), force = recovered) }
+                        publishNotification { updateNotification(confirmedActive, force = recovered) }
 
                         // 4. Efectos del ciclo ya publicado. Si fallan, el resultado en pantalla sigue
                         // siendo válido: no se marca «no disponible»; una línea [SYS] por racha dice
@@ -1821,7 +1641,7 @@ class MiniICService : Service() {
                             // de ser una línea de tiempo. Un solo hilo serializa la escritura de verdad.
                             writeGate.launch(scope, forensicDispatcher) {
                                 forensicRecorder.observe(
-                                    active = confirmedActive.copy(verified = knownStatus),
+                                    active = confirmedActive,
                                     neighbors = nonServingContext,
                                     location = currentLocation,
                                     latencyState = networkLatencyState.value,
@@ -1832,7 +1652,7 @@ class MiniICService : Service() {
 
                             // Alertas y registro (fila de historial) con el estado de esta entrega.
                             checkAlerts(
-                                confirmedActive.copy(verified = knownStatus),
+                                confirmedActive,
                                 confirmed = true,
                                 context = observationContext,
                                 episodeKey = confirmationKey
@@ -2155,10 +1975,10 @@ class MiniICService : Service() {
     }
 
     // La sonda de latencia solo es representativa si está activada y la salida es la red
-    // celular directa: sin WiFi, sin VPN y sin Tor (proxy SOCKS5). En cualquier otro caso
+    // celular directa: sin WiFi y sin VPN. En cualquier otro caso
     // el indicador debe ser "N/A", no "OK".
     private fun isLatencyProbeActive(): Boolean =
-        isLatencyDetectionEnabled && !isWifiConnected() && !isVpnActive() && !isProxyEnabled
+        isLatencyDetectionEnabled && !isWifiConnected() && !isVpnActive()
 
 
     private fun onGpsAvailable() {
@@ -2173,7 +1993,6 @@ class MiniICService : Service() {
         scope.launch {
             delay(3000L.milliseconds)
 
-            // Verificar también en DB antes de lanzar
             val loc = getCurrentLocation()
             if (loc == null) {
                 appendLog("[GPS]", "GPS inestable tras espera, reintentando más tarde")
@@ -2182,12 +2001,10 @@ class MiniICService : Service() {
             }
 
             // FIX race condition: recapturar la celda activa AHORA, no la de hace 3 s. Si hubo
-            // handover durante la espera, las coordenadas y la (re)verificación deben ir a nombre de
+            // handover durante la espera, las coordenadas deben ir a nombre de
             // la celda REALMENTE activa, no de la anterior — si no, inyectaríamos un GPS fresco en
             // los registros de la antena equivocada (ruido para H11/H13).
             val currentCell = _cellFlow.value.firstOrNull { it.isRegistered } ?: return@launch
-            val cacheKey = currentCell.identityKey
-            val cachedStatus = verificationCache[cacheKey]
 
             // Rellenar coordenadas SOLO con un fix casi de tiempo real (<15 s, la cadencia del
             // stream). Antes de un cambio de celda / rebote a la misma celda queremos la posición
@@ -2216,63 +2033,6 @@ class MiniICService : Service() {
             } else {
                 appendLog("[GPS]", "Fix disponible pero no lo bastante fresco (${coordAgeMs / 1000}s) — se omite el relleno; espera al fix preciso")
             }
-
-            // El relleno de coordenadas (arriba) se ejecuta SIEMPRE que haya GPS, esté la celda
-            // verificada o no: una celda puede estar verificada y aun así no tener coordenadas si
-            // el GPS no estaba listo al registrarla. La RE-VERIFICACIÓN, en cambio, solo si hace
-            // falta (pendiente/error/desconocida); una celda ya verificada no se vuelve a consultar.
-            val needsReverification = cachedStatus == null ||
-                                      cachedStatus == VerificationStatus.PENDING ||
-                                      cachedStatus == VerificationStatus.ERROR
-            if (!needsReverification) return@launch
-
-            val generationAtStart = historyEpoch.current()
-            val dbStatus = withContext(Dispatchers.IO) {
-                dbHelper.getKnownStatus(
-                    currentCell.mnc, currentCell.tac, currentCell.cellId,
-                    currentCell.mcc, loc.latitude, loc.longitude, currentCell.radioTech
-                )
-            }
-
-            if (dbStatus == VerificationStatus.VERIFIED) {
-                // v2.10.10 — Si se borró el historial durante la consulta, el resultado ya no vale.
-                val stillCurrent = historyEpoch.ifCurrent(generationAtStart) {
-                    verificationCache[cacheKey] = VerificationStatus.VERIFIED
-                }
-                if (!stillCurrent) return@launch
-                appendLog("[GPS]", "Celda ya verificada en DB, sin necesidad de API")
-                // Forzar actualización de la UI con el estado recuperado
-                updateFlowWithStatus(currentCell, VerificationStatus.VERIFIED, generationAtStart)
-                return@launch
-            }
-
-            verificationCache.remove(cacheKey)
-            appendLog("[GPS]", "GPS estabilizado — relanzando verificación")
-            verificationController.verify(currentCell)
-        }
-    }
-
-    /**
-     * Marca en la pantalla el estado de verificación de **una** celda.
-     *
-     * Recibe la celda entera, no su Cell ID. Comparando solo el CID, otra celda de la lista con el
-     * mismo identificador pero distinto operador, área o tecnología —vecinas incluidas— cambiaba de
-     * color con ella. En una app cuyo trabajo es distinguir antenas, la identidad parcial no vale
-     * en ningún sitio, y menos en el que la persona mira.
-     */
-    /**
-     * @param epoch v2.10.10 — Época del historial en la que empezó la consulta. La publicación se
-     *   encola en Main; la época se vuelve a comprobar ahí, justo antes de tocar la pantalla, para
-     *   que un resultado de antes de un "Borrar historial" no se aplique después.
-     */
-    private fun updateFlowWithStatus(cell: CellData, status: VerificationStatus, epoch: Long) {
-        val clave = cell.identityKey
-        scope.launch(Dispatchers.Main) {
-            historyEpoch.ifCurrent(epoch) {
-                _cellFlow.value = _cellFlow.value.map {
-                    if (it.identityKey == clave) it.copy(verified = status) else it
-                }
-            }
         }
     }
 
@@ -2285,10 +2045,6 @@ class MiniICService : Service() {
         val cid = cell.cellId
         val dbm = cell.dbm
         val net = cell.networkType
-
-        // Cierra en el terminal la auditoría de esta misma celda si la verificación ya ha
-        // contestado desde que se escribió. No hace nada si nada ha cambiado.
-        auditController.logVerificationOutcome(cell)
 
         // Reset del estado de latencia al cambiar de celda: el veredicto de la celda anterior NO es
         // válido para la nueva. Limpiamos "ANOMALA" (icono y heurística 12) y la racha; la celda
@@ -2356,19 +2112,8 @@ class MiniICService : Service() {
     }
 
     private fun updateNotification(cell: CellData, force: Boolean = false) {
-        // 3.0 — Sin token no hay nada pendiente: la comprobación está desactivada (PublicDbNote).
-        val vStatus = when (com.alexisgordr.icdetector.core.PublicDbNote.of(cell.verified, verificationConfig.current().hasCredentials)) {
-            com.alexisgordr.icdetector.core.PublicDbNote.REGISTERED -> getString(R.string.verified_label)
-            // El aspa roja sobraba: que una base colaborativa no conozca una antena no es un fallo
-            // de la antena ni un indicio de nada, y desde v2.1 tampoco resta puntos. La
-            // notificación lo dice como lo que es, un dato de contexto.
-            com.alexisgordr.icdetector.core.PublicDbNote.NOT_FOUND -> getString(R.string.not_found_label)
-            com.alexisgordr.icdetector.core.PublicDbNote.REJECTED -> getString(R.string.rejected_label)
-            com.alexisgordr.icdetector.core.PublicDbNote.ERROR -> getString(R.string.api_error_label)
-            com.alexisgordr.icdetector.core.PublicDbNote.QUERYING -> getString(R.string.pending_label)
-            com.alexisgordr.icdetector.core.PublicDbNote.CHECK_OFF_NO_TOKEN -> getString(R.string.public_db_off_label)
-        }
-        val content = "$vStatus | ${cell.networkType} | CID: ${cell.cellId} | ${cell.dbm} dBm"
+        // 3.1.0 — Sin verificación externa: la notificación ya no lleva estado de base pública.
+        val content = "${cell.networkType} | CID: ${cell.cellId} | ${cell.dbm} dBm"
         updateNotificationText(content, force)
     }
 

@@ -166,7 +166,6 @@ internal fun CellDbHelper.logObservation(row: ObservationRow, appVersion: String
         tac = cell.tac,
         mcc = cell.mcc,
         dbm = cell.dbm,
-        verified = cell.verified,
         score = cell.securityScore,
         failedHeuristics = reason,
         lat = fix?.latitude,

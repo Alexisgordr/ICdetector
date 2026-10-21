@@ -4,25 +4,19 @@
     <string name="settings_language">LANGUAGE</string>
     <string name="language_spanish">Español</string>
     <string name="language_english">English</string>
-    <string name="settings_apis">APIS</string>
-    <string name="tor_proxy">Tor proxy (Orbot)</string>
-    <string name="tor_unavailable_latency">Unavailable while the latency probe is active: Tor would distort the measurement.</string>
-    <string name="tor_description">Route OpenCellID queries through Tor (SOCKS5 9050). No direct fallback.</string>
     <string name="latency_detection">Latency detection (Experimental)</string>
     <string name="unavailable_wifi">Unavailable while Wi-Fi is active.</string>
     <string name="unavailable_vpn">Unavailable while a VPN is active.</string>
-    <string name="latency_description">3 HEAD requests every 30 s. Incompatible with the Tor proxy.</string>
+    <string name="latency_description">3 HEAD requests every 30 s.</string>
     <string name="save_settings">SAVE SETTINGS</string>
     <string name="technical_notice">TECHNICAL NOTICE</string>
     <string name="technical_notice_body">Direct detection of null encryption and IMSI disclosure is not implemented for standard Android installations. It requires privileged APIs or permissions that a non-root app does not receive, so this rule is shown as N/A when the system does not expose the data.</string>
     <string name="support_project">SUPPORT PROJECT</string>
-    <string name="opencellid_token">OpenCellID token</string>
     <string name="signal_comparison">SIGNAL COMPARISON</string>
     <string name="active_cell_format">ACTIVE (%1$s)</string>
     <string name="neighbor_cell_format">NEIGHBOR (%1$s)</string>
     <string name="geometric_telemetry">GEOMETRIC TELEMETRY (TA)</string>
     <string name="ta_distance">TA DISTANCE</string>
-    <string name="public_database_distance">PUBLIC DATABASE DISTANCE</string>
     <string name="ta_unavailable">UNAVAILABLE</string>
     <string name="ta_no_conversion">NO CONVERSION</string>
     <string name="ta_blocked">Timing Advance: BLOCKED</string>
@@ -100,13 +94,11 @@
     <string name="site_warning">Sectors grouped under this eNodeB appear far apart. This may indicate reused or anomalous identity, but also a distributed network; review it with the remaining evidence.</string>
     <string name="route_distance_format">centres %1$d m · unexplained %2$d m</string>
     <string name="monitoring_active">Monitoring active</string>
-    <string name="verified_label">✅ REGISTERED</string><string name="not_found_label">➖ NOT REGISTERED</string><string name="rejected_label">⚠️ RESPONSE REJECTED</string><string name="api_error_label">⚠️ API ERROR</string><string name="pending_label">⏳ PENDING</string><string name="public_db_off_label">⏸ PUBLIC DB OFF</string>
     <string name="security_alerts_channel">Security alerts</string><string name="stop">Stop</string>
     <string name="permissions_required">Android will ask you for these permissions next. This is what each one is used for.</string>
     <string name="monitor">MONITOR</string><string name="history">HISTORY</string>
     <string name="searching_signal">SEARCHING FOR SIGNAL…</string><string name="network_anomaly_confirmed">NETWORK ANOMALY CONFIRMED</string><string name="no_anomalies">NO ANOMALIES DETECTED</string>
     <string name="observing_score">OBSERVING — %1$d%%</string><string name="unconfirmed_anomaly_score">UNCONFIRMED ANOMALY — %1$d%%</string>
-    <string name="public_db_registered">Registered in public database (does not prove legitimacy)</string><string name="public_db_not_found">Not registered in public database (does not imply a threat)</string><string name="public_db_rejected">Public-database response rejected; retry pending</string><string name="public_db_pending">Querying public database…</string><string name="public_db_off_no_token">Public database check off (no token)</string><string name="public_db_error">Public database did not respond</string>
     <string name="csv_exported_format">✅ CSV exported: %1$d rows</string>
     <string name="incident_observing">OBSERVING</string><string name="incident_confirmed">CONFIRMED</string><string name="incident_recovered">RECOVERED</string><string name="incident_interrupted">INTERRUPTED</string>
     <string name="critical_battery_gps_paused">Critical battery: continuous GPS paused</string><string name="no_signal_airplane">No signal / Airplane mode</string><string name="searching_network">Searching for network…</string>
@@ -117,7 +109,6 @@
     <string name="heuristic_rule_format">H%1$d · detection rule</string><string name="status_passed">PASSED</string><string name="status_failed">FAILED</string><string name="status_coherent">COHERENT</string><string name="status_incoherent">INCOHERENT</string>
     <string-array name="heuristic_names"><item>Isolated cell</item><item>Signal-power stability</item><item>MCC consistency</item><item>MNC limit</item><item>Regional TAC validation</item><item>Timing Advance proximity</item><item>Neighbor spectrum</item><item>ARFCN data quality</item><item>Hardware ciphering</item><item>Anti ping-pong</item><item>Geographic consistency</item><item>Latency + RF correlation</item><item>Baseline and RF fingerprint</item><item>Band downgrade</item><item>RF identity stability</item><item>Cellular-transition coherence</item></string-array><string name="transition_explanation_passed">The observed handover is coherent with learned local routes.</string><string name="transition_explanation_failed">The observed handover is inconsistent with learned local routes.</string><string name="transition_explanation_na">There is not enough trusted route history to evaluate this transition.</string>
     <string name="mobility_sanity">MOBILITY SANITY · H16</string>
-    <string name="badge_registered">REGISTERED</string><string name="badge_not_found">NOT REGISTERED</string><string name="badge_rejected">RESPONSE REJECTED</string><string name="badge_pending">PENDING</string><string name="badge_error">API ERROR</string>
     <string name="raw_terminal_output">RAW TERMINAL OUTPUT</string>
     <string name="current_technology">TECHNOLOGY</string><string name="signal_power">POWER</string><string name="radio_band">BAND</string>
     <string name="audit_updated">Security audit updated</string><string name="temporal_confirmed_format">TEMPORAL CONFIRMATION %1$s · CONFIRMED</string><string name="temporal_observing_format">TEMPORAL CONFIRMATION %1$s · OBSERVING</string>
@@ -265,8 +256,6 @@
     <string name="geometry_transitions_in_out">Transitions in/out</string>
     <string name="geometry_trusted_in_out">Learned in/out</string>
     <string name="geometry_route_counts_format">Transitions %1$d · Trips %2$d</string>
-    <string name="intel_verified">REGISTERED</string>
-    <string name="intel_not_found">NOT FOUND</string>
     <string name="geometry_local_cell_trust">Local cell trust</string>
     <string name="geometry_mobility">Familiarity · earlier trips</string>
     <string name="geometry_good_edges">Good edges</string>
@@ -284,7 +273,7 @@
     <string name="permission_phone_body">Needed to follow the network state: operator, registration, service and data-network changes, and the cellular security events Android reports. ICdetection does not read calls, SMS, contacts, your phone number or IMEI.</string>
     <string name="permission_notifications_title">Notifications (optional)</string>
     <string name="permission_notifications_body">Shows the ongoing monitoring notification and warns you when an anomaly is confirmed. You can deny it: monitoring still works, but you will not see alerts outside the app.</string>
-    <string name="permissions_privacy">Coordinates and radio readings are stored only on this phone. OpenCellID checks send the cell identity, never your position, and only if you add an API key in Settings.</string>
+    <string name="permissions_privacy">Coordinates and radio readings are stored only on this phone and are never sent anywhere.</string>
     <string name="permissions_denied_hint">If you denied a permission and Android no longer asks, grant it from the app settings.</string>
     <string name="permissions_open_settings">Open app settings</string>
     <string name="notif_monitoring_title">ICdetection: monitoring · continuous GPS</string>
@@ -324,7 +313,7 @@
     <string name="gps_state_unavailable">● NO GPS</string>
     <!-- 3.0 — Copia de seguridad -->
     <string name="backup_section_title">Backup</string>
-    <string name="backup_section_body">Saves all ICdetection data (history, antennas, incidents, forensic cases, Stable-Site and trips) and your settings in one file, except the OpenCelliD key. The file is not encrypted and contains your location history: keep it private.</string>
+    <string name="backup_section_body">Saves all ICdetection data (history, antennas, incidents, forensic cases, Stable-Site and trips) and your settings in one file. The file is not encrypted and contains your location history: keep it private.</string>
     <string name="backup_export">EXPORT BACKUP</string>
     <string name="backup_import">RESTORE BACKUP</string>
     <string name="backup_import_replaces">Restoring REPLACES all current data. Before replacing anything, you save a copy of your current data wherever you choose.</string>
@@ -576,11 +565,6 @@
     <string name="stable_site_episode_focus_open_sites">View Stable-Site</string>
     <string name="notif_legacy_previous_signal">Last earlier signal observed: %1$d dBm (context only).</string>
     <string name="notif_legacy_previous_unknown">Earlier signal unknown.</string>
-    <string name="opencellid_privacy">Each query sends your API key and the cell identity (MCC, MNC, area code, Cell ID and technology) to OpenCellID. Tor hides your IP address, but the same key lets OpenCellID link your queries. With the proxy selected and Tor unavailable, queries fail: they never fall back to a direct connection.</string>
-    <string name="latency_tor_dialog_title">Turn off the OpenCellID proxy?</string>
-    <string name="latency_tor_dialog_body">Enabling latency will turn off the OpenCellID proxy; queries may then go out directly over your connection. OpenCellID will see your IP address. Nothing changes until you save.</string>
-    <string name="latency_tor_dialog_confirm">Enable latency</string>
-    <string name="latency_tor_dialog_cancel">Cancel</string>
     <string name="intel_loading">Loading statistics…</string>
     <string name="intel_load_error">Statistics could not be read. The history was not modified.</string>
     <string name="route_not_evaluated">NOT EVALUATED</string>

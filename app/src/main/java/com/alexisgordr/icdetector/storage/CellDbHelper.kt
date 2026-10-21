@@ -100,10 +100,10 @@ class CellDbHelper(
         // interna que nadie ve sería un riesgo sin contrapartida. El identificador Kotlin y la
         // cabecera del export —lo que sí se lee— dicen lo correcto.
         const val COLUMN_ANOMALY_CONFIDENCE = "threat_prob"
-        // v2.1 — Coordenada de la ANTENA devuelta por la API (OpenCellID). Separada de
-        // lat/lon a propósito: lat/lon es SIEMPRE la posición GPS del dispositivo. Antes la
-        // coordenada de la API se escribía encima de lat/lon y contaminaba el historial
-        // geográfico (H11/H13) con posiciones a cientos de km.
+        // v2.1 — Coordenada de la ANTENA según la verificación externa, separada de lat/lon
+        // (que es SIEMPRE la posición GPS del dispositivo). 3.1.0 — Ya no hay verificación
+        // externa: las filas nuevas las dejan vacías. Se conservan para no tocar el esquema ni
+        // el formato del CSV, y por las filas antiguas.
         const val COLUMN_API_LAT = "api_lat"
         const val COLUMN_API_LON = "api_lon"
         // v2.1 — Timing Advance crudo y la unidad en la que vino. Ver HistoryRecord.
@@ -181,20 +181,6 @@ class CellDbHelper(
         const val TABLE_MOBILITY_TRIP_EDGES = "mobility_trip_edges"
 
         /**
-         * Cuánto vale una verificación antes de volver a preguntar — v2.1.
-         *
-         * No es una fecha de caducidad de la evidencia: las filas verificadas siguen en el
-         * historial para siempre y el análisis posterior las verá. Es la distancia entre dos
-         * afirmaciones que conviene no confundir — "esta celda estuvo verificada" y "tenemos una
-         * confirmación reciente de esta celda" —, porque las bases públicas cambian y los
-         * identificadores celulares se reconfiguran y se reutilizan.
-         *
-         * 30 días: suficiente para no gastar consultas a diario con las celdas de casa y del
-         * trabajo, y corto frente al ritmo al que una operadora reorganiza su red.
-         */
-        const val VERIFIED_TTL_MS = 30L * 24 * 60 * 60 * 1000
-
-        /**
          * Días de historial que se conservan.
          *
          * v2.3.3 — Eran 60, elegidos contra la ventana de análisis de 30 días de las heurísticas.
@@ -228,20 +214,6 @@ class CellDbHelper(
         const val COORDINATE_BACKFILL_FUTURE_TOLERANCE_MS = 5_000L
         const val TRUSTED_BASELINE_MIN_SAMPLES = 5
         const val TRUSTED_BASELINE_MIN_DAYS = 2
-
-        /**
-         * Distancia máxima creíble entre tú y la antena a la que estás conectado.
-         *
-         * Una sola cifra para las dos preguntas que antes tenían dos: si se acepta la coordenada
-         * que devuelve la API (isValidCoordinate) y si una verificación guardada sigue valiendo
-         * donde estás ahora (getKnownStatus). Con 50 km y 5 km respectivamente, una antena aceptada
-         * a 12 km se reconsultaba después por "demasiado lejos", indefinidamente.
-         *
-         * 50 km es generoso a propósito: las macroceldas rurales llegan lejos y el objetivo de esta
-         * barrera no es la precisión, sino descartar lo imposible — la coordenada a 1.100 km que
-         * devolvía una búsqueda mal formulada.
-         */
-        const val MAX_PLAUSIBLE_ANTENNA_DISTANCE_M = 50_000f
     }
 
     /**
@@ -1623,7 +1595,6 @@ class CellDbHelper(
         tac: String,
         mcc: String,
         dbm: Int,
-        verified: VerificationStatus = VerificationStatus.PENDING,
         score: Int = 100,
         failedHeuristics: String = "",
         lat: Double? = null,
@@ -1668,7 +1639,8 @@ class CellDbHelper(
             put(COLUMN_TAC, tac)
             put(COLUMN_MCC, mcc)
             put(COLUMN_DBM, dbm)
-            put(COLUMN_VERIFIED, verified.name)
+            // 3.1.0 — Sin verificación externa: toda fila nueva es PENDING (la columna se conserva).
+            put(COLUMN_VERIFIED, VerificationStatus.PENDING.name)
             put(COLUMN_RADIO, radio.name)
             put(COLUMN_SCORE, score)
             put(COLUMN_FAILED_H, failedHeuristics)
@@ -1685,8 +1657,8 @@ class CellDbHelper(
                 put(COLUMN_TA, timingAdvance)
                 put(COLUMN_TA_UNIT, timingAdvanceUnit.name)
             }
-            // api_lat / api_lon NO se escriben aquí: son un dato de verificación, no de la
-            // observación. Los rellena updateVerificationStatus cuando la API responde.
+            // api_lat / api_lon no se escriben: desde 3.1.0 no hay verificación externa y las dos
+            // columnas quedan vacías en las filas nuevas (se conservan por compatibilidad).
             put(COLUMN_CONN_STATUS, connectionState.name)
             if (bandwidthKhz != null) put(COLUMN_BANDWIDTH_KHZ, bandwidthKhz)
             if (bands != null) put(COLUMN_BANDS, bands)
@@ -1720,142 +1692,6 @@ class CellDbHelper(
 
     /** Parámetros de [observedSince] / [observedBefore] para un corte en milisegundos. */
     private fun since(cutoffMs: Long): Array<String> = ObservationTime.cutoffArgs(cutoffMs)
-
-    /**
-     * Edad en milisegundos de un registro a partir de su timestamp, o null si no se puede leer.
-     * Devolver null significa "no sé cuándo fue", y quien pregunta trata ese caso como "no ha
-     * caducado": inventar una edad sería peor que no tenerla.
-     */
-    private fun edadDeRegistro(observedAtMs: Long?, timestamp: String?): Long? {
-        // 3.0 (#23) — El instante guardado si existe; las filas anteriores, por su texto como antes.
-        val at = ObservationTime.bestEffortMs(observedAtMs, timestamp) ?: return null
-        return (System.currentTimeMillis() - at).coerceAtLeast(0L)
-    }
-
-    fun getKnownStatus(
-        mnc: String,
-        tac: String,
-        cid: String,
-        mcc: String,
-        currentLat: Double? = null,
-        currentLon: Double? = null,
-        // Sin valor por defecto, a propósito. Con el WHERE estricto en `radio`, una llamada que se
-        // olvidara de pasarlo no fallaría: buscaría filas de tecnología UNKNOWN y devolvería
-        // PENDING para siempre, en silencio. Que lo exija el compilador cuesta nada y cierra esa
-        // puerta. Mismo criterio que updateVerificationStatus.
-        radio: RadioTech
-    ): VerificationStatus {
-        val db = this.readableDatabase
-        // Solo se reutiliza una verificación que conserve coordenadas de API. Las observaciones
-        // periódicas copian el estado visual pero no escriben api_lat/api_lon; usar su timestamp
-        // renovaba artificialmente el TTL. NOT_FOUND tampoco se reutiliza desde la DB: no existe
-        // aún una columna con la fecha de la consulta API y una muestra nueva lo haría eterno.
-        // La caché de sesión ya limita sus reintentos a una hora.
-        // v2.1: la comprobación de cercanía usa api_lat/api_lon (posición de la ANTENA según la
-        // API), que es lo que esta función siempre quiso comparar. Antes leía lat/lon, donde la
-        // coordenada de la API acababa mezclada con la del GPS: la semántica era ambigua y
-        // dependía de por qué camino se hubiera escrito esa fila.
-        // La tecnología forma parte de la identidad de verificación. Las filas antiguas con
-        // `radio` NULL se conservan como evidencia histórica, pero no pueden confirmar hoy una
-        // tecnología que nunca registraron. Deben volver a consultarse.
-        val query = "SELECT $COLUMN_VERIFIED, $COLUMN_API_LAT, $COLUMN_API_LON, $COLUMN_TIMESTAMP, $COLUMN_OBSERVED_AT_MS FROM $TABLE_HISTORY " +
-                    "WHERE $COLUMN_CID=? AND $COLUMN_MNC=? AND $COLUMN_TAC=? AND $COLUMN_MCC=? " +
-                    "AND $COLUMN_RADIO=? " +
-                    "AND $COLUMN_VERIFIED='VERIFIED' " +
-                    "AND $COLUMN_API_LAT IS NOT NULL AND $COLUMN_API_LON IS NOT NULL " +
-                    "ORDER BY $NEWEST_FIRST LIMIT 1"
-
-        val cursor = db.rawQuery(query, arrayOf(cid, mnc, tac, mcc, radio.name))
-        var status = VerificationStatus.PENDING
-        try {
-        
-        if (cursor.moveToFirst()) {
-            val savedStatusStr = cursor.getString(0)
-            val savedLat = if (cursor.isNull(1)) null else cursor.getDouble(1)
-            val savedLon = if (cursor.isNull(2)) null else cursor.getDouble(2)
-            val savedTimeStr = cursor.getString(3)
-            val savedAtMs = if (cursor.isNull(4)) null else cursor.getLong(4)
-            
-            val savedStatus = try { VerificationStatus.valueOf(savedStatusStr) } catch(_: Exception) { VerificationStatus.PENDING }
-            
-            if (savedStatus == VerificationStatus.VERIFIED) {
-                // TTL de la verificación — v2.1.
-                //
-                // "Estuvo verificada una vez" y "tenemos una confirmación reciente" no son lo mismo,
-                // y hasta aquí eran indistinguibles: una verificación valía para siempre. Las bases
-                // públicas cambian, y los identificadores celulares se reconfiguran y se reutilizan;
-                // una confirmación de hace medio año no dice nada del presente. Pasado el TTL se
-                // vuelve a preguntar. El hecho histórico NO se borra: las filas verificadas siguen
-                // en el historial, que es lo que se analizará luego.
-                val edad = edadDeRegistro(savedAtMs, savedTimeStr)
-                if (edad != null && edad > VERIFIED_TTL_MS) {
-                    status = VerificationStatus.PENDING
-                } else if (currentLat == null || currentLon == null || savedLat == null || savedLon == null) {
-                    status = VerificationStatus.VERIFIED
-                } else {
-                    // Misma vara de medir que isValidCoordinate() al aceptar la coordenada. Antes
-                    // esto exigía 5 km mientras la aceptación permitía 50: una antena aceptada a
-                    // 12 km quedaba luego marcada como "demasiado lejos" y se reconsultaba sin
-                    // motivo, en bucle. Dos políticas para la misma pregunta es una de más.
-                    val results = FloatArray(1)
-                    Location.distanceBetween(currentLat, currentLon, savedLat, savedLon, results)
-                    status = if (results[0] < MAX_PLAUSIBLE_ANTENNA_DISTANCE_M) VerificationStatus.VERIFIED
-                             else VerificationStatus.PENDING
-                }
-            }
-        }
-        } finally {
-            cursor.close()
-        }
-        return status
-    }
-
-    /**
-     * Asocia [status] a la observación más reciente de esta celda y tecnología y, si la API
-     * devolvió la posición de la antena, la guarda en [COLUMN_API_LAT]/[COLUMN_API_LON].
-     *
-     * v2.1 — CAMBIO IMPORTANTE: antes escribía esa coordenada en lat/lon, es decir, ENCIMA de la
-     * posición GPS del dispositivo (o rellenando las filas que se habían guardado sin GPS). Ese
-     * era el origen real de las coordenadas imposibles en el historial: no venían del GPS —
-     * nunca pasaban por isPlausibleFix() — sino de la respuesta de WiGLE/OpenCellID. Y contaminaba
-     * el baseline geográfico de H11/H13, que interpreta lat/lon como "dónde estaba yo".
-     *
-     * Ahora lat/lon es intocable: solo la escribe el GPS. Las dos magnitudes viven separadas.
-     * [COLUMN_RADIO] también forma parte del WHERE: una verificación LTE nunca actualiza una fila
-     * GSM/UMTS/NR que comparta por casualidad los identificadores numéricos.
-     */
-    fun updateVerificationStatus(
-        mnc: String,
-        tac: String,
-        cid: String,
-        status: VerificationStatus,
-        lat: Double? = null,
-        lon: Double? = null,
-        mcc: String? = null,
-        radio: RadioTech
-    ): Int {
-        val db = this.writableDatabase
-        val values = ContentValues().apply {
-            put(COLUMN_VERIFIED, status.name)
-            if (lat != null) put(COLUMN_API_LAT, lat)
-            if (lon != null) put(COLUMN_API_LON, lon)
-        }
-        val identityWhere = if (mcc != null) {
-            "$COLUMN_CID=? AND $COLUMN_MNC=? AND $COLUMN_TAC=? AND $COLUMN_MCC=? AND $COLUMN_RADIO=?"
-        } else {
-            "$COLUMN_CID=? AND $COLUMN_MNC=? AND $COLUMN_TAC=? AND $COLUMN_RADIO=?"
-        }
-        val args = if (mcc != null) arrayOf(cid, mnc, tac, mcc, radio.name)
-                   else arrayOf(cid, mnc, tac, radio.name)
-
-        // La respuesta describe el estado conocido AHORA. Se adjunta siempre a la observación
-        // más reciente de esta identidad, aunque esa fila naciera como NOT_FOUND/REJECTED por una
-        // consulta anterior. Limitar el UPDATE a PENDING hacía que una verificación posterior no
-        // persistiera coordenadas ni estado. Solo se reescribe la última fila: las respuestas
-        // históricas anteriores conservan su significado forense.
-        val latestWhere = "$COLUMN_ID=(SELECT $COLUMN_ID FROM $TABLE_HISTORY WHERE $identityWhere ORDER BY $NEWEST_FIRST LIMIT 1)"
-        return db.update(TABLE_HISTORY, values, latestWhere, args)
-    }
 
     /**
      * Convierte la fila actual del cursor en un [HistoryRecord].
@@ -2838,132 +2674,6 @@ class CellDbHelper(
             cursor.getDouble(latIdx), cursor.getDouble(lonIdx), results
         )
         return results[0] <= radiusMeters
-    }
-
-    /**
-     * ¿Cuántas ÁREAS DE SEGUIMIENTO distintas (MCC-MNC-TAC) tienen ya registrada esta misma
-     * coordenada de API, sin contar la del propio interesado?
-     *
-     * v2.1 — detector de coordenadas "centinela". Los datos de campo mostraron una coordenada
-     * devuelta idéntica hasta el sexto decimal para 46 celdas distintas: eso no es la posición de
-     * ninguna antena, es un valor por defecto de la API.
-     *
-     * **Por qué cuenta áreas y no celdas.** La primera versión contaba Cell IDs distintas, y eso
-     * castigaba justo lo que es normal: un mástil real aloja muchas celdas —varios sectores, varias
-     * bandas, LTE y NR— y las bases públicas les atribuyen prácticamente la misma coordenada. Al
-     * tercer vecino de su propio emplazamiento, una antena perfectamente legítima quedaba
-     * descartada, y el problema EMPEORABA con el tiempo: cuantas más celdas verificadas guardaba el
-     * historial, más coordenadas cruzaban el umbral. Celdas verificadas la semana pasada empezaban
-     * a salir "no registradas" esta. Un centinela de verdad no se parece a eso: aparece en áreas de
-     * seguimiento distintas y a cientos de kilómetros, no en los tres sectores del mismo poste.
-     *
-     * Por eso se excluye además el área del propio consultante: verificar de nuevo una celda no
-     * puede convertir su propia coordenada, ya guardada, en prueba contra ella misma.
-     *
-     * Tolerancia de ~11 m (0,0001°) para absorber redondeos entre respuestas.
-     */
-    fun countDistinctAreasWithApiCoordinate(
-        lat: Double,
-        lon: Double,
-        excludeMcc: String,
-        excludeMnc: String,
-        excludeTac: String,
-        toleranceDeg: Double = 0.0001
-    ): Int {
-        return try {
-            val db = this.readableDatabase
-            val query = """
-                SELECT COUNT(DISTINCT $COLUMN_MCC || '-' || $COLUMN_MNC || '-' || $COLUMN_TAC)
-                FROM $TABLE_HISTORY
-                WHERE $COLUMN_API_LAT IS NOT NULL
-                  AND $COLUMN_API_LON IS NOT NULL
-                  AND ABS($COLUMN_API_LAT - CAST(? AS REAL)) <= CAST(? AS REAL)
-                  AND ABS($COLUMN_API_LON - CAST(? AS REAL)) <= CAST(? AS REAL)
-                  AND NOT ($COLUMN_MCC=? AND $COLUMN_MNC=? AND $COLUMN_TAC=?)
-            """.trimIndent()
-            db.rawQuery(
-                query,
-                arrayOf(
-                    lat.toString(), toleranceDeg.toString(),
-                    lon.toString(), toleranceDeg.toString(),
-                    excludeMcc, excludeMnc, excludeTac
-                )
-            ).use { c -> if (c.moveToFirst()) c.getInt(0) else 0 }
-        } catch (_: Exception) {
-            0
-        }
-    }
-
-    /**
-     * ¿Consta esta celda como VERIFICADA **recientemente** en el historial? — v2.1
-     *
-     * Se usa para una regla simple: una consulta que falla, o que vuelve vacía, **no borra** una
-     * verificación reciente. OpenCellID no da de baja antenas; si una celda estuvo en su
-     * base, lo normal es que siga estándolo, y cuando una reconsulta dice "no encontrada" lo que
-     * suele haber cambiado es la cuota diaria, el permiso de la cuenta o la cobertura.
-     *
-     * Con el matiz de "reciente" ([VERIFIED_TTL_MS]): pasado el TTL, una negativa explícita SÍ
-     * puede cambiar el estado. Una confirmación de hace medio año no debe blindar a una celda
-     * indefinidamente, porque los identificadores se reconfiguran y se reutilizan.
-     */
-    fun hasRecentVerifiedRecord(
-        cid: String,
-        mnc: String,
-        tac: String,
-        mcc: String,
-        /** Obligatorio por el mismo motivo que en [getKnownStatus]. */
-        radio: RadioTech
-    ): Boolean {
-        return try {
-            val db = this.readableDatabase
-            db.rawQuery(
-                "SELECT $COLUMN_TIMESTAMP,$COLUMN_OBSERVED_AT_MS FROM $TABLE_HISTORY WHERE $COLUMN_CID=? AND $COLUMN_MNC=? " +
-                    "AND $COLUMN_TAC=? AND $COLUMN_MCC=? " +
-                    "AND $COLUMN_RADIO=? " +
-                    "AND $COLUMN_VERIFIED='VERIFIED' " +
-                    "AND $COLUMN_API_LAT IS NOT NULL AND $COLUMN_API_LON IS NOT NULL " +
-                    "ORDER BY $NEWEST_FIRST LIMIT 1",
-                arrayOf(cid, mnc, tac, mcc, radio.name)
-            ).use { c ->
-                if (!c.moveToFirst()) return@use false
-                val edad = edadDeRegistro(if (c.isNull(1)) null else c.getLong(1), c.getString(0))
-                // Sin fecha legible se conserva la verificación: ante la duda, no se destruye una
-                // confirmación previa por no saber cuándo se hizo.
-                edad == null || edad <= VERIFIED_TTL_MS
-            }
-        } catch (_: Exception) {
-            false
-        }
-    }
-
-    /**
-     * Última posición conocida de la ANTENA para esta celda, según OpenCellID — v2.1.
-     *
-     * Solo lectura de las columnas api_lat/api_lon, que la verificación ya rellenaba pero que
-     * nadie volvía a consultar después: `CellData.lat/lon` solo lleva la coordenada durante el
-     * ciclo inmediatamente posterior a la verificación, y en los miles de ciclos siguientes está
-     * vacía. Esto la recupera para poder mostrar la distancia a la antena de forma continua.
-     *
-     * Devuelve null si esa celda nunca se verificó con coordenada.
-     */
-    fun getCellApiLocation(cellId: String, mnc: String, tac: String, mcc: String, radio: RadioTech): Pair<Double, Double>? {
-        return try {
-            val db = this.readableDatabase
-            val query = """
-                SELECT $COLUMN_API_LAT, $COLUMN_API_LON
-                FROM $TABLE_HISTORY
-                WHERE $COLUMN_CID = ? AND $COLUMN_MNC = ? AND $COLUMN_TAC = ? AND $COLUMN_MCC = ?
-                  AND $COLUMN_RADIO = ?
-                  AND $COLUMN_API_LAT IS NOT NULL AND $COLUMN_API_LON IS NOT NULL
-                ORDER BY $NEWEST_FIRST
-                LIMIT 1
-            """.trimIndent()
-            db.rawQuery(query, arrayOf(cellId, mnc, tac, mcc, radio.name)).use { c ->
-                if (c.moveToFirst()) c.getDouble(0) to c.getDouble(1) else null
-            }
-        } catch (_: Exception) {
-            null
-        }
     }
 
     /**

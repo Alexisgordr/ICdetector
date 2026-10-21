@@ -70,7 +70,7 @@
 > **Start from a clean install.** This last update changes how several rules are evaluated and,
 > together with the dataset cuts of the 3.0 betas ([Status.md](Status.md) lists them), data
 > recorded before it is not comparable with data recorded after it. Export anything you want to
-> keep, uninstall the app, install 3.0.0 and start collecting from scratch — and enjoy the app. To keep your settings (such as the OpenCellID key), *History → Delete history* gives the same
+> keep, uninstall the app, install 3.0.0 and start collecting from scratch — and enjoy the app. To keep your settings (such as the location mode), *History → Delete history* gives the same
 > clean start without uninstalling.
 >
 > - **You can also just update.** On a 3.0 beta, 3.0.0 installs over it, migrates the database and
@@ -180,8 +180,7 @@ imposed by Android.
    access, and GPS enables the geographic checks.
 4. **Exclude the app from battery optimisation** for long sessions:
    **Settings → Apps → ICdetection → Battery → Battery optimization → Don't optimize**.
-5. **Optional:** add your own OpenCellID token for infrastructure verification, and enable the
-   experimental latency check.
+5. **Optional:** enable the experimental latency check.
 
 The [Field Manual](MANUAL.md) covers setup, every screen, the rules and the exports in detail.
 
@@ -469,12 +468,10 @@ its mode; the [manual](MANUAL.md) gives the timing.
 
 ## 🛰️ Infrastructure verification
 
-ICdetection can optionally cross-reference observed cells with **OpenCellID**. Public databases are
-incomplete, community-maintained, occasionally outdated and uneven across regions, so a `NOT_FOUND`
-result does **not** imply malicious infrastructure. Requests are made only after you configure and
-enable verification.
-
-Verification is a **label, not a verdict**: its result never changes the security score.
+Removed in 3.1.0. Up to 3.0 the app could look up cells in OpenCellID; the lookup never changed the
+score, and 3.1.0 drops it together with its token and proxy settings. ICdetection now relies only on
+what the phone observes. The `Verified`, `ApiLat` and `ApiLon` CSV columns remain, always `PENDING`
+and empty for new rows.
 
 ---
 
@@ -486,8 +483,7 @@ automatic cloud backup and phone-to-phone transfer exclude every app file (`allo
 disabled and the extraction rules exclude all data), so a vendor transfer tool following
 Android's rules does not copy the database to another phone.
 
-**Backup and restore.** *Settings → Backup* saves everything in one file (without the OpenCellID
-key) and restores it on another install; a new install asks whether to restore one before recording
+**Backup and restore.** *Settings → Backup* saves everything in one file and restores it on another install; a new install asks whether to restore one before recording
 anything. Restoring replaces the current data after saving a copy of it and is safe against
 interruptions; backups from v2.10.x are refused. It is meant for moving data now (a new phone, a
 reset), not as an archive: use the exports for that. Its checksum detects damage, not tampering, so
@@ -497,15 +493,11 @@ restore only backups you made yourself. See the [manual](MANUAL.md#backup-and-re
 transitions, service-state events, Stable-Site learning and route-familiarity trips in a single
 transaction, safely even while monitoring is running.
 
-**Optional SOCKS5 routing.** Verification requests can be routed through a SOCKS5 proxy, including
-Tor / Orbot-style local setups.
-
 **Every network connection is optional and off by default.**
 
 | Feature | When it connects | Endpoint(s) | What is sent |
 |---|---|---|---|
-| OpenCellID verification | Only after you enter your own API token | `opencellid.org` | Serving-cell identity (MCC, MNC, TAC/LAC, Cell ID, radio type) and your token; can go through SOCKS5 |
-| Latency detection (experimental) | Only if you enable it, and only over mobile data (not Wi-Fi, a VPN or the SOCKS5 proxy); one round roughly every 30 s | `www.google.com/generate_204` (Google), `one.one.one.one` (Cloudflare), `dns.quad9.net` (Quad9) | An HTTPS `HEAD` request with no cell or location data; like any connection, it reveals your IP address to those services |
+| Latency detection (experimental) | Only if you enable it, and only over mobile data (not Wi-Fi or a VPN); one round roughly every 30 s | `www.google.com/generate_204` (Google), `one.one.one.one` (Cloudflare), `dns.quad9.net` (Quad9) | An HTTPS `HEAD` request with no cell or location data; like any connection, it reveals your IP address to those services |
 
 ---
 
@@ -555,16 +547,15 @@ GPS accuracy, app versions and the dataset cuts a file crosses, and flags legacy
 
 Key points for analysis:
 
-- **`Lat` / `Lon` are always the device's own GPS position**, taken when the reading arrived. The
-  OpenCellID antenna position is in `ApiLat` / `ApiLon`.
+- **`Lat` / `Lon` are always the device's own GPS position**, taken when the reading arrived.
 - **`[sub-umbral]`** entries in `FailedHeuristics` failed without reaching the alarm threshold; they
   are kept on purpose so false positives can be studied (shown as `[sub-threshold]` in English).
 - **Text that could look like a formula** (`=`, `+`, `-`, `@` at the start of a field from the
   network, such as `NetworkName` or `CsgName`) gets one leading `'` in every CSV; numbers such as
   dBm or coordinates are unchanged. It reduces the risk in spreadsheets; it is not a guarantee (see
   the [manual](MANUAL.md)).
-- **`Verified` is a label, not a verdict:** `VERIFIED`, `NOT_FOUND`, `REJECTED`, `ERROR` or `PENDING`.
-  None of them changes `SecurityScore`.
+- **`Verified`, `ApiLat` and `ApiLon` are always `PENDING` and empty from 3.1.0** (the external
+  verification was removed); older rows keep their values. None of them ever changed `SecurityScore`.
 
 > [!CAUTION]
 > Exports can contain precise location and cellular metadata. Treat them as private forensic material
@@ -769,7 +760,7 @@ addressed where possible.
 > varias reglas y, sumada a los cortes del dataset de las betas de la 3.0, separa los datos de antes
 > y de después. **Lo que recomiendo** es empezar desde una instalación limpia: exportad lo que
 > queráis conservar, desinstalad la app, instalad la 3.0.0 (GitHub Releases) y empezad a
-> recoger datos desde cero. Y a disfrutar de la app. Si queréis conservar los ajustes (como la clave de OpenCellID),
+> recoger datos desde cero. Y a disfrutar de la app. Si queréis conservar los ajustes (como el modo de ubicación),
 > *Historial → Borrar historial* deja la base igual de limpia sin desinstalar. **También podéis
 > simplemente actualizar** desde una beta de la 3.0: la app migra la base y os seguirá funcionando,
 > pero **apuntad la fecha en que actualizasteis**, porque las filas anteriores pertenecen a otro

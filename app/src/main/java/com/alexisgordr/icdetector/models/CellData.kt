@@ -23,8 +23,7 @@ data class CellData(
      *
      * No confundir con [networkType], que viene de `TelephonyDisplayInfo` y describe el icono de la
      * barra de estado (la misma celda alterna ahí entre "4G" y "5G" sin cambiar de identidad). Esto
-     * es el dato firme, y es lo que se manda a OpenCellID en el parámetro `radio` y lo que se
-     * compara contra el `radio` que devuelve. Ver [RadioTech].
+     * es el dato firme, y forma parte de la identidad de la celda. Ver [RadioTech].
      */
     val radioTech: RadioTech = RadioTech.UNKNOWN,
     val arfcn: Int? = null,
@@ -45,18 +44,6 @@ data class CellData(
      * prometer una validación que no existe. Ver BayesianScorer.
      */
     val anomalyConfidence: Float = 0f,
-    /**
-     * Distancia en metros entre tu posición GPS y la posición que las bases públicas
-     * (OpenCellID) atribuye a esta antena — v2.1.
-     *
-     * Es SOLO PARA MOSTRAR. No entra en ninguna heurística, a propósito: es una estimación de
-     * calidad muy distinta a la del Timing Advance (depende de lo buena que sea la coordenada de
-     * una base de datos colaborativa, que puede estar a cientos de metros del emplazamiento real,
-     * y de que tengas fix GPS). Sirve para responder "¿a qué distancia está la antena?" cuando el
-     * módem no reporta TA, que es el caso en buena parte de los teléfonos; no sirve para acusar a
-     * nadie. Mezclarla con la geometría del TA sería juntar dos precisiones incomparables.
-     */
-    val distanceToTowerMeters: Int? = null,
     /** Estado visible y persistible del filtro temporal; no modifica el resultado heurístico. */
     val temporalProgress: TemporalProgress = TemporalProgress(),
     /** Diagnóstico del ciclo actual, incluida la causa concreta de cada N/A. */
@@ -94,9 +81,8 @@ data class CellData(
  * cachés, rachas temporales y comparaciones.
  *
  * Incluye la tecnología además de MCC, MNC, área y Cell ID. Sin ella, dos celdas de tecnologías
- * distintas que compartan esos cuatro identificadores serían la misma para la app — y desde que la
- * consulta a OpenCellID distingue por `radio`, dejarlas juntas aquí contradice el motivo por el que
- * se distingue allí: se preguntaría por una y se reutilizaría la respuesta para la otra.
+ * distintas que compartan esos cuatro identificadores serían la misma para la app, y se mezclarían
+ * sus rachas, sus perfiles y sus rutas.
  *
  * Existe sobre todo porque esta cadena estaba escrita a mano en nueve sitios distintos. Nueve
  * copias de una regla de identidad es una forma garantizada de que algún día ocho digan una cosa y

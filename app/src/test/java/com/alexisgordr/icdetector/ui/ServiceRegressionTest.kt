@@ -99,28 +99,4 @@ class ServiceRegressionTest {
         assertTrue(source("forensics/GeometryExporter.kt").contains("db.readConsistently"))
         assertTrue(source("ui/RadioScreen.kt").contains("getServiceStateEvents(strict = true)"))
     }
-
-    // Revisión de v2.10.10: una verificación de antes del borrado no escribe después, y la
-    // re-comprobación local de VERIFIED no depende de tener credenciales de OpenCellID.
-    @Test fun `verification results from before a history deletion are discarded`() {
-        val verification = source("service/ExternalVerificationController.kt")
-        assertTrue(verification.contains("historyEpoch.ifCurrent(generation, block)"))
-        assertTrue(Regex("ifCurrent\\(generation\\)").findAll(verification).count() >= 5)
-        assertEquals(6, Regex("publish\\(cell, [^)]*, generation\\)").findAll(verification).count())
-        val service = source("service/MiniICService.kt")
-        assertTrue(service.contains("historyEpoch = historyEpoch"))
-        assertTrue(service.contains("historyEpoch.ifCurrent(generationAtStart)"))
-        // La publicación en pantalla vuelve a comprobar la época dentro de la tarea de Main.
-        val publish = service.substringAfter("private fun updateFlowWithStatus(").substringBefore("\n    }\n")
-        assertTrue(publish.contains("scope.launch(Dispatchers.Main) {\n            historyEpoch.ifCurrent(epoch) {"))
-    }
-
-    @Test fun `verified label is rechecked locally without api credentials`() {
-        val verification = source("service/ExternalVerificationController.kt")
-        val noToken = verification.substringAfter("if (!snapshot.hasCredentials) {")
-            .substringBefore("return\n")
-        assertTrue(noToken.contains("recheckVerifiedLocally(cell, key, generation)"))
-        assertFalse(verification.substringAfter("private fun recheckVerifiedLocally").substringBefore("private fun verifyNow")
-            .contains("OpenCellIdClient"))
-    }
 }

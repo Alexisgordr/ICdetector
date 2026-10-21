@@ -8,7 +8,7 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
- * La verificación externa (WiGLE / OpenCellID) **no puntúa** — v2.1.
+ * La verificación externa **no puntúa** — v2.1 (y desde 3.1.0 ya no existe).
  *
  * Durante la fase de recolección el score tiene que salir solo de las 14 heurísticas, para poder
  * cruzarlo después contra la etiqueta de verificación y medir si esa etiqueta aporta señal. Si el

@@ -26,9 +26,9 @@ import kotlin.math.sqrt
  * Por eso la UI debe llamarlo "centro de observación" y nunca "posición de la antena", igual que
  * `BayesianScorer` dejó de llamarse "probabilidad" cuando se vio que no estaba calibrada.
  *
- * ── POR QUÉ NO SE USA OPENCELLID / WIGLE AQUÍ ───────────────────────────────────────────────
+ * ── POR QUÉ NO SE USA UNA BASE DE ANTENAS EXTERNA ───────────────────────────────────────────
  *
- * Tres razones, ninguna de ellas "por no depender de internet":
+ * Tres razones, además de que la app no tiene conexión a Internet:
  *
  *  1. **Autoconsistencia.** Comparar un centroide propio con uno de una base externa mezcla dos
  *     métodos de cálculo distintos y hace que las distancias dejen de ser comparables entre sí.

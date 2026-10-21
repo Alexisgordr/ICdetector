@@ -97,22 +97,6 @@ fun GeoGraph(active: CellData, geoHistory: List<Float>) {
             Column(horizontalAlignment = Alignment.End) {
                 Text(stringResource(R.string.ta_distance), color = Color(0xFF444444), fontSize = 8.sp, fontFamily = FontFamily.Monospace)
                 Text(distanceText, color = if (distanceMeters != null) Color.White else Color(0xFF888888), fontFamily = FontFamily.Monospace, fontSize = 16.sp, fontWeight = FontWeight.ExtraBold)
-
-                // v2.1 — Segunda estimación, por una vía completamente distinta: la coordenada
-                // que las bases públicas atribuyen a esta antena frente a tu fix GPS. Se muestra
-                // aparte y con su procedencia a la vista porque su precisión NO es comparable con
-                // la del TA: una coordenada colaborativa puede estar a cientos de metros del
-                // emplazamiento real. Presentarlas como si fueran lo mismo sería engañar.
-                val towerDistance = active.distanceToTowerMeters
-                if (towerDistance != null) {
-                    Spacer(Modifier.height(6.dp))
-                    Text(stringResource(R.string.public_database_distance), color = Color(0xFF444444), fontSize = 8.sp, fontFamily = FontFamily.Monospace)
-                    Text(
-                        if (towerDistance >= 1000) String.format(Locale.ROOT, "%.2f km", towerDistance / 1000f)
-                        else "$towerDistance m",
-                        color = Color(0xFF4CAF50), fontFamily = FontFamily.Monospace, fontSize = 16.sp, fontWeight = FontWeight.ExtraBold
-                    )
-                }
             }
         }
 

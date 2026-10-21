@@ -3,9 +3,10 @@ package com.alexisgordr.icdetector.backup
 import org.json.JSONObject
 
 /**
- * 3.0 — Ajustes que viajan en la copia de seguridad. Lista cerrada: solo preferencias del usuario.
- * La clave de OpenCelliD (`opencellid_key`) no se copia nunca, ni el estado interno (última
- * ubicación aceptada, contadores, etc.).
+ * 3.0 — Ajustes que viajan en la copia de seguridad. Lista cerrada: solo preferencias del usuario,
+ * nunca el estado interno (última ubicación aceptada, contadores, etc.). 3.1.0 — Sin el proxy de
+ * la verificación externa: una copia anterior que lo traiga lo ignora, como cualquier clave
+ * desconocida.
  */
 object BackupSettings {
     const val PREFS_FILE = "miniic_prefs"
@@ -14,7 +15,6 @@ object BackupSettings {
     val KEYS: Map<String, Type> = linkedMapOf(
         "app_language" to Type.STRING,
         "location_mode" to Type.STRING,
-        "proxy_enabled" to Type.BOOLEAN,
         "latency_detection_enabled" to Type.BOOLEAN,
         // 3.0 — Avisos de red 2G/3G (LegacyNetworkAlertMode).
         "legacy_network_alert_mode" to Type.STRING,
@@ -31,8 +31,6 @@ object BackupSettings {
         "legacy_network_alert_mode" to "NOTIFY",
         "stable_site_silent_notices" to true
     )
-
-    const val NEVER_EXPORTED = "opencellid_key"
 
     enum class Type { STRING, BOOLEAN }
 

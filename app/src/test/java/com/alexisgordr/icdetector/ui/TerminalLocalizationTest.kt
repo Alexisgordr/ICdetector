@@ -19,14 +19,13 @@ class TerminalLocalizationTest {
     }
 
     @Test
-    fun `terminal translates verification failure without hiding raw response`() {
-        val source = "[API] OpenCellID: límite diario de consultas agotado. NO significa que la antena no exista; se reintentará. Respuesta: 429"
+    fun `terminal translates a write failure without hiding the raw error`() {
+        val source = "ESCRITURA FALLIDA: SQLiteFullException 13"
         val result = localizeTerminalLine(source)
 
-        assertTrue(result.contains("daily query limit exhausted", ignoreCase = true))
-        assertTrue(result.contains("Will retry", ignoreCase = true))
-        assertTrue(result.contains("429"))
-        assertFalse(result.contains("Respuesta"))
+        assertTrue(result.contains("WRITE FAILED"))
+        assertTrue(result.contains("SQLiteFullException 13"))
+        assertFalse(result.contains("ESCRITURA"))
     }
 
     @Test

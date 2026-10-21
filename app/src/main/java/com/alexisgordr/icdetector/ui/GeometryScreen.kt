@@ -81,7 +81,7 @@ private fun transformedGraphPoint(point: Offset, size: IntSize, scale: Float, pa
  *     al servidor y cada petición revelaría dónde vive el usuario — un agujero absurdo en una
  *     app cuyo objetivo es precisamente la privacidad de la localización. El lienzo se dibuja con
  *     una proyección equirectangular sobre el rectángulo que ocupan los datos, y ya.
- *  2. **No hay base de datos externa.** Ni OpenCellID ni WiGLE. Ver [CellGeometry] para el porqué.
+ *  2. **No hay base de datos externa.** Ver [CellGeometry] para el porqué.
  *  3. **Esto no puntúa.** Es diagnóstico puro: no modifica el score, no abre casos forenses y no
  *     enseña rutas al baseline. Solo enseña lo que ya hay.
  */

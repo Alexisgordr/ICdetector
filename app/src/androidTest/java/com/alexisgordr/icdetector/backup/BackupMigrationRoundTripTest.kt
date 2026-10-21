@@ -54,7 +54,7 @@ class BackupMigrationRoundTripTest {
     private val target = File(dir, "target.db")
     private val helpers = mutableListOf<CellDbHelper>()
     private val prefs = context.getSharedPreferences(BackupSettings.PREFS_FILE, Context.MODE_PRIVATE)
-    private val touched = BackupSettings.KEYS.keys + listOf(BackupSettings.NEVER_EXPORTED, StableSiteNotices.PREF_PENDING_EPISODE)
+    private val touched = BackupSettings.KEYS.keys + listOf(LEGACY_KEY, StableSiteNotices.PREF_PENDING_EPISODE)
     private lateinit var saved: Map<String, Any?>
 
     @Before fun setUp() {
@@ -138,24 +138,24 @@ class BackupMigrationRoundTripTest {
     @Test fun schema25RoundTripIsIdenticalTableByTableAndKeepsSettings() {
         val src = helper(source)
         populate(src)
-        prefs.edit().putBoolean("proxy_enabled", true).putBoolean("stable_site_silent_notices", false)
-            .putString("legacy_network_alert_mode", "NOTIFY").putString(BackupSettings.NEVER_EXPORTED, "secret-key").commit()
+        prefs.edit().putString("location_mode", "ADAPTIVE").putBoolean("stable_site_silent_notices", false)
+            .putString("legacy_network_alert_mode", "NOTIFY").putString(LEGACY_KEY, "secret-key").commit()
         val backup = export(src, source)
         val expected = dump(src.readableDatabase)
         assertTrue("hay datos en todas las áreas", listOf("history", "profile_evaluations", "cell_transitions", "mobility_trips", "forensic_cases")
             .all { expected[it].orEmpty().isNotEmpty() })
 
         // El teléfono cambia después de la copia.
-        prefs.edit().putBoolean("proxy_enabled", false).putBoolean("stable_site_silent_notices", true)
-            .putString(BackupSettings.NEVER_EXPORTED, "other-key").commit()
+        prefs.edit().putString("location_mode", "CONTINUOUS").putBoolean("stable_site_silent_notices", true)
+            .putString(LEGACY_KEY, "other-key").commit()
         helper(target).also { addOther(it) }.close()
 
         val restored = restore(backup)
         assertEquals(CellDbHelper.DATABASE_VERSION, restored.readableDatabase.version)
         assertEquals(expected, dump(restored.readableDatabase))
-        assertTrue(prefs.getBoolean("proxy_enabled", false))
+        assertEquals("ADAPTIVE", prefs.getString("location_mode", null))
         assertFalse(prefs.getBoolean("stable_site_silent_notices", true))
-        assertEquals("la clave no viaja en la copia", "other-key", prefs.getString(BackupSettings.NEVER_EXPORTED, null))
+        assertEquals("una clave retirada no viaja en la copia", "other-key", prefs.getString(LEGACY_KEY, null))
     }
 
     private fun addOther(h: CellDbHelper) = h.logConnection(observedAtMs = 1L, netType = "LTE", cid = "999", mnc = "07", tac = "1",
@@ -265,5 +265,10 @@ class BackupMigrationRoundTripTest {
         assertEquals("ni un byte de la base actual cambia", shaBefore, sha(target))
         assertEquals(RestoreEngine.RestoreOutcome.NOTHING, RestoreEngine(dir, target.name, AndroidDatabaseOps).recover().outcome)
         assertEquals(before, dump(helper(target).readableDatabase))
+    }
+
+    private companion object {
+        /** Ajuste retirado en 3.1.0 (ver LegacyPreferences): nunca viajó ni viaja en la copia. */
+        const val LEGACY_KEY = "opencellid_key"
     }
 }

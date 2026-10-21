@@ -71,7 +71,7 @@ class AnalysisPresentationTest {
         assertEquals("falta de señal en las cuatro llamadas", 4,
             Regex("""R\.string\.(no_signal_airplane|searching_network)\)?,?\s*(force = recovered, )?kind = com\.alexisgordr\.icdetector\.core\.MonitoringNotificationText\.TextKind\.NO_SIGNAL""")
                 .findAll(service).count())
-        assertTrue(service.contains("updateNotification(confirmedActive.copy(verified = finalStatus), force = recovered)"))
+        assertTrue(service.contains("updateNotification(confirmedActive, force = recovered)"))
         assertTrue(service.contains("updateNotificationText(getString(R.string.searching_network), force = recovered, kind ="))
     }
 

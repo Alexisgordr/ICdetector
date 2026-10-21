@@ -48,7 +48,6 @@ import com.alexisgordr.icdetector.models.SUBTHRESHOLD_PREFIX
 import com.alexisgordr.icdetector.models.identityKey
 import com.alexisgordr.icdetector.models.CellTransitionSummary
 import com.alexisgordr.icdetector.models.HeuristicStatus
-import com.alexisgordr.icdetector.models.VerificationStatus
 import com.alexisgordr.icdetector.storage.CellDbHelper
 import com.alexisgordr.icdetector.utils.ExportUtils
 import kotlinx.coroutines.Dispatchers
@@ -415,8 +414,6 @@ fun HistoryPanel(
                                     modifier = Modifier.wrapContentWidth(),
                                     verticalAlignment = Alignment.CenterVertically
                                 ) {
-                                    VerificationBadge(first.verified, compact = true)
-                                    Spacer(Modifier.width(4.dp))
                                     Icon(
                                         imageVector = if (isExpanded) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
                                         contentDescription = null,
@@ -477,7 +474,7 @@ private fun AntennaDetailAccordions(
                     // La precisión guardada acompaña a la posición; si no se guardó, se dice (no se supone).
                     val accuracy = RowProvenance.accuracyMeters(record.gpsAccuracyM)
                         ?.let { stringResource(R.string.antenna_gps_accuracy, it) } ?: stringResource(R.string.antenna_gps_accuracy_unknown)
-                    Text("${verificationStatusLabel(record.verified)} · ${"%.5f".format(java.util.Locale.ROOT, record.lat)}, ${"%.5f".format(java.util.Locale.ROOT, record.lon)} · $accuracy", color = Color(0xFF777777), fontSize = 9.sp, fontFamily = FontFamily.Monospace)
+                    Text("${"%.5f".format(java.util.Locale.ROOT, record.lat)}, ${"%.5f".format(java.util.Locale.ROOT, record.lon)} · $accuracy", color = Color(0xFF777777), fontSize = 9.sp, fontFamily = FontFamily.Monospace)
                 }
                 LocationButton(record.lat!!, record.lon!!, record.cid)
             }
@@ -496,7 +493,7 @@ private fun AntennaDetailAccordions(
     if (open == AntennaSection.TECHNICAL) {
         val latest = records.first()
         val oldest = records.last()
-        DetailText("CID ${latest.cid} · MCC/MNC ${latest.mcc}/${latest.mnc} · TAC ${latest.tac}\n${latest.radio.name} · PCI ${latest.pci ?: "N/A"} · ARFCN ${latest.arfcn ?: "N/A"}\n${latest.dbm} dBm · RSRQ ${latest.rsrq ?: "N/A"} · SINR ${latest.sinr ?: "N/A"} · TA ${latest.timingAdvance ?: "N/A"} ${latest.timingAdvanceUnit.name}\n${verificationStatusLabel(latest.verified)} · score ${latest.score}% · ${stringResource(R.string.antenna_anomaly_label)} ${"%.1f".format(java.util.Locale.ROOT, latest.anomalyConfidence)}%\n${records.size} ${stringResource(R.string.antenna_samples_label)} · ${oldest.timestamp} — ${latest.timestamp}")
+        DetailText("CID ${latest.cid} · MCC/MNC ${latest.mcc}/${latest.mnc} · TAC ${latest.tac}\n${latest.radio.name} · PCI ${latest.pci ?: "N/A"} · ARFCN ${latest.arfcn ?: "N/A"}\n${latest.dbm} dBm · RSRQ ${latest.rsrq ?: "N/A"} · SINR ${latest.sinr ?: "N/A"} · TA ${latest.timingAdvance ?: "N/A"} ${latest.timingAdvanceUnit.name}\nscore ${latest.score}% · ${stringResource(R.string.antenna_anomaly_label)} ${"%.1f".format(java.util.Locale.ROOT, latest.anomalyConfidence)}%\n${records.size} ${stringResource(R.string.antenna_samples_label)} · ${oldest.timestamp} — ${latest.timestamp}")
         val notEvaluated = when (val n = RowProvenance.notEvaluated(latest.notEvaluatedHeuristics)) {
             RowProvenance.NotEvaluated.Unknown -> stringResource(R.string.antenna_not_evaluated_unknown)
             RowProvenance.NotEvaluated.None -> stringResource(R.string.antenna_not_evaluated_none)
@@ -752,18 +749,6 @@ private fun TopologyRouteCard(route: CellTransitionSummary, onOpen: () -> Unit) 
 // v2.10.6 — Etiquetas localizadas de estados que antes se mostraban con `.name` (VERIFIED,
 // PASSED, READY…). Solo cambian lo que se ve: el almacenamiento y las exportaciones siguen
 // usando el nombre del enum.
-
-/** Estado de verificación externa, con los mismos textos que [VerificationBadge]. */
-@Composable
-private fun verificationStatusLabel(status: VerificationStatus): String = stringResource(
-    when (status) {
-        VerificationStatus.VERIFIED -> R.string.badge_registered
-        VerificationStatus.NOT_FOUND -> R.string.badge_not_found
-        VerificationStatus.REJECTED -> R.string.badge_rejected
-        VerificationStatus.PENDING -> R.string.badge_pending
-        VerificationStatus.ERROR -> R.string.badge_error
-    }
-)
 
 /**
  * 3.0 (UI2) — Estado de la ÚLTIMA OBSERVACIÓN de una ruta (H16), igual en tarjeta, detalle y
@@ -1103,8 +1088,6 @@ fun IntelPanel(dbHelper: CellDbHelper) {
     val avgScore = stats.averageScore
     // Puntuación baja (< umbral) en alguna observación: NO es una alarma confirmada.
     val lowScoreCells = stats.lowScoreCells
-    val verifiedCells = stats.verifiedCells
-    val notFoundCells = stats.notFoundCells
     val recordsWithGps = stats.observationsWithGps
     val mostSeenCell = stats.mostSeen
     // Celdas con algún motivo guardado (no limpio, no sub-umbral). Incluye alarmas aún en
@@ -1142,12 +1125,16 @@ fun IntelPanel(dbHelper: CellDbHelper) {
         HorizontalDivider(color = Color(0xFF1A1A1A))
         Spacer(Modifier.height(6.dp))
 
+        // 3.1.0 — Sin verificación externa: ya no hay contadores de registradas / sin registro.
         Row(modifier = Modifier.fillMaxWidth()) {
-            IntelCell(Modifier.weight(1f), stringResource(R.string.intel_verified), verifiedCells.toString(), Color(0xFF4CAF50))
-            IntelCell(Modifier.weight(1f), stringResource(R.string.intel_not_found), notFoundCells.toString(), Color(0xFFFFA000))
             IntelCell(
                 Modifier.weight(1f), stringResource(R.string.intel_suspicious, com.alexisgordr.icdetector.core.ScoreThreshold.SUSPICIOUS_BELOW), lowScoreCells.toString(),
                 if (lowScoreCells > 0) Color(0xFFCF6679) else Color(0xFF4CAF50)
+            )
+            IntelCell(Modifier.weight(1f), stringResource(R.string.intel_with_gps), recordsWithGps.toString())
+            IntelCell(
+                Modifier.weight(1f), stringResource(R.string.intel_anomalies), cellsWithReason.toString(),
+                if (cellsWithReason > 0) Color(0xFFFFA000) else Color(0xFF4CAF50)
             )
         }
 
@@ -1156,11 +1143,6 @@ fun IntelPanel(dbHelper: CellDbHelper) {
         Spacer(Modifier.height(6.dp))
 
         Row(modifier = Modifier.fillMaxWidth()) {
-            IntelCell(Modifier.weight(1f), stringResource(R.string.intel_with_gps), recordsWithGps.toString())
-            IntelCell(
-                Modifier.weight(1f), stringResource(R.string.intel_anomalies), cellsWithReason.toString(),
-                if (cellsWithReason > 0) Color(0xFFFFA000) else Color(0xFF4CAF50)
-            )
             // Período en 2 líneas para que no se corte
             Column(
                 modifier = Modifier.weight(1f),

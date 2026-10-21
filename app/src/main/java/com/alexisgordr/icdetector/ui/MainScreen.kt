@@ -222,9 +222,6 @@ fun MainScreenContent(dbHelper: CellDbHelper, service: MiniICService?) {
     val rsrqHistory by rsrqFlow.collectAsStateWithLifecycle()
     val geoHistory by geoFlow.collectAsStateWithLifecycle()
     val serviceState by serviceStateFlow.collectAsStateWithLifecycle()
-    // 3.0 — Token de OpenCellID configurado (sin servicio: no se consulta nada).
-    val publicDbCheckEnabledFlow = remember(service) { service?.publicDbCheckEnabled ?: MutableStateFlow(false) }
-    val publicDbCheckEnabled by publicDbCheckEnabledFlow.collectAsStateWithLifecycle()
     
     var refreshing by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
@@ -303,37 +300,14 @@ fun MainScreenContent(dbHelper: CellDbHelper, service: MiniICService?) {
         } else {
             Box(modifier = Modifier.fillMaxSize().pullRefresh(pullRefreshState)) {
                 Column(modifier = Modifier.fillMaxSize()) {
-                    // v2.1 — Una sola verdad en pantalla.
-                    //
-                    // Hasta aquí esta cabecera decidía su color por `verified == VERIFIED` y el
-                    // panel de auditoría de abajo lo decidía por el score. Con el mismo dato —una
-                    // celda limpia que las bases públicas no conocen, 90%— la cabecera pintaba
-                    // ámbar y el panel verde. Dos veredictos para un único número: exactamente la
-                    // clase de contradicción que v2.1 existe para eliminar.
-                    //
-                    // El score es la salida del motor, así que el color sale del score, por la
-                    // misma función que usa el panel. Lo que las bases públicas contestaron no es
-                    // un veredicto de seguridad: es un dato de contexto, y va en su propia línea.
+                    // v2.1 — Una sola verdad en pantalla: el color de la cabecera sale del score,
+                    // por la misma función que usa el panel de auditoría.
                     val (statusText, statusColor) = when {
                         active == null -> stringResource(R.string.searching_signal) to Color(0xFF888888)
                         active.isSuspicious -> stringResource(R.string.network_anomaly_confirmed) to Color(0xFFCF6679)
                         active.securityScore >= SCORE_SAFE -> stringResource(R.string.no_anomalies) to securityScoreColor(active.securityScore)
                         active.securityScore >= SCORE_WATCH -> stringResource(R.string.observing_score, active.securityScore) to securityScoreColor(active.securityScore)
                         else -> stringResource(R.string.unconfirmed_anomaly_score, active.securityScore) to securityScoreColor(active.securityScore)
-                    }
-
-                    // Contexto, no veredicto: qué contestó OpenCellID. Que una celda no
-                    // esté en una base pública no la hace sospechosa —las bases están incompletas
-                    // y las celdas nuevas tardan meses en aparecer—, sólo la deja sin respaldo.
-                    // 3.0 — Sin token no se consulta nada: la tarjeta lo dice (PublicDbNote).
-                    val verificationNote = when (active?.verified?.let { com.alexisgordr.icdetector.core.PublicDbNote.of(it, publicDbCheckEnabled) }) {
-                        com.alexisgordr.icdetector.core.PublicDbNote.REGISTERED -> stringResource(R.string.public_db_registered)
-                        com.alexisgordr.icdetector.core.PublicDbNote.NOT_FOUND -> stringResource(R.string.public_db_not_found)
-                        com.alexisgordr.icdetector.core.PublicDbNote.REJECTED -> stringResource(R.string.public_db_rejected)
-                        com.alexisgordr.icdetector.core.PublicDbNote.QUERYING -> stringResource(R.string.public_db_pending)
-                        com.alexisgordr.icdetector.core.PublicDbNote.ERROR -> stringResource(R.string.public_db_error)
-                        com.alexisgordr.icdetector.core.PublicDbNote.CHECK_OFF_NO_TOKEN -> stringResource(R.string.public_db_off_no_token)
-                        null -> null
                     }
 
                     // 3.0 (#35) — Si las alarmas están silenciadas, decirlo antes que nada.
@@ -360,10 +334,6 @@ fun MainScreenContent(dbHelper: CellDbHelper, service: MiniICService?) {
                             Column {
                                 Text(stringResource(R.string.sector_status), color = Color(0xFF666666), fontFamily = FontFamily.Monospace, fontSize = 10.sp)
                                 Text(statusText, color = statusColor, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Bold, fontSize = 16.sp, letterSpacing = 1.sp)
-                                if (verificationNote != null) {
-                                    Spacer(Modifier.height(2.dp))
-                                    Text(verificationNote, color = Color(0xFF777777), fontFamily = FontFamily.Monospace, fontSize = 9.sp)
-                                }
                                 active?.localCellTrust?.let { trust ->
                                     val trustLabel = stringResource(when (trust.state) {
                                         LocalCellTrustState.NEW -> R.string.trust_state_new

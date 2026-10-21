@@ -19,7 +19,6 @@ import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.res.stringArrayResource
 import androidx.compose.ui.res.stringResource
 import com.alexisgordr.icdetector.R
-import com.alexisgordr.icdetector.models.VerificationStatus
 import com.alexisgordr.icdetector.models.HeuristicStatus
 import com.alexisgordr.icdetector.models.HeuristicDiagnostic
 import com.alexisgordr.icdetector.models.TransitionCoherenceResult
@@ -143,38 +142,5 @@ fun TransitionCoherenceCard(result: TransitionCoherenceResult) {
                 HeuristicStatus.NOT_EVALUATED -> stringResource(R.string.transition_explanation_na)
             }, color = Color(0xFF888888), fontSize = 8.sp, fontFamily = FontFamily.Monospace)
         }
-    }
-}
-
-@Composable
-fun VerificationBadge(status: VerificationStatus, compact: Boolean = false) {
-    val (text, color) = when (status) {
-        VerificationStatus.VERIFIED -> stringResource(R.string.badge_registered) to Color(0xFF4CAF50)
-        // "NO ENCONTRADA" en rojo era otra herencia de cuando no estar en una base pública se
-        // trataba como un indicio. No lo es: las bases están incompletas. Gris, como corresponde a
-        // un dato de contexto que no acusa a nadie.
-        VerificationStatus.NOT_FOUND -> stringResource(R.string.badge_not_found) to Color(0xFF888888)
-        VerificationStatus.REJECTED -> stringResource(R.string.badge_rejected) to Color(0xFFFFA000)
-        VerificationStatus.PENDING -> stringResource(R.string.badge_pending) to Color(0xFF888888)
-        VerificationStatus.ERROR -> stringResource(R.string.badge_error) to Color(0xFFFFA000)
-    }
-    
-    Surface(
-        color = color.copy(alpha = 0.1f),
-        shape = RoundedCornerShape(2.dp),
-        border = BorderStroke(1.dp, color.copy(alpha = 0.5f))
-    ) {
-        Text(
-            text = text,
-            color = color,
-            fontSize = if (compact) 8.sp else 10.sp,
-            fontFamily = FontFamily.Monospace,
-            fontWeight = FontWeight.Bold,
-            maxLines = 1,
-            modifier = Modifier.padding(
-                horizontal = if (compact) 4.dp else 6.dp,
-                vertical = 2.dp
-            )
-        )
     }
 }

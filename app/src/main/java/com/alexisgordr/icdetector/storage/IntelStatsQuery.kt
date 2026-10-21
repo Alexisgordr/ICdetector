@@ -14,8 +14,6 @@ data class IntelStats(
     val averageScore: Double,
     /** Celdas con alguna observación por debajo del umbral (score < 70). NO son alarmas confirmadas. */
     val lowScoreCells: Long,
-    val verifiedCells: Long,
-    val notFoundCells: Long,
     /** Observaciones (no celdas) con latitud y longitud. */
     val observationsWithGps: Long,
     /** Celdas con algún motivo guardado que no sea limpio ni sub-umbral (incluye alarmas en confirmación). */
@@ -36,8 +34,7 @@ data class IntelStats(
  * Semántica idéntica a la de entonces (comprobada contra una réplica del cálculo anterior):
  *  - Identidad completa `mcc-mnc-tac-cid-RADIO`; un texto nulo cuenta como "null" (como la
  *    plantilla de Kotlin) y una tecnología desconocida o inválida como UNKNOWN.
- *  - Score nulo = 0 y no entero truncado (como `Cursor.getInt`); `verified` exacto ('VERIFIED',
- *    'NOT_FOUND'; otro valor o nulo = PENDING).
+ *  - Score nulo = 0 y no entero truncado (como `Cursor.getInt`).
  *  - «Con motivo»: motivo no en blanco (los mismos espacios que `isBlank` de Kotlin), distinto de
  *    "OK" y que no empiece por el prefijo sub-umbral. Las alarmas aún en confirmación cuentan.
  *  - Orden del historial `observed_at_ms DESC, id DESC` (nulos al final) para los empates y las fechas.
@@ -58,7 +55,6 @@ object IntelStatsQuery {
     private const val MNC = "mnc"
     private const val TAC = "tac"
     private const val MCC = "mcc"
-    private const val VERIFIED = "verified"
     private const val SCORE = "score"
     private const val FAILED = "failed_heuristics"
     private const val LAT = "lat"
@@ -92,11 +88,9 @@ object IntelStatsQuery {
     val SUMMARY_SQL = """
         SELECT COUNT(*), COUNT(DISTINCT ident), AVG(sc),
           COUNT(DISTINCT CASE WHEN sc < ${ScoreThreshold.SUSPICIOUS_BELOW} THEN ident END),
-          COUNT(DISTINCT CASE WHEN v = ${lit("VERIFIED")} THEN ident END),
-          COUNT(DISTINCT CASE WHEN v = ${lit("NOT_FOUND")} THEN ident END),
           IFNULL(SUM(CASE WHEN $LAT IS NOT NULL AND $LON IS NOT NULL THEN 1 ELSE 0 END),0),
           COUNT(DISTINCT CASE WHEN reasoned THEN ident END)
-        FROM (SELECT $IDENTITY_SQL AS ident, $SCORE_EXPR AS sc, $VERIFIED AS v, $LAT, $LON, $WITH_REASON AS reasoned FROM $TABLE)
+        FROM (SELECT $IDENTITY_SQL AS ident, $SCORE_EXPR AS sc, $LAT, $LON, $WITH_REASON AS reasoned FROM $TABLE)
     """.trimIndent()
 
     /**
@@ -139,10 +133,8 @@ object IntelStatsQuery {
             cells = n(1),
             averageScore = (s[2] as Number).toDouble(),
             lowScoreCells = n(3),
-            verifiedCells = n(4),
-            notFoundCells = n(5),
-            observationsWithGps = n(6),
-            cellsWithReason = n(7),
+            observationsWithGps = n(4),
+            cellsWithReason = n(5),
             mostSeen = most?.let { (it[0] as String) to (it[1] as Number).toLong() },
             networkTypes = nets,
             dateFrom = oldest,

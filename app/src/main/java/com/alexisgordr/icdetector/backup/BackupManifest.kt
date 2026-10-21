@@ -6,7 +6,7 @@ import org.json.JSONObject
  * 3.0 — Índice de una copia de seguridad (`manifest.json` dentro del fichero `.icdbackup`).
  *
  * La copia es un ZIP con tres entradas: este índice, la base de datos completa y los ajustes que
- * se pueden restaurar ([BackupSettings]). La clave de OpenCelliD no viaja nunca.
+ * se pueden restaurar ([BackupSettings]).
  */
 data class BackupManifest(
     /** Formato del fichero de copia; ver [BackupFormat.FORMAT]. */

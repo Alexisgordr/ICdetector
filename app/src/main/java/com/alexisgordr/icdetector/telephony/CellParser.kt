@@ -36,8 +36,8 @@ object CellParser {
     // La tecnología se toma de la CLASE de CellInfo y de nada más. Es la única fuente firme: la
     // cadena `networkTypeString` viene de TelephonyDisplayInfo y describe el icono de la barra de
     // estado. Las dos primeras versiones de este mapeo se equivocaron —GSM salía etiquetado como
-    // UMTS y WCDMA se quedaba sin tecnología—, que es justo el error que manda una consulta GSM a
-    // OpenCellID pidiendo radio=UMTS. Hay un test por cada una de las cuatro clases.
+    // UMTS y WCDMA se quedaba sin tecnología—, y la tecnología forma parte de la identidad de la
+    // celda. Hay un test por cada una de las cuatro clases.
 
 
     // 3.0 — PCI, PSC y canales: solo `CellInfo.UNAVAILABLE` (Int.MAX_VALUE) pasa a null

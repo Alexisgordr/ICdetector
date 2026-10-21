@@ -51,25 +51,6 @@ class StringResourcesTest {
         }
     }
 
-    @Test fun `without a token the status card does not say the public database is being queried`() {
-        // 3.0 — Revisión de F-Droid: sin token no se consulta nada.
-        assertEquals("Public database check off (no token)", en.getValue("public_db_off_no_token"))
-        assertEquals("Comprobación de base pública desactivada (sin token)", es.getValue("public_db_off_no_token"))
-        listOf(en, es).forEach { lang ->
-            listOf("public_db_off_no_token", "public_db_off_label").forEach { key ->
-                val text = lang.getValue(key)
-                assertFalse("$key: $text", text.contains("Querying") || text.contains("Consultando"))
-                assertFalse("$key: $text", text.contains("PENDING") || text.contains("PENDIENTE"))
-            }
-        }
-        val main = module("src/main/java/com/alexisgordr/icdetector/ui/MainScreen.kt").readText()
-        assertTrue(main.contains("PublicDbNote.CHECK_OFF_NO_TOKEN -> stringResource(R.string.public_db_off_no_token)"))
-        assertFalse("public_db_pending solo para QUERYING", main.contains("VerificationStatus.PENDING -> stringResource(R.string.public_db_pending)"))
-        val service = module("src/main/java/com/alexisgordr/icdetector/service/MiniICService.kt").readText()
-        assertTrue(service.contains("PublicDbNote.CHECK_OFF_NO_TOKEN -> getString(R.string.public_db_off_label)"))
-        assertFalse(service.contains("VerificationStatus.PENDING -> getString(R.string.pending_label)"))
-    }
-
     @Test fun `history and geometry screens do not hard-code the confirmation word`() {
         listOf("HistoryScreen.kt", "GeometryScreen.kt").forEach { name ->
             val source = module("src/main/java/com/alexisgordr/icdetector/ui/$name").readText()
@@ -233,8 +214,8 @@ class StringResourcesTest {
         assertEquals(3, Regex("trustGated = true, trustGateMet = maturity.trustGateMet").findAll(main).count())
     }
 
-    // v2.10.8 — El cliente de WiGLE no se usaba: se retira para que el código coincida con la
-    // documentación (solo OpenCellID y la prueba de latencia opcional salen a la red).
+    // v2.10.8 — El cliente de WiGLE no se usaba: se retiró para que el código coincidiera con la
+    // documentación. (3.1.0: ya no queda ninguna conexión externa; ver ExternalVerificationRemovalTest.)
     @Test fun `dead wigle client is gone`() {
         assertFalse(File("src/main/java/com/alexisgordr/icdetector/network/WigleClient.kt").exists())
         assertFalse(File("app/src/main/java/com/alexisgordr/icdetector/network/WigleClient.kt").exists())

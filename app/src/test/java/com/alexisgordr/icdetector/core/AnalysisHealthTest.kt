@@ -166,16 +166,15 @@ class AnalysisHealthTest {
         val publish = service.substringAfter("if (!collectionGeneration.mayPublish(cycleTicket)) return@withContext")
             .substringBefore("} else {\n                        stableSiteIntensiveActive = false")
         fun at(s: String) = publish.indexOf(s).also { assertTrue("falta: $s", it >= 0) }
-        val verify = at("verificationController.verify(active)")
+        // 3.1.0 — Sin verificación externa: nada se consulta fuera antes de publicar.
+        assertFalse(publish.contains("verificationController"))
         val screen = at("_cellFlow.value = sorted.mapIndexed")
         val health = at("onAnalysisPublished(cycleTicket)")
         val tail = at("publicationTail {")
-        assertTrue(verify < screen && screen < health && health < tail)
+        assertTrue(screen < health && health < tail)
         listOf("dbHelper.recordIncidentPhase(", "forensicRecorder.observe(", "checkAlerts(").forEach {
             assertTrue("$it va después de publicar", at(it) > tail)
         }
-        assertTrue("la verificación no puede tirar la publicación",
-            publish.substring(0, verify).trimEnd().endsWith("try {"))
         val tailFn = service.substringAfter("private inline fun publicationTail(").substringBefore("\n    }\n")
         assertTrue(tailFn.contains("catch (e: CancellationException)"))
         assertTrue(tailFn.contains("AnalysisHealth.TAIL_FAILURE_LOG"))

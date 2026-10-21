@@ -49,10 +49,9 @@ data class HistoryRecord(
      */
     val anomalyConfidence: Float = 0f,
     /**
-     * Coordenada de la ANTENA según OpenCellID. v2.1: vive en su propia columna y NO
-     * se mezcla nunca con [lat]/[lon], que son y solo son la posición GPS del dispositivo en
-     * el momento de la observación. Mezclar ambas magnitudes en la misma columna era la causa
-     * real de las coordenadas imposibles (~1.100 km) que aparecían en el historial.
+     * Coordenada de la ANTENA según la verificación externa, separada de [lat]/[lon] (que son
+     * y solo son la posición GPS del dispositivo). 3.1.0 — Ya no hay verificación externa: las
+     * filas nuevas las dejan vacías; solo las filas anteriores a 3.1.0 pueden traerlas.
      */
     val apiLat: Double? = null,
     val apiLon: Double? = null,

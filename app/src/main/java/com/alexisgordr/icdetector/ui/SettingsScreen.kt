@@ -14,7 +14,6 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.edit
@@ -32,7 +31,6 @@ import com.alexisgordr.icdetector.util.LocaleController
 import com.alexisgordr.icdetector.core.LegacyNetworkAlertMode
 import com.alexisgordr.icdetector.core.StableSiteNotices
 import com.alexisgordr.icdetector.core.LocationMode
-import com.alexisgordr.icdetector.core.LatencyProxyChoice
 import kotlin.time.Duration.Companion.milliseconds
 
 @Composable
@@ -46,9 +44,6 @@ fun SettingsPanel(
 ) {
     val context = LocalContext.current
     val prefs = remember { context.getSharedPreferences("miniic_prefs", Context.MODE_PRIVATE) }
-    var token by remember { mutableStateOf(prefs.getString("opencellid_key", "") ?: "") }
-    var proxyEnabled by remember { mutableStateOf(prefs.getBoolean("proxy_enabled", false)) }
-    var askLatencyOverTor by remember { mutableStateOf(false) }
     var latencyDetectionEnabled by remember {
         mutableStateOf(prefs.getBoolean("latency_detection_enabled", false))
     }
@@ -106,26 +101,6 @@ fun SettingsPanel(
                 }
             }
             HorizontalDivider(color = Color(0xFF1A1A1A), modifier = Modifier.padding(vertical = 4.dp))
-            Text(stringResource(R.string.settings_apis), color = Color.White, fontSize = 14.sp, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Bold)
-            Text(stringResource(R.string.opencellid_token), color = Color(0xFF888888), fontSize = 11.sp, fontFamily = FontFamily.Monospace)
-            OutlinedTextField(
-                value = token,
-                onValueChange = { token = it },
-                modifier = Modifier.fillMaxWidth(),
-                textStyle = LocalTextStyle.current.copy(color = Color.White, fontFamily = FontFamily.Monospace, fontSize = 12.sp),
-                placeholder = { Text("pk.xxxxxxxxxxxxxxxx", color = Color(0xFF444444), fontSize = 12.sp) },
-                visualTransformation = PasswordVisualTransformation(),
-                colors = OutlinedTextFieldDefaults.colors(
-                    focusedBorderColor = Color(0xFF4CAF50),
-                    unfocusedBorderColor = Color(0xFF333333),
-                    cursorColor = Color.White
-                )
-            )
-            // 3.0 (V2) — Qué sale en cada consulta y qué protege (y qué no) el proxy.
-            Text(stringResource(R.string.opencellid_privacy), color = Color(0xFF666666), fontSize = 10.sp,
-                fontFamily = FontFamily.Monospace, lineHeight = 13.sp)
-            HorizontalDivider(color = Color(0xFF222222), modifier = Modifier.padding(vertical = 4.dp))
-
             // Leer estado WiFi de forma reactiva
             val isWifiActive by produceState(initialValue = false) {
                 while (true) {
@@ -155,51 +130,6 @@ fun SettingsPanel(
 
             // La latencia se bloquea con WiFi o VPN activos.
             val latencyBlocked = isWifiActive || isVpnActive
-
-            // ── Proxy Tor ───────────────────────────────────────────────────────────────────
-            // v2.5 — Esta fila ya NO se oculta cuando la latencia está activa. Antes se ocultaba,
-            // y combinado con que el interruptor de latencia se deshabilita con Wi-Fi/VPN se
-            // producía un callejón sin salida: con la latencia guardada en ON y entrando a Ajustes
-            // con Wi-Fi puesto, no se podía apagar la latencia (interruptor gris) ni tocar Tor
-            // (fila oculta). La única salida era apagar el Wi-Fi y volver a entrar.
-            // Ahora la fila siempre está, en gris y con el motivo escrito cuando no se puede usar.
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Column(Modifier.weight(1f)) {
-                    Text(
-                        stringResource(R.string.tor_proxy),
-                        color = if (latencyDetectionEnabled) Color(0xFF444444) else Color.White,
-                        fontSize = 14.sp,
-                        fontFamily = FontFamily.Monospace
-                    )
-                    Text(
-                        if (latencyDetectionEnabled) {
-                            stringResource(R.string.tor_unavailable_latency)
-                        } else {
-                            stringResource(R.string.tor_description)
-                        },
-                        color = Color(0xFF666666),
-                        fontSize = 10.sp,
-                        fontFamily = FontFamily.Monospace,
-                        lineHeight = 13.sp
-                    )
-                }
-                Spacer(Modifier.width(8.dp))
-                Switch(
-                    checked = proxyEnabled,
-                    enabled = !latencyDetectionEnabled,
-                    onCheckedChange = { proxyEnabled = it },
-                    colors = SwitchDefaults.colors(
-                        checkedThumbColor = Color.White,
-                        checkedTrackColor = Color(0xFF4CAF50)
-                    )
-                )
-            }
-
-            HorizontalDivider(color = Color(0xFF222222), modifier = Modifier.padding(vertical = 4.dp))
 
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -234,15 +164,7 @@ fun SettingsPanel(
                     enabled = !latencyBlocked || latencyDetectionEnabled,
                     onCheckedChange = { requested ->
                         // Encender exige que no haya Wi-Fi/VPN. Apagar siempre se permite.
-                        // 3.0 (V2) — Con Tor seleccionado se pregunta antes de quitar el proxy.
-                        val form = LatencyProxyChoice.Form(latencyDetectionEnabled, proxyEnabled)
-                        when (LatencyProxyChoice.onLatencyToggle(form, requested, latencyBlocked)) {
-                            LatencyProxyChoice.Action.APPLY -> LatencyProxyChoice.apply(form, requested).let {
-                                latencyDetectionEnabled = it.latencyEnabled; proxyEnabled = it.proxyEnabled
-                            }
-                            LatencyProxyChoice.Action.ASK -> askLatencyOverTor = true
-                            LatencyProxyChoice.Action.IGNORE -> Unit
-                        }
+                        if (!requested || !latencyBlocked) latencyDetectionEnabled = requested
                     },
                     colors = SwitchDefaults.colors(
                         checkedThumbColor = Color.White,
@@ -250,27 +172,6 @@ fun SettingsPanel(
                         disabledCheckedTrackColor = Color(0xFF444444),
                         disabledUncheckedTrackColor = Color(0xFF333333)
                     )
-                )
-            }
-
-            // 3.0 (V2) — Elección explícita: activar la latencia desactiva el proxy de OpenCellID.
-            // Cancelar deja el formulario como estaba; nada se aplica hasta «Guardar ajustes».
-            if (askLatencyOverTor) {
-                AlertDialog(
-                    onDismissRequest = { askLatencyOverTor = false },
-                    title = { Text(stringResource(R.string.latency_tor_dialog_title)) },
-                    text = { Text(stringResource(R.string.latency_tor_dialog_body)) },
-                    confirmButton = {
-                        TextButton(onClick = {
-                            LatencyProxyChoice.apply(LatencyProxyChoice.Form(latencyDetectionEnabled, proxyEnabled), true).let {
-                                latencyDetectionEnabled = it.latencyEnabled; proxyEnabled = it.proxyEnabled
-                            }
-                            askLatencyOverTor = false
-                        }) { Text(stringResource(R.string.latency_tor_dialog_confirm)) }
-                    },
-                    dismissButton = {
-                        TextButton(onClick = { askLatencyOverTor = false }) { Text(stringResource(R.string.latency_tor_dialog_cancel)) }
-                    }
                 )
             }
 
@@ -349,22 +250,14 @@ fun SettingsPanel(
 
             Button(
                 onClick = {
-                    val cleanToken = token.trim()
                     val selectedMode = selectedLocationMode
                     val legacyMode = selectedLegacyAlertMode
                     prefs.edit {
-                        putString("opencellid_key", cleanToken)
-                        remove("wigle_api_name")
-                        remove("wigle_api_token")
-                        remove("wigle_rate_limited_until")
-                        putBoolean("proxy_enabled", proxyEnabled)
                         putBoolean("latency_detection_enabled", latencyDetectionEnabled)
                         putString(LocationMode.PREF_KEY, selectedMode.storedValue)
                         putString(LegacyNetworkAlertMode.PREF_KEY, legacyMode.storedValue)
                         putBoolean(StableSiteNotices.PREF_ENABLED, stableSiteNotices)
                     }
-                    // 3.0 (V4) — Clave y proxy, juntos.
-                    service?.updateVerificationSettings(cleanToken, proxyEnabled)
                     service?.isLatencyDetectionEnabled = latencyDetectionEnabled
                     service?.locationMode = selectedMode
                     service?.legacyNetworkAlertMode = legacyMode
