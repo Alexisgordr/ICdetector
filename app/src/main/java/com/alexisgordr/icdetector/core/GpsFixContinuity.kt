@@ -77,13 +77,7 @@ class GpsFixContinuity(
         return false
     }
 
-    private fun distanceMeters(a: Fix, b: Fix): Double {
-        val earthRadius = 6_371_000.0
-        val lat1 = Math.toRadians(a.latitude)
-        val lat2 = Math.toRadians(b.latitude)
-        val deltaLat = Math.toRadians(b.latitude - a.latitude)
-        val deltaLon = Math.toRadians(b.longitude - a.longitude)
-        val h = sin(deltaLat / 2).pow(2) + cos(lat1) * cos(lat2) * sin(deltaLon / 2).pow(2)
-        return 2 * earthRadius * atan2(sqrt(h), sqrt(1 - h))
-    }
+    /** 3.1.0 (#47) — El haversine de [CellGeometry.distanceMeters], sin copia propia. */
+    private fun distanceMeters(a: Fix, b: Fix): Double =
+        CellGeometry.distanceMeters(a.latitude, a.longitude, b.latitude, b.longitude)
 }

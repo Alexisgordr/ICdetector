@@ -207,12 +207,9 @@ class MotionClassifier(
         private const val MAX_ACCURACY_M = 50f
         /** Clock granularity between the Location stamp and the delivery read; not a new threshold. */
         private const val FUTURE_TOLERANCE_MS = 1_000L
-        fun distanceMeters(aLat: Double, aLon: Double, bLat: Double, bLon: Double): Float {
-            val r = 6_371_000.0; val p1 = Math.toRadians(aLat); val p2 = Math.toRadians(bLat)
-            val dp = p2 - p1; val dl = Math.toRadians(bLon - aLon)
-            val h = sin(dp/2).pow(2) + cos(p1)*cos(p2)*sin(dl/2).pow(2)
-            return (2*r*asin(sqrt(h))).toFloat()
-        }
+        /** 3.1.0 (#47) — El haversine de [CellGeometry.distanceMeters]; antes tenía su propia copia. */
+        fun distanceMeters(aLat: Double, aLon: Double, bLat: Double, bLon: Double): Float =
+            CellGeometry.distanceMeters(aLat, aLon, bLat, bLon).toFloat()
     }
 }
 
