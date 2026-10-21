@@ -19,7 +19,7 @@ class WifiDiagnosticConsistencyTest {
 
     private fun inputs(wifi: Boolean) = DiagnosticEngine.Inputs(
         neighborCount = 0, wifiActive = wifi, locationAvailable = false, historyWithLocation = 0,
-        latencyAvailable = false, previousBandAvailable = false,
+        previousBandAvailable = false,
         signalBaseline = null, rfFingerprint = null, rfStability = null, reputation = null
     )
 

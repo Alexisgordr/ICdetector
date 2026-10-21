@@ -180,7 +180,6 @@ imposed by Android.
    access, and GPS enables the geographic checks.
 4. **Exclude the app from battery optimisation** for long sessions:
    **Settings → Apps → ICdetection → Battery → Battery optimization → Don't optimize**.
-5. **Optional:** enable the experimental latency check.
 
 The [Field Manual](MANUAL.md) covers setup, every screen, the rules and the exports in detail.
 
@@ -191,7 +190,8 @@ The [Field Manual](MANUAL.md) covers setup, every screen, the rules and the expo
 ICdetection continuously performs multi-layer heuristic analysis during cell reselections, handovers,
 signal transitions, topology changes, mobility events and changes in local radio behaviour. Sixteen
 rules (H1–H16) are evaluated on every cycle; each one passes, fails or reports `N/A` with a reason.
-Fourteen of them count as evidence: H8 is a data-quality flag and H9 is reserved.
+Thirteen of them count as evidence: H8 is a data-quality flag, H9 is reserved and H12 was retired in
+3.1.0.
 
 <details open>
 <summary><strong>Analysis layers</strong></summary>
@@ -251,9 +251,9 @@ Validates Cell IDs against a local GPS history built from the device's own clean
 across days, revealing the same Cell ID appearing from physically inconsistent locations. It uses
 only a GPS fix of 60 s or less, and does not rely on public tower databases.
 
-#### Latency Correlation (H12, optional)
-Compares network latency with this cell's own learned reference. Evaluated only on a real
-measurement; `N/A` while learning or when latency detection is off.
+#### Latency Correlation (H12, retired in 3.1.0)
+Compared network latency with the cell's own reference, which needed requests to third-party servers.
+Retired with the latency probe in 3.1.0; it keeps its number and is always `N/A`.
 
 #### Signal Baseline Anomaly (H13)
 Learns each cell's typical signal level at a given location and flags readings anomalously
@@ -353,7 +353,7 @@ It improves later review; it does not turn a heuristic alert into proof.
 
 The diagnostics view reports whether each rule passed, failed or could not be evaluated, and every
 `N/A` comes with a reason: unavailable modem telemetry, missing neighbour identities, missing
-location, insufficient latency context or an immature baseline. It also shows the maturity of the
+location or an immature baseline. It also shows the maturity of the
 RSRP baseline, the RSRQ/SINR fingerprint, PCI identity stability, local reputation and Stable-Site —
 so an inactive-looking rule can be told apart from one waiting for trustworthy data.
 
@@ -493,11 +493,8 @@ restore only backups you made yourself. See the [manual](MANUAL.md#backup-and-re
 transitions, service-state events, Stable-Site learning and route-familiarity trips in a single
 transaction, safely even while monitoring is running.
 
-**Every network connection is optional and off by default.**
-
-| Feature | When it connects | Endpoint(s) | What is sent |
-|---|---|---|---|
-| Latency detection (experimental) | Only if you enable it, and only over mobile data (not Wi-Fi or a VPN); one round roughly every 30 s | `www.google.com/generate_204` (Google), `one.one.one.one` (Cloudflare), `dns.quad9.net` (Quad9) | An HTTPS `HEAD` request with no cell or location data; like any connection, it reveals your IP address to those services |
+**No network connections.** Since 3.1.0 the app makes no connection of its own: the external
+verification and the latency probe were removed.
 
 ---
 
@@ -617,9 +614,8 @@ applications. ICdetection cannot directly access:
 - the identity (MCC, MNC, TAC, Cell ID) of most neighbour cells — many modems only report their
   frequency, PCI and signal level
 
-With Wi-Fi connected, the current implementation abstains on **H1, H2, H7, H12 and H13**
-(`N/A`, never "passed"). H12 must: its probe would measure the Wi-Fi path. The four RF rules abstain
-as an unvalidated precaution, so on Wi-Fi the app relies on the remaining rules; see the
+With Wi-Fi connected, the current implementation abstains on **H1, H2, H7 and H13**
+(`N/A`, never "passed"). The four RF rules abstain as an unvalidated precaution, so on Wi-Fi the app relies on the remaining rules; see the
 [manual](MANUAL.md) (*Wi-Fi and rule coverage*). Rows recorded on Wi-Fi can still feed the local
 references if they pass the usual filters, "no failure recorded" does not mean every rule ran, and
 the Wi-Fi state is not stored per row; whether this mixes contexts in a way that matters is not yet

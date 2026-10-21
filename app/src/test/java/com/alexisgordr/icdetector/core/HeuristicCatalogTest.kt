@@ -35,7 +35,7 @@ class HeuristicCatalogTest {
         assertTrue(keys.containsAll(BayesianScorer.groupedKeys))
     }
 
-    @Test fun `H8 is a data-quality flag and H9 is reserved, neither is evidence`() {
+    @Test fun `H8 is a data-quality flag, H9 is reserved and H12 is retired, none is evidence`() {
         val h8 = HeuristicCatalog.ARFCN_SANITY
         assertEquals(false, h8.isEvidence)
         assertEquals(ThreatEpisodeTracker.Family.DATA_QUALITY, h8.episodeFamily)
@@ -48,7 +48,15 @@ class HeuristicCatalogTest {
         assertEquals(ThreatEpisodeTracker.Family.UNAVAILABLE, h9.episodeFamily)
         assertEquals(BayesianScorer.Group.NOT_SCORED, BayesianScorer.groupOf(h9.scorerKey))
         assertTrue("sin LR", h9.scorerKey !in BayesianScorer.weightedKeys)
-        assertEquals(listOf("H8", "H9"), HeuristicCatalog.entries.filter { !it.isEvidence }.map { it.id })
+        // 3.1.0 — H12 retirada: conserva id y posición, sin familia de episodio ni LR.
+        val h12 = HeuristicCatalog.LATENCY_CORRELATION
+        assertEquals("H12", h12.id)
+        assertEquals("H12 conserva su posición", 11, h12.ordinal)
+        assertEquals(false, h12.isEvidence)
+        assertEquals(ThreatEpisodeTracker.Family.UNAVAILABLE, h12.episodeFamily)
+        assertEquals(BayesianScorer.Group.NOT_SCORED, BayesianScorer.groupOf(h12.scorerKey))
+        assertTrue("sin LR", h12.scorerKey !in BayesianScorer.weightedKeys)
+        assertEquals(listOf("H8", "H9", "H12"), HeuristicCatalog.entries.filter { !it.isEvidence }.map { it.id })
         // El recuento de fallos del informe usa la misma lista.
         assertEquals(HeuristicCatalog.entries.filter { !it.isEvidence }.map { it.id }.toSet(), HeuristicReport.NON_EVIDENCE_IDS)
     }
@@ -61,7 +69,8 @@ class HeuristicCatalogTest {
         val emitted = Regex("""\) add\("([A-Za-z0-9]+)"\)""").findAll(analyzer).map { it.groupValues[1] }.toSet()
         val keys = HeuristicCatalog.values().filter { it.isEvidence }.map { it.scorerKey }.toSet()
         assertTrue("sin catalogar: ${emitted - keys}", keys.containsAll(emitted))
-        assertTrue("latency la aporta el monitor de latencia", (keys - emitted) == setOf("latency"))
+        assertEquals("toda regla de evidencia la entrega el analizador", emptySet<String>(), keys - emitted)
+        assertTrue("H12 (retirada) no se entrega al bayesiano", "latency" !in emitted)
         assertTrue("H8 no se entrega al bayesiano", "arfcn" !in emitted)
         assertTrue("H9 no se entrega al bayesiano", "ciphering" !in emitted)
     }
@@ -81,7 +90,6 @@ class HeuristicCatalogTest {
         ThreatEpisodeTracker.Family.RF_DOMINANCE -> g == BayesianScorer.Group.RF_DOMINANCE
         ThreatEpisodeTracker.Family.MOBILITY -> g == BayesianScorer.Group.MOBILITY
         ThreatEpisodeTracker.Family.IDENTITY -> g == BayesianScorer.Group.WEAK_IDENTITY || g == BayesianScorer.Group.INDEPENDENT
-        ThreatEpisodeTracker.Family.CROSS_LAYER -> g == BayesianScorer.Group.INDEPENDENT
         ThreatEpisodeTracker.Family.DATA_QUALITY -> g == BayesianScorer.Group.NOT_SCORED
         ThreatEpisodeTracker.Family.UNAVAILABLE -> g == BayesianScorer.Group.NOT_SCORED
     }

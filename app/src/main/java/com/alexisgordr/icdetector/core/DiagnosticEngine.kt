@@ -12,11 +12,8 @@ object DiagnosticEngine {
         val wifiActive: Boolean,
         val locationAvailable: Boolean,
         val historyWithLocation: Int,
-        val latencyAvailable: Boolean,
         /** 3.0 (#28) — Entregas sin vecinas ya vistas / necesarias, mientras H1 está pendiente. */
         val isolationProgress: Pair<Int, Int>? = null,
-        /** 3.0 (#26) — La sonda mide, pero aún aprende la referencia de esta celda. */
-        val latencyLearning: Boolean = false,
         val previousBandAvailable: Boolean,
         val signalBaseline: SignalBaseline?,
         val rfFingerprint: CellRfFingerprint?,
@@ -87,13 +84,7 @@ object DiagnosticEngine {
                     else -> "N/A: identidad celular insuficiente para comparar."
                 })),
             HeuristicDiagnostic(12, "Correlación latencia + RF", r.latencyCorrelation,
-                explanation(r.latencyCorrelation, when {
-                    i.wifiActive -> "N/A: Wi-Fi/VPN impide atribuir la latencia al enlace celular."
-                    i.latencyLearning -> "N/A: la sonda de latencia aún aprende la referencia de esta celda."
-                    !i.latencyAvailable -> "N/A: la sonda de latencia todavía no tiene una medición válida."
-                    cell.rsrq == null && cell.sinr == null -> "N/A: el módem no entrega RSRQ ni SINR."
-                    else -> "N/A: faltan datos cruzados del ciclo."
-                })),
+                explanation(r.latencyCorrelation, H12_RETIRED_EXPLANATION)),
             HeuristicDiagnostic(13, "Baseline y huella RF", r.signalBaseline,
                 explanation(r.signalBaseline, if (i.wifiActive) WIFI_NA else "N/A: baseline en aprendizaje; se necesitan muestras históricas compatibles.")),
             HeuristicDiagnostic(14, "Downgrade de banda", r.bandDowngrade,
@@ -115,6 +106,8 @@ object DiagnosticEngine {
     /** 3.0 (corte de campaña) — H8 es un aviso de calidad de dato (ver ThreatAnalyzer, regla 8). */
     /** 3.0 (corte de campaña) — H11 con un fix de más de 60 s o sin edad conocida. */
     const val H11_FIX_TOO_OLD_EXPLANATION = "N/A: el fix GPS tiene más de 60 s (o no se sabe su edad); en movimiento, la posición ya no sería la de esta lectura."
+    /** 3.1.0 — H12 retirada: necesitaba sondas de red y la app ya no sale a Internet. */
+    const val H12_RETIRED_EXPLANATION = "N/A: regla retirada en 3.1.0 (la correlación de latencia necesitaba conexión a Internet)."
     /** 3.0 (corte de campaña) — H1, H2, H5, H6 y H7 en una celda CSG. */
     const val CSG_NA_EXPLANATION = "N/A: celda CSG (femtocelda): las reglas de dominancia, proximidad e identidad local no aplican a una celda diseñada para ser aislada."
     /** 3.0 (corte de campaña) — H9 está reservada: nunca se evalúa. */

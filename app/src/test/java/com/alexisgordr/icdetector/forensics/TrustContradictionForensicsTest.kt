@@ -199,10 +199,10 @@ class TrustContradictionForensicsTest {
         var elapsed = 1_000L
         val recorder = ForensicRecorder(store, { wall }, { elapsed })
 
-        recorder.observe(cell(LocalCellTrustState.ESTABLISHED), emptyList(), null, "N/A", emptyList())
+        recorder.observe(cell(LocalCellTrustState.ESTABLISHED), emptyList(), null, emptyList())
         wall += 1_000; elapsed += 1_000
         recorder.observe(
-            cell(LocalCellTrustState.CHANGED, setOf("PCI")), emptyList(), null, "N/A", emptyList(),
+            cell(LocalCellTrustState.CHANGED, setOf("PCI")), emptyList(), null, emptyList(),
             TrustContradictionSignal.TRANSITION
         )
         assertEquals(ForensicCaseOrigin.TRUST_CONTRADICTION, store.created.single().second)
@@ -211,10 +211,10 @@ class TrustContradictionForensicsTest {
         assertEquals(ForensicCaseState.POST_CAPTURE, store.states.last())
 
         wall += 30_000; elapsed += 30_000
-        recorder.observe(cell(LocalCellTrustState.CHANGED, setOf("PCI")), emptyList(), null, "N/A", emptyList())
+        recorder.observe(cell(LocalCellTrustState.CHANGED, setOf("PCI")), emptyList(), null, emptyList())
         assertNull(store.finished)
         wall += 30_000; elapsed += 30_000
-        recorder.observe(cell(LocalCellTrustState.CHANGED, setOf("PCI")), emptyList(), null, "N/A", emptyList())
+        recorder.observe(cell(LocalCellTrustState.CHANGED, setOf("PCI")), emptyList(), null, emptyList())
         assertEquals(ForensicCaseState.READY, store.finished)
         assertEquals(4, store.samples.size)
     }
@@ -222,13 +222,13 @@ class TrustContradictionForensicsTest {
     @Test fun `stable site novelty opens one silent observational case and honors persistent dedup`() = runBlocking {
         val store = FakeStore()
         val recorder = ForensicRecorder(store, { 10_000L }, { 10_000L })
-        recorder.observe(cell(LocalCellTrustState.SITE_UNVERIFIED), emptyList(), null, "N/A", emptyList(), TrustContradictionSignal.SITE_NOVELTY)
+        recorder.observe(cell(LocalCellTrustState.SITE_UNVERIFIED), emptyList(), null, emptyList(), TrustContradictionSignal.SITE_NOVELTY)
         assertEquals(ForensicCaseOrigin.TRUST_CONTRADICTION, store.created.single().second)
         assertEquals("STABLE_SITE_NEW_SERVING", store.samples.single().event)
 
         val afterRestart = FakeStore().apply { recentCaseIdentities += "214-07-31601-100-LTE" }
         ForensicRecorder(afterRestart, { 11_000L }, { 11_000L }).observe(
-            cell(LocalCellTrustState.SITE_UNVERIFIED), emptyList(), null, "N/A", emptyList(), TrustContradictionSignal.SITE_NOVELTY
+            cell(LocalCellTrustState.SITE_UNVERIFIED), emptyList(), null, emptyList(), TrustContradictionSignal.SITE_NOVELTY
         )
         assertTrue(afterRestart.created.isEmpty())
     }
@@ -237,12 +237,12 @@ class TrustContradictionForensicsTest {
         val store = FakeStore()
         var time = 1_000L
         val recorder = ForensicRecorder(store, { time }, { time })
-        recorder.observe(cell(LocalCellTrustState.ESTABLISHED), emptyList(), null, "N/A", emptyList())
+        recorder.observe(cell(LocalCellTrustState.ESTABLISHED), emptyList(), null, emptyList())
         time += 1_000
-        recorder.observe(cell(LocalCellTrustState.ESTABLISHED), emptyList(), null, "N/A", emptyList())
+        recorder.observe(cell(LocalCellTrustState.ESTABLISHED), emptyList(), null, emptyList())
         time += 1_000
         recorder.observe(
-            cell(LocalCellTrustState.CHANGED, setOf("PCI")), emptyList(), null, "N/A", emptyList(),
+            cell(LocalCellTrustState.CHANGED, setOf("PCI")), emptyList(), null, emptyList(),
             TrustContradictionSignal.TRANSITION
         )
         assertEquals(listOf("OBSERVATION", "OBSERVATION", "TRUST_CONTRADICTION"), store.samples.map { it.event })
@@ -253,7 +253,7 @@ class TrustContradictionForensicsTest {
         val recorder = ForensicRecorder(store, { 1_000L }, { 1_000L })
         recorder.observe(
             cell(LocalCellTrustState.CHANGED, setOf("PCI", "HANDOVER"), score = 74, confidence = 28.5f),
-            emptyList(), null, "N/A", emptyList(), TrustContradictionSignal.TRANSITION
+            emptyList(), null, emptyList(), TrustContradictionSignal.TRANSITION
         )
         val payload = JSONObject(store.samples.single().json)
         assertEquals(74, payload.getInt("score"))
@@ -276,7 +276,7 @@ class TrustContradictionForensicsTest {
     @Test fun `normal anomaly cases keep their existing alarm origin`() = runBlocking {
         val store = FakeStore()
         val recorder = ForensicRecorder(store, { 1_000L }, { 1_000L })
-        recorder.observe(cell(LocalCellTrustState.LEARNING, phase = 1), emptyList(), null, "N/A", emptyList())
+        recorder.observe(cell(LocalCellTrustState.LEARNING, phase = 1), emptyList(), null, emptyList())
         assertEquals(ForensicCaseOrigin.ALARM, store.created.single().second)
         assertEquals("ANOMALY_STARTED", store.samples.single().event)
     }
@@ -285,14 +285,14 @@ class TrustContradictionForensicsTest {
         val store = FakeStore()
         var time = 1_000L
         val recorder = ForensicRecorder(store, { time }, { time })
-        recorder.observe(cell(LocalCellTrustState.ESTABLISHED), emptyList(), null, "N/A", emptyList())
+        recorder.observe(cell(LocalCellTrustState.ESTABLISHED), emptyList(), null, emptyList())
         time += 1_000
         recorder.observe(
-            cell(LocalCellTrustState.CHANGED, setOf("PCI")), emptyList(), null, "N/A", emptyList(),
+            cell(LocalCellTrustState.CHANGED, setOf("PCI")), emptyList(), null, emptyList(),
             TrustContradictionSignal.TRANSITION
         )
         time += 1_000
-        recorder.observe(cell(LocalCellTrustState.CHANGED, setOf("PCI"), phase = 1), emptyList(), null, "N/A", emptyList())
+        recorder.observe(cell(LocalCellTrustState.CHANGED, setOf("PCI"), phase = 1), emptyList(), null, emptyList())
         assertEquals(1, store.created.size)
         assertEquals(1, store.promotions)
         assertEquals(ForensicCaseState.CAPTURING, store.states.last())
@@ -304,7 +304,7 @@ class TrustContradictionForensicsTest {
         val store = FakeStore()
         val recorder = ForensicRecorder(store, { 1_000L }, { 1_000L })
         recorder.observe(
-            cell(LocalCellTrustState.CHANGED, setOf("PCI")), emptyList(), null, "N/A", emptyList(),
+            cell(LocalCellTrustState.CHANGED, setOf("PCI")), emptyList(), null, emptyList(),
             TrustContradictionSignal.ON_START
         )
         assertEquals(ForensicCaseOrigin.TRUST_CONTRADICTION, store.created.single().second)
@@ -316,7 +316,7 @@ class TrustContradictionForensicsTest {
         val store = FakeStore().apply { recentCaseIdentities += "214-07-31601-100-LTE" }
         val recorder = ForensicRecorder(store, { 1_000L }, { 1_000L })
         recorder.observe(
-            cell(LocalCellTrustState.CHANGED, setOf("PCI")), emptyList(), null, "N/A", emptyList(),
+            cell(LocalCellTrustState.CHANGED, setOf("PCI")), emptyList(), null, emptyList(),
             TrustContradictionSignal.ON_START
         )
         assertTrue(store.created.isEmpty())
@@ -328,7 +328,7 @@ class TrustContradictionForensicsTest {
         val store = FakeStore().apply { emptyRecentCaseIdentities += identity }
         val recorder = ForensicRecorder(store, { 1_000L }, { 1_000L })
         recorder.observe(
-            cell(LocalCellTrustState.CHANGED, setOf("PCI")), emptyList(), null, "N/A", emptyList(),
+            cell(LocalCellTrustState.CHANGED, setOf("PCI")), emptyList(), null, emptyList(),
             TrustContradictionSignal.ON_START
         )
         assertEquals(1, store.created.size)
@@ -340,7 +340,7 @@ class TrustContradictionForensicsTest {
         val now = 5L * 24 * 60 * 60 * 1000
         val recorder = ForensicRecorder(store, { now }, { now })
         recorder.observe(
-            cell(LocalCellTrustState.CHANGED, setOf("PCI")), emptyList(), null, "N/A", emptyList(),
+            cell(LocalCellTrustState.CHANGED, setOf("PCI")), emptyList(), null, emptyList(),
             TrustContradictionSignal.ON_START
         )
         assertEquals(now - 24L * 60 * 60 * 1000, store.dedupQueries.single().second)
@@ -350,9 +350,9 @@ class TrustContradictionForensicsTest {
     @Test fun `a live transition never consults the dedup window`() = runBlocking {
         val store = FakeStore().apply { recentCaseIdentities += "214-07-31601-100-LTE" }
         val recorder = ForensicRecorder(store, { 1_000L }, { 1_000L })
-        recorder.observe(cell(LocalCellTrustState.ESTABLISHED), emptyList(), null, "N/A", emptyList())
+        recorder.observe(cell(LocalCellTrustState.ESTABLISHED), emptyList(), null, emptyList())
         recorder.observe(
-            cell(LocalCellTrustState.CHANGED, setOf("PCI")), emptyList(), null, "N/A", emptyList(),
+            cell(LocalCellTrustState.CHANGED, setOf("PCI")), emptyList(), null, emptyList(),
             TrustContradictionSignal.TRANSITION
         )
         assertTrue(store.dedupQueries.isEmpty())
@@ -363,7 +363,7 @@ class TrustContradictionForensicsTest {
         val store = FakeStore()
         val recorder = ForensicRecorder(store, { 1_000L }, { 1_000L })
         recorder.observe(
-            cell(LocalCellTrustState.CHANGED, setOf("PCI"), phase = 1), emptyList(), null, "N/A",
+            cell(LocalCellTrustState.CHANGED, setOf("PCI"), phase = 1), emptyList(), null,
             emptyList(), TrustContradictionSignal.ON_START
         )
         assertEquals(ForensicCaseOrigin.ALARM, store.created.single().second)
@@ -376,12 +376,12 @@ class TrustContradictionForensicsTest {
         var time = 1_000L
         val recorder = ForensicRecorder(store, { time }, { time })
         recorder.observe(
-            cell(LocalCellTrustState.CHANGED, setOf("PCI")), emptyList(), null, "N/A", emptyList(),
+            cell(LocalCellTrustState.CHANGED, setOf("PCI")), emptyList(), null, emptyList(),
             TrustContradictionSignal.ON_START
         )
         assertTrue(store.created.isEmpty())
         time += 1_000
-        recorder.observe(cell(LocalCellTrustState.CHANGED, setOf("PCI"), phase = 1), emptyList(), null, "N/A", emptyList())
+        recorder.observe(cell(LocalCellTrustState.CHANGED, setOf("PCI"), phase = 1), emptyList(), null, emptyList())
         assertEquals(ForensicCaseOrigin.ALARM, store.created.single().second)
         assertEquals(
             listOf("TRUST_CONTRADICTION_ON_START", "ANOMALY_STARTED"),
@@ -396,11 +396,11 @@ class TrustContradictionForensicsTest {
         val changes = mutableListOf<Boolean>()
         var time = 1_000L
         val recorder = ForensicRecorder(store, { time }, { time }, { changes += it })
-        recorder.observe(cell(LocalCellTrustState.LEARNING, phase = 1), emptyList(), null, "N/A", emptyList())
+        recorder.observe(cell(LocalCellTrustState.LEARNING, phase = 1), emptyList(), null, emptyList())
         assertFalse(recorder.isStorageFailing)
         repeat(2) {
             time += 1_000
-            recorder.observe(cell(LocalCellTrustState.LEARNING, phase = 1), emptyList(), null, "N/A", emptyList())
+            recorder.observe(cell(LocalCellTrustState.LEARNING, phase = 1), emptyList(), null, emptyList())
         }
         assertTrue(recorder.isStorageFailing)
         assertEquals(listOf(true), changes)
@@ -412,12 +412,12 @@ class TrustContradictionForensicsTest {
         var time = 1_000L
         val recorder = ForensicRecorder(store, { time }, { time }, { changes += it })
         repeat(3) {
-            recorder.observe(cell(LocalCellTrustState.LEARNING, phase = 1), emptyList(), null, "N/A", emptyList())
+            recorder.observe(cell(LocalCellTrustState.LEARNING, phase = 1), emptyList(), null, emptyList())
             time += 1_000
         }
         assertTrue(recorder.isStorageFailing)
         store.failWrites = false
-        recorder.observe(cell(LocalCellTrustState.LEARNING, phase = 1), emptyList(), null, "N/A", emptyList())
+        recorder.observe(cell(LocalCellTrustState.LEARNING, phase = 1), emptyList(), null, emptyList())
         assertFalse(recorder.isStorageFailing)
         assertEquals(listOf(true, false), changes)
     }
@@ -427,13 +427,13 @@ class TrustContradictionForensicsTest {
         val changes = mutableListOf<Boolean>()
         var time = 1_000L
         val recorder = ForensicRecorder(store, { time }, { time }, { changes += it })
-        recorder.observe(cell(LocalCellTrustState.LEARNING, phase = 1), emptyList(), null, "N/A", emptyList())
+        recorder.observe(cell(LocalCellTrustState.LEARNING, phase = 1), emptyList(), null, emptyList())
         store.failWrites = true
         time += 1_000
-        recorder.observe(cell(LocalCellTrustState.LEARNING, phase = 1), emptyList(), null, "N/A", emptyList())
+        recorder.observe(cell(LocalCellTrustState.LEARNING, phase = 1), emptyList(), null, emptyList())
         store.failWrites = false
         time += 1_000
-        recorder.observe(cell(LocalCellTrustState.LEARNING, phase = 1), emptyList(), null, "N/A", emptyList())
+        recorder.observe(cell(LocalCellTrustState.LEARNING, phase = 1), emptyList(), null, emptyList())
         assertFalse(recorder.isStorageFailing)
         assertTrue(changes.isEmpty())
     }
@@ -442,7 +442,7 @@ class TrustContradictionForensicsTest {
         val store = FakeStore().apply { failWrites = true }
         val recorder = ForensicRecorder(store, { 1_000L }, { 1_000L })
         val observed = cell(LocalCellTrustState.CHANGED, setOf("PCI"), phase = 1, score = 66)
-        repeat(5) { recorder.observe(observed, emptyList(), null, "N/A", emptyList()) }
+        repeat(5) { recorder.observe(observed, emptyList(), null, emptyList()) }
         assertEquals(66, observed.securityScore)
         assertFalse(observed.localCellTrust.alarmCandidate)
     }

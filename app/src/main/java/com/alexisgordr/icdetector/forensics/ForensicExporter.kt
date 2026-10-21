@@ -61,6 +61,8 @@ object ForensicExporter {
         files["timeline.csv"] = buildString {
             // 3.0 (corte de campaña) — Columnas nuevas al final: fases necesarias, aviso de calidad de
             // dato (H8) y estado de cada regla con sus motivos de abstención.
+            // 3.1.0 — `latency_state` se conserva en su sitio, vacía en las muestras nuevas (sin sonda
+            // de latencia); `verified` es siempre PENDING (sin verificación externa).
             appendLine("timestamp_utc,elapsed_ms,event,phase,score,anomaly_confidence,cell_identity,verified,latency_state,gps_lat,gps_lon,gps_accuracy_m,reason," +
                 "required_phases,data_quality_reason,heuristics")
             parsed.forEach { (s, j) ->

@@ -27,19 +27,13 @@ class ServiceRegressionTest {
         assertTrue(service.contains("RfFingerprintRefresh.needed("))
     }
 
-    @Test fun `latency result from a previous cell is discarded`() {
-        // La lógica se prueba ejecutándola en NetworkLatencyMonitorTest; aquí, solo el cableado
-        // del servicio, que depende de Android.
+    // 3.1.0 — La sonda de latencia (H12) se retiró: el servicio ya no mide ni guarda latencia.
+    @Test fun `the latency probe is gone from the service`() {
         val service = source("service/MiniICService.kt")
-        // El reset compara la identidad completa (no solo el CID), con la regla de los handovers:
-        // un CID «N/A» transitorio no lo reinicia (ServingIdentityChangeTest).
-        assertTrue(service.contains("val activeCellKey = latencyServingIdentity?.key ?: return"))
-        // 3.0 (#26) — Celda nueva: "no medida", nunca un OK sin medir.
-        assertTrue(service.contains("latencyMonitor.onCellChanged(nextKey, NetworkLatencyMonitor.STATE_NOT_MEASURED)"))
-        // Misma celda con un campo rellenado: se renombra, no se reinicia.
-        assertTrue(service.contains("latencyMonitor.renameActiveCell(previousKey, nextKey)"))
-        assertFalse(service.contains("activeRaw.cellId != prevCid) {\n                latencyMonitor.reset"))
-        assertTrue(service.contains("latencyMonitor.check(activeCellKey)"))
+        listOf("latencyMonitor", "NetworkLatencyMonitor", "isLatencyDetectionEnabled", "networkLatencyState", "showLatencyAlert")
+            .forEach { assertFalse(it, service.contains(it)) }
+        assertFalse(listOf(File("src/main/java"), File("app/src/main/java")).first { it.exists() }
+            .resolve("com/alexisgordr/icdetector/service/NetworkLatencyMonitor.kt").exists())
     }
 
     @Test fun `ping-pong window is shared by the service and the analyzer`() {

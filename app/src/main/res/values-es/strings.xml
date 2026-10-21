@@ -4,10 +4,6 @@
     <string name="settings_language">IDIOMA</string>
     <string name="language_spanish">Español</string>
     <string name="language_english">English</string>
-    <string name="latency_detection">Detección de latencia (Experimental)</string>
-    <string name="unavailable_wifi">No disponible con Wi-Fi activo.</string>
-    <string name="unavailable_vpn">No disponible con VPN activa.</string>
-    <string name="latency_description">3 peticiones HEAD cada 30 s.</string>
     <string name="save_settings">GUARDAR AJUSTES</string>
     <string name="technical_notice">AVISO TÉCNICO</string>
     <string name="technical_notice_body">La detección directa de cifrado nulo e IMSI Disclosure no está implementada para instalaciones Android estándar. Requiere APIs o permisos privilegiados que una app no-root no recibe; por eso esta regla se muestra como N/A cuando el sistema no expone el dato.</string>
@@ -105,9 +101,8 @@
     <string name="analysis_unavailable">Análisis temporalmente no disponible</string>
     <string name="analysis_previous_result_format">Se muestra el último resultado válido (%1$s). No está actualizado. Es un fallo interno de la app, no falta de señal ni una anomalía de red.</string>
     <string name="analysis_no_previous_result">Todavía no hay un resultado válido. Es un fallo interno de la app, no falta de señal ni una anomalía de red.</string>
-    <string name="latency_warning">Latencia anómala persistente — posible interferencia MITM</string>
     <string name="heuristic_rule_format">H%1$d · regla de detección</string><string name="status_passed">SUPERADA</string><string name="status_failed">FALLIDA</string><string name="status_coherent">COHERENTE</string><string name="status_incoherent">INCOHERENTE</string>
-    <string-array name="heuristic_names"><item>Celda aislada</item><item>Estabilidad de potencia</item><item>Consistencia MCC</item><item>Límite MNC</item><item>Validación regional TAC</item><item>Proximidad por Timing Advance</item><item>Espectro de vecinos</item><item>Calidad de dato ARFCN</item><item>Cifrado hardware</item><item>Anti ping-pong</item><item>Consistencia geográfica</item><item>Correlación latencia + RF</item><item>Baseline y huella RF</item><item>Downgrade de banda</item><item>Estabilidad de identidad RF</item><item>Coherencia de transición celular</item></string-array><string name="transition_explanation_passed">El handover observado es coherente con las rutas locales aprendidas.</string><string name="transition_explanation_failed">El handover observado no concuerda con las rutas locales aprendidas.</string><string name="transition_explanation_na">No hay suficiente historial fiable de rutas para evaluar esta transición.</string>
+    <string-array name="heuristic_names"><item>Celda aislada</item><item>Estabilidad de potencia</item><item>Consistencia MCC</item><item>Límite MNC</item><item>Validación regional TAC</item><item>Proximidad por Timing Advance</item><item>Espectro de vecinos</item><item>Calidad de dato ARFCN</item><item>Cifrado hardware</item><item>Anti ping-pong</item><item>Consistencia geográfica</item><item>Correlación latencia + RF (retirada)</item><item>Baseline y huella RF</item><item>Downgrade de banda</item><item>Estabilidad de identidad RF</item><item>Coherencia de transición celular</item></string-array><string name="transition_explanation_passed">El handover observado es coherente con las rutas locales aprendidas.</string><string name="transition_explanation_failed">El handover observado no concuerda con las rutas locales aprendidas.</string><string name="transition_explanation_na">No hay suficiente historial fiable de rutas para evaluar esta transición.</string>
     <string name="mobility_sanity">CORDURA DE MOVILIDAD · H16</string>
     <string name="raw_terminal_output">SALIDA RAW DEL TERMINAL</string>
     <string name="current_technology">TECNOLOGÍA</string><string name="signal_power">POTENCIA</string><string name="radio_band">BANDA</string>
@@ -282,7 +277,6 @@
     <string name="notif_legacy_network_title">ICdetection: red 2G/3G en uso</string>
     <string name="channel_monitoring_name">Monitorización</string>
     <string name="channel_alerts_description">Alarmas de anomalía de red confirmadas, una por episodio</string>
-    <string name="notif_latency_title">⚠ Anomalía de red</string>
     <string name="collection_interrupted_format">⚠ Recolección interrumpida %1$dh %2$dmin</string>
     <string name="write_failure_notification">⚠ ESCRITURA FALLIDA — no se están guardando datos</string>
     <string name="audit_starting">Iniciando…</string>
@@ -290,11 +284,6 @@
     <string name="alarm_notification_body_format">CID %1$s · %2$s · %3$s</string>
     <string name="baseline_waiting">EN ESPERA</string>
     <string name="baseline_needs_days">NECESITA 2 DÍAS</string>
-    <!-- 3.0 (#26) — Indicador de latencia de red -->
-    <string name="latency_state_ok">● RED OK</string>
-    <string name="latency_state_anomalous">● RED ANÓMALA</string>
-    <string name="latency_state_learning">● RED APRENDIENDO</string>
-    <string name="latency_state_not_measured">● RED N/A</string>
     <!-- 3.0 (#35) — Alarmas silenciadas -->
     <string name="alarm_muted_title">⚠ ALARMAS SILENCIADAS</string>
     <string name="alarm_muted_body_silenced">El canal Alertas de seguridad está en silencio, así que la notificación de una anomalía de red confirmada llegará sin sonido. Vuelve a darle sonido: ICdetection solo suena cuando se confirma una anomalía de red, y la notificación de monitorización es siempre silenciosa. El pitido corto de alerta es aparte y sigue sonando salvo con el móvil en silencio, vibración o No molestar.</string>

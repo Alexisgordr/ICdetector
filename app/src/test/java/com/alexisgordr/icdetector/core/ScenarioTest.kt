@@ -107,6 +107,9 @@ class ScenarioTest {
                 serviceState = c.service,
                 reputation = c.reputation
             )
+            // 3.1.0 — H12 retirada: N/A en todos los ciclos de todos los escenarios, nunca fallida.
+            assertEquals("H12 retirada", HeuristicStatus.NOT_EVALUATED, analyzed.heuristicReport.latencyCorrelation)
+            assertTrue("H12 entre las no evaluadas", "H12" in analyzed.heuristicReport.notEvaluatedIds().split(";"))
             val key = PingPongRule.confirmationKey(
                 analyzed.identityKey, changes, nowMs,
                 pingPongFailed = analyzed.heuristicReport.pingPong == HeuristicStatus.FAILED

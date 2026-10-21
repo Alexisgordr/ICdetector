@@ -66,8 +66,8 @@ data class HeuristicReport(
      * Reglas de EVIDENCIA fallidas: lo que cuenta como "la celda tiene algo en contra" (confianza
      * local, aprendizaje de Stable-Site, resumen del panel).
      *
-     * 3.0 (corte de campaña) — No cuenta H8 (aviso de calidad de dato) ni H9 (reservada): no son
-     * evidencia ([NON_EVIDENCE_IDS], igual que HeuristicCatalog.isEvidence). Antes un H8 fallado
+     * 3.0 (corte de campaña) — No cuenta H8 (aviso de calidad de dato) ni H9 (reservada), ni H12
+     * (retirada en 3.1.0): no son evidencia ([NON_EVIDENCE_IDS], igual que HeuristicCatalog.isEvidence). Antes un H8 fallado
      * ponía la celda en cuarentena y frenaba Stable-Site aunque ya no restara puntos.
      */
     val failedCount: Int
@@ -135,9 +135,10 @@ data class HeuristicReport(
 
         /**
          * 3.0 (corte de campaña) — Reglas que no son evidencia: H8 (calidad de dato) y H9 (reservada).
-         * Debe coincidir con HeuristicCatalog.isEvidence; HeuristicCatalogTest lo comprueba.
+         * 3.1.0 — Y H12 (retirada). Debe coincidir con HeuristicCatalog.isEvidence; HeuristicCatalogTest
+         * lo comprueba.
          */
-        val NON_EVIDENCE_IDS = setOf("H8", "H9")
+        val NON_EVIDENCE_IDS = setOf("H8", "H9", "H12")
 
         /** 3.0 (corte de campaña) — Reglas que no se evalúan en una celda CSG. */
         val CSG_RULES = setOf("H1", "H2", "H5", "H6", "H7")

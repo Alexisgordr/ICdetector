@@ -33,11 +33,9 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlin.time.Duration.Companion.milliseconds
-import okhttp3.OkHttpClient
 import java.text.SimpleDateFormat
 import java.util.*
 import java.util.concurrent.CopyOnWriteArrayList
-import java.util.concurrent.TimeUnit
 
 class MiniICService : Service() {
 
@@ -81,10 +79,6 @@ class MiniICService : Service() {
 
     private val _auditStatus = MutableStateFlow("")
     val auditStatus: StateFlow<String> = _auditStatus
-
-    // Arranca en "N/A": hasta que la sonda mida algo de verdad no se afirma "OK".
-    private val _networkLatencyState = MutableStateFlow<String>("N/A")
-    val networkLatencyState: StateFlow<String> = _networkLatencyState
 
     /**
      * v2.10.4 — Recibe una lectura de ServiceState (callback o sondeo). Los cambios se insertan
@@ -195,7 +189,6 @@ class MiniICService : Service() {
     private val historyEpoch = com.alexisgordr.icdetector.core.HistoryEpoch()
     private lateinit var notificationController: ServiceNotificationController
     private lateinit var databaseMaintenance: DatabaseMaintenance
-    private lateinit var latencyMonitor: NetworkLatencyMonitor
     private lateinit var legacyNetworkProtection: LegacyNetworkProtection
     private lateinit var transitionTracker: ServingTransitionTracker
     private lateinit var collectionPower: CollectionPowerController
@@ -281,20 +274,11 @@ class MiniICService : Service() {
     private var cacheTimestamp = 0L
     private val CELL_CACHE_TTL = 60_000L
 
-    // 3.1.0 — Cliente HTTP solo para la detección de latencia (H12); la verificación externa
-    // se retiró. Timeout corto (4 s) para que una medición no bloquee la corrutina.
-    private val latencyClient = OkHttpClient.Builder()
-        .connectTimeout(4, TimeUnit.SECONDS)
-        .readTimeout(4, TimeUnit.SECONDS)
-        .callTimeout(4, TimeUnit.SECONDS)
-        .build()
-
     var alarmThreshold = -50f
     var isStrongSignalAlarmEnabled = true
     /** 3.0 — Avisos de red 2G/3G (Ajustes). Predeterminado: solo notificación. */
     @Volatile var legacyNetworkAlertMode: com.alexisgordr.icdetector.core.LegacyNetworkAlertMode =
         com.alexisgordr.icdetector.core.LegacyNetworkAlertMode.DEFAULT
-    var isLatencyDetectionEnabled: Boolean = false
     /** 3.0 — Modo de ubicación (Ajustes). Continuo por defecto; adaptativo ahorra batería. */
     @Volatile var locationMode: com.alexisgordr.icdetector.core.LocationMode =
         com.alexisgordr.icdetector.core.LocationMode.CONTINUOUS
@@ -330,13 +314,11 @@ class MiniICService : Service() {
     }
 
     /**
-     * 3.0 (#20, #26) — Pérdida de la servidora utilizable: invalida los ciclos en curso, rompe la
-     * continuidad de la confirmación y deja la latencia en "no medida" (una medición de antes del
-     * hueco ya no describe la celda a la que se vuelva).
+     * 3.0 (#20) — Pérdida de la servidora utilizable: invalida los ciclos en curso y rompe la
+     * continuidad de la confirmación.
      */
     private fun onSignalLost() {
         collectionGeneration.lose()
-        latencyMonitor.reset()
         // 3.0 — Sin celda activa no hay 4G/5G continuo: reinicia la cuenta de cierre del episodio 2G/3G.
         if (::securityAlerts.isInitialized) securityAlerts.onServiceInterrupted()
     }
@@ -426,12 +408,6 @@ class MiniICService : Service() {
         }
         notificationController = ServiceNotificationController(this, MiniICService::class.java) { locationMode }
         databaseMaintenance = DatabaseMaintenance(dbHelper) { appendLog("[SYS]", it) }
-        latencyMonitor = NetworkLatencyMonitor(
-            client = latencyClient,
-            log = { appendLog("[NET]", it) },
-            publishState = { _networkLatencyState.value = it },
-            onPersistentAnomaly = { showLatencyAlert() }
-        )
         legacyNetworkProtection = LegacyNetworkProtection(
             notifications = notificationController,
             log = { appendLog("[SEC]", it) }
@@ -563,7 +539,6 @@ class MiniICService : Service() {
         // deja escrito, para que una interrupción sea un hecho observable y no una sorpresa en
         // diciembre al ver un agujero en el CSV.
         collectionHealthController.restore()?.let { appendLog("[SYS]", it) }
-        isLatencyDetectionEnabled = prefs.getBoolean("latency_detection_enabled", false)
         locationMode = com.alexisgordr.icdetector.core.LocationMode.fromStored(
             prefs.getString(com.alexisgordr.icdetector.core.LocationMode.PREF_KEY, null)
         )
@@ -678,12 +653,6 @@ class MiniICService : Service() {
                             locationController.requestPreciseFix(force = true)
                         }
                         requestFreshCellInfo()
-                        checkLatencyAnomaly()
-                        val activeForPrune = _cellFlow.value.firstOrNull { it.isRegistered }
-                        pruneCaches(
-                            activeForPrune?.cellId,
-                            activeForPrune?.identityKey
-                        )
                         scheduleDailyDatabaseMaintenance()
 
                         // En reposo (pantalla apagada) con una celda esperando coordenadas
@@ -717,14 +686,6 @@ class MiniICService : Service() {
      * cachés indexadas por celda en sesiones muy largas. Es barato: solo actúa cuando se
      * supera el cap o hay errores caducados.
      */
-    private fun pruneCaches(activeCellId: String?, activeCacheKey: String?) {
-        val now = System.currentTimeMillis()
-        // Cap de seguridad: si se excede, se descarta el exceso (las celdas afectadas
-        // simplemente vuelven a aprender su línea base de latencia; sin impacto de correctitud).
-        // La celda activa se excluye para no borrar justo su estado en viajes largos.
-        latencyMonitor.prune(activeCacheKey, MAX_TRACKED_CELLS)
-    }
-
     /**
      * v2.10.10 — "Borrar historial" coordinado con el servicio. Antes la pantalla borraba la base
      * directamente y el servicio seguía con su estado: el caso forense abierto apuntaba a un caso
@@ -772,69 +733,6 @@ class MiniICService : Service() {
         cellChanges.clear()
     }
 
-    /** Identidad completa de la celda para la que vale el estado de latencia publicado. */
-    /**
-     * 3.0 — Identidad de la celda cuya latencia se mide. Sigue la misma regla que los handovers
-     * (ServingIdentityChange.step): un CID «N/A» transitorio no reinicia el estado de latencia.
-     */
-    private var latencyServingIdentity: com.alexisgordr.icdetector.core.ServingIdentityChange.Identity? = null
-
-    /**
-     * v2.10.9 — El reset comparaba solo el CID: si cambiaba MCC, MNC, TAC o la tecnología con el
-     * mismo CID, una medición en curso podía publicar su resultado sobre la celda nueva. Ahora
-     * compara la identidad completa, la misma clave que usa el historial de latencia. No cambia
-     * la detección de handover (H10 sigue usando el cambio de CID).
-     */
-    @Synchronized
-    private fun resetLatencyIfCellChanged(cell: CellData) {
-        val previousKey = latencyServingIdentity?.key
-        val step = com.alexisgordr.icdetector.core.ServingIdentityChange.step(
-            latencyServingIdentity, com.alexisgordr.icdetector.core.ServingIdentityChange.of(cell))
-        latencyServingIdentity = step.next
-        val nextKey = step.next?.key ?: return
-        if (step.handover) {
-            // 3.0 (#26) — Celda nueva: todavía no medida. Antes se mostraba "OK" sin medir nada.
-            latencyMonitor.onCellChanged(nextKey, NetworkLatencyMonitor.STATE_NOT_MEASURED)
-        } else if (previousKey != null && nextKey != previousKey) {
-            // Misma celda; un campo que faltaba se ha rellenado y su clave cambia. Sin reiniciar.
-            latencyMonitor.renameActiveCell(previousKey, nextKey)
-        }
-    }
-
-    private fun checkLatencyAnomaly() {
-        if (!isLatencyProbeActive()) {
-            latencyMonitor.reset()
-            return
-        }
-        // 3.0 (#26) — La caducidad corre en cada vuelta del ciclo periódico, aunque no se pueda
-        // medir (sin celda registrada): un OK/ANOMALA no sobrevive más de 90 s sin medición nueva.
-        latencyMonitor.expireIfStale()
-        // v2.10.9 — Identidad completa: dos celdas con el mismo CID en otra red o tecnología no
-        // comparten la media de latencia.
-        // 3.0 — La medición se atribuye a la identidad estable (la de resetLatencyIfCellChanged), y
-        // solo si la lectura actual trae un CID legible: con «N/A» no se sabe de qué celda es.
-        val active = _cellFlow.value.firstOrNull { it.isRegistered } ?: return
-        if (!com.alexisgordr.icdetector.core.ServingIdentityChange.hasReadableCellId(
-                com.alexisgordr.icdetector.core.ServingIdentityChange.of(active))) return
-        val activeCellKey = latencyServingIdentity?.key ?: return
-        if (!latencyMonitor.isDue()) return
-        scope.launch(Dispatchers.IO) { latencyMonitor.check(activeCellKey) }
-    }
-
-    private fun showLatencyAlert() {
-        scope.launch(Dispatchers.Main) {
-            toneGenerator?.startTone(ToneGenerator.TONE_CDMA_SOFT_ERROR_LITE, 300)
-            val notification = NotificationCompat.Builder(this@MiniICService, CHANNEL_ID)
-                .setSmallIcon(android.R.drawable.ic_dialog_alert)
-                .setContentTitle(getString(R.string.notif_latency_title))
-                .setContentText(getString(R.string.latency_warning))
-                .setPriority(NotificationCompat.PRIORITY_HIGH)
-                .setAutoCancel(true)
-                .build()
-            getSystemService(NotificationManager::class.java)
-                .notify(LATENCY_NOTIFICATION_ID, notification)
-        }
-    }
     private fun registerScreenReceiver() {
         // 3.0 — Bug found during testing: isScreenOn empezaba siempre en true. Si Android
         // reiniciaba el servicio con la pantalla apagada, el modo adaptativo encendía el GPS
@@ -1138,10 +1036,6 @@ class MiniICService : Service() {
             // 3.0 — Sin marca de tiempo (o 0), desconocido: IsolatedCellConfidence lo trata como fresco.
             val observationToken = activeObservationToken?.takeIf { it > 0L }
 
-            // Reset del estado de latencia ANTES del análisis si la celda ha cambiado.
-            // Esto evita que la heurística 12 lea el veredicto "ANOMALA" de la celda vieja
-            // en el primer ciclo de la nueva, antes de que tenga su propio baseline.
-            if (activeRaw != null && activeRaw.cellId != "N/A") resetLatencyIfCellChanged(activeRaw)
             // 3.0 — Lista sin celda registrada: tampoco hay servicio continuo (ver onSignalLost).
             if (activeRaw == null && ::securityAlerts.isInitialized) securityAlerts.onServiceInterrupted()
 
@@ -1410,9 +1304,6 @@ class MiniICService : Service() {
                             currentLocation = currentLocation,
                             preloadedHistory = preloadedHistory,
                             isWifiActive = wifiActive,
-                            isNetworkLatencyAnomalous = networkLatencyState.value == NetworkLatencyMonitor.STATE_ANOMALOUS,
-                            // 3.0 (#26) — Solo una medición contra la referencia (OK/ANOMALA) cuenta.
-                            isNetworkLatencyAvailable = NetworkLatencyMonitor.isMeasured(networkLatencyState.value),
                             signalBaseline = signalBaseline,
                             previousBand = prevBand,
                             previousDbm = prevRegisteredDbm,
@@ -1564,8 +1455,6 @@ class MiniICService : Service() {
                             isolationProgress = isolatedCellConfidence.progress to isolatedCellConfidence.required,
                             locationAvailable = currentLocation != null,
                             historyWithLocation = preloadedHistory.count { it.lat != null && it.lon != null },
-                            latencyAvailable = NetworkLatencyMonitor.isMeasured(networkLatencyState.value),
-                            latencyLearning = networkLatencyState.value == NetworkLatencyMonitor.STATE_LEARNING,
                             previousBandAvailable = (prevBand != null || prevNrArfcn != null) && prevRegisteredDbm != null,
                             signalBaseline = signalBaseline,
                             rfFingerprint = rfFingerprint,
@@ -1644,7 +1533,6 @@ class MiniICService : Service() {
                                     active = confirmedActive,
                                     neighbors = nonServingContext,
                                     location = currentLocation,
-                                    latencyState = networkLatencyState.value,
                                     logs = liveLogs.value,
                                     trustContradictionTransition = trustContradictionTransition
                                 )
@@ -1962,24 +1850,6 @@ class MiniICService : Service() {
         return capabilities.hasTransport(NetworkCapabilities.TRANSPORT_WIFI)
     }
 
-    // Detecta si hay una VPN activa en la red por defecto del sistema.
-    // Doble comprobación: transporte VPN o ausencia de la capability NOT_VPN (robusto
-    // ante distintos modos de túnel). La latencia hacia endpoints externos viajaría por
-    // el túnel y no reflejaría la red celular local, así que no debe medirse.
-    private fun isVpnActive(): Boolean {
-        val cm = getSystemService(CONNECTIVITY_SERVICE) as ConnectivityManager
-        val network = cm.activeNetwork ?: return false
-        val capabilities = cm.getNetworkCapabilities(network) ?: return false
-        return capabilities.hasTransport(NetworkCapabilities.TRANSPORT_VPN) ||
-            !capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_NOT_VPN)
-    }
-
-    // La sonda de latencia solo es representativa si está activada y la salida es la red
-    // celular directa: sin WiFi y sin VPN. En cualquier otro caso
-    // el indicador debe ser "N/A", no "OK".
-    private fun isLatencyProbeActive(): Boolean =
-        isLatencyDetectionEnabled && !isWifiConnected() && !isVpnActive()
-
 
     private fun onGpsAvailable() {
         val now = System.currentTimeMillis()
@@ -2045,11 +1915,6 @@ class MiniICService : Service() {
         val cid = cell.cellId
         val dbm = cell.dbm
         val net = cell.networkType
-
-        // Reset del estado de latencia al cambiar de celda: el veredicto de la celda anterior NO es
-        // válido para la nueva. Limpiamos "ANOMALA" (icono y heurística 12) y la racha; la celda
-        // nueva volverá a "OK"/"ANOMALA" según sus propias mediciones una vez aprenda su baseline.
-        resetLatencyIfCellChanged(cell)
 
         // 3.0 (#19) — Handover = cambia la identidad completa (MCC, MNC, TAC, CID o tecnología),
         // no solo el CID. Un campo desconocido en un lado no cuenta como cambio.
@@ -2188,11 +2053,7 @@ class MiniICService : Service() {
         const val CHANNEL_ID = ServiceNotificationController.CHANNEL_ID
         const val ALERT_CHANNEL_ID = ServiceNotificationController.ALERT_CHANNEL_ID
         const val NOTIFICATION_ID = ServiceNotificationController.NOTIFICATION_ID
-        const val LATENCY_NOTIFICATION_ID = 3  // distinto al NOTIFICATION_ID principal
         const val ACTION_STOP = "com.alexisgordr.icdetector.STOP"
-        // Cap de seguridad para los mapas en memoria indexados por celda: evita crecimiento
-        // ilimitado en sesiones muy largas o viajes con miles de celdas distintas.
-        const val MAX_TRACKED_CELLS = 500
         // v2.5 — Evidencia del diagnóstico de Timing Advance, superviviente a reinicios del
         // servicio. Ver TimingAdvanceSanity: se guarda la evidencia, nunca el veredicto.
         // 3.0 (#33) — Por unidad: ta_seen_real_LTE_INDEX, ta_zero_cells_GSM_INDEX, …

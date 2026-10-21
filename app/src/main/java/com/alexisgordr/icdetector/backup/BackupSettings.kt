@@ -5,8 +5,8 @@ import org.json.JSONObject
 /**
  * 3.0 — Ajustes que viajan en la copia de seguridad. Lista cerrada: solo preferencias del usuario,
  * nunca el estado interno (última ubicación aceptada, contadores, etc.). 3.1.0 — Sin el proxy de
- * la verificación externa: una copia anterior que lo traiga lo ignora, como cualquier clave
- * desconocida.
+ * la verificación externa ni el interruptor de latencia (H12): una copia anterior que los traiga
+ * los ignora, como cualquier clave desconocida.
  */
 object BackupSettings {
     const val PREFS_FILE = "miniic_prefs"
@@ -15,7 +15,6 @@ object BackupSettings {
     val KEYS: Map<String, Type> = linkedMapOf(
         "app_language" to Type.STRING,
         "location_mode" to Type.STRING,
-        "latency_detection_enabled" to Type.BOOLEAN,
         // 3.0 — Avisos de red 2G/3G (LegacyNetworkAlertMode).
         "legacy_network_alert_mode" to Type.STRING,
         // 3.0 — Avisos silenciosos de Stable-Site (StableSiteNotices.PREF_ENABLED).

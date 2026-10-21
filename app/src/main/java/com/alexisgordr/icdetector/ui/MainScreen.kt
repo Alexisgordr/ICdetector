@@ -792,30 +792,8 @@ fun SecurityScorePanel(active: CellData, dbmHistory: List<Int>, geoHistory: List
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                // Indicador RED — izquierda
-                val latencyFlow = remember(service) { service?.networkLatencyState ?: MutableStateFlow("N/A") }
-                val netState by latencyFlow.collectAsStateWithLifecycle()
-
-                // Cuatro estados: OK (verde) / ANÓMALA (rojo) / APRENDIENDO (ámbar: mide, pero
-                // aún sin referencia de esta celda) / N/A (gris, sin medir: latencia desactivada,
-                // WiFi/VPN/Tor, celda recién cambiada o resultado caducado). 3.0 (#26).
-                val (netText, netColor) = when (netState) {
-                    com.alexisgordr.icdetector.service.NetworkLatencyMonitor.STATE_OK ->
-                        stringResource(R.string.latency_state_ok) to Color(0xFF4CAF50)
-                    com.alexisgordr.icdetector.service.NetworkLatencyMonitor.STATE_ANOMALOUS ->
-                        stringResource(R.string.latency_state_anomalous) to Color(0xFFCF6679)
-                    com.alexisgordr.icdetector.service.NetworkLatencyMonitor.STATE_LEARNING ->
-                        stringResource(R.string.latency_state_learning) to Color(0xFFFFB74D)
-                    else -> stringResource(R.string.latency_state_not_measured) to Color(0xFF888888)
-                }
-                Text(
-                    text = netText,
-                    color = netColor,
-                    fontSize = 9.sp,
-                    fontFamily = FontFamily.Monospace
-                )
-
-                // Indicador RF — centro, siempre visible
+                // 3.1.0 — Sin indicador de red: la sonda de latencia (H12) se retiró.
+                // Indicador RF — izquierda, siempre visible
                 val rsrq = active.rsrq
                 val isRfWarning = rsrq != null && rsrq <= -15
 

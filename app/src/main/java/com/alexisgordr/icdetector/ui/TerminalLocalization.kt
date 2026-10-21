@@ -155,14 +155,7 @@ private val replacements = linkedMapOf(
     "señal previa desconocida" to "earlier signal unknown",
     "Puede deberse a cobertura o a llamadas sin VoLTE; no es un ataque confirmado." to
         "It can be caused by coverage or calls without VoLTE; it is not a confirmed attack.",
-    "Latencia" to "Latency",
-    "sin suficientes endpoints disponibles" to "not enough endpoints available",
     "anómala" to "anomalous",
-    "media" to "average",
-    "ANOMALÍA DE RED PERSISTENTE" to "PERSISTENT NETWORK ANOMALY",
-    "posible interferencia" to "possible interference",
-    "normalizada" to "normalized",
-    "aprendiendo baseline" to "learning baseline",
     "Señal sospechosamente fuerte detectada" to "Suspiciously strong signal detected",
     "Efecto Ping-Pong confirmado" to "Ping-pong effect confirmed",
     "detección de cifrado nulo/IMSI: pendiente API Android 16" to "null-cipher/IMSI detection: awaiting Android 16 API",
@@ -196,7 +189,6 @@ private val replacements = linkedMapOf(
         "Data quality: the modem reports a channel outside the 3GPP table. It is not evidence of an attack and subtracts no points.",
     "Integridad PCI" to "PCI integrity",
     "Consistencia Geográfica" to "Geographic consistency",
-    "Correlación Latency + RF" to "Latency + RF correlation",
     "Correlación Latencia + RF" to "Latency + RF correlation",
     "Reputación de Celda" to "Cell reputation",
     "Coherencia de Transición" to "Transition coherence",
@@ -300,21 +292,18 @@ private val replacements = linkedMapOf(
     // 3.0 (corte de campaña) — Celda CSG: H1/H2/H5/H6/H7 no se evalúan.
     "celda CSG (femtocelda): las reglas de dominancia, proximidad e identidad local no aplican a una celda diseñada para ser aislada" to "CSG cell (femtocell): the dominance, proximity and local-identity rules do not apply to a cell designed to be isolated",
     "celda CSG (femtocelda)" to "CSG cell (femtocell)",
+    // 3.1.0 — H12 retirada (DiagnosticEngine.H12_RETIRED_EXPLANATION).
+    "regla retirada en 3.1.0 (la correlación de latencia necesitaba conexión a Internet)" to "rule retired in 3.1.0 (the latency correlation needed an Internet connection)",
     // 3.0 (corte de campaña) — H9 reservada.
     "Android no expone el estado de cifrado a aplicaciones sin privilegios; regla reservada" to "Android does not expose ciphering status to unprivileged apps; reserved rule",
     "todavía no existe una secuencia temporal utilizable" to "no usable temporal sequence exists yet",
     "falta una posición GPS reciente" to "a recent GPS position is unavailable",
     "aún no hay observaciones previas geolocalizadas de esta celda" to "this cell has no previous geolocated observations yet",
     "identidad celular insuficiente para comparar" to "insufficient cell identity for comparison",
-    "Wi-Fi/VPN impide atribuir la latencia al enlace celular" to "Wi-Fi/VPN prevents attributing latency to the cellular link",
-    "la sonda de latencia todavía no tiene una medición válida" to "the latency probe does not yet have a valid measurement",
     // 3.0 (#28)
     "sin vecinas, pendiente de confirmar" to "no neighbours, pending confirmation",
     " entregas)" to " deliveries)",
     // 3.0 (#26)
-    "la sonda de latencia aún aprende la referencia de esta celda" to "the latency probe is still learning this cell's reference",
-    "el módem no entrega RSRQ ni SINR" to "the modem provides neither RSRQ nor SINR",
-    "faltan datos cruzados del ciclo" to "cross-signal data is unavailable for this cycle",
     "baseline en aprendizaje; se necesitan muestras históricas compatibles" to "baseline still learning; compatible historical samples are required",
     "falta una banda anterior válida (LTE o 5G) de la misma tecnología para comparar" to
         "no previous valid band (LTE or 5G) of the same technology to compare with",

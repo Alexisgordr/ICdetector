@@ -185,8 +185,7 @@ class DiagnosticsTest {
     fun `diagnostics explain unavailable timing advance`() {
         val inputs = DiagnosticEngine.Inputs(
             neighborCount = 0, wifiActive = false, locationAvailable = false,
-            historyWithLocation = 0, latencyAvailable = false,
-            previousBandAvailable = false,
+            historyWithLocation = 0, previousBandAvailable = false,
             signalBaseline = null, rfFingerprint = null, rfStability = null, reputation = null
         )
         val diagnostic = DiagnosticEngine.explain(cell(), inputs).first { it.id == 6 }
@@ -198,8 +197,7 @@ class DiagnosticsTest {
     fun `H3 diagnostics say why it passed, failed or abstained`() {
         val inputs = DiagnosticEngine.Inputs(
             neighborCount = 2, wifiActive = false, locationAvailable = false,
-            historyWithLocation = 0, latencyAvailable = false,
-            previousBandAvailable = false,
+            historyWithLocation = 0, previousBandAvailable = false,
             signalBaseline = null, rfFingerprint = null, rfStability = null, reputation = null
         )
         fun h3(report: HeuristicReport) = DiagnosticEngine.explain(cell(report), inputs).first { it.id == 3 }.explanation
@@ -227,7 +225,7 @@ class DiagnosticsTest {
     fun `maturity reflects actual analyzer thresholds`() {
         val inputs = DiagnosticEngine.Inputs(
             neighborCount = 1, wifiActive = false, locationAvailable = true,
-            historyWithLocation = 1, latencyAvailable = true, previousBandAvailable = true,
+            historyWithLocation = 1, previousBandAvailable = true,
             signalBaseline = SignalBaseline(20, -90.0, 3.0, -100, -80),
             rfFingerprint = CellRfFingerprint(30, -10.0, 1.0, 12.0, 2.0),
             rfStability = CellRfStability(4, emptyList(), emptyList()),
@@ -246,8 +244,7 @@ class DiagnosticsTest {
     fun `maturity carries the trust gate for display only`() {
         fun inputs(gate: Boolean?) = DiagnosticEngine.Inputs(
             neighborCount = 0, wifiActive = false, locationAvailable = false,
-            historyWithLocation = 0, latencyAvailable = false,
-            previousBandAvailable = false,
+            historyWithLocation = 0, previousBandAvailable = false,
             signalBaseline = null, rfFingerprint = null, rfStability = null, reputation = null,
             trustGateMet = gate
         )

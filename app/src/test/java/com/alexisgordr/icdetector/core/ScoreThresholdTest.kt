@@ -21,7 +21,6 @@ class ScoreThresholdTest {
         val engine = src("core/ThreatAnalyzer.kt")
         assertTrue(engine.contains("val isSuspicious = ScoreThreshold.isBelow(finalScore)"))
         assertFalse(engine.contains("finalScore < 70"))
-        assertTrue("RSRP −70 dBm no es el umbral", engine.contains("active.dbm >= -70"))
         assertTrue(src("ui/MainScreen.kt").contains("private const val SCORE_WATCH = com.alexisgordr.icdetector.core.ScoreThreshold.SUSPICIOUS_BELOW"))
         assertFalse(src("ui/HistoryScreen.kt").contains("score < 70"))
         assertTrue(src("ui/Visualizers.kt").contains("val umbral = -70"))

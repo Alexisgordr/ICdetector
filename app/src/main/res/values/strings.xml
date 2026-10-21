@@ -4,10 +4,6 @@
     <string name="settings_language">LANGUAGE</string>
     <string name="language_spanish">Español</string>
     <string name="language_english">English</string>
-    <string name="latency_detection">Latency detection (Experimental)</string>
-    <string name="unavailable_wifi">Unavailable while Wi-Fi is active.</string>
-    <string name="unavailable_vpn">Unavailable while a VPN is active.</string>
-    <string name="latency_description">3 HEAD requests every 30 s.</string>
     <string name="save_settings">SAVE SETTINGS</string>
     <string name="technical_notice">TECHNICAL NOTICE</string>
     <string name="technical_notice_body">Direct detection of null encryption and IMSI disclosure is not implemented for standard Android installations. It requires privileged APIs or permissions that a non-root app does not receive, so this rule is shown as N/A when the system does not expose the data.</string>
@@ -105,9 +101,8 @@
     <string name="analysis_unavailable">Analysis temporarily unavailable</string>
     <string name="analysis_previous_result_format">Showing the last valid result (%1$s). It is not up to date. This is an internal app error, not a missing signal or a network anomaly.</string>
     <string name="analysis_no_previous_result">No valid result yet. This is an internal app error, not a missing signal or a network anomaly.</string>
-    <string name="latency_warning">Persistent anomalous latency — possible MITM interference</string>
     <string name="heuristic_rule_format">H%1$d · detection rule</string><string name="status_passed">PASSED</string><string name="status_failed">FAILED</string><string name="status_coherent">COHERENT</string><string name="status_incoherent">INCOHERENT</string>
-    <string-array name="heuristic_names"><item>Isolated cell</item><item>Signal-power stability</item><item>MCC consistency</item><item>MNC limit</item><item>Regional TAC validation</item><item>Timing Advance proximity</item><item>Neighbor spectrum</item><item>ARFCN data quality</item><item>Hardware ciphering</item><item>Anti ping-pong</item><item>Geographic consistency</item><item>Latency + RF correlation</item><item>Baseline and RF fingerprint</item><item>Band downgrade</item><item>RF identity stability</item><item>Cellular-transition coherence</item></string-array><string name="transition_explanation_passed">The observed handover is coherent with learned local routes.</string><string name="transition_explanation_failed">The observed handover is inconsistent with learned local routes.</string><string name="transition_explanation_na">There is not enough trusted route history to evaluate this transition.</string>
+    <string-array name="heuristic_names"><item>Isolated cell</item><item>Signal-power stability</item><item>MCC consistency</item><item>MNC limit</item><item>Regional TAC validation</item><item>Timing Advance proximity</item><item>Neighbor spectrum</item><item>ARFCN data quality</item><item>Hardware ciphering</item><item>Anti ping-pong</item><item>Geographic consistency</item><item>Latency + RF correlation (retired)</item><item>Baseline and RF fingerprint</item><item>Band downgrade</item><item>RF identity stability</item><item>Cellular-transition coherence</item></string-array><string name="transition_explanation_passed">The observed handover is coherent with learned local routes.</string><string name="transition_explanation_failed">The observed handover is inconsistent with learned local routes.</string><string name="transition_explanation_na">There is not enough trusted route history to evaluate this transition.</string>
     <string name="mobility_sanity">MOBILITY SANITY · H16</string>
     <string name="raw_terminal_output">RAW TERMINAL OUTPUT</string>
     <string name="current_technology">TECHNOLOGY</string><string name="signal_power">POWER</string><string name="radio_band">BAND</string>
@@ -282,7 +277,6 @@
     <string name="notif_legacy_network_title">ICdetection: 2G/3G network in use</string>
     <string name="channel_monitoring_name">Monitoring</string>
     <string name="channel_alerts_description">Confirmed network anomaly alarms, one per episode</string>
-    <string name="notif_latency_title">⚠ Network anomaly</string>
     <string name="collection_interrupted_format">⚠ Collection interrupted %1$dh %2$dmin</string>
     <string name="write_failure_notification">⚠ WRITE FAILED — data is not being saved</string>
     <string name="audit_starting">Starting…</string>
@@ -290,11 +284,6 @@
     <string name="alarm_notification_body_format">CID %1$s · %2$s · %3$s</string>
     <string name="baseline_waiting">WAITING</string>
     <string name="baseline_needs_days">NEEDS 2 DAYS</string>
-    <!-- 3.0 (#26) — Network latency indicator -->
-    <string name="latency_state_ok">● NET OK</string>
-    <string name="latency_state_anomalous">● NET ANOMALOUS</string>
-    <string name="latency_state_learning">● NET LEARNING</string>
-    <string name="latency_state_not_measured">● NET N/A</string>
     <!-- 3.0 (#35) — Alarmas silenciadas -->
     <string name="alarm_muted_title">⚠ ALARMS ARE MUTED</string>
     <string name="alarm_muted_body_silenced">The Security alerts channel is silent, so the notification of a confirmed network anomaly will arrive without sound. Turn its sound back on: ICdetection only makes a sound when a network anomaly is confirmed, and the monitoring notification is always silent. The short alert tone is separate and still plays unless the phone is on silent, vibrate or Do Not Disturb.</string>

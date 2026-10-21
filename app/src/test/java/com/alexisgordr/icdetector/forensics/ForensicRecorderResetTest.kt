@@ -40,7 +40,7 @@ class ForensicRecorderResetTest {
     )
 
     private fun observe(phase: Int) = runBlocking {
-        recorder.observe(cell(phase), emptyList(), null, "N/A", emptyList())
+        recorder.observe(cell(phase), emptyList(), null, emptyList())
         clock += 2_000L
     }
 

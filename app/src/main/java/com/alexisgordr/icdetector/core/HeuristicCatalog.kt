@@ -56,7 +56,9 @@ enum class HeuristicCatalog(
     HARDWARE_CIPHERING("H9", "ciphering", Family.UNAVAILABLE, G.NOT_SCORED, null, { it.hardwareCiphering }),
     PING_PONG("H10", "pingPong", Family.MOBILITY, G.MOBILITY, null, { it.pingPong }),
     MOBILE_CELL_ID("H11", "h11", Family.MOBILITY, G.MOBILITY, null, { it.mobileCellId }),
-    LATENCY_CORRELATION("H12", "latency", Family.CROSS_LAYER, G.INDEPENDENT, null, { it.latencyCorrelation }),
+    // Retirada en 3.1.0 — La correlación latencia + RF necesitaba salir a Internet. Conserva id y
+    // posición (CSV, numeración): siempre N/A, sin peso ni familia, como H9.
+    LATENCY_CORRELATION("H12", "latency", Family.UNAVAILABLE, G.NOT_SCORED, null, { it.latencyCorrelation }),
     SIGNAL_BASELINE("H13", "signalBaseline", Family.RF_DOMINANCE, G.RF_DOMINANCE, null, { it.signalBaseline }),
     BAND_DOWNGRADE("H14", "bandDowngrade", Family.MOBILITY, G.RF_DOMINANCE,
         "Celda nueva fuerte en banda baja: para el scorer, dominancia (absorbida por H2); para el episodio, cambio de celda.", { it.bandDowngrade }),

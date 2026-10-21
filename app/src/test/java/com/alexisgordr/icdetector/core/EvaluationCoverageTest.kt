@@ -38,6 +38,16 @@ class EvaluationCoverageTest {
         assertFalse("H5" in ids)
     }
 
+    /** 3.1.0 — H12 retirada: un análisis real la lista siempre como no evaluada. */
+    @Test fun `a real analysis always lists the retired H12 as not evaluated`() {
+        val cell = com.alexisgordr.icdetector.models.CellData(isRegistered = true, networkType = "4G LTE", cellId = "1000",
+            mnc = "07", tac = "100", dbm = -60, mcc = "214", rsrq = -18, sinr = -2,
+            radioTech = com.alexisgordr.icdetector.models.RadioTech.LTE)
+        val report = ThreatAnalyzer.analyzeThreats(cell, emptyList(), emptyList(), null).heuristicReport
+        assertTrue("H12" in report.notEvaluatedIds().split(";"))
+        assertFalse(report.failedCount > 0 && report.latencyCorrelation == FAILED)
+    }
+
     @Test fun `all rules evaluated is an explicit NONE, not an empty value`() {
         assertEquals(HeuristicReport.NONE_NOT_EVALUATED, allPassed().notEvaluatedIds())
         // Un informe sin calcular dice la verdad: no se evaluó ninguna.

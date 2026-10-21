@@ -18,12 +18,12 @@ class AnomalyConfidenceTierTest {
 
     @Test
     fun `no evidence and one strong signal stay grey, combined evidence climbs`() {
-        assertEquals(0, anomalyConfidenceTier(BayesianScorer.calculate(emptyList(), "PENDING", false)))
+        assertEquals(0, anomalyConfidenceTier(BayesianScorer.calculate(emptyList(), "PENDING")))
         // MCC (LR 9) sola: ~4,3 % -> gris.
-        assertEquals(0, anomalyConfidenceTier(BayesianScorer.calculate(listOf("mccMismatch"), "PENDING", false)))
+        assertEquals(0, anomalyConfidenceTier(BayesianScorer.calculate(listOf("mccMismatch"), "PENDING")))
         // Dos señales fuertes de grupos distintos (MCC 9, H11 6): ~21 % -> ámbar.
-        assertEquals(1, anomalyConfidenceTier(BayesianScorer.calculate(listOf("mccMismatch", "h11"), "PENDING", false)))
+        assertEquals(1, anomalyConfidenceTier(BayesianScorer.calculate(listOf("mccMismatch", "h11"), "PENDING")))
         // Tres (y TAC 6,5): ~64 % -> rojo.
-        assertEquals(2, anomalyConfidenceTier(BayesianScorer.calculate(listOf("mccMismatch", "h11", "tacDev"), "PENDING", false)))
+        assertEquals(2, anomalyConfidenceTier(BayesianScorer.calculate(listOf("mccMismatch", "h11", "tacDev"), "PENDING")))
     }
 }

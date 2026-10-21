@@ -101,7 +101,8 @@ class ForensicExporterTest {
         val read = (Regex("""(?:opt|get)\w*\("(\w+)"""").findAll(exporter) + Regex("""nullable\(\w+,\s*"(\w+)"\)""").findAll(exporter))
             .map { it.groupValues[1] }.toSet()
         assertTrue("guardado y no exportado: ${written - read}", read.containsAll(written))
-        assertTrue("leído y nunca guardado: ${read - written}", written.containsAll(read))
+        // 3.1.0 — `latencyState` solo se lee de muestras anteriores (la sonda de latencia se retiró).
+        assertTrue("leído y nunca guardado: ${read - written}", written.containsAll(read - "latencyState"))
     }
 
     @Test fun `trust, site, data quality and rule states reach the export`() {

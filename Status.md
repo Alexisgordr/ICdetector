@@ -61,7 +61,7 @@ changed between 3.0 betas. Each row records the app version and build commit tha
 | H8 | Data-quality flag: no points, no weight, not shown as a suspicion; its reason is still stored in the row (campaign cut) |
 | H10, handover rows | Handover = change of the full serving identity (#19); a transient unreadable Cell ID is not a handover; H10 uses only a recent GPS speed; a serving change counts in the cycle that observes it (campaign cut) |
 | H11 | Parser sentinels are not an RF difference; history chosen across days; `N/A` with a GPS fix older than 60 s or of unknown age, stored as `H11(fix_viejo)` (campaign cut) |
-| H12 | Evaluated only on a real measurement; learning state (#26) |
+| H12 | Evaluated only on a real measurement; learning state (#26). Retired in 3.1.0: always `N/A` (see below) |
 | H14 | Complete band table, same-eNodeB changes ignored, 5G SA, band context reset after a gap (#32 #10 #8 #20) |
 | H15 | EARFCN 0 learnt, impossible PCIs ignored (#22); rows carrying the H15 reason stay in its history whatever else failed |
 | H16 | Own recent fix at each end; no route across a service gap; incoherent only with the phone in the previous cell's zone; zones sampled across days |
@@ -79,10 +79,19 @@ The collection and storage fixes made with the second part (telephony watchdog, 
 clock, local-profile retention, export identifiers, retention clock guard, write-failure health)
 change no rule and are not cuts.
 
+## Dataset cuts in 3.1.0
+
+3.1.0 (version code 40, in preparation) changes the rules below. Rows record `AppVersion`, so the
+cut can be applied per row; the commit is the one that introduces each change.
+
+| Area | What changed | Commit |
+|---|---|---|
+| H12, score, anomaly confidence | H12 retired: always `N/A`, no points, no likelihood ratio. Changes only rows where latency detection had been enabled | B (latency removal) |
+
 ## Known limitations and open items
 
 - **H9 (ciphering)** is reserved and always `N/A`: Android does not expose the modem's ciphering
-  state to regular apps.
+  state to regular apps. **H12 (latency)** is retired from 3.1.0 and always `N/A`.
 - **H3 near borders** can fail when your operator's foreign partner is configured as non-roaming and
   no neighbour reports its MCC; see the [MANUAL](MANUAL.md#8-main-heuristic-families).
 - **H6 on 5G NR** stays `N/A`: Android's NR Timing Advance has no defensible distance conversion yet.

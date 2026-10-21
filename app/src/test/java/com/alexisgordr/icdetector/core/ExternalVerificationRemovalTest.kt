@@ -17,8 +17,9 @@ class ExternalVerificationRemovalTest {
     private val main = listOf(File("src/main"), File("app/src/main")).first { it.exists() }
     private fun source(path: String) = main.resolve("java/com/alexisgordr/icdetector/$path").readText()
 
-    @Test fun `no source file names the public database, a SOCKS proxy or an API key`() {
-        val forbidden = Regex("opencellid|socks|apikey|api_key", RegexOption.IGNORE_CASE)
+    @Test fun `no source file names the public database, OkHttp, a SOCKS proxy or an API key`() {
+        // 3.1.0 (B) — OkHttp también: lo usaba la sonda de latencia, retirada después.
+        val forbidden = Regex("opencellid|okhttp|socks|apikey|api_key", RegexOption.IGNORE_CASE)
         val offenders = main.walkTopDown()
             .filter { it.isFile && it.extension in setOf("kt", "xml") }
             // La única excepción: la lista de claves antiguas que el servicio borra al arrancar.
@@ -28,7 +29,8 @@ class ExternalVerificationRemovalTest {
             .toList()
         assertEquals(emptyList<String>(), offenders)
         listOf("network/OpenCellIdClient.kt", "network/VerificationOutcome.kt", "service/ExternalVerificationController.kt",
-            "core/VerificationConfig.kt", "core/VerificationDecision.kt").forEach {
+            "core/VerificationConfig.kt", "core/VerificationDecision.kt", "service/NetworkLatencyMonitor.kt",
+            "core/LatencyProxyChoice.kt").forEach {
             assertFalse(it, main.resolve("java/com/alexisgordr/icdetector/$it").exists())
         }
     }

@@ -74,18 +74,13 @@ another one keeps watching.
 H16 shows each handover result for 20 s, then returns to `N/A` until the next handover. It only gets
 regular coverage with **Continuous** GPS mode.
 
-### 5. Man in the middle: traffic going where it should not
-
-| Rule | What it watches | Points | When it abstains (`N/A`) |
-|---|---|---|---|
-| **H12** Latency + RF | Abnormal latency with signal ≥ −70 and RSRQ ≤ −15 or SINR ≤ 0 | −20 | Experimental and off by default; also `N/A` on Wi-Fi |
-
-### 6. Rules that never take points
+### 5. Rules that never take points
 
 | Rule | What it is for |
 |---|---|
 | **H8** Data quality | Flags a channel (ARFCN) outside the 3GPP tables: the modem is reporting badly, not an attack |
 | **H9** Ciphering | Reserved. Always `N/A`, because Android does not expose the modem's ciphering state |
+| **H12** Latency + RF | Retired in 3.1.0 with the latency probe (it needed an Internet connection). Always `N/A` |
 
 > **Remember:** H2 (against the neighbours, now) and H13 (against the cell's own history) look at
 > power from different references. H1 (no neighbours) and H7 (neighbours crushed) split the

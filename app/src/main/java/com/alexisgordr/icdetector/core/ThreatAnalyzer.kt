@@ -154,8 +154,6 @@ object ThreatAnalyzer {
         currentLocation: Location?,
         preloadedHistory: List<HistoryRecord> = emptyList(),
         isWifiActive: Boolean = false,
-        isNetworkLatencyAnomalous: Boolean = false,
-        isNetworkLatencyAvailable: Boolean = true,
         signalBaseline: SignalBaseline? = null,
         previousBand: Int? = null,
         previousDbm: Int? = null,
@@ -207,7 +205,6 @@ object ThreatAnalyzer {
         var hSignalBaseline = true
         var hBandDowngrade = true
         var hRfStability = true
-        var hLatencyCorrelation = true
         var hTransitionCoherence = true
 
         // 3.0 (corte de campaña) — Una celda CSG (femtocelda, indicador de grupo cerrado de abonados) está
@@ -230,7 +227,6 @@ object ThreatAnalyzer {
         var eArfcn = false
         var ePingPong = true
         var eMobileCellId = false
-        var eLatencyCorrelation = false
         var eSignalBaseline = false
         var eBandDowngrade = false
         var eRfStability = false
@@ -443,18 +439,9 @@ object ThreatAnalyzer {
             score -= hMobilePenalty
         }
 
-        // 12. RF Quality + Latency Cross-Layer Correlation (Experimental)
-        eLatencyCorrelation = !isWifiActive && isNetworkLatencyAvailable &&
-            (active.rsrq != null || active.sinr != null)
-        if (!isWifiActive && isNetworkLatencyAvailable && isNetworkLatencyAnomalous && active.dbm >= -70) {
-            val rsrqAnomalous = active.rsrq != null && active.rsrq <= -15
-            val sinrAnomalous = active.sinr != null && active.sinr <= 0
-            if (rsrqAnomalous || sinrAnomalous) {
-                hLatencyCorrelation = false
-                reasons.add("RF anómalo + latencia: posible MITM (Experimental)")
-                score -= 20
-            }
-        }
+        // 12. Correlación latencia + RF — retirada en 3.1.0. Necesitaba que la app saliera a
+        // Internet (sondas HEAD a servidores de terceros) y nunca llegó a ser evidencia fiable. Su
+        // id y su posición se conservan (CSV, numeración): siempre N/A, sin puntos ni LR.
 
         // 13. Anomalía de potencia vs línea base propia (baseline geográfico)
         // Aprende del propio historial: esta celda, en este punto, suele verse a X dBm.
@@ -690,9 +677,6 @@ object ThreatAnalyzer {
         val anomalyConfidence = BayesianScorer.calculate(
             failedList,
             active.verified.name,
-            // 3.0 — Solo H12 FAILED aporta la LR de latencia; el indicador bruto no (antes pesaba
-            // aunque H12 no fallara: con Wi-Fi, señal débil o RF normal).
-            latencyCorrelationFailed = !hLatencyCorrelation,
             neighborCount = neighbors.size,
             trustScore = reputation?.trustScore ?: -1
         )
@@ -725,7 +709,7 @@ object ThreatAnalyzer {
             hardwareCiphering = HeuristicStatus.NOT_EVALUATED,
             pingPong = status(ePingPong, hPingPong),
             mobileCellId = status(eMobileCellId, hMobileCellId),
-            latencyCorrelation = status(eLatencyCorrelation, hLatencyCorrelation),
+            latencyCorrelation = HeuristicStatus.NOT_EVALUATED,   // H12, retirada en 3.1.0
             signalBaseline = status(eSignalBaseline, hSignalBaseline),
             bandDowngrade = status(eBandDowngrade, hBandDowngrade),
             rfStability = status(eRfStability, hRfStability),

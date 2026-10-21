@@ -55,9 +55,8 @@ class LegacyNetworkWiringTest {
         assertTrue(suspicious.contains("if (confirmed && alarmEpisodes.onConfirmedAlarm(episodeKey))"))
         assertTrue("por defecto, la identidad de la celda", alerts.contains("episodeKey: String = cell.identityKey"))
         assertTrue(suspicious.contains("notifyConfirmedAlarm(cell)"))
-        // Los avisos independientes se conservan: potencia fuerte (aquí) y latencia (servicio).
+        // El aviso independiente de potencia fuerte se conserva (el de latencia se retiró en 3.1.0).
         assertTrue(alerts.contains("TONE_CDMA_ALERT_CALL_GUARD"))
-        assertTrue(src("MiniICService.kt").substringAfter("private fun showLatencyAlert()").contains("startTone"))
     }
 
     @Test fun `the service reads a real preference instead of a hard-coded flag`() {

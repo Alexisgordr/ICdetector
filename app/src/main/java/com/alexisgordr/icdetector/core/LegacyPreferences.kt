@@ -6,8 +6,9 @@ package com.alexisgordr.icdetector.core
  *
  * - WiGLE: retirado antes de 3.0 (usuario, token y límite de peticiones).
  * - OpenCellID: verificación externa retirada en 3.1.0 (clave de API, proxy SOCKS5 y pausa).
+ * - Latencia: sonda de red de H12, retirada en 3.1.0 (interruptor de Ajustes).
  *
- * Es el ÚNICO sitio de app/src/main que nombra esos servicios: el test que comprueba que no queda
+ * Es el ÚNICO sitio de app/src/main que nombra los servicios externos: el test que comprueba que no queda
  * código de red lo permite solo aquí.
  */
 object LegacyPreferences {
@@ -17,6 +18,7 @@ object LegacyPreferences {
         "wigle_rate_limited_until",
         "opencellid_key",
         "proxy_enabled",
-        "opencellid_pause"
+        "opencellid_pause",
+        "latency_detection_enabled"
     )
 }

@@ -31,7 +31,6 @@ import com.alexisgordr.icdetector.util.LocaleController
 import com.alexisgordr.icdetector.core.LegacyNetworkAlertMode
 import com.alexisgordr.icdetector.core.StableSiteNotices
 import com.alexisgordr.icdetector.core.LocationMode
-import kotlin.time.Duration.Companion.milliseconds
 
 @Composable
 fun SettingsPanel(
@@ -44,9 +43,6 @@ fun SettingsPanel(
 ) {
     val context = LocalContext.current
     val prefs = remember { context.getSharedPreferences("miniic_prefs", Context.MODE_PRIVATE) }
-    var latencyDetectionEnabled by remember {
-        mutableStateOf(prefs.getBoolean("latency_detection_enabled", false))
-    }
     var selectedLanguage by remember { mutableStateOf(LocaleController.selectedLanguage(context)) }
     var selectedLocationMode by remember {
         mutableStateOf(LocationMode.fromStored(prefs.getString(LocationMode.PREF_KEY, null)))
@@ -101,82 +97,6 @@ fun SettingsPanel(
                 }
             }
             HorizontalDivider(color = Color(0xFF1A1A1A), modifier = Modifier.padding(vertical = 4.dp))
-            // Leer estado WiFi de forma reactiva
-            val isWifiActive by produceState(initialValue = false) {
-                while (true) {
-                    val cm = context.getSystemService(Context.CONNECTIVITY_SERVICE)
-                        as android.net.ConnectivityManager
-                    val caps = cm.getNetworkCapabilities(cm.activeNetwork)
-                    value = caps?.hasTransport(android.net.NetworkCapabilities.TRANSPORT_WIFI) ?: false
-                    kotlinx.coroutines.delay(2000L.milliseconds) // comprueba cada 2 segundos
-                }
-            }
-
-            // Leer estado VPN de forma reactiva (mismo patrón que WiFi). La latencia no es
-            // representativa con VPN activa: el tráfico va por el túnel, no por la red
-            // celular directa, así que el toggle se deshabilita.
-            val isVpnActive by produceState(initialValue = false) {
-                while (true) {
-                    val cm = context.getSystemService(Context.CONNECTIVITY_SERVICE)
-                        as android.net.ConnectivityManager
-                    val caps = cm.getNetworkCapabilities(cm.activeNetwork)
-                    value = caps != null && (
-                        caps.hasTransport(android.net.NetworkCapabilities.TRANSPORT_VPN) ||
-                        !caps.hasCapability(android.net.NetworkCapabilities.NET_CAPABILITY_NOT_VPN)
-                    )
-                    kotlinx.coroutines.delay(2000L.milliseconds)
-                }
-            }
-
-            // La latencia se bloquea con WiFi o VPN activos.
-            val latencyBlocked = isWifiActive || isVpnActive
-
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        stringResource(R.string.latency_detection),
-                        color = if (latencyBlocked) Color(0xFF444444) else Color.White,
-                        fontSize = 14.sp,
-                        fontFamily = FontFamily.Monospace
-                    )
-                    Text(
-                        when {
-                            isWifiActive -> stringResource(R.string.unavailable_wifi)
-                            isVpnActive -> stringResource(R.string.unavailable_vpn)
-                            else -> stringResource(R.string.latency_description)
-                        },
-                        color = Color(0xFF666666),
-                        fontSize = 9.sp,
-                        fontFamily = FontFamily.Monospace,
-                        lineHeight = 12.sp
-                    )
-                }
-                Spacer(Modifier.width(8.dp))
-                Switch(
-                    checked = latencyDetectionEnabled,
-                    // v2.5 — Wi-Fi/VPN bloquean ENCENDER la sonda, nunca apagarla. Antes bloqueaban
-                    // las dos direcciones, así que quien la dejaba activada se quedaba sin poder
-                    // desactivarla mientras hubiera Wi-Fi. Apagar algo siempre debe ser posible.
-                    enabled = !latencyBlocked || latencyDetectionEnabled,
-                    onCheckedChange = { requested ->
-                        // Encender exige que no haya Wi-Fi/VPN. Apagar siempre se permite.
-                        if (!requested || !latencyBlocked) latencyDetectionEnabled = requested
-                    },
-                    colors = SwitchDefaults.colors(
-                        checkedThumbColor = Color.White,
-                        checkedTrackColor = Color(0xFFFFA000),
-                        disabledCheckedTrackColor = Color(0xFF444444),
-                        disabledUncheckedTrackColor = Color(0xFF333333)
-                    )
-                )
-            }
-
-            HorizontalDivider(color = Color(0xFF222222), modifier = Modifier.padding(vertical = 4.dp))
-
             Text(stringResource(R.string.location_mode_title), color = Color.White,
                 fontSize = 14.sp, fontFamily = FontFamily.Monospace)
             LocationMode.entries.forEach { mode ->
@@ -253,12 +173,10 @@ fun SettingsPanel(
                     val selectedMode = selectedLocationMode
                     val legacyMode = selectedLegacyAlertMode
                     prefs.edit {
-                        putBoolean("latency_detection_enabled", latencyDetectionEnabled)
                         putString(LocationMode.PREF_KEY, selectedMode.storedValue)
                         putString(LegacyNetworkAlertMode.PREF_KEY, legacyMode.storedValue)
                         putBoolean(StableSiteNotices.PREF_ENABLED, stableSiteNotices)
                     }
-                    service?.isLatencyDetectionEnabled = latencyDetectionEnabled
                     service?.locationMode = selectedMode
                     service?.legacyNetworkAlertMode = legacyMode
                     onSave()

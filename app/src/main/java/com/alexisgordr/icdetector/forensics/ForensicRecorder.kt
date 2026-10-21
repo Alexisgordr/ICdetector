@@ -101,7 +101,6 @@ class ForensicRecorder(
         active: CellData,
         neighbors: List<CellData>,
         location: Location?,
-        latencyState: String,
         logs: List<String>,
         trustContradictionTransition: TrustContradictionSignal = TrustContradictionSignal.NONE
     ) = mutex.withLock {
@@ -122,7 +121,7 @@ class ForensicRecorder(
             phase == 0 && lastPhase > 0 -> "RECOVERY_STARTED"
             else -> "OBSERVATION"
         }
-        val payload = payload(active, neighbors, location, latencyState, logs)
+        val payload = payload(active, neighbors, location, logs)
         val sample = Buffered(wall, elapsed, event, payload)
         buffer.addLast(sample)
         // elapsedRealtime es monotónico: un ajuste manual/NTP de la hora no vacía ni congela el
@@ -210,7 +209,7 @@ class ForensicRecorder(
         if (storageHealth.noteWrite(rowId, wall)) onStorageHealthChange(storageHealth.isFailing)
     }
 
-    private fun payload(active: CellData, neighbors: List<CellData>, loc: Location?, latency: String, logs: List<String>): String {
+    private fun payload(active: CellData, neighbors: List<CellData>, loc: Location?, logs: List<String>): String {
         fun cellJson(c: CellData) = JSONObject().apply {
             put("registered", c.isRegistered); put("identity", c.identityKey)
             put("mcc", c.mcc); put("mnc", c.mnc); put("tac", c.tac); put("cid", c.cellId)
@@ -237,7 +236,8 @@ class ForensicRecorder(
             put("gps", if (loc == null) JSONObject.NULL else JSONObject().apply {
                 put("lat", loc.latitude); put("lon", loc.longitude); put("accuracyM", loc.accuracy)
             })
-            put("latencyState", latency); put("phase", active.temporalProgress.phase)
+            // 3.1.0 — Sin "latencyState": la sonda de latencia se retiró (H12).
+            put("phase", active.temporalProgress.phase)
             put("requiredPhases", active.temporalProgress.required); put("score", active.securityScore)
             put("anomalyConfidence", active.anomalyConfidence); put("verified", active.verified.name)
             put("reason", active.suspiciousReason ?: "")

@@ -19,7 +19,7 @@ class LegacyAndWifiDocsTest {
     @Test fun `README limitations list the Wi-Fi abstentions and Allow 2G without a universal route`() {
         val readme = doc("README.md")
         val limits = readme.substringAfter("## 🚧 Technical limitations").substringBefore("\n---")
-        assertTrue(limits.contains("abstains on **H1, H2, H7, H12 and H13**"))
+        assertTrue(limits.contains("abstains on **H1, H2, H7 and H13**"))
         assertTrue(limits.contains("**Allow 2G**") && limits.contains("**not 3G**"))
         assertTrue(limits.contains("so there is no universal route"))
         assertTrue(limits.contains("turning Airplane mode on is always the user's own\naction"))

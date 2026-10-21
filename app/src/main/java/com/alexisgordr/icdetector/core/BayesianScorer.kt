@@ -69,7 +69,7 @@ object BayesianScorer {
         // 3.0 (corte de campaña) — "ciphering" (H9) tampoco: Android no expone el estado de cifrado a una app sin
         // privilegios, H9 nunca se evalúa y una LR de 12 para una regla que no mide nada no es
         // honesta. Queda reservada ([UNAVAILABLE_KEYS]).
-        "latency"     to 1.8f   // Experimental — demasiadas variables confundentes
+        // 3.1.0 — "latency" (H12) se retira con la sonda de latencia ([UNAVAILABLE_KEYS]).
     )
 
     /**
@@ -170,8 +170,11 @@ object BayesianScorer {
     /** 3.0 (corte de campaña) — Claves de reglas que son avisos de calidad de dato, sin LR: H8. */
     internal val DATA_QUALITY_KEYS = setOf("arfcn")
 
-    /** 3.0 (corte de campaña) — Claves de reglas que una app no puede evaluar, sin LR: H9 (cifrado). */
-    internal val UNAVAILABLE_KEYS = setOf("ciphering")
+    /**
+     * 3.0 (corte de campaña) — Claves de reglas que no se evalúan, sin LR: H9 (cifrado; una app no
+     * puede verlo) y, desde 3.1.0, H12 (latencia; retirada con la sonda de red).
+     */
+    internal val UNAVAILABLE_KEYS = setOf("ciphering", "latency")
 
     /** Claves sin LR: ni calidad de dato ni reglas reservadas son evidencia. */
     internal val NOT_SCORED_KEYS = DATA_QUALITY_KEYS + UNAVAILABLE_KEYS
@@ -191,16 +194,9 @@ object BayesianScorer {
     /** 3.0 (#7, O2) — Claves usadas en los grupos de correlación. */
     internal val groupedKeys: Set<String> get() = ALL_GROUPED.toSet()
 
-    /**
-     * @param latencyCorrelationFailed H12 en estado FAILED en esta observación. La LR de latencia
-     *   se aplica SOLO entonces: el indicador bruto de latencia anómala no es evidencia por sí solo
-     *   (con Wi-Fi, sin medición, con señal débil o con RF normal, H12 no falla y no debe pesar).
-     *   No va en [failedHeuristics] para no contarla dos veces.
-     */
     fun calculate(
         failedHeuristics: List<String>,
         verificationStatus: String,
-        latencyCorrelationFailed: Boolean,
         neighborCount: Int = -1,
         trustScore: Int = -1
     ): Float {
@@ -240,11 +236,6 @@ object BayesianScorer {
         // Factor verificación DB
         val dbLr = DB_RATIOS[verificationStatus] ?: 1.0f
         posterior = bayesUpdate(posterior, dbLr)
-
-        // Factor latencia experimental: solo con H12 FAILED (ver el parámetro).
-        if (latencyCorrelationFailed) {
-            posterior = bayesUpdate(posterior, LIKELIHOOD_RATIOS["latency"]!!)
-        }
 
         // Saturación en 95% — honestidad epistémica
         // Android userland nunca puede confirmar con certeza absoluta

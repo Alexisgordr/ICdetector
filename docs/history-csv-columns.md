@@ -4,6 +4,11 @@ The history CSV (`ExportUtils.CSV_HEADER`) keeps every column it had in 3.0.0, i
 New columns are only ever added at the end. This page lists what changed in the meaning of existing
 columns and which columns were added; [MANUAL.md](../MANUAL.md#12-exporting-antenna-history) describes every column.
 
+## Rules that are always listed as not evaluated from 3.1.0
+
+`NotEvaluatedHeuristics` lists H12 in every row from 3.1.0: the latency + RF correlation was retired
+with the latency probe. Rows from earlier versions list it only when it was not evaluated then.
+
 ## Columns that are always empty from 3.1.0
 
 | Column | Up to 3.0.0 | From 3.1.0 |

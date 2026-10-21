@@ -152,7 +152,7 @@ class StringResourcesTest {
     @Test fun `notification texts exist in both languages and are not hard-coded`() {
         listOf(
             "notif_monitoring_title", "notif_legacy_network_title", "notif_legacy_change_title", "notif_legacy_network_body", "notif_open_airplane_settings",
-            "channel_monitoring_name", "channel_alerts_description", "notif_latency_title",
+            "channel_monitoring_name", "channel_alerts_description",
             "collection_interrupted_format", "write_failure_notification", "audit_starting",
             "alarm_notification_title", "alarm_notification_body_format"
         ).forEach { key ->

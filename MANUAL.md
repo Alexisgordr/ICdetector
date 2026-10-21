@@ -44,8 +44,8 @@ While monitoring, it can:
 - Observe the serving cell and the cellular information exposed by Android.
 - Record MCC, MNC, Cell ID, TAC, PCI, channel, RSRP, RSRQ, SINR, radio technology and Timing Advance
   when available.
-- Evaluate sixteen heuristics (H1–H16) in every analysis cycle; fourteen count as evidence (H8 is a
-  data-quality flag and H9 is reserved).
+- Evaluate sixteen heuristics (H1–H16) in every analysis cycle; thirteen count as evidence (H8 is a
+  data-quality flag, H9 is reserved and H12 was retired in 3.1.0).
 - Learn the historical behaviour of repeatedly observed cells.
 - Require suspicious behaviour to persist through three analysis phases, or two when two
   high-value historical or physical checks fail together (they can share data; see *Shared evidence*).
@@ -202,9 +202,8 @@ silenced or has its sound set to *None*, the main screen shows **ALARMS ARE MUTE
 opens that channel's settings. The *2G/3G network* and *Stable-Site silent notices* channels are
 independent: silencing one does not silence another, and the warning only looks at *Security alerts*.
 
-Two other cues are short tones at notification volume (they respect silent, vibrate and Do Not
-Disturb): the very-strong-signal warning (at most once a minute) and, if latency detection is
-enabled, a persistent latency anomaly.
+One other cue is a short tone at notification volume (it respects silent, vibrate and Do Not
+Disturb): the very-strong-signal warning (at most once a minute).
 
 ### 2G/3G network alerts
 
@@ -240,25 +239,11 @@ The `Verified`, `ApiLat` and `ApiLon` columns stay in the database and the histo
 format does not change: from 3.1.0, `Verified` is always `PENDING` and `ApiLat` / `ApiLon` are empty
 (see *Exporting antenna history*). Rows recorded by earlier versions keep the values they had.
 
-### Latency detection (experimental)
+### Latency detection (removed in 3.1.0)
 
-Off by default. When you enable it in Settings, and only while traffic leaves over mobile data (not
-over Wi-Fi or a VPN), the app sends an HTTPS `HEAD` request roughly every
-30 seconds to three third-party endpoints: `www.google.com/generate_204` (Google),
-`one.one.one.one` (Cloudflare) and `dns.quad9.net` (Quad9). The requests carry no cell or location
-data, but they reveal your IP address to those services. This is the only network connection the
-app makes.
-
-The network indicator on the main screen shows one of four states:
-
-| Indicator | Meaning |
-|---|---|
-| `NET N/A` | Not measured (disabled, not on mobile data, or no recent result) |
-| `NET LEARNING` (amber) | Learning this cell's reference latency; H12 is `N/A` meanwhile |
-| `NET OK` | Measured and normal |
-| `NET ANOMALOUS` | Measured and anomalous for this cell |
-
-A result is valid for 90 seconds and is reset when the cell changes or the signal is lost.
+Up to 3.0, an optional probe sent HTTPS `HEAD` requests to three third-party endpoints to correlate
+network latency with radio quality (H12). 3.1.0 removes it, with its setting, its `NET` indicator on
+the main screen and its notification. H12 keeps its number and is always `N/A` (see *Retired rules*).
 
 ### Mobility Familiarity and Geometry (experimental)
 
@@ -568,8 +553,8 @@ request made during that silence. The terminal records each restart: *"Watchdog:
 without cell deliveries."* An occasional restart is harmless; frequent ones point to a modem or a
 power-saving setting that is withholding cell data.
 
-**Dynamic states.** A rule may move from `N/A` to `PASS` once GPS, neighbour data, latency or an API
-result becomes available, and later to `FAIL` if a new measurement becomes inconsistent.
+**Dynamic states.** A rule may move from `N/A` to `PASS` once GPS, neighbour data or local history
+becomes available, and later to `FAIL` if a new measurement becomes inconsistent.
 
 **Continuity.** Confirmation counts consecutive observations of the same cell. It starts again — and
 the terminal says why — after:
@@ -971,8 +956,10 @@ H11 uses the current position only if the GPS fix is 60 s old or less, measured 
 clock. With an older fix, or one of unknown age, H11 is `N/A` (stored as `H11(fix_viejo)`): in a
 moving vehicle an old position can be kilometres from where the cell is seen.
 
-**Regional, latency and external correlation (H12 and others).** These depend on reliable location,
-tower-database results, network reachability and enough samples, and may legitimately remain `N/A`.
+**Retired rules.** H9 (hardware ciphering) is reserved: Android does not expose the ciphering state to
+an app. H12 (latency + RF correlation) was retired in 3.1.0 with the latency probe, because it needed
+an Internet connection. Both keep their number and position so the rule list and the CSV do not
+change; they are always `N/A`, never subtract points and never count as evidence.
 
 **Band downgrade (H14).** Suspicious moves from high-frequency capacity bands to sub-GHz bands when
 the previous signal was strong and there was no progressive degradation. Every 3GPP LTE band is
@@ -1063,7 +1050,8 @@ final alert. A case can contain:
 - about 60 seconds after recovery (30 minutes at most in total);
 - serving and observed neighbour cells, with RSRP, RSRQ, SINR, PCI, channel, TAC, TA and technology;
 - device position and GPS accuracy when available;
-- external-verification state and latency context;
+- the `verified` field (always `PENDING` from 3.1.0) and, in samples from earlier versions, the
+  latency state (empty from 3.1.0);
 - threat score, temporal phase and rule diagnostics for each cycle;
 - device capabilities and unavailable-data explanations;
 - relevant terminal output;
@@ -1286,9 +1274,9 @@ not satisfy legal requirements by itself.
 
 **Settings → Backup** saves all ICdetection data in one `.icdbackup` file: history, antennas and
 their learned trust, incidents, forensic cases, Stable-Site, trips, and the language, location mode,
-latency, 2G/3G alert and Stable-Site silent notice settings. A backup made before a setting
-existed restores that setting's default (*Notification only* and *on*); the proxy setting of older
-backups is ignored (3.1.0). The file is **not encrypted** and contains your location history: keep it private. The
+2G/3G alert and Stable-Site silent notice settings. A backup made before a setting
+existed restores that setting's default (*Notification only* and *on*); the proxy and latency settings
+of older backups are ignored (3.1.0). The file is **not encrypted** and contains your location history: keep it private. The
 backup is consistent even while monitoring is running. Stable-Site episodes in a restored backup never
 produce a silent notice.
 
@@ -1372,9 +1360,10 @@ Android; it cannot guarantee detection.
 
 ### Wi-Fi and rule coverage
 
-While Wi-Fi is connected, five rules abstain (`N/A`, never "passed"): **H1** (isolated cell),
-**H2** (power jump), **H7** (ghost neighbours), **H12** (latency + RF) and **H13** (signal baseline and
-RSRQ/SINR fingerprint). The isolated-cell confirmation count also restarts. All other rules keep
+While Wi-Fi is connected, four rules abstain (`N/A`, never "passed"): **H1** (isolated cell),
+**H2** (power jump), **H7** (ghost neighbours) and **H13** (signal baseline and
+RSRQ/SINR fingerprint). H12 was retired in 3.1.0 and is `N/A` everywhere, Wi-Fi or not. The
+isolated-cell confirmation count also restarts. All other rules keep
 running, and nothing about Wi-Fi itself is scored. Each row records the abstentions in
 `NotEvaluatedHeuristics`; the Wi-Fi state itself is not stored per row.
 
@@ -1382,11 +1371,10 @@ Why each exclusion exists, and how strong the reason is:
 
 | Rule | Kind | Reason | Assessment |
 |---|---|---|---|
-| H12 | Latency | The latency probe would measure the Wi-Fi path, not the cellular link (the same applies to a VPN). | **Required.** Without cellular data traffic there is nothing to correlate. |
 | H1, H2, H7 | RF, neighbours | With data on Wi-Fi the modem usually stays idle on the cellular network; idle-mode neighbour reports are sparser and less frequent, which can look like an isolated cell, a power gap or weak "ghost" neighbours. | **Precaution, not validated.** The radio measurements still exist; the concern is reporting quality. |
 | H13 | RF, own history | Most of the baseline is learned with the phone in connected mode; idle readings may follow a different distribution. | **Precaution, not validated.** |
 
-Consequences: at home or at work on Wi-Fi, often for many hours, these five rules give no evidence,
+Consequences: at home or at work on Wi-Fi, often for many hours, these four rules give no evidence,
 so the strongest remaining signals there are H3, H6, H11, H14, H15 and H16 (when their own data is
 available). H4 and H5 also depend on neighbour reports but do not abstain on Wi-Fi; that inconsistency is
 documented, not changed.
@@ -1397,12 +1385,12 @@ location), the local references — H13's signal baseline and RSRQ/SINR fingerpr
 and local cell confidence — can learn from it, even though some rules did not run in that cycle (the
 local profile learns from every stored row anyway). "No failure recorded" therefore does not mean "every rule was evaluated": check
 `NotEvaluatedHeuristics`. The Wi-Fi state is not stored per row and cannot be reconstructed
-afterwards (a row listing H1, H2, H7, H12 and H13 as not evaluated suggests it, but those rules can
+afterwards (a row listing H1, H2, H7 and H13 as not evaluated suggests it, but those rules can
 also abstain for other reasons). Whether mixing Wi-Fi (idle) and mobile-data (connected) readings
 shifts those references is a **limitation still to be measured**, not a quantified bias, and not a
 demonstrated change in detection. There is no Wi-Fi column and these rows are not excluded.
 
-H12 must keep abstaining. H1, H2, H7 and H13 should only be enabled on
+H1, H2, H7 and H13 should only be enabled on
 Wi-Fi after a specific validation — for example, logging what each would have decided on Wi-Fi in
 shadow mode and comparing it with the same places on mobile data — so no rule changes until then.
 
@@ -1449,7 +1437,7 @@ placeholder values, as some MediaTek modems do. ICdetection reads them as unavai
 devices are less reliable; see the compatibility notes in the [README](README.md).
 
 **A rule alternates between `N/A` and `PASS`.** Its input is intermittent. Check GPS, neighbour
-reporting, latency or API availability. This alone is not a threat.
+reporting or local history. This alone is not a threat.
 
 **No forensic case appears.** A case starts at the first suspicious phase. Confirm that monitoring is
 running and check incident history; normal observations do not create cases.
