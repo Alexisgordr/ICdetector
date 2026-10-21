@@ -66,6 +66,10 @@ Version code 40. A local build; not published yet.
   *Monitoring stopped — open the app to resume*, the failure is recorded (time and exception class) as
   a collection-health event that the next start writes in the terminal, and the main screen shows the
   stopped state with a **Resume** button instead of the normal status.
+- **H6 read GSM Timing Advance index 0 as 0 m (#47).** The GSM index comes in 554 m steps, so 0 means
+  "closer than 554 m" and cannot show the 100 m of the proximity check; any strong GSM cell at index
+  0 failed H6. H6 is now `N/A` on GSM, stored as `H6(ta_gsm)`. **Dataset cut** for H6 on GSM rows
+  only (and the score and anomaly confidence through it).
 - **One stray Timing Advance value disabled the stub detection for good (#43).** The first non-zero
   TA of a technology marked it as "reports real values" forever, and the mark was saved, so a single
   spurious value let an always-zero modem feed H6 as if it measured. The decision now uses the last

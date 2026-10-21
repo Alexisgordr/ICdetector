@@ -336,7 +336,13 @@ object ThreatAnalyzer {
         // conversión y H6 NO JUZGA. Abstenerse es correcto: una geometría inventada aquí es peor
         // que no tener geometría.
         // En una celda CSG no hay distancia que juzgar: una femtocelda está cerca por diseño (ver csgCell).
-        val taMeters = active.timingAdvance?.takeUnless { csgCell }?.let { active.timingAdvanceUnit.toMeters(it) }
+        //
+        // 3.1.0 (#47) — Tampoco en GSM: el paso del índice es de 554 m, así que el índice 0 significa
+        // «a menos de 554 m», no 0 m, y no permite afirmar los 100 m de la rama de proximidad (antes
+        // fallaba con cualquier GSM fuerte a índice 0). H6 queda N/A con su motivo (`H6(ta_gsm)`).
+        val taGsmCoarse = !csgCell && active.timingAdvance != null &&
+            active.timingAdvanceUnit == com.alexisgordr.icdetector.models.TimingAdvanceUnit.GSM_INDEX
+        val taMeters = active.timingAdvance?.takeUnless { csgCell || taGsmCoarse }?.let { active.timingAdvanceUnit.toMeters(it) }
         eTa = taMeters != null
         //
         // 3.0 — Solo queda la rama de PROXIMIDAD (TA + señal). Había otra rama "geométrica" que
@@ -711,6 +717,7 @@ object ThreatAnalyzer {
             csgCell = csgCell,
             mobileCellIdFixTooOld = h11FixTooOld,
             mobileCellIdFixImprecise = h11FixImprecise,
+            taDistanceGsmCoarse = taGsmCoarse,
             mncCount = status(eMncCount, hMncCount),
             tacDeviation = status(eTac, hTac),
             taDistance = status(eTa, hTa),

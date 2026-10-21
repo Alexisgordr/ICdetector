@@ -64,7 +64,8 @@ object DiagnosticEngine {
             HeuristicDiagnostic(5, "Validación regional TAC", r.tacDeviation,
                 explanation(r.tacDeviation, local("N/A: no hay TAC válidos de vecinas de la misma tecnología y el mismo operador para contrastar."))),
             HeuristicDiagnostic(6, "Proximidad por Timing Advance", r.taDistance,
-                explanation(r.taDistance, local("N/A: el módem no entrega un Timing Advance convertible a metros."))),
+                explanation(r.taDistance, local(if (r.taDistanceGsmCoarse) H6_GSM_TA_EXPLANATION
+                    else "N/A: el módem no entrega un Timing Advance convertible a metros."))),
             HeuristicDiagnostic(7, "Espectro de vecinos", r.ghostNeighbors,
                 explanation(r.ghostNeighbors, local(if (i.wifiActive) WIFI_NA else "N/A: no hay celdas vecinas de la misma tecnología para contrastar el espectro."))),
             // 3.0 (corte de campaña) — Aviso de calidad de dato: su fallo no es la condición de un ataque.
@@ -110,6 +111,8 @@ object DiagnosticEngine {
     /** 3.0 (corte de campaña) — H11 con un fix de más de 60 s o sin edad conocida. */
     const val H11_FIX_TOO_OLD_EXPLANATION = "N/A: el fix GPS tiene más de 60 s (o no se sabe su edad); en movimiento, la posición ya no sería la de esta lectura."
     /** 3.1.0 (#46) — H11 con un fix sin precisión conocida o peor que 100 m. */
+    /** 3.1.0 (#47) — H6 con TA de GSM (HeuristicReport.taDistanceGsmCoarse). */
+    const val H6_GSM_TA_EXPLANATION = "N/A: en GSM el Timing Advance va en pasos de 554 m; el índice 0 significa a menos de 554 m, no 0 m, y no permite afirmar que estés a menos de 100 m."
     const val H11_FIX_IMPRECISE_EXPLANATION = "N/A: el fix GPS no tiene precisión conocida o es peor que 100 m; la posición podría estar lejos de donde se vio la celda."
     /** 3.1.0 — H12 retirada: necesitaba sondas de red y la app ya no sale a Internet. */
     const val H12_RETIRED_EXPLANATION = "N/A: regla retirada en 3.1.0 (la correlación de latencia necesitaba conexión a Internet)."

@@ -305,6 +305,10 @@ private val replacements = linkedMapOf(
     "el fix GPS no tiene precisión conocida o es peor que 100 m; la posición podría estar lejos de donde se vio la celda" to
         "the GPS fix has no known accuracy or is worse than 100 m; the position could be far from where the cell was seen",
     "fix GPS sin precisión conocida o de más de 100 m" to "GPS fix without known accuracy or worse than 100 m",
+    // 3.1.0 (#47) — H6 con TA de GSM (DiagnosticEngine.H6_GSM_TA_EXPLANATION, HeuristicReport.H6_GSM_TA_TEXT).
+    "en GSM el Timing Advance va en pasos de 554 m; el índice 0 significa a menos de 554 m, no 0 m, y no permite afirmar que estés a menos de 100 m" to
+        "on GSM the Timing Advance comes in 554 m steps; index 0 means closer than 554 m, not 0 m, and cannot show that you are within 100 m",
+    "TA de GSM: el paso es de 554 m y no permite afirmar menos de 100 m" to "GSM TA: the step is 554 m and cannot show less than 100 m",
     // 3.1.0 — H17 en sombra (HeuristicReport.H17_SHADOW_TEXT, DiagnosticEngine.H17_SHADOW_EXPLANATION, servicio).
     "en sombra; se registran las celdas distintas y los cambios de 15 min, sin evaluar hasta calibrarla con datos de campaña" to
         "shadow mode; the distinct cells and changes over 15 min are recorded, not evaluated until calibrated with campaign data",

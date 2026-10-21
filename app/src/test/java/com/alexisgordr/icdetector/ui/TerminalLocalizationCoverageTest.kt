@@ -60,6 +60,9 @@ class TerminalLocalizationCoverageTest {
         "[H17 sombra] 15 min: 3 celdas distintas, 4 cambios; movimiento MOVING (sin evaluar)",
         com.alexisgordr.icdetector.core.DiagnosticEngine.H17_SHADOW_EXPLANATION,
         com.alexisgordr.icdetector.core.DiagnosticEngine.H12_RETIRED_EXPLANATION,
+        // 3.1.0 (#47) — H6 con TA de GSM.
+        com.alexisgordr.icdetector.core.DiagnosticEngine.H6_GSM_TA_EXPLANATION,
+        "[HEUR] 6. Proximidad por Timing Advance: N/A (TA de GSM: el paso es de 554 m y no permite afirmar menos de 100 m)",
         "[HEUR] 12. Correlación Latencia + RF: N/A (regla retirada en 3.1.0)",
         "[AUDIT] 6. Proximidad por Timing Advance: NO EVALUADA",
         "[AUDIT] 7. Espectro Fantasma: SUPERADA",

@@ -918,7 +918,10 @@ metres. From 3.1.0 the decision uses the last 200 readings of each technology: t
 measurement when more than 5 % are non-zero across at least two cells, and an unfilled field
 (`STUB_ZERO`) when they come from three or more cells and none is non-zero; otherwise the previous
 decision stands. A single stray non-zero value no longer switches the detection off for good, and
-both changes can happen if the data justify them. TA on 5G NR is not converted to distance, so H6 is `N/A` there. Only values in range are
+both changes can happen if the data justify them. TA on 5G NR is not converted to distance, so H6 is
+`N/A` there. From 3.1.0 H6 is also `N/A` on GSM (stored as `H6(ta_gsm)`): the GSM index comes in
+554 m steps, so index 0 means "closer than 554 m", not 0 m, and cannot show the 100 m that the
+proximity check needs. Only values in range are
 used: LTE index 0–1282, GSM index 0–219 (also when converting older rows). LTE TA comes only from
 Android's getter, never from the manufacturer's text, so some phones report little or no TA. NR TA comes from Android's public getter (Android 14+): despite its name it is the raw 3GPP
 T_A index (0–3846), not microseconds, and it is kept as raw context without a distance;
@@ -1200,7 +1203,8 @@ ObservationId, ChurnCells15m, ChurnChanges15m, ChurnMotion
   rule listed here neither passed nor failed. Some rules carry the reason in parentheses: H3
   (`roaming`, `frontera`, `sin_sim`, `sin_servicestate`, `sin_mcc_servidora`); on a CSG cell with
   local history, H1, H2, H5, H6 and H7 (`csg`); H11 with a GPS fix older than 60 s or of unknown
-  age (`fix_viejo`) or, from 3.1.0, without a known accuracy of 100 m or better (`fix_impreciso`); and,
+  age (`fix_viejo`) or, from 3.1.0, without a known accuracy of 100 m or better (`fix_impreciso`);
+  from 3.1.0, H6 on GSM, whose Timing Advance step is too coarse (`ta_gsm`); and,
   from 3.1.0, H12 (`retirada`, retired; a bare `H12` is a 3.0 row where it abstained) and H17
   (`sombra`, shadow mode). For example `H1(csg);H3(roaming);H9;H11(fix_viejo);H12(retirada);H17(sombra)`.
 - `GpsAccuracyM` is the accuracy of the row's fix in metres; filter large values before analysing

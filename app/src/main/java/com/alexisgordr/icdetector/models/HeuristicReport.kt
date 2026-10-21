@@ -42,7 +42,9 @@ data class HeuristicReport(
     /** 3.0 (corte de campaña) — H11 se abstuvo porque el fix GPS era demasiado viejo o de edad desconocida. */
     val mobileCellIdFixTooOld: Boolean = false,
     /** 3.1.0 (#46) — H11 se abstuvo porque el fix no tenía precisión conocida o pasaba de 100 m. */
-    val mobileCellIdFixImprecise: Boolean = false
+    val mobileCellIdFixImprecise: Boolean = false,
+    /** 3.1.0 (#47) — H6 se abstuvo: TA de GSM, cuyo paso de 554 m no permite afirmar menos de 100 m. */
+    val taDistanceGsmCoarse: Boolean = false
 ) {
     // Compatibilidad: una regla que se abstiene no debe activar una alarma.
     val isolatedCellPassed get() = isolatedCell.passed
@@ -123,6 +125,7 @@ data class HeuristicReport(
         csgCell && id in CSG_RULES -> CSG_ABSTENTION_CODE
         id == "H11" && mobileCellIdFixTooOld -> H11_FIX_ABSTENTION_CODE
         id == "H11" && mobileCellIdFixImprecise -> H11_FIX_IMPRECISE_CODE
+        id == "H6" && taDistanceGsmCoarse -> H6_GSM_TA_CODE
         id == "H12" -> H12_RETIRED_CODE
         id == "H17" -> H17_SHADOW_CODE
         else -> null
@@ -134,6 +137,7 @@ data class HeuristicReport(
         csgCell && id in CSG_RULES -> CSG_ABSTENTION_TEXT
         id == "H11" && mobileCellIdFixTooOld -> H11_FIX_ABSTENTION_TEXT
         id == "H11" && mobileCellIdFixImprecise -> H11_FIX_IMPRECISE_TEXT
+        id == "H6" && taDistanceGsmCoarse -> H6_GSM_TA_TEXT
         id == "H12" -> H12_RETIRED_TEXT
         id == "H17" -> H17_SHADOW_TEXT
         else -> null
@@ -162,6 +166,10 @@ data class HeuristicReport(
         /** 3.1.0 (#46) — H11 con un fix sin precisión conocida o de más de 100 m (ver core/MobileCellIdFixAge). */
         const val H11_FIX_IMPRECISE_CODE = "fix_impreciso"
         const val H11_FIX_IMPRECISE_TEXT = "fix GPS sin precisión conocida o de más de 100 m"
+
+        /** 3.1.0 (#47) — H6 con TA de GSM: el índice 0 es «a menos de 554 m», no 0 m. */
+        const val H6_GSM_TA_CODE = "ta_gsm"
+        const val H6_GSM_TA_TEXT = "TA de GSM: el paso es de 554 m y no permite afirmar menos de 100 m"
 
         /**
          * 3.1.0 — H12 retirada: siempre N/A. Con código propio para no confundirla con el `H12` de

@@ -228,7 +228,7 @@ Fails when the Timing Advance implies the phone is within about 100 m of the tra
 signal is very strong (≥ −60 dBm). The app has no tower position in the scoring path (public-database
 coordinates are only shown as a distance), so H6 does not compare TA with a tower location. A missing TA is only taken from a duplicate of the same cell, never from another transmitter. Modems
 that always report zero are detected per technology (`STUB_ZERO`) and excluded from geometry. TA on
-5G NR is not converted to distance.
+5G NR is not converted to distance, and on GSM (554 m steps) H6 is `N/A`.
 
 #### Ghost Neighbour Detection (H7)
 Detects a very strong serving cell while every visible neighbour is extremely weak — possibly an
