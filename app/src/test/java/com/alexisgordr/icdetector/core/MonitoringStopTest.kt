@@ -115,6 +115,12 @@ class MonitoringStopTest {
         assertTrue(receiver.contains("if (action == BootStart.Action.NOTIFY) ServiceNotificationController.notifyResumeAfterBoot(context)"))
     }
 
+    /**
+     * Test de cableado: lee el código del servicio, la actividad, MainScreen y
+     * ServiceNotificationController. Son clases de Android y Compose que no se pueden ejecutar en la
+     * JVM; el comportamiento (MonitoringStop, BootStart) se prueba arriba, y el aviso en pantalla en
+     * androidTest (MonitoringStoppedNoticeTest).
+     */
     @Test fun `the service, the activity and the screen are wired to it`() {
         val service = src("service/MiniICService.kt")
         val create = service.substringAfter("override fun onCreate()")
@@ -142,6 +148,11 @@ class MonitoringStopTest {
             .substringBefore("fun cancelMonitoringStopped(").let { it.contains("manager.notify(MONITORING_STOPPED_NOTIFICATION_ID") && !it.contains("startForeground") && !it.contains("setOngoing(true)") })
     }
 
+    /**
+     * El conjunto de permisos se comprueba sobre el manifiesto (es el propio artefacto). Lo de
+     * SettingsScreen es un test de cableado: Compose no se ejecuta en la JVM. El valor por defecto
+     * del ajuste se comprueba con BootStart y BackupSettings.
+     */
     @Test fun `only RECEIVE_BOOT_COMPLETED is added and the setting is visible and off by default`() {
         val manifest = main.resolve("AndroidManifest.xml").readText()
         val permissions = Regex("""<uses-permission\s+android:name="android\.permission\.(\w+)"(?![^>]*tools:node="remove")""")

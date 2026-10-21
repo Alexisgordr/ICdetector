@@ -159,6 +159,9 @@ class TimingAdvanceSanity {
         return false
     }
 
+    /** Observa una celda con su clave de emplazamiento ([evidenceKey]); ver [observe]. */
+    fun observe(cell: CellData): Boolean = observe(cell.timingAdvanceUnit, evidenceKey(cell), cell.timingAdvance)
+
     /**
      * Unidad efectiva para esta observación: la declarada por el parser, salvo que esa misma
      * unidad se haya concluido como campo sin rellenar, en cuyo caso pasa a

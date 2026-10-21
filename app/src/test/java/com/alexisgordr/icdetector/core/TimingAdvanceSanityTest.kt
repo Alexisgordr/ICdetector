@@ -144,16 +144,6 @@ class TimingAdvanceSanityTest {
         assertEquals(TimingAdvanceUnit.GSM_INDEX, s.effectiveUnit(GSM, 0))
     }
 
-    @Test fun `el servicio no lee la evidencia global antigua`() {
-        val service = listOf(
-            java.io.File("src/main/java/com/alexisgordr/icdetector/service/MiniICService.kt"),
-            java.io.File("app/src/main/java/com/alexisgordr/icdetector/service/MiniICService.kt")
-        ).first { it.exists() }.readText()
-        assertFalse(service.contains("\"ta_seen_real_value\""))
-        assertFalse(service.contains("\"ta_zero_only_cells\""))
-        assertTrue(service.contains("taSanity.observe(current.timingAdvanceUnit, taKey, current.timingAdvance)"))
-    }
-
     // ── 3.0 — Qué cuenta como «distinto» ────────────────────────────────────────────────────
 
     private fun lte(cid: Long, tac: String = "31601", mcc: String = "214", mnc: String = "07") =
@@ -199,13 +189,6 @@ class TimingAdvanceSanityTest {
         assertFalse(s.isStub(LTE))
         assertEquals("cell:GSM:42", TimingAdvanceSanity.normalizeStoredKey("214-07-1200-42-GSM"))
         assertEquals("cell:GSM:42", TimingAdvanceSanity.normalizeStoredKey("cell:GSM:42"))
-    }
-
-    @Test fun `the service observes with the evidence key`() {
-        val service = listOf(java.io.File("src/main/java/com/alexisgordr/icdetector/service/MiniICService.kt"),
-            java.io.File("app/src/main/java/com/alexisgordr/icdetector/service/MiniICService.kt")).first { it.exists() }.readText()
-        assertTrue(service.contains("val taKey = com.alexisgordr.icdetector.core.TimingAdvanceSanity.evidenceKey(current)"))
-        assertFalse(service.contains("val taKey = current.identityKey"))
     }
 
     // ── 3.1.0 (#43) — Ventana en lugar del latch ───────────────────────────────────────────
@@ -317,12 +300,75 @@ class TimingAdvanceSanityTest {
         assertTrue("veredicto nuevo", t.observe(LTE, site(3), 0))
     }
 
-    @Test fun `the service persists the window and migrates the 3_0 keys`() {
+    // ── 3.1.0 — Persistencia y migración con preferencias en memoria (TimingAdvanceEvidenceStore) ──
+
+    /** Preferencias en memoria: lo mismo que el servicio hace con SharedPreferences. */
+    private class MemoryPrefs(initial: Map<String, Any> = emptyMap()) : TimingAdvanceEvidenceStore.Prefs {
+        val values = HashMap<String, Any>(initial)
+        var writes = 0
+        override fun getString(key: String) = values[key] as? String
+        @Suppress("UNCHECKED_CAST")
+        override fun getStringSet(key: String) = values[key] as? Set<String>
+        override fun contains(key: String) = key in values
+        override fun write(put: Map<String, String>, remove: Set<String>) { writes++; remove.forEach(values::remove); values.putAll(put) }
+    }
+
+    @Test fun `pre-3_0 global evidence is not read and its keys are removed`() {
+        val prefs = MemoryPrefs(mapOf("ta_seen_real_value" to true, "ta_zero_only_cells" to setOf("214-07-1-1-LTE", "214-07-1-2-LTE", "214-07-1-3-LTE")))
+        val s = TimingAdvanceSanity()
+        assertFalse(TimingAdvanceEvidenceStore(prefs).restore(s))
+        TimingAdvanceSanity.EVIDENCE_UNITS.forEach { assertEquals(TimingAdvanceSanity.Verdict.UNKNOWN, s.verdict(it)) }
+        assertFalse(prefs.contains("ta_seen_real_value")); assertFalse(prefs.contains("ta_zero_only_cells"))
+    }
+
+    @Test fun `the 3_0 per-unit evidence is migrated without its latch and removed`() {
+        val prefs = MemoryPrefs(mapOf(
+            "ta_seen_real_LTE_INDEX" to true,                                   // latch de 3.0: no fuerza REAL
+            "ta_zero_cells_GSM_INDEX" to setOf("cell:GSM:1", "cell:GSM:2", "cell:GSM:3"),
+            "other_setting" to "kept"
+        ))
+        val s = TimingAdvanceSanity()
+        assertTrue("GSM migrado como STUB", TimingAdvanceEvidenceStore(prefs).restore(s))
+        assertTrue(s.isStub(GSM))
+        assertEquals(TimingAdvanceSanity.Verdict.UNKNOWN, s.verdict(LTE))
+        assertFalse(prefs.values.keys.any { it.startsWith("ta_seen_real_") || it.startsWith("ta_zero_cells_") })
+        assertEquals("kept", prefs.values["other_setting"])
+        assertEquals("la ventana migrada queda guardada", s.summary(GSM), prefs.values["ta_window_GSM_INDEX"])
+    }
+
+    @Test fun `the window survives a restart through the store`() {
+        val prefs = MemoryPrefs()
+        val before = TimingAdvanceSanity()
+        before.observe(LTE, key(1), 5); before.observe(LTE, key(2), 6)
+        listOf(11, 12, 13).forEach { before.observe(GSM, key(it), 0) }
+        TimingAdvanceEvidenceStore(prefs).persist(before)
+        val after = TimingAdvanceSanity()
+        assertTrue(TimingAdvanceEvidenceStore(prefs).restore(after))
+        assertEquals(TimingAdvanceSanity.Verdict.REAL, after.verdict(LTE))
+        assertTrue(after.isStub(GSM))
+        assertEquals("sin claves antiguas, restaurar no escribe nada", 1, prefs.writes)
+    }
+
+    @Test fun `observing a cell uses its site key, so sectors of one eNodeB count once`() {
+        val enb = 23_456L shl 8
+        val s = TimingAdvanceSanity()
+        listOf(1L, 2L, 3L, 11L).forEach { s.observe(lte(enb + it).copy(timingAdvance = 0, timingAdvanceUnit = LTE)) }
+        assertEquals(1, s.zeroOnlyCellCount(LTE))
+        assertFalse(s.isStub(LTE))
+        s.observe(lte(enb + 1).copy(cellId = "N/A", timingAdvance = 0, timingAdvanceUnit = LTE))
+        assertEquals("CID ilegible: un cero sin celda no suma", 1, s.zeroOnlyCellCount(LTE))
+    }
+
+    /**
+     * Test de cableado: el servicio usa observe(cell), annotate(cell) y el almacén (lee el código de
+     * MiniICService; el servicio no se puede ejecutar en la JVM). El comportamiento está arriba.
+     */
+    @Test fun `the service is wired to the cell observation, annotate and the store`() {
         val service = listOf(java.io.File("src/main/java/com/alexisgordr/icdetector/service/MiniICService.kt"),
             java.io.File("app/src/main/java/com/alexisgordr/icdetector/service/MiniICService.kt")).first { it.exists() }.readText()
-        assertTrue(service.contains("editor.putString(KEY_TA_WINDOW_PREFIX + unit.name, taSanity.summary(unit))"))
-        assertTrue(service.contains("taSanity.restoreLegacy(unit, cells)"))
-        assertTrue(service.contains("legacy.remove(KEY_TA_SEEN_REAL_PREFIX + unit.name).remove(KEY_TA_ZERO_CELLS_PREFIX + unit.name)"))
-        assertFalse("el latch antiguo no se lee", service.contains("p.getBoolean(KEY_TA_SEEN_REAL_PREFIX"))
+        assertTrue(service.contains("if (taSanity.observe(current)) persistTaSanityEvidence()"))
+        assertTrue(service.contains("list[activeIndex] = taSanity.annotate(current)"))
+        assertTrue(service.contains("if (taEvidenceStore().restore(taSanity)) {"))
+        assertTrue(service.contains("try { taEvidenceStore().persist(taSanity) } catch (_: Exception) {}"))
     }
 }
