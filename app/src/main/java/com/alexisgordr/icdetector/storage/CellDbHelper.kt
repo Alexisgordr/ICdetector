@@ -363,10 +363,10 @@ class CellDbHelper(
         if (oldVersion < 7) {
             // Migración aditiva y NO destructiva: solo añade columnas para el fingerprint RF
             // (RSRQ/SINR). Las filas existentes quedan intactas con estas columnas a NULL.
-            // Cada ALTER va en su propio try/catch para que, en el caso raro de que una columna
-            // ya existiera (instalación parcial), no aborte la migración ni la app.
-            try { db.execSQL("ALTER TABLE $TABLE_HISTORY ADD COLUMN $COLUMN_RSRQ INTEGER") } catch (_: Exception) {}
-            try { db.execSQL("ALTER TABLE $TABLE_HISTORY ADD COLUMN $COLUMN_SINR INTEGER") } catch (_: Exception) {}
+            // Cada ALTER tolera que la columna ya existiera (instalación parcial). 3.1.0 (#47): solo
+            // eso; antes se tragaba cualquier excepción (ver SchemaMigration).
+            SchemaMigration.tolerateDuplicateColumn { db.execSQL("ALTER TABLE $TABLE_HISTORY ADD COLUMN $COLUMN_RSRQ INTEGER") }
+            SchemaMigration.tolerateDuplicateColumn { db.execSQL("ALTER TABLE $TABLE_HISTORY ADD COLUMN $COLUMN_SINR INTEGER") }
         }
         if (oldVersion < 8) {
             // Índices de rendimiento. NO tocan ni una sola fila de datos: solo crean estructuras
@@ -378,30 +378,30 @@ class CellDbHelper(
         if (oldVersion < 9) {
             // Migración a esquema 9, aditiva y NO destructiva: tres columnas nuevas. Las filas
             // existentes quedan intactas (threat_prob = 0, api_lat/api_lon = NULL). Cada ALTER
-            // en su propio try/catch por si una columna ya existiera en una instalación parcial.
+            // tolera que la columna ya existiera en una instalación parcial (SchemaMigration).
             //
             // NOTA sobre el histórico anterior a v2.1: las filas viejas pueden tener en
             // lat/lon la coordenada de la ANTENA (bug corregido en esta versión) en lugar de la
             // posición GPS. No se tocan aquí — borrarlas o moverlas automáticamente sería
             // adivinar. Se recomienda partir de un historial limpio (Ajustes > borrar historial)
             // para que el baseline geográfico se construya solo con datos correctos.
-            try { db.execSQL("ALTER TABLE $TABLE_HISTORY ADD COLUMN $COLUMN_ANOMALY_CONFIDENCE REAL DEFAULT 0") } catch (_: Exception) {}
-            try { db.execSQL("ALTER TABLE $TABLE_HISTORY ADD COLUMN $COLUMN_API_LAT REAL") } catch (_: Exception) {}
-            try { db.execSQL("ALTER TABLE $TABLE_HISTORY ADD COLUMN $COLUMN_API_LON REAL") } catch (_: Exception) {}
+            SchemaMigration.tolerateDuplicateColumn { db.execSQL("ALTER TABLE $TABLE_HISTORY ADD COLUMN $COLUMN_ANOMALY_CONFIDENCE REAL DEFAULT 0") }
+            SchemaMigration.tolerateDuplicateColumn { db.execSQL("ALTER TABLE $TABLE_HISTORY ADD COLUMN $COLUMN_API_LAT REAL") }
+            SchemaMigration.tolerateDuplicateColumn { db.execSQL("ALTER TABLE $TABLE_HISTORY ADD COLUMN $COLUMN_API_LON REAL") }
         }
         if (oldVersion < 10) {
             // Migración a esquema 10, aditiva y NO destructiva: se registra el Timing Advance
             // crudo con su unidad. Las filas anteriores quedan con ambas columnas a NULL, que es lo
             // honesto: en aquel momento el dato no se guardaba, y eso no es lo mismo que "no había".
-            try { db.execSQL("ALTER TABLE $TABLE_HISTORY ADD COLUMN $COLUMN_TA INTEGER") } catch (_: Exception) {}
-            try { db.execSQL("ALTER TABLE $TABLE_HISTORY ADD COLUMN $COLUMN_TA_UNIT TEXT") } catch (_: Exception) {}
+            SchemaMigration.tolerateDuplicateColumn { db.execSQL("ALTER TABLE $TABLE_HISTORY ADD COLUMN $COLUMN_TA INTEGER") }
+            SchemaMigration.tolerateDuplicateColumn { db.execSQL("ALTER TABLE $TABLE_HISTORY ADD COLUMN $COLUMN_TA_UNIT TEXT") }
         }
         if (oldVersion < 11) {
             // Migración a esquema 11, aditiva y NO destructiva: una columna para la tecnología de
             // radio. Las filas anteriores quedan con NULL, y las consultas de identidad lo tratan
             // como "no consta" en vez de como un desacuerdo — un historial antiguo sigue siendo
             // válido, sencillamente no sabe de qué tecnología era cada observación.
-            try { db.execSQL("ALTER TABLE $TABLE_HISTORY ADD COLUMN $COLUMN_RADIO TEXT") } catch (_: Exception) {}
+            SchemaMigration.tolerateDuplicateColumn { db.execSQL("ALTER TABLE $TABLE_HISTORY ADD COLUMN $COLUMN_RADIO TEXT") }
         }
         if (oldVersion < 12) {
             // La identidad histórica completa incluye la tecnología. El índice anterior se
@@ -413,19 +413,19 @@ class CellDbHelper(
         if (oldVersion < 15) createTransitionTable(db)
         if (oldVersion < 16) createStableSiteTables(db)
         if (oldVersion < 17) {
-            try { db.execSQL("ALTER TABLE $TABLE_CELL_TRANSITIONS ADD COLUMN trip_count INTEGER NOT NULL DEFAULT 0") } catch (_: Exception) {}
-            try { db.execSQL("ALTER TABLE $TABLE_CELL_TRANSITIONS ADD COLUMN last_trip_id TEXT") } catch (_: Exception) {}
-            try { db.execSQL("ALTER TABLE $TABLE_CELL_TRANSITIONS ADD COLUMN mobility_first_seen_ms INTEGER") } catch (_: Exception) {}
-            try { db.execSQL("ALTER TABLE $TABLE_CELL_TRANSITIONS ADD COLUMN mobility_last_seen_ms INTEGER") } catch (_: Exception) {}
+            SchemaMigration.tolerateDuplicateColumn { db.execSQL("ALTER TABLE $TABLE_CELL_TRANSITIONS ADD COLUMN trip_count INTEGER NOT NULL DEFAULT 0") }
+            SchemaMigration.tolerateDuplicateColumn { db.execSQL("ALTER TABLE $TABLE_CELL_TRANSITIONS ADD COLUMN last_trip_id TEXT") }
+            SchemaMigration.tolerateDuplicateColumn { db.execSQL("ALTER TABLE $TABLE_CELL_TRANSITIONS ADD COLUMN mobility_first_seen_ms INTEGER") }
+            SchemaMigration.tolerateDuplicateColumn { db.execSQL("ALTER TABLE $TABLE_CELL_TRANSITIONS ADD COLUMN mobility_last_seen_ms INTEGER") }
             createMobilityTables(db)
         }
         if (oldVersion < 18) createStableSiteRfNeighbourTables(db)
         if (oldVersion < 19) {
             // Migración a esquema 19, aditiva y NO destructiva: columnas de contexto de radio en
             // el historial y una tabla de eventos de servicio. Las filas existentes quedan con
-            // NULL. Cada ALTER en su propio try/catch por si una columna ya existiera.
+            // NULL. Cada ALTER tolera que la columna ya existiera (SchemaMigration).
             RADIO_CONTEXT_COLUMNS.forEach { (name, type) ->
-                try { db.execSQL("ALTER TABLE $TABLE_HISTORY ADD COLUMN $name $type") } catch (_: Exception) {}
+                SchemaMigration.tolerateDuplicateColumn { db.execSQL("ALTER TABLE $TABLE_HISTORY ADD COLUMN $name $type") }
             }
             createServiceStateTable(db)
         }
