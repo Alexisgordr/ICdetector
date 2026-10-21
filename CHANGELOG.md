@@ -8,44 +8,47 @@ Version numbers follow the app's `versionName`; the Android `versionCode` is giv
 
 Version code 40. A local build; not published yet.
 
+### Added
+
+- **H17, cell churn, in shadow mode.** Distinct serving cells and serving changes over 15 minutes,
+  with the phone's motion from a GPS fix of 60 s or less (`UNKNOWN` otherwise), restarted after a
+  service loss or a gap. Stored in every history row (database schema 26 adds three columns; older
+  rows keep them empty) and at the end of the CSV (`ChurnCells15m`, `ChurnChanges15m`,
+  `ChurnMotion`), shown in the terminal as `[H17 sombra]`. H17 is never evaluated (`N/A`, stored as
+  `H17(sombra)`), has no points or likelihood ratio and is not evidence, so no score changes. Its
+  thresholds will come from the campaign data (3.2).
+
 ### Fixed
 
 - **GPS fix age when filling coordinates (#36).** When the GPS came back, rows without a position
   were filled only with a fix younger than 15 s, but that age came from the phone's clock: with the
   clock set ahead a fresh fix was skipped, and with it set behind an old fix was used. The age now
   comes from the monotonic clock; the fix time is still what matches it to the rows.
-
 - **Writes during a restore (#41).** Every database write of the service goes through the write gate
   that a restore closes and drains. The one that did not — the external verification's status update
   — was removed with it, and *Delete history* now goes through the gate too: while a restore is in
   progress it does nothing and says so in the terminal.
-
 - **Write-ahead logging (#39).** The database now uses WAL: the service's writes no longer block the
   screens' reads, and an interrupted write is discarded whole when the database reopens. A backup
   checkpoints passively before copying, copies the `-wal` with the main file and consolidates the copy
   into one file in DELETE mode, as before; a restore moves `-wal` and `-shm` with the database.
-
 - **H14 kept the previous band only while the reading had a channel (#37).** Many modems sometimes
   publish the serving cell without its ARFCN; that reading erased the known band of the same cell, so
   a handover right after it left H14 `N/A`. The band, and the base station it was measured on, are
   now kept while the full serving identity does not change; a handover takes the new cell's context
   and a service loss or gap clears it. **Dataset cut** for H14 (and, through it, the score and the
   anomaly confidence).
-
 - **Local cell confidence ignored the PCI of a reading without a channel (#38).** For LTE and NR the
   PCI was only compared with the PCIs learned on the same carrier, so without a valid ARFCN it was
   not compared at all and a new PCI went unnoticed. It is now compared with every PCI learned for the
   cell. **Dataset cut** for local cell confidence (a mature cell can become `CHANGED`) and, through
   the alarm candidate (an RF change together with a failed H11 or H16), for alarms.
-
 - **H13's 99th percentile used 0 as "not calculated" (#40).** `p99Dbm` is now nullable: a real
   99th percentile of 0 dBm is applied instead of being skipped. Baselines always store a computed
   value, so no row is expected to change in practice.
-
 - **H11 used fixes of any accuracy (#46).** H11 now needs a known accuracy of 100 m or better — the
   value stored in the row's `GpsAccuracyM`; otherwise it is `N/A`, stored as `H11(fix_impreciso)`.
   **Dataset cut** for H11 (and the score and anomaly confidence through it).
-
 - **H1's likelihood ratio was always halved by the density factor (#45).** H1 only fails with no
   neighbours, and no neighbours is exactly when the density factor damps the most (×0.5), so its
   3.5 always became 2.25, in a city too. H1 is now damped only by reputation, like H6. **Dataset
@@ -69,13 +72,6 @@ Version code 40. A local build; not published yet.
   latency detection off, its default, nothing changes). `NotEvaluatedHeuristics` always lists H12.
   The forensic `latency_state` column stays, empty for new samples. The latency setting of an
   older backup is ignored, and a stored one is deleted the first time 3.1.0 runs.
-- **H17, cell churn, in shadow mode.** Distinct serving cells and serving changes over 15 minutes,
-  with the phone's motion from a GPS fix of 60 s or less (`UNKNOWN` otherwise), restarted after a
-  service loss or a gap. Stored in every history row (database schema 26 adds three columns; older
-  rows keep them empty) and at the end of the CSV (`ChurnCells15m`, `ChurnChanges15m`,
-  `ChurnMotion`), shown in the terminal as `[H17 sombra]`. H17 is never evaluated (`N/A`, stored as
-  `H17(sombra)`), has no points or likelihood ratio and is not evidence, so no score changes. Its
-  thresholds will come from the campaign data (3.2).
 - **Internet permission.** With no network code left, the app no longer requests
   `android.permission.INTERNET` (it is also removed from the merged manifest). It keeps
   `ACCESS_NETWORK_STATE` to know whether data goes over Wi-Fi.
