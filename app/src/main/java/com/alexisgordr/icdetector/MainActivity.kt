@@ -69,6 +69,9 @@ class MainActivity : ComponentActivity() {
         // 3.0 — Un aviso silencioso de Stable-Site abre su episodio. Solo en la primera creación:
         // al girar la pantalla el destino ya está fijado (o cerrado) y no se vuelve a abrir.
         if (savedInstanceState == null) com.alexisgordr.icdetector.ui.StableSiteNoticeTarget.consume(intent)
+        // 3.1.0 (#42) — Abierta desde la notificación «El teléfono se ha reiniciado»: se reanuda aquí,
+        // en primer plano. Solo en la primera creación (al girar la pantalla ya se hizo).
+        if (savedInstanceState == null) resumeAfterBootIfAsked(intent)
         
         // No iniciamos el servicio aquí directamente para evitar crasheos por permisos en Android 14+
         // El inicio del servicio se gestionará desde el MainLayout cuando los permisos sean otorgados.
@@ -97,6 +100,19 @@ class MainActivity : ComponentActivity() {
         super.onNewIntent(intent)
         setIntent(intent)
         com.alexisgordr.icdetector.ui.StableSiteNoticeTarget.consume(intent)
+        resumeAfterBootIfAsked(intent)
+    }
+
+    /**
+     * 3.1.0 (#42) — Notificación tras reiniciar (BootStart): con la primera apertura contestada,
+     * quita la notificación y arranca el monitoreo como cualquier arranque desde la app.
+     */
+    private fun resumeAfterBootIfAsked(intent: Intent?) {
+        val asked = intent?.getBooleanExtra(com.alexisgordr.icdetector.core.BootStart.EXTRA_RESUME_AFTER_BOOT, false) == true
+        if (!com.alexisgordr.icdetector.core.BootStart.resumeOnOpen(asked, com.alexisgordr.icdetector.backup.FirstRun.isPending(this))) return
+        intent?.removeExtra(com.alexisgordr.icdetector.core.BootStart.EXTRA_RESUME_AFTER_BOOT)
+        com.alexisgordr.icdetector.service.ServiceNotificationController.cancelResumeAfterBoot(this)
+        startAndBindService()
     }
 
     fun startAndBindService() {

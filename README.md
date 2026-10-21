@@ -180,10 +180,11 @@ imposed by Android.
    access, and GPS enables the geographic checks.
 4. **Exclude the app from battery optimisation** for long sessions:
    **Settings → Apps → ICdetection → Battery → Battery optimization → Don't optimize**.
-5. **Optional: start after a reboot.** *Settings → Start monitoring after a reboot* (off by default)
-   restarts monitoring when the phone boots, if it was on at shutdown. This is the only use of the
-   `RECEIVE_BOOT_COMPLETED` permission. If Android refuses to start monitoring, at boot or at any
-   other time, a *Monitoring stopped — open the app to resume* notification says so.
+5. **Optional: resume after a reboot.** With *Settings → Resume monitoring after a reboot* (off by
+   default) and monitoring on at shutdown, a notification after the restart says *The phone restarted
+   — tap to resume monitoring*; tapping it resumes monitoring from the app. This is the only use of the
+   `RECEIVE_BOOT_COMPLETED` permission; nothing starts in the background. If Android ever refuses to
+   start monitoring, a *Monitoring stopped — open the app to resume* notification says so.
 
 The [Field Manual](MANUAL.md) covers setup, every screen, the rules and the exports in detail.
 

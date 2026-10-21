@@ -1,14 +1,17 @@
 package com.alexisgordr.icdetector.core
 
 /**
- * 3.1.0 (#42) — Arranque del monitoreo tras reiniciar el teléfono.
+ * 3.1.0 (#42) — Qué hacer cuando el teléfono termina de reiniciarse.
  *
- * Solo si el usuario lo ha pedido ([PREF_ENABLED], un ajuste visible, desactivado por defecto) y el
- * monitoreo estaba activado al apagar ([PREF_MONITORING_ENABLED]: lo marca un arranque correcto
- * del servicio y lo desmarca el botón «Detener»). Con la pregunta de la primera apertura sin
- * contestar no se arranca nada. Si Android no deja arrancar el servicio (en Android 14+ sin
- * permiso de ubicación «todo el tiempo» puede negarse), el fallo se informa como cualquier otro
- * ([MonitoringStop]): notificación «Monitoreo detenido — abre la app para reanudar».
+ * El monitoreo NO se arranca desde segundo plano. La app no pide ubicación en segundo plano
+ * (ACCESS_BACKGROUND_LOCATION), así que un servicio en primer plano arrancado desde
+ * BOOT_COMPLETED no recibe ubicación ni celdas: quedaría «Monitoreo activo» sin recoger nada. En
+ * su lugar, si el usuario lo ha pedido ([PREF_ENABLED], ajuste visible, desactivado por defecto),
+ * el monitoreo estaba activado al apagar ([PREF_MONITORING_ENABLED]: lo marca un arranque correcto
+ * del servicio y lo desmarca el botón «Detener») y la pregunta de la primera apertura está
+ * contestada, se publica una notificación «El teléfono se ha reiniciado — toca para reanudar el
+ * monitoreo». Al tocarla se abre la app ([EXTRA_RESUME_AFTER_BOOT]) y el monitoreo arranca desde
+ * la actividad, en primer plano, como cualquier arranque normal.
  */
 object BootStart {
     const val ACTION_BOOT_COMPLETED = "android.intent.action.BOOT_COMPLETED"
@@ -16,28 +19,16 @@ object BootStart {
     const val DEFAULT_ENABLED = false
     const val PREF_MONITORING_ENABLED = "monitoring_enabled"
 
-    fun shouldStart(action: String?, settingEnabled: Boolean, monitoringWasEnabled: Boolean, firstRunPending: Boolean): Boolean =
-        action == ACTION_BOOT_COMPLETED && settingEnabled && monitoringWasEnabled && !firstRunPending
+    /** Extra del intent de la notificación: la actividad reanuda el monitoreo al abrirse. */
+    const val EXTRA_RESUME_AFTER_BOOT = "com.alexisgordr.icdetector.RESUME_AFTER_BOOT"
 
-    /**
-     * Lo que hace el receptor: arranca con [start] si procede; si [start] lanza, lo informa con
-     * [MonitoringStop.fail]. Devuelve true si intentó arrancar.
-     */
-    fun handle(
-        action: String?,
-        settingEnabled: Boolean,
-        monitoringWasEnabled: Boolean,
-        firstRunPending: Boolean,
-        sink: MonitoringStop.Sink,
-        nowMs: Long,
-        start: () -> Unit
-    ): Boolean {
-        if (!shouldStart(action, settingEnabled, monitoringWasEnabled, firstRunPending)) return false
-        try {
-            start()
-        } catch (e: Exception) {
-            MonitoringStop.fail(sink, nowMs, e)
-        }
-        return true
-    }
+    enum class Action { NOTIFY, NOTHING }
+
+    /** Solo BOOT_COMPLETED (no LOCKED_BOOT_COMPLETED: antes de desbloquear no hay nada que hacer). */
+    fun onBoot(action: String?, settingEnabled: Boolean, monitoringWasEnabled: Boolean, firstRunPending: Boolean): Action =
+        if (action == ACTION_BOOT_COMPLETED && settingEnabled && monitoringWasEnabled && !firstRunPending) Action.NOTIFY
+        else Action.NOTHING
+
+    /** Al abrir la app desde esa notificación: reanudar solo con la primera apertura contestada. */
+    fun resumeOnOpen(hasResumeExtra: Boolean, firstRunPending: Boolean): Boolean = hasResumeExtra && !firstRunPending
 }

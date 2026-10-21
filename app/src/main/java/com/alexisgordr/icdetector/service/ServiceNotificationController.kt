@@ -260,6 +260,44 @@ internal class ServiceNotificationController(
             try { manager.notify(MONITORING_STOPPED_NOTIFICATION_ID, notification) } catch (_: SecurityException) {}
         }
 
+        /** 3.1.0 (#42) — «El teléfono se ha reiniciado — toca para reanudar el monitoreo». */
+        const val RESUME_AFTER_BOOT_NOTIFICATION_ID = 207
+
+        /**
+         * 3.1.0 (#42) — Tras reiniciar (BootStart): notificación normal, no persistente, en el canal
+         * de monitoreo (importancia baja, sin sonido). Al tocarla se abre la app con
+         * [com.alexisgordr.icdetector.core.BootStart.EXTRA_RESUME_AFTER_BOOT] y la actividad reanuda
+         * el monitoreo. No se arranca ningún servicio desde aquí.
+         */
+        fun notifyResumeAfterBoot(context: Context) {
+            val localized = LocaleController.localizedContext(context)
+            val manager = context.getSystemService(NotificationManager::class.java) ?: return
+            manager.createNotificationChannel(
+                NotificationChannel(CHANNEL_ID, localized.getString(R.string.channel_monitoring_name), NotificationManager.IMPORTANCE_LOW)
+            )
+            val resume = PendingIntent.getActivity(
+                context, 3,
+                Intent(context, MainActivity::class.java)
+                    .putExtra(com.alexisgordr.icdetector.core.BootStart.EXTRA_RESUME_AFTER_BOOT, true)
+                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP),
+                PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
+            )
+            val notification = NotificationCompat.Builder(context, CHANNEL_ID)
+                .setContentTitle(localized.getString(R.string.resume_after_boot_title))
+                .setContentText(localized.getString(R.string.resume_after_boot_body))
+                .setSmallIcon(android.R.drawable.ic_menu_info_details)
+                .setContentIntent(resume)
+                .setAutoCancel(true)
+                .setOngoing(false)
+                .build()
+            // Sin permiso de notificaciones no se muestra: el monitoreo se reanuda al abrir la app.
+            try { manager.notify(RESUME_AFTER_BOOT_NOTIFICATION_ID, notification) } catch (_: SecurityException) {}
+        }
+
+        fun cancelResumeAfterBoot(context: Context) {
+            context.getSystemService(NotificationManager::class.java)?.cancel(RESUME_AFTER_BOOT_NOTIFICATION_ID)
+        }
+
         fun cancelMonitoringStopped(context: Context) {
             context.getSystemService(NotificationManager::class.java)?.cancel(MONITORING_STOPPED_NOTIFICATION_ID)
         }

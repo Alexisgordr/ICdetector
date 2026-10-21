@@ -4,5 +4,5 @@
 • New shadow rule H17 (cell churn): recorded, no points, no alarms.
 • Timing Advance stub detection on a 200-reading window; H6 is N/A on GSM.
 • H11 needs a GPS fix of 100 m or better; H14 keeps the band without ARFCN.
-• If Android refuses to start monitoring, the app now says so; optional start after reboot.
+• If Android refuses to start monitoring, the app now says so; optional reminder after a reboot.
 • Faster database (WAL), safe with backups.

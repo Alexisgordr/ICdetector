@@ -174,7 +174,7 @@ fun SettingsPanel(
                 )
             }
 
-            // 3.1.0 (#42) — Iniciar el monitoreo al reiniciar el teléfono (BootReceiver).
+            // 3.1.0 (#42) — Reanudar el monitoreo tras reiniciar: notificación para tocar (BootReceiver).
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,

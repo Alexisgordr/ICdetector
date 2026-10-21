@@ -7,9 +7,9 @@ import kotlinx.coroutines.flow.asStateFlow
 /**
  * 3.1.0 (#42) — El servicio en primer plano no pudo arrancar.
  *
- * `startForeground()` puede lanzar (ForegroundServiceStartNotAllowedException en Android 12+, una
- * SecurityException sin permiso de ubicación en Android 14+, p. ej. al arrancar tras un reinicio
- * sin «Permitir todo el tiempo»). Antes el servicio se paraba en silencio: no había notificación,
+ * `startForeground()` puede lanzar (ForegroundServiceStartNotAllowedException en Android 12+ si la
+ * app no puede arrancar un servicio en primer plano en ese momento, una SecurityException sin
+ * permiso de ubicación en Android 14+). Antes el servicio se paraba en silencio: no había notificación,
  * no quedaba rastro y la app no lo decía, así que la recolección podía estar parada días sin que
  * nadie lo supiera. Ahora un fallo deja tres cosas, en este orden:
  *  1. un registro persistente (el evento de collection-health, [Sink.record]) con la hora y la
@@ -19,7 +19,8 @@ import kotlinx.coroutines.flow.asStateFlow
  *  3. el estado [state], que la pantalla principal enseña en lugar del monitoreo en marcha.
  * Un arranque correcto borra el registro y la notificación ([Sink.cleared]).
  *
- * Puro, sin Android: el servicio, la actividad y el receptor de arranque pasan su [Sink].
+ * Puro, sin Android: el servicio y la actividad pasan su [Sink]. Tras un reinicio no se arranca nada
+ * desde segundo plano ([BootStart]): el monitoreo vuelve desde la actividad, por esta misma vía.
  */
 object MonitoringStop {
 
@@ -52,7 +53,7 @@ object MonitoringStop {
         return true
     }
 
-    /** Fallo al arrancar (en el servicio, al pedirlo la actividad o tras un reinicio del teléfono). */
+    /** Fallo al arrancar (en el servicio o al pedirlo la actividad). */
     fun fail(sink: Sink, nowMs: Long, error: Throwable): Stopped {
         val stopped = Stopped(nowMs, errorClass(error))
         runCatching { sink.record(stopped) }

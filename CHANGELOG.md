@@ -18,9 +18,12 @@ Version code 40. A local build; not published yet.
   `ChurnMotion`), shown in the terminal as `[H17 sombra]`. H17 is never evaluated (`N/A`, stored as
   `H17(sombra)`), has no points or likelihood ratio and is not evidence, so no score changes. Its
   thresholds will come from the campaign data (3.2).
-- **Start monitoring after a reboot (#42).** A setting, off by default, restarts monitoring when the
-  phone boots, only if it was on when the phone shut down (the notification's **Stop** turns it
-  off). It adds the `RECEIVE_BOOT_COMPLETED` permission (normal, no dialog) and no other.
+- **Resume monitoring after a reboot (#42).** A setting, off by default: if monitoring was on when the
+  phone shut down (the notification's **Stop** turns that off), a notification after the restart says
+  *The phone restarted — tap to resume monitoring*, and tapping it resumes monitoring from the app.
+  Nothing starts in the background: without background location a service started at boot would
+  receive neither location nor cells. It adds the `RECEIVE_BOOT_COMPLETED` permission (normal, no
+  dialog) and no other.
 
 ### Fixed
 

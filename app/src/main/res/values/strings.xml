@@ -545,8 +545,10 @@
     <string name="monitoring_stopped_title">Monitoring stopped — open the app to resume</string>
     <string name="monitoring_stopped_body">Android did not allow the monitoring service to start (%1$s). Nothing is being recorded.</string>
     <string name="monitoring_stopped_resume">Resume</string>
-    <string name="start_on_boot_title">Start monitoring after a reboot</string>
-    <string name="start_on_boot_description">Only if monitoring was on when the phone shut down. On Android 14 or later, without location access \"Allow all the time\", Android may refuse; you then get a \"Monitoring stopped\" notification.</string>
+    <string name="start_on_boot_title">Resume monitoring after a reboot</string>
+    <string name="start_on_boot_description">Only if monitoring was on when the phone shut down. After the restart a notification appears; tap it and monitoring resumes. Nothing starts in the background on its own.</string>
+    <string name="resume_after_boot_title">The phone restarted — tap to resume monitoring</string>
+    <string name="resume_after_boot_body">Monitoring was on before the restart. Open the app to resume it.</string>
     <string name="channel_stable_site_name">Stable-Site silent notices</string>
     <string name="channel_stable_site_description">One silent notice per unusual cell change at a known place. No sound, no vibration, no alarms.</string>
     <string name="notif_stable_site_title">Unusual change at this place</string>

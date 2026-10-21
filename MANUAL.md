@@ -110,10 +110,12 @@ If a permission is unavailable, ICdetection continues with the remaining informa
 affected rules report `N/A`.
 
 From 3.1.0 the app also declares **RECEIVE_BOOT_COMPLETED**, a normal permission with no dialog. It
-is only used by **Settings → Start monitoring after a reboot**, which is off by default: with it on,
-monitoring starts again after the phone restarts, but only if it was on when the phone shut down
-(the **Stop** button of the notification turns that off). On Android 14 or later Android may refuse
-to start location monitoring at boot unless location access is set to *Allow all the time*.
+is only used by **Settings → Resume monitoring after a reboot**, which is off by default. With it on,
+and only if monitoring was on when the phone shut down (the **Stop** button of the notification turns
+that off), a notification appears after the restart: **The phone restarted — tap to resume
+monitoring**. Tapping it opens the app and monitoring resumes from there. Nothing is started in the
+background: the app does not request background location, so a monitoring service started at boot
+would receive neither location nor cells.
 
 ### Background monitoring and battery
 

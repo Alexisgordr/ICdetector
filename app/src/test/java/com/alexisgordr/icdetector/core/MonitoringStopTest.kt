@@ -78,27 +78,41 @@ class MonitoringStopTest {
             "Nothing was recorded until this start.", localizeTerminalLine(line))
     }
 
-    @Test fun `the boot receiver starts nothing while the setting is off`() {
-        val sink = FakeSink()
-        var starts = 0
-        fun boot(setting: Boolean, wasOn: Boolean = true, firstRun: Boolean = false, action: String = BootStart.ACTION_BOOT_COMPLETED) =
-            BootStart.handle(action, setting, wasOn, firstRun, sink, 0L) { starts++ }
-        assertFalse(boot(setting = false))
-        assertFalse("monitoreo desactivado al apagar", boot(setting = true, wasOn = false))
-        assertFalse("pregunta de la primera apertura pendiente", boot(setting = true, firstRun = true))
-        assertFalse("otra acción", boot(setting = true, action = "android.intent.action.LOCKED_BOOT_COMPLETED"))
-        assertEquals(0, starts)
-        assertTrue(boot(setting = true))
-        assertEquals(1, starts)
-        assertEquals(0, sink.notified)
+    @Test fun `after a reboot it only notifies, with the setting on, monitoring on and the first run answered`() {
+        fun boot(setting: Boolean = true, wasOn: Boolean = true, firstRun: Boolean = false, action: String? = BootStart.ACTION_BOOT_COMPLETED) =
+            BootStart.onBoot(action, setting, wasOn, firstRun)
+        assertEquals(BootStart.Action.NOTIFY, boot())
+        assertEquals("ajuste desactivado", BootStart.Action.NOTHING, boot(setting = false))
+        assertEquals("monitoreo desactivado al apagar", BootStart.Action.NOTHING, boot(wasOn = false))
+        assertEquals("primera apertura sin contestar", BootStart.Action.NOTHING, boot(firstRun = true))
+        assertEquals("antes de desbloquear", BootStart.Action.NOTHING, boot(action = "android.intent.action.LOCKED_BOOT_COMPLETED"))
+        assertEquals(BootStart.Action.NOTHING, boot(action = null))
         assertFalse("desactivado por defecto", BootStart.DEFAULT_ENABLED)
+        // Ninguna acción arranca el servicio: solo NOTIFY o NOTHING.
+        assertEquals(setOf("NOTIFY", "NOTHING"), BootStart.Action.entries.map { it.name }.toSet())
     }
 
-    @Test fun `a boot start that Android refuses is reported like any other`() {
+    @Test fun `tapping the notification resumes only with the first run answered`() {
+        assertTrue(BootStart.resumeOnOpen(hasResumeExtra = true, firstRunPending = false))
+        assertFalse(BootStart.resumeOnOpen(hasResumeExtra = true, firstRunPending = true))
+        assertFalse("una apertura normal no es la notificación", BootStart.resumeOnOpen(hasResumeExtra = false, firstRunPending = false))
+    }
+
+    @Test fun `a start that Android refuses from the activity is still reported`() {
         val sink = FakeSink()
-        assertTrue(BootStart.handle(BootStart.ACTION_BOOT_COMPLETED, true, true, false, sink, 9L) { throw SecurityException() })
+        MonitoringStop.fail(sink, 9L, SecurityException())
         assertEquals(1, sink.notified)
         assertEquals(MonitoringStop.Stopped(9L, "SecurityException"), MonitoringStop.state.value)
+    }
+
+    /**
+     * Test de cableado: el receptor no arranca ningún servicio (lee el código; un BroadcastReceiver
+     * no se puede ejecutar en la JVM).
+     */
+    @Test fun `the boot receiver never starts the service from the background`() {
+        val receiver = src("service/BootReceiver.kt")
+        assertFalse(receiver.contains("startForegroundService") || receiver.contains("startService"))
+        assertTrue(receiver.contains("if (action == BootStart.Action.NOTIFY) ServiceNotificationController.notifyResumeAfterBoot(context)"))
     }
 
     @Test fun `the service, the activity and the screen are wired to it`() {
@@ -114,6 +128,11 @@ class MonitoringStopTest {
         val activity = src("MainActivity.kt")
         assertTrue(activity.contains("com.alexisgordr.icdetector.core.MonitoringStop.fail("))
         assertTrue(activity.contains("com.alexisgordr.icdetector.core.MonitoringStop.restore("))
+        // Tras reiniciar, el monitoreo se reanuda desde la actividad al tocar la notificación.
+        val resume = activity.substringAfter("private fun resumeAfterBootIfAsked(").substringBefore("\n    }\n")
+        assertTrue(resume.contains("BootStart.resumeOnOpen(asked, com.alexisgordr.icdetector.backup.FirstRun.isPending(this))"))
+        assertTrue(resume.contains("cancelResumeAfterBoot(this)") && resume.contains("startAndBindService()"))
+        assertTrue(activity.contains("if (savedInstanceState == null) resumeAfterBootIfAsked(intent)"))
         val screen = src("ui/MainScreen.kt")
         assertTrue(screen.contains("val monitoringStopped by com.alexisgordr.icdetector.core.MonitoringStop.state.collectAsStateWithLifecycle()"))
         assertTrue(screen.contains("monitoringStopped != null -> stringResource(R.string.monitoring_stopped_title)"))
@@ -129,6 +148,7 @@ class MonitoringStopTest {
             .findAll(manifest).map { it.groupValues[1] }.toSet()
         assertEquals(setOf("ACCESS_FINE_LOCATION", "ACCESS_COARSE_LOCATION", "READ_PHONE_STATE", "ACCESS_NETWORK_STATE",
             "FOREGROUND_SERVICE_LOCATION", "POST_NOTIFICATIONS", "WAKE_LOCK", "RECEIVE_BOOT_COMPLETED"), permissions - "FOREGROUND_SERVICE")
+        assertFalse("sin ubicación en segundo plano", manifest.contains("ACCESS_BACKGROUND_LOCATION"))
         assertTrue(manifest.contains("android:name=\"com.alexisgordr.icdetector.service.BootReceiver\"\n            android:exported=\"false\""))
         assertTrue(manifest.contains("<action android:name=\"android.intent.action.BOOT_COMPLETED\" />"))
         val settings = src("ui/SettingsScreen.kt")
@@ -138,9 +158,17 @@ class MonitoringStopTest {
         listOf("values", "values-es").forEach { dir ->
             val strings = main.resolve("res/$dir/strings.xml").readText()
             listOf("monitoring_stopped_title", "monitoring_stopped_body", "monitoring_stopped_resume",
-                "start_on_boot_title", "start_on_boot_description").forEach { assertTrue("$dir: $it", strings.contains("name=\"$it\"")) }
+                "start_on_boot_title", "start_on_boot_description", "resume_after_boot_title", "resume_after_boot_body").forEach { assertTrue("$dir: $it", strings.contains("name=\"$it\"")) }
         }
         assertTrue(main.resolve("res/values-es/strings.xml").readText()
             .contains("<string name=\"monitoring_stopped_title\">Monitoreo detenido — abre la app para reanudar</string>"))
+        assertTrue(main.resolve("res/values-es/strings.xml").readText()
+            .contains("<string name=\"resume_after_boot_title\">El teléfono se ha reiniciado — toca para reanudar el monitoreo</string>"))
+        assertTrue(main.resolve("res/values/strings.xml").readText()
+            .contains("<string name=\"resume_after_boot_title\">The phone restarted — tap to resume monitoring</string>"))
+        listOf("values", "values-es").forEach { dir ->
+            val text = main.resolve("res/$dir/strings.xml").readText()
+            assertFalse("$dir: sin «Permitir todo el tiempo»", text.contains("Allow all the time") || text.contains("Permitir todo el tiempo"))
+        }
     }
 }

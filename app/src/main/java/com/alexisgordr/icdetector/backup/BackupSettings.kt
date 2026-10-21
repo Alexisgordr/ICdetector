@@ -19,7 +19,7 @@ object BackupSettings {
         "legacy_network_alert_mode" to Type.STRING,
         // 3.0 — Avisos silenciosos de Stable-Site (StableSiteNotices.PREF_ENABLED).
         "stable_site_silent_notices" to Type.BOOLEAN,
-        // 3.1.0 (#42) — Iniciar el monitoreo al reiniciar (BootStart.PREF_ENABLED).
+        // 3.1.0 (#42) — Reanudar el monitoreo tras reiniciar (BootStart.PREF_ENABLED).
         "start_on_boot" to Type.BOOLEAN
     )
 

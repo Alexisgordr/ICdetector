@@ -19,6 +19,9 @@ internal class MonitoringStopSink(private val context: Context) : MonitoringStop
     override fun cleared() {
         CollectionHealthController.clearForegroundStartFailure(preferences)
         ServiceNotificationController.cancelMonitoringStopped(context)
+        // 3.1.0 (#42) — Un arranque correcto (también abriendo la app sin tocarla) deja sin objeto
+        // la notificación «El teléfono se ha reiniciado».
+        ServiceNotificationController.cancelResumeAfterBoot(context)
     }
 
     companion object {
