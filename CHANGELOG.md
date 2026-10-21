@@ -35,8 +35,9 @@ Version code 40. A local build; not published yet.
 - **H14 kept the previous band only while the reading had a channel (#37).** Many modems sometimes
   publish the serving cell without its ARFCN; that reading erased the known band of the same cell, so
   a handover right after it left H14 `N/A`. The band, and the base station it was measured on, are
-  now kept while the full serving identity does not change; a handover takes the new cell's context
-  and a service loss or gap clears it. **Dataset cut** for H14 (and, through it, the score and the
+  now kept while the full serving identity does not change, also through a reading with an
+  unreadable Cell ID (a band change between sectors of the same base station stays exempt); a
+  handover takes the new cell's context and a service loss or gap clears it. **Dataset cut** for H14 (and, through it, the score and the
   anomaly confidence).
 - **Local cell confidence ignored the PCI of a reading without a channel (#38).** For LTE and NR the
   PCI was only compared with the PCIs learned on the same carrier, so without a valid ARFCN it was

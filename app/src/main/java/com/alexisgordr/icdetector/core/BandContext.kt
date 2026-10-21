@@ -32,11 +32,13 @@ internal data class BandContext(
             val site = LteSite.key(current)
             val step = ServingIdentityChange.step(previous?.identity, identity)
             if (previous == null || step.handover) return BandContext(identity, band, site.takeIf { band != null }, nr)
-            // Misma celda: lo que trae la lectura manda; lo que le falta, se conserva.
+            // Misma celda: lo que trae la lectura manda; lo que le falta, se conserva. También la
+            // estación: una lectura con el CID ilegible (sin estación) no la borra, para que un
+            // cambio de banda dentro de la misma estación siga exento en H14.
             return BandContext(
                 identity = step.next ?: previous.identity,
                 lteBand = band ?: previous.lteBand,
-                site = if (band != null) site else previous.site,
+                site = if (band != null) site ?: previous.site else previous.site,
                 nrArfcn = nr ?: previous.nrArfcn
             )
         }

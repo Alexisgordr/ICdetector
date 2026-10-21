@@ -4,6 +4,7 @@ import com.alexisgordr.icdetector.models.CellData
 import com.alexisgordr.icdetector.models.HeuristicStatus
 import com.alexisgordr.icdetector.models.RadioTech
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -40,6 +41,27 @@ class BandContextTest {
     @Test fun `an unreadable Cell ID is not a handover and keeps the context`() {
         val ctx = BandContext.next(BandContext.next(null, high), lte("N/A", null))
         assertEquals(7, ctx.lteBand)
+    }
+
+    /**
+     * Remate de 3.1.0: una lectura de la misma celda con el CID ilegible pero con canal dejaba la
+     * estación a null, y un cambio de banda dentro de la misma estación (otro sector del mismo eNB)
+     * se evaluaba como de estación distinta: H14 fallaba.
+     */
+    @Test fun `an unreadable Cell ID keeps the site, so an intra-site band change stays exempt in H14`() {
+        val first = BandContext.next(null, high)
+        val ctx = BandContext.next(first, lte("N/A", 3350))
+        assertEquals(7, ctx.lteBand)
+        assertEquals("conserva la estación", LteSite.key(high), ctx.site)
+        // Otro sector del mismo eNB (310002), en B20.
+        val sameSiteLow = lte("79360513", 6300, dbm = -70)
+        assertEquals(LteSite.key(high), LteSite.key(sameSiteLow))
+        fun h14(site: String?) = ThreatAnalyzer.analyzeThreats(
+            sameSiteLow, emptyList(), emptyList(), null, previousBand = ctx.lteBand, previousDbm = -80,
+            previousBandSite = site, recentRegisteredDbm = listOf(-80, -80, -80)
+        ).heuristicReport.bandDowngrade
+        assertNotEquals(HeuristicStatus.FAILED, h14(ctx.site))
+        assertEquals("antes (estación null) fallaba", HeuristicStatus.FAILED, h14(null))
     }
 
     @Test fun `NR keeps its ARFCN the same way and a technology change resets it`() {
