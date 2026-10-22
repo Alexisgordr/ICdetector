@@ -1,0 +1,27 @@
+<!-- 3.1.1 — Icono pequeño de las notificaciones: la silueta del icono de la app (torre, punta y
+     ondas) en un solo color. Android solo usa el canal alfa y lo tiñe; un icono a color o el del
+     sistema (una «i» en un círculo) no identifica la app en la barra de estado. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="76"
+    android:viewportHeight="76">
+    <group
+        android:translateX="-16"
+        android:translateY="-12">
+        <!-- Torre -->
+        <path
+            android:fillColor="#FFFFFFFF"
+            android:pathData="M54,30 L70,85 L38,85 Z" />
+        <!-- Punta -->
+        <path
+            android:fillColor="#FFFFFFFF"
+            android:pathData="M54,20 m-5,0 a5,5 0 1,0 10,0 a5,5 0 1,0 -10,0" />
+        <!-- Ondas -->
+        <path
+            android:strokeColor="#FFFFFFFF"
+            android:strokeWidth="4"
+            android:strokeLineCap="round"
+            android:pathData="M65,20 A15,15 0 0,1 75,35 M33,35 A15,15 0 0,1 43,20" />
+    </group>
+</vector>
