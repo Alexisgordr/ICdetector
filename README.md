@@ -9,7 +9,7 @@
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](LICENSE)
 ![Platform](https://img.shields.io/badge/Platform-Android%2012%2B-green.svg)
 ![Root Required](https://img.shields.io/badge/Root-Not%20Required-brightgreen.svg)
-[![Release](https://img.shields.io/github/v/release/Alexisgordr/ICdetector?label=release&color=brightgreen)](https://github.com/Alexisgordr/ICdetector/releases/latest)
+[![Release](https://img.shields.io/badge/release-v3.1.0-brightgreen.svg)](https://github.com/Alexisgordr/ICdetector/releases/latest)
 [![Featured in Awesome Telco](https://img.shields.io/badge/Featured%20in-Awesome%20Telco-6f42c1.svg)](https://github.com/ravens/awesome-telco#imsi-catcher-detection)
 
 [**Install**](#-getting-started) ·
