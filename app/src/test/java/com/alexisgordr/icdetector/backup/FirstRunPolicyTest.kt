@@ -87,4 +87,16 @@ class FirstRunPolicyTest {
         val app = read("$main/ICDetectionApp.kt")
         assertTrue(app.indexOf("RestoreStartup.run(this)") < app.indexOf("FirstRun.resolveAtStart(this, restore.outcome)"))
     }
+
+    @Test fun `the database is not opened before the first-run question`() {
+        // 3.1.0 — Abrirla crea el fichero, y hasForeignData lo tomaba por datos de otra instalación:
+        // en una instalación limpia salía el aviso de datos ajenos (informe de F-Droid).
+        val onCreate = read("$main/MainActivity.kt").substringAfter("override fun onCreate(").substringBefore("setContent {")
+        assertTrue(onCreate.indexOf("firstRunPending = com.alexisgordr.icdetector.backup.FirstRun.isPending(this)") <
+            onCreate.indexOf("if (!firstRunPending) dbHelper.openThroughGate()"))
+        assertFalse(onCreate.contains("\n        dbHelper.openThroughGate()"))
+        val activity = read("$main/MainActivity.kt")
+        assertTrue(activity.substringAfter("FirstRunScreen(onStartedFresh = {").substringBefore("})")
+            .let { it.indexOf("dbHelper.openThroughGate()") in 0 until it.indexOf("firstRunPending = false") })
+    }
 }

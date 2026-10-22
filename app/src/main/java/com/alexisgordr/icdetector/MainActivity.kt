@@ -59,10 +59,13 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         dbHelper = CellDbHelper.getInstance(this)
+        firstRunPending = com.alexisgordr.icdetector.backup.FirstRun.isPending(this)
         // 3.1.0 (#47) — Único punto de apertura de la base, antes de que nada la lea. Si es de una
         // versión más nueva, DatabaseGate lo publica y abajo se enseña el diálogo bloqueante.
-        dbHelper.openThroughGate()
-        firstRunPending = com.alexisgordr.icdetector.backup.FirstRun.isPending(this)
+        // Con la primera apertura pendiente no se abre: abrirla crea el fichero, y la pantalla de
+        // bienvenida lo tomaría por datos de otra instalación (FirstRun.hasForeignData). Esa
+        // pantalla no lee la base; se abre al empezar de cero.
+        if (!firstRunPending) dbHelper.openThroughGate()
         // 3.1.0 (#42) — Un fallo de arranque del servicio (también de un proceso anterior, p. ej.
         // tras reiniciar) se enseña en la pantalla principal hasta que el servicio arranque bien.
         com.alexisgordr.icdetector.core.MonitoringStop.restore(
@@ -95,7 +98,10 @@ class MainActivity : ComponentActivity() {
                     // 3.1.0 (#47) — Bloqueante: ninguna pantalla que lea la base, ningún servicio.
                     com.alexisgordr.icdetector.ui.DatabaseNewerDialog(newer, onClose = { finish() })
                 } else if (firstRunPending) {
-                    com.alexisgordr.icdetector.ui.FirstRunScreen(onStartedFresh = { firstRunPending = false })
+                    com.alexisgordr.icdetector.ui.FirstRunScreen(onStartedFresh = {
+                        dbHelper.openThroughGate()
+                        firstRunPending = false
+                    })
                 } else {
                     MainLayout(context = this, dbHelper = dbHelper, service = service)
                 }

@@ -323,7 +323,7 @@
     <string name="restore_result_pending">The restore was interrupted and will be completed when the app starts again (%1$s).</string>
     <string name="restore_drain_failed">Monitoring could not finish saving its pending data, so the restore was not started. Nothing was changed; try again in a moment.</string>
     <!-- 3.0 — Primera apertura -->
-    <string name="first_run_title">Welcome to ICdetection 3.0</string>
+    <string name="first_run_title">Welcome to ICdetection</string>
     <string name="first_run_body">Do you want to restore a backup? Nothing is recorded until you choose.</string>
     <string name="first_run_foreign_data">This phone already has ICdetection data that did not come from this install (for example, copied by a transfer tool). Starting from scratch deletes it; restoring a backup replaces it. It is kept if a restore fails.</string>
     <string name="first_run_restore">RESTORE A BACKUP</string>
