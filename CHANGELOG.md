@@ -4,6 +4,20 @@ Every notable change to ICdetection, newest first. Releases inside the field-col
 fix bugs; a fix that changes how a rule is evaluated is marked as a **dataset cut** for that rule.
 Version numbers follow the app's `versionName`; the Android `versionCode` is given where it matters.
 
+## 3.1.2
+
+Version code 42, database schema 26 (unchanged). A small interface update. It installs over any
+3.1.x and keeps its data. No rule changes, so no dataset cut: the field-collection campaign
+continues on it.
+
+### Changed
+
+- **Topology filters show how many routes each one has.** *ALL*, *LEARNED* and *REVIEW* now read,
+  for example, *12 ALL*, *3 LEARNED*, *0 REVIEW*, with the same criteria the lists use.
+- **New store screenshots** (fastlane, English and Spanish): Settings, cell geometry and the main
+  screen with the rules. The old ones showed features removed in 3.1.0 (the OpenCellID token, the
+  Orbot proxy, latency detection and the support button).
+
 ## 3.1.1
 
 Version code 41, database schema 26 (unchanged). Bug fixes for 3.1.0, reported by the F-Droid

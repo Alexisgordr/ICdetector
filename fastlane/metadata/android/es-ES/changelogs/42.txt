@@ -1,0 +1,4 @@
+3.1.2 — pequeña mejora de la interfaz. Se instala encima de cualquier 3.1.x y conserva sus datos; ninguna regla cambia.
+
+- Topología: los filtros TODAS, APRENDIDAS y REVISAR muestran cuántas rutas tiene cada uno.
+- Capturas nuevas de la versión actual.

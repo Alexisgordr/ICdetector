@@ -1,0 +1,4 @@
+3.1.2 — small interface update. Installs over any 3.1.x and keeps its data; no rule changes.
+
+- Topology: the ALL, LEARNED and REVIEW filters show how many routes each one has.
+- New screenshots of the current version.
