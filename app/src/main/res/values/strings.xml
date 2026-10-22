@@ -42,6 +42,8 @@
     <string name="filter_all">ALL</string>
     <string name="filter_learned">LEARNED</string>
     <string name="filter_review">REVIEW</string>
+    <!-- 3.1.2 — Filtros de Topología: número de rutas delante del nombre («12 ALL»). -->
+    <string name="filter_count_format">%1$d %2$s</string>
     <string name="export_topology">EXPORT TOPOLOGY</string>
     <string name="export_stable_site">EXPORT STABLE-SITE</string>
     <string name="export_stable_site_title">Export Stable-Site</string>

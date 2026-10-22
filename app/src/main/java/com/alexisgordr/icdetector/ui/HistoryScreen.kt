@@ -602,6 +602,8 @@ private fun TopologyPanel(
     }
     val totalHandovers = transitions.sumOf { it.observations }
     val trustedRoutes = transitions.count { it.trustedObservations > 0 }
+    // 3.1.2 — Cuántas rutas hay en cada filtro, delante de su nombre (los mismos criterios que `visible`).
+    val reviewRoutes = remember(transitions) { transitions.count { com.alexisgordr.icdetector.core.RouteReview.needsReview(it) } }
 
     Column(modifier) {
         Text(
@@ -626,9 +628,15 @@ private fun TopologyPanel(
             Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
             horizontalArrangement = Arrangement.spacedBy(6.dp)
         ) {
-            FilterChip(filter == "ALL", { filter = "ALL" }, label = { Text(stringResource(R.string.filter_all)) })
-            FilterChip(filter == "TRUSTED", { filter = "TRUSTED" }, label = { Text(stringResource(R.string.filter_learned)) })
-            FilterChip(filter == "REVIEW", { filter = "REVIEW" }, label = { Text(stringResource(R.string.filter_review)) })
+            FilterChip(filter == "ALL", { filter = "ALL" }, label = {
+                Text(stringResource(R.string.filter_count_format, transitions.size, stringResource(R.string.filter_all)))
+            })
+            FilterChip(filter == "TRUSTED", { filter = "TRUSTED" }, label = {
+                Text(stringResource(R.string.filter_count_format, trustedRoutes, stringResource(R.string.filter_learned)))
+            })
+            FilterChip(filter == "REVIEW", { filter = "REVIEW" }, label = {
+                Text(stringResource(R.string.filter_count_format, reviewRoutes, stringResource(R.string.filter_review)))
+            })
         }
         if (filter == "REVIEW") {
             Text(stringResource(R.string.route_review_note), color = Color(0xFF666666), fontFamily = FontFamily.Monospace, fontSize = 8.sp)
