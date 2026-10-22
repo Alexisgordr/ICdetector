@@ -1,0 +1,5 @@
+3.1.1 — correcciones de la 3.1.0. Se instala encima de la 3.1.0 y conserva sus datos; ninguna regla cambia.
+
+- Instalación limpia: la pantalla de bienvenida ya no avisa de datos de otra instalación.
+- Pantalla de bienvenida: título sin número de versión y ya no queda bajo la barra de estado.
+- Las notificaciones usan el icono de la app en vez de uno genérico; las alarmas conservan el triángulo de aviso.

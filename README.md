@@ -9,7 +9,7 @@
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](LICENSE)
 ![Platform](https://img.shields.io/badge/Platform-Android%2012%2B-green.svg)
 ![Root Required](https://img.shields.io/badge/Root-Not%20Required-brightgreen.svg)
-[![Release](https://img.shields.io/badge/release-v3.1.0-brightgreen.svg)](https://github.com/Alexisgordr/ICdetector/releases/latest)
+[![Release](https://img.shields.io/badge/release-v3.1.1-brightgreen.svg)](https://github.com/Alexisgordr/ICdetector/releases/latest)
 [![Featured in Awesome Telco](https://img.shields.io/badge/Featured%20in-Awesome%20Telco-6f42c1.svg)](https://github.com/ravens/awesome-telco#imsi-catcher-detection)
 
 [**Install**](#-getting-started) ·
@@ -50,11 +50,12 @@
 > [!IMPORTANT]
 > **Project status**
 >
-> - **Stable — 3.1.0.** Published on [GitHub Releases](https://github.com/Alexisgordr/ICdetector/releases).
->   A design update together with a security update that fixes bugs. **It needs a full reinstall**
->   (see below). The field-collection campaign restarts on it from a fresh install
->   ([IMPORTANT.md](IMPORTANT.md)).
-> - **Previous release — 3.0.0.** Still on GitHub Releases; 3.1.0 replaces it.
+> - **Stable — 3.1.1.** Published on [GitHub Releases](https://github.com/Alexisgordr/ICdetector/releases).
+>   Bug fixes for 3.1.0; it installs over 3.1.0 and keeps its data.
+> - **3.1.0** is a design update together with a security update that fixes bugs. Coming from 3.0.0,
+>   **it needs a full reinstall** (see below). The field-collection campaign restarts on it from a
+>   fresh install ([IMPORTANT.md](IMPORTANT.md)).
+> - **Previous release — 3.0.0.** Still on GitHub Releases; 3.1.x replaces it.
 >
 > Details: [Status.md](Status.md) · [CHANGELOG.md](CHANGELOG.md)
 
@@ -166,14 +167,15 @@ imposed by Android.
 
 ## 🚀 Getting started
 
-1. **Download** 3.1.0 from [GitHub Releases](https://github.com/Alexisgordr/ICdetector/releases).
-   **3.1.0 needs a full reinstall:** export what you want to keep, uninstall the app, then install
-   3.1.0 (see the note above). Every release is the same app (`com.alexisgordr.icdetector`), so
-   later versions install over an earlier one and keep its data.
+1. **Download** 3.1.1 from [GitHub Releases](https://github.com/Alexisgordr/ICdetector/releases).
+   **Coming from 3.0.0 or earlier, 3.1 needs a full reinstall:** export what you want to keep,
+   uninstall the app, then install 3.1.1 (see the note above). Every release is the same app
+   (`com.alexisgordr.icdetector`), so later versions install over an earlier one and keep its data
+   (3.1.1 over 3.1.0, for example).
 2. **Build it yourself** instead, if you prefer:
 
    ```bash
-   git clone -b v3.1.0 https://github.com/Alexisgordr/ICdetector.git
+   git clone -b v3.1.1 https://github.com/Alexisgordr/ICdetector.git
    cd ICdetector
    ./gradlew assembleDebug    # APK in app/build/outputs/apk/debug/
    ```

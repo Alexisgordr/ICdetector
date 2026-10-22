@@ -4,6 +4,27 @@ Every notable change to ICdetection, newest first. Releases inside the field-col
 fix bugs; a fix that changes how a rule is evaluated is marked as a **dataset cut** for that rule.
 Version numbers follow the app's `versionName`; the Android `versionCode` is given where it matters.
 
+## 3.1.1
+
+Version code 41, database schema 26 (unchanged). Bug fixes for 3.1.0, reported by the F-Droid
+reviewer. It installs over 3.1.0 and keeps its data. No rule changes, so no dataset cut: the
+field-collection campaign continues on it.
+
+### Fixed
+
+- **Every clean install warned about data from another install.** The app opened its database
+  before the first-run screen, which created the file that screen checks, so it always showed
+  *This phone already has ICdetection data that did not come from this install* and *Start from
+  scratch* asked to delete it. The database now opens only once the first-run question is answered.
+- **First-run screen.** The title said *Welcome to ICdetection 3.0*; it is now *Welcome to
+  ICdetection*. It no longer sits under the status bar.
+
+### Changed
+
+- **Notification icon.** The monitoring notification, the reboot reminder, the monitoring-stopped
+  notice and the Stable-Site notices used a generic Android icon (an *i* in a circle); they now use
+  the app's own silhouette. Alarms keep the warning triangle.
+
 ## 3.1.0
 
 Version code 40, database schema 26. A design update together with a security update that fixes

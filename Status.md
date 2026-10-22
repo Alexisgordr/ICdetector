@@ -8,9 +8,9 @@ The current state of the project in one page. What changed in each release is in
 
 | | Version | Version code | DB schema | Where |
 |---|---|---|---|---|
-| **Stable release** | 3.1.0 | 40 | 26 | GitHub Releases ([docs/3.1.0-progress.md](docs/3.1.0-progress.md)) |
-| **Previous stable release** | 3.0.0 | 39 | 25 | GitHub Releases |
-| **Field campaign** | 3.1.0 | 40 | 26 | Day 1 = a full reinstall of 3.1.0, with a fresh database ([IMPORTANT.md](IMPORTANT.md)) |
+| **Stable release** | 3.1.1 | 41 | 26 | GitHub Releases ([docs/3.1.0-progress.md](docs/3.1.0-progress.md)) |
+| **Previous stable release** | 3.1.0 | 40 | 26 | GitHub Releases; 3.1.1 installs over it |
+| **Field campaign** | 3.1.x | 40–41 | 26 | Day 1 = a full reinstall of 3.1.x, with a fresh database ([IMPORTANT.md](IMPORTANT.md)) |
 | **Previous campaign stage** | 3.0.0 | 39 | 25 | Closed by 3.1.0 |
 | **Last v2.10.x release** | v2.10.10 | 38 | 19 | GitHub Releases |
 | **Earlier campaign stage** | v2.10.5 | 33 | 19 | Baseline of the v2.10.x stage, closed |
@@ -19,6 +19,9 @@ The current state of the project in one page. What changed in each release is in
   version installs over an older one.
 - **3.0 needs a clean install** from v2.10.x (export, uninstall, install), and so does **3.1.0** from
   3.0.0 (below).
+- **Version code 41** is 3.1.1: bug fixes for 3.1.0 (the first-run screen warned about data from
+  another install on every clean install; the notification icon). It installs over 3.1.0 and keeps
+  its data. No rule changes, so no dataset cut: the campaign continues on it.
 - **Version code 40** is 3.1.0: a design update together with a security update that fixes bugs.
   It needs a **full reinstall** (export, uninstall, install, *Start from scratch*), and the campaign
   restarts on it; the 3.1.0 dataset cuts (below) explain why. From 3.1.0 the app works without
@@ -147,12 +150,14 @@ Run by CI on pull requests to `main`, on `main` and on release tags:
   is tested with SQLite in the JVM (`SchemaV26MigrationTest`).
 - `tools/check_export.py` regression tests, SQL affinity and query-plan checks, `when` exhaustiveness.
 
-## Publishing 3.1.0
+## Publishing 3.1.1
 
-1. Push `main` (a fast-forward from the `ICdetection-v3.1.0` branch), let CI pass, push the tag
-   `v3.1.0` and attach the signed APK to the GitHub release. The release notes must say that a
-   full reinstall is required.
-2. The store notes for 3.1.0 are in `fastlane/metadata/android/*/changelogs/40.txt`.
+1. Push `main`, let CI pass, create the GitHub release `v3.1.1` and attach the signed APK
+   (`ICdetection-v3.1.1.apk`). It installs over 3.1.0; coming from 3.0.0 a full reinstall is still
+   required.
+2. The store notes for 3.1.1 are in `fastlane/metadata/android/*/changelogs/41.txt`.
+
+3.1.0 was published the same way (tag `v3.1.0`, commit c8f06a5), with its store notes in `40.txt`.
 3. Close the issues resolved in 3.1.0 ([docs/3.1.0-progress.md](docs/3.1.0-progress.md) lists them
    with their commits); #44 stays open.
 4. Restart field collection on 3.1.0 and test it on more devices.

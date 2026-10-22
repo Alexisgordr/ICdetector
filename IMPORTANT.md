@@ -4,8 +4,8 @@
 >
 > | | |
 > |---|---|
-> | **Campaign build** | 3.1.0 (version code 40), from GitHub Releases |
-> | **Day 1** | A full reinstall of 3.1.0, with a fresh database |
+> | **Campaign build** | 3.1.x from GitHub Releases: 3.1.0 (version code 40) or 3.1.1 (41), which installs over 3.1.0 and changes no rule |
+> | **Day 1** | A full reinstall of 3.1.x, with a fresh database |
 > | **Database schema** | 26 |
 > | **Duration** | Approximately three months |
 > | **Previous stages** | 3.0.0, schema 25 (closed by 3.1.0; see [below](#previous-stage-300)); v2.10.x, dataset baseline v2.10.5, schema 19 (closed; see [below](#previous-stage-the-v210x-campaign)) |
@@ -85,7 +85,7 @@ would mix data recorded with both methods in one database.
 > 1. Export anything you want to keep: the history CSV and forensic cases (*History*), and, if you
 >    like, a backup (*Settings → Backup*) as an archive of the 3.0.0 data.
 > 2. Uninstall ICdetection.
-> 3. Install 3.1.0 from GitHub Releases.
+> 3. Install the latest 3.1.x (3.1.1) from GitHub Releases.
 > 4. On the first start, choose **Start from scratch**. Restoring a 3.0.0 backup would bring the old
 >    dataset back.
 

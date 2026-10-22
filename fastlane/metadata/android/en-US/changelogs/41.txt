@@ -1,0 +1,5 @@
+3.1.1 — bug fixes for 3.1.0. Installs over 3.1.0 and keeps its data; no rule changes.
+
+- Clean install: the welcome screen no longer warns about data from another install.
+- Welcome screen: title without a version number, no longer under the status bar.
+- Notifications show the app's own icon instead of a generic one; alarms keep the warning triangle.
