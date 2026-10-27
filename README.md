@@ -9,7 +9,7 @@
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](LICENSE)
 ![Platform](https://img.shields.io/badge/Platform-Android%2012%2B-green.svg)
 ![Root Required](https://img.shields.io/badge/Root-Not%20Required-brightgreen.svg)
-[![Release](https://img.shields.io/badge/release-v3.1.5-brightgreen.svg)](https://github.com/Alexisgordr/ICdetector/releases/latest)
+[![Release](https://img.shields.io/badge/release-v3.1.6-brightgreen.svg)](https://github.com/Alexisgordr/ICdetector/releases/latest)
 [![Featured in Awesome Telco](https://img.shields.io/badge/Featured%20in-Awesome%20Telco-6f42c1.svg)](https://github.com/ravens/awesome-telco#imsi-catcher-detection)
 
 [<img src="https://fdroid.gitlab.io/artwork/badge/get-it-on.png" alt="Get it on F-Droid" height="80">](https://f-droid.org/packages/com.alexisgordr.icdetector/)
@@ -52,10 +52,10 @@
 > [!IMPORTANT]
 > **Project status**
 >
-> - **Stable — 3.1.5.** Published on [GitHub Releases](https://github.com/Alexisgordr/ICdetector/releases)
+> - **Stable — 3.1.6.** Published on [GitHub Releases](https://github.com/Alexisgordr/ICdetector/releases)
 >   and [F-Droid](https://f-droid.org/packages/com.alexisgordr.icdetector/).
->   A text size setting for easier reading (3.1.3), with screens that adapt to large text (3.1.4,
->   3.1.5);
+>   Fixes a background crash when the phone's location is turned off on some devices (3.1.6), after a
+>   text size setting for easier reading (3.1.3) with screens that adapt to it (3.1.4, 3.1.5);
 >   it installs over any 3.1.x and keeps its data.
 > - **3.1.0** is a design update together with a security update that fixes bugs. Coming from 3.0.0,
 >   **it needs a full reinstall** (see below). The field-collection campaign restarts on it from a
@@ -177,15 +177,15 @@ imposed by Android.
    identical to the signed APK on GitHub (reproducible build), so both are the same app with the same
    signature and you can switch between them without reinstalling. A new version can take a few days
    to reach F-Droid.
-2. **Or download** 3.1.5 from [GitHub Releases](https://github.com/Alexisgordr/ICdetector/releases).
+2. **Or download** 3.1.6 from [GitHub Releases](https://github.com/Alexisgordr/ICdetector/releases).
    **Coming from 3.0.0 or earlier, 3.1 needs a full reinstall:** export what you want to keep,
-   uninstall the app, then install 3.1.5 (see the note above). Every release is the same app
+   uninstall the app, then install 3.1.6 (see the note above). Every release is the same app
    (`com.alexisgordr.icdetector`), so later versions install over an earlier one and keep its data
-   (3.1.5 over any earlier 3.1.x, for example).
+   (3.1.6 over any earlier 3.1.x, for example).
 3. **Build it yourself** instead, if you prefer:
 
    ```bash
-   git clone -b v3.1.5 https://github.com/Alexisgordr/ICdetector.git
+   git clone -b v3.1.6 https://github.com/Alexisgordr/ICdetector.git
    cd ICdetector
    ./gradlew assembleDebug    # APK in app/build/outputs/apk/debug/
    ```

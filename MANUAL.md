@@ -86,7 +86,7 @@ is not supported.
 
 **3.1.0 needs a full reinstall as well.** It is a design update together with a security update
 that fixes bugs, and several of the fixes change how rules are evaluated, so data from 3.0 and 3.1.0
-cannot be mixed. Export what you want to keep, uninstall the app, install 3.1.5 and choose **Start
+cannot be mixed. Export what you want to keep, uninstall the app, install 3.1.6 and choose **Start
 from scratch** on the first start (restoring a 3.0 backup would bring the old data back). Set the
 location mode again afterwards.
 
@@ -160,7 +160,10 @@ app does not request the privileged battery-optimization exemption itself.
 
 - **Location turned off:** Android gives no cell information to any app while the phone's location
   is off. Monitoring keeps running and the main screen shows *Searching for signal*; the terminal may
-  log that the telephony callbacks were restarted. Cells come back once location is on again.
+  log that the telephony callbacks were restarted. Cells come back once location is on again. On
+  some phones the system sends no list at all instead of an empty one; up to 3.1.5 that could close
+  the app in the background (#49). From 3.1.6 it is handled like an empty list, and the terminal
+  says once *The system delivers no cells (null list); is location turned off?*
 - **Low battery:** below 5% while unplugged, continuous GPS and the collection wake lock pause, and
   resume automatically when charging starts or the battery recovers.
 - **Missing coordinates:** if a scheduled sample is recorded without coordinates, ICdetection

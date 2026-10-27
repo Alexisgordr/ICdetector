@@ -4,6 +4,27 @@ Every notable change to ICdetection, newest first. Releases inside the field-col
 fix bugs; a fix that changes how a rule is evaluated is marked as a **dataset cut** for that rule.
 Version numbers follow the app's `versionName`; the Android `versionCode` is given where it matters.
 
+## 3.1.6
+
+Version code 46, database schema 26 (unchanged). A crash fix. It installs over any 3.1.x and keeps
+its data. The engine, the rules, the database and the export formats are unchanged, so there is no
+dataset cut and the field-collection campaign continues on it.
+
+### Fixed
+
+- **Crash in the background with the location turned off (#49).** Android declares the lists of
+  cells as non-null, and the telephony callbacks took them that way, so Kotlin checked them on
+  entry. Some manufacturers' system layers deliver null instead (for example with the location
+  off; AOSP and Pixel deliver an empty list): the check threw a `NullPointerException` on the main
+  thread before the app could handle it, and the app closed. The cell callbacks
+  (`onCellInfoChanged` and the `requestCellInfoUpdate` answer), `onServiceStateChanged` and
+  `onDisplayInfoChanged` now accept null. A null cell list follows the normal path as an empty
+  list (no signal), does not count as a delivery for the callback watchdog, and writes one line in
+  the terminal, not repeated until a non-null list arrives: *The system delivers no cells (null
+  list); is location turned off?* The fallback read after a failed `requestCellInfoUpdate` now
+  catches any exception (`allCellInfo` can throw `IllegalStateException` on some devices) and
+  treats a null result as an empty list.
+
 ## 3.1.5
 
 Version code 45, database schema 26 (unchanged). The GEOM panel adapts to large text. It installs
