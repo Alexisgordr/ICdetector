@@ -20,6 +20,9 @@
     <string name="ta_unavailable">UNAVAILABLE</string>
     <string name="ta_no_conversion">NO CONVERSION</string>
     <string name="ta_blocked">Timing Advance: BLOCKED</string>
+    <!-- 3.1.5 — Aviso dentro de la gráfica de TA (antes fijo en castellano). -->
+    <string name="ta_graph_blocked">TA SENSOR BLOCKED BY HARDWARE</string>
+    <string name="ta_graph_no_conversion_format">TA WITHOUT A CONVERTIBLE UNIT (%1$s)</string>
     <string name="ta_value_format">Timing Advance: %1$d (%2$s)</string>
     <string name="ta_not_reported">⚠️ NOTE: the modem is not reporting Timing Advance for this cell. This is a phone firmware limitation, not an app failure; H6 does not assess geometry without it.</string>
     <string name="ta_stub_zero">⚠️ Your modem returns 0 for every cell: this is not a measurement but an unpopulated firmware field. The green distance above comes from another source and does not depend on TA.</string>

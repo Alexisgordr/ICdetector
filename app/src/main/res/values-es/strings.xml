@@ -20,6 +20,9 @@
     <string name="ta_unavailable">NO DISPONIBLE</string>
     <string name="ta_no_conversion">SIN CONVERSIÓN</string>
     <string name="ta_blocked">Timing Advance: BLOQUEADO</string>
+    <!-- 3.1.5 — Aviso dentro de la gráfica de TA (antes fijo en castellano). -->
+    <string name="ta_graph_blocked">SENSOR DE TA BLOQUEADO POR HARDWARE</string>
+    <string name="ta_graph_no_conversion_format">TA SIN UNIDAD CONVERTIBLE (%1$s)</string>
     <string name="ta_value_format">Timing Advance: %1$d (%2$s)</string>
     <string name="ta_not_reported">⚠️ NOTA: el módem no está reportando Timing Advance en esta celda. Es una limitación del firmware, no un fallo de la app; sin ese dato H6 no juzga geometría.</string>
     <string name="ta_stub_zero">⚠️ Tu módem devuelve 0 en todas las celdas: no es una medida, sino un campo que el firmware no rellena. La distancia verde superior procede de otra fuente y no depende del TA.</string>

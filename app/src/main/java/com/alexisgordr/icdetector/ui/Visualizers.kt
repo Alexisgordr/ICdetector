@@ -8,6 +8,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
@@ -85,26 +86,40 @@ fun GeoGraph(active: CellData, geoHistory: List<Float>) {
     Column(modifier = Modifier.fillMaxWidth().padding(top = 16.dp)) {
         HorizontalDivider(color = Color(0xFF1A1A1A))
         Spacer(Modifier.height(8.dp))
-        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.Bottom) {
-            Column {
-                Text(stringResource(R.string.geometric_telemetry), color = Color(0xFF555555), fontFamily = FontFamily.Monospace, fontSize = 10.sp, fontWeight = FontWeight.Bold)
-                Text(
-                    if (isTaAvailable && taValue >= 0) stringResource(R.string.ta_value_format, taValue, taUnit.name)
-                    else stringResource(R.string.ta_blocked),
-                    color = Color(0xFFFFA000), fontFamily = FontFamily.Monospace, fontSize = 14.sp, fontWeight = FontWeight.Bold
-                )
+        // 3.1.5 (#50) — Con letra grande, «Timing Advance: …» y la distancia no cabían en una fila y
+        // se apretaban: ahora van uno debajo del otro (AdaptiveSplitRow).
+        AdaptiveSplitRow(
+            verticalAlignment = Alignment.Bottom,
+            start = {
+                Column {
+                    Text(stringResource(R.string.geometric_telemetry), color = Color(0xFF555555), fontFamily = FontFamily.Monospace, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                    Text(
+                        if (isTaAvailable && taValue >= 0) stringResource(R.string.ta_value_format, taValue, taUnit.name)
+                        else stringResource(R.string.ta_blocked),
+                        color = Color(0xFFFFA000), fontFamily = FontFamily.Monospace, fontSize = 14.sp, fontWeight = FontWeight.Bold
+                    )
+                }
+            },
+            end = {
+                Column(horizontalAlignment = if (largeTextLayout()) Alignment.Start else Alignment.End) {
+                    Text(stringResource(R.string.ta_distance), color = Color(0xFF444444), fontSize = 8.sp, fontFamily = FontFamily.Monospace)
+                    Text(distanceText, color = if (distanceMeters != null) Color.White else Color(0xFF888888), fontFamily = FontFamily.Monospace, fontSize = 16.sp, fontWeight = FontWeight.ExtraBold)
+                }
             }
-            Column(horizontalAlignment = Alignment.End) {
-                Text(stringResource(R.string.ta_distance), color = Color(0xFF444444), fontSize = 8.sp, fontFamily = FontFamily.Monospace)
-                Text(distanceText, color = if (distanceMeters != null) Color.White else Color(0xFF888888), fontFamily = FontFamily.Monospace, fontSize = 16.sp, fontWeight = FontWeight.ExtraBold)
-            }
-        }
+        )
+
+        // 3.1.5 — El aviso dentro de la gráfica estaba fijo en castellano y en 26 px: ahora sigue el
+        // idioma y el tamaño del texto de la app.
+        val graphNotice = if (isTaAvailable && distanceMeters == null) stringResource(R.string.ta_graph_no_conversion_format, taUnit.name)
+                          else stringResource(R.string.ta_graph_blocked)
+        val graphNoticePx = with(LocalDensity.current) { 9.sp.toPx() }
 
         Canvas(modifier = Modifier.fillMaxWidth().height(100.dp).padding(vertical = 8.dp)) {
             if (geoHistory.isEmpty() || !isTaAvailable || taValue < 0 || distanceMeters == null) {
-                 val motivo = if (isTaAvailable && distanceMeters == null) "TA SIN UNIDAD CONVERTIBLE (${taUnit.name})"
-                              else "SENSOR DE TA BLOQUEADO POR HARDWARE"
-                 drawContext.canvas.nativeCanvas.drawText(motivo, 20f, 50f, android.graphics.Paint().apply { color = android.graphics.Color.DKGRAY; textSize = 26f })
+                 drawContext.canvas.nativeCanvas.drawText(
+                     graphNotice, 20f, size.height / 2f + graphNoticePx / 3f,
+                     android.graphics.Paint().apply { color = android.graphics.Color.DKGRAY; textSize = graphNoticePx; isAntiAlias = true }
+                 )
                  return@Canvas
             }
             

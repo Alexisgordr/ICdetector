@@ -162,6 +162,7 @@ fun largeTextLayout(): Boolean =
 @Composable
 fun AdaptiveSplitRow(
     modifier: Modifier = Modifier,
+    verticalAlignment: Alignment.Vertical = Alignment.Top,
     start: @Composable () -> Unit,
     end: @Composable () -> Unit
 ) {
@@ -171,7 +172,7 @@ fun AdaptiveSplitRow(
             end()
         }
     } else {
-        Row(modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        Row(modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = verticalAlignment) {
             Box(Modifier.weight(1f)) { start() }
             end()
         }
