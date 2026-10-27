@@ -16,16 +16,20 @@ class ServiceRegressionTest {
             .first { it.exists() }.readText()
 
     /**
-     * 3.1.6 (#49) — Con un parámetro no nulo, Kotlin comprueba la nulidad al entrar en el callback y
-     * una lista nula del fabricante cerraba la app en segundo plano antes de llegar al código.
+     * 3.1.6 (#49) — Un override de Kotlin comprueba la nulidad de sus parámetros al entrar, y Android
+     * los declara no nulos (Kotlin no deja hacerlos nulables). Una lista nula del fabricante cerraba
+     * la app en segundo plano antes de llegar al código. Los callbacks son ahora adaptadores en Java,
+     * que no añaden esa comprobación, y la lista llega, quizá null, a una función que la acepta.
      */
-    @Test fun `telephony callbacks accept null from the framework`() {
+    @Test fun `telephony callbacks go through the null-tolerant Java adapters`() {
         val telephony = source("service/TelephonyCollectionController.kt")
-        assertTrue(telephony.contains("override fun onCellInfoChanged(cellInfo: MutableList<CellInfo>?)"))
-        assertTrue(telephony.contains("override fun onCellInfo(cellInfo: MutableList<CellInfo>?)"))
-        assertTrue(telephony.contains("override fun onServiceStateChanged(serviceState: ServiceState?)"))
-        assertTrue(telephony.contains("override fun onDisplayInfoChanged(displayInfo: TelephonyDisplayInfo?)"))
-        assertFalse("ningún callback con la lista no nula", telephony.contains("MutableList<CellInfo>)"))
+        listOf("onCellInfoChanged", "onCellInfo", "onServiceStateChanged", "onDisplayInfoChanged", "onError").forEach {
+            assertFalse("ningún override de Kotlin de $it", telephony.contains("override fun $it("))
+        }
+        assertTrue(telephony.contains("NullTolerantTelephonyCallbacks.CellInfoRequest("))
+        assertTrue(telephony.contains("NullTolerantTelephonyCallbacks.CellInfoChanged { cellInfo ->"))
+        assertTrue(telephony.contains("NullTolerantTelephonyCallbacks.ServiceStateChanged { serviceState ->"))
+        assertTrue(telephony.contains("NullTolerantTelephonyCallbacks.DisplayInfoChanged { displayInfo ->"))
         // Las dos vías de celdas pasan por el mismo tratamiento (CellDelivery, probado en la JVM).
         val handler = telephony.substringAfter("private fun handleCellDelivery(").substringBefore("\n    }")
         assertTrue(handler.contains("CellDelivery.countsForWatchdog(raw)"))
@@ -33,10 +37,29 @@ class ServiceRegressionTest {
         assertTrue(handler.contains("CellDelivery.orEmpty(raw)"))
         assertTrue(telephony.contains("handleCellDelivery(cellInfo, fresh = true, registered = true)"))
         assertTrue(telephony.contains("handleCellDelivery(cellInfo, fresh = true, registered = false)"))
-        // onError: allCellInfo puede lanzar IllegalStateException; se captura cualquier excepción.
-        val onError = telephony.substringAfter("override fun onError(").substringBefore("\n                }")
+        // Error de la petición: allCellInfo puede lanzar IllegalStateException; se captura cualquiera.
+        val onError = telephony.substringAfter("{ _, _ ->").substringBefore("\n                    }\n                )")
         assertTrue(onError.contains("handleCellDelivery(manager.allCellInfo, fresh = false, registered = false)"))
         assertTrue(onError.contains("} catch (_: Exception) {}"))
+        // Los ServiceState y DisplayInfo nulos se ignoran.
+        assertTrue(telephony.contains("if (serviceState != null) {"))
+        assertTrue(telephony.contains("if (displayInfo != null) {"))
+    }
+
+    @Test fun `the Java adapters only forward and accept null`() {
+        val adapters = source("service/NullTolerantTelephonyCallbacks.java")
+        assertTrue(adapters.contains("void accept(@Nullable T value);"))
+        assertTrue(adapters.contains("void onError(int errorCode, @Nullable Throwable detail);"))
+        listOf(
+            "public void onCellInfoChanged(List<CellInfo> cellInfo) {\n            sink.accept(cellInfo);",
+            "public void onCellInfo(List<CellInfo> cellInfo) {\n            sink.accept(cellInfo);",
+            "public void onServiceStateChanged(ServiceState serviceState) {\n            sink.accept(serviceState);",
+            "public void onDisplayInfoChanged(TelephonyDisplayInfo displayInfo) {\n            sink.accept(displayInfo);",
+            "public void onError(int errorCode, Throwable detail) {\n            errorSink.onError(errorCode, detail);"
+        ).forEach { assertTrue(it, adapters.contains(it)) }
+        // Ninguna comprobación de nulidad en el reenvío.
+        assertFalse(adapters.contains("requireNonNull"))
+        assertFalse(adapters.contains("@NonNull"))
     }
 
     @Test fun `no empty ciphering callback pretends ciphering is monitored`() {

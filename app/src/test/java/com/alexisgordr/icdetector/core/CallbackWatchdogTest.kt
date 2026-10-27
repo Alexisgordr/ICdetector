@@ -56,7 +56,7 @@ class CallbackWatchdogTest {
     @Test fun `the controller counts poll answers and logs every restart`() {
         val src = listOf(File("src/main/java"), File("app/src/main/java")).first { it.exists() }
             .resolve("com/alexisgordr/icdetector/service/TelephonyCollectionController.kt").readText()
-        val onCellInfo = src.substringAfter("override fun onCellInfo(").substringBefore("override fun onError")
+        val onCellInfo = src.substringAfter("NullTolerantTelephonyCallbacks.CellInfoRequest(").substringBefore("{ _, _ ->")
         // 3.1.6 (#49) — La respuesta pasa por handleCellDelivery, que cuenta solo listas con celdas.
         assertTrue(onCellInfo.contains("handleCellDelivery(cellInfo, fresh = true, registered = false)"))
         val handler = src.substringAfter("private fun handleCellDelivery(").substringBefore("\n    }")

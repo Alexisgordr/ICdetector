@@ -16,9 +16,11 @@ dataset cut and the field-collection campaign continues on it.
   cells as non-null, and the telephony callbacks took them that way, so Kotlin checked them on
   entry. Some manufacturers' system layers deliver null instead (for example with the location
   off; AOSP and Pixel deliver an empty list): the check threw a `NullPointerException` on the main
-  thread before the app could handle it, and the app closed. The cell callbacks
+  thread before the app could handle it, and the app closed. Kotlin cannot override those
+  callbacks with nullable parameters (the SDK declares them non-null), so the cell callbacks
   (`onCellInfoChanged` and the `requestCellInfoUpdate` answer), `onServiceStateChanged` and
-  `onDisplayInfoChanged` now accept null. A null cell list follows the normal path as an empty
+  `onDisplayInfoChanged` are now small Java adapters (`NullTolerantTelephonyCallbacks`), which add no
+  check and forward the value, possibly null, to the app. A null cell list follows the normal path as an empty
   list (no signal), does not count as a delivery for the callback watchdog, and writes one line in
   the terminal, not repeated until a non-null list arrives: *The system delivers no cells (null
   list); is location turned off?* The fallback read after a failed `requestCellInfoUpdate` now

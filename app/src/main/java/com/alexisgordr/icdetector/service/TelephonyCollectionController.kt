@@ -49,21 +49,20 @@ internal class TelephonyCollectionController(
         try {
             manager.requestCellInfoUpdate(
                 context.mainExecutor,
-                object : TelephonyManager.CellInfoCallback() {
-                    // 3.1.6 (#49) — Nullable: algunos fabricantes entregan null (ver CellDelivery).
-                    override fun onCellInfo(cellInfo: MutableList<CellInfo>?) {
-                        handleCellDelivery(cellInfo, fresh = true, registered = false)
+                // 3.1.6 (#49) — Adaptador en Java: la lista puede llegar null (ver
+                // NullTolerantTelephonyCallbacks y CellDelivery).
+                NullTolerantTelephonyCallbacks.CellInfoRequest(
+                    { cellInfo -> handleCellDelivery(cellInfo, fresh = true, registered = false) },
+                    { _, _ ->
+                        if (hasLocationPermission()) {
+                            // 3.1.6 (#49) — allCellInfo puede lanzar algo más que SecurityException
+                            // (IllegalStateException en algunos dispositivos) o devolver null.
+                            try {
+                                handleCellDelivery(manager.allCellInfo, fresh = false, registered = false)
+                            } catch (_: Exception) {}
+                        }
                     }
-
-                    override fun onError(errorCode: Int, detail: Throwable?) {
-                        if (!hasLocationPermission()) return
-                        // 3.1.6 (#49) — allCellInfo puede lanzar algo más que SecurityException
-                        // (IllegalStateException en algunos dispositivos) o devolver null.
-                        try {
-                            handleCellDelivery(manager.allCellInfo, fresh = false, registered = false)
-                        } catch (_: Exception) {}
-                    }
-                }
+                )
             )
         } catch (_: SecurityException) {}
     }
@@ -134,10 +133,9 @@ internal class TelephonyCollectionController(
     private fun registerServiceStateCallback() {
         if (serviceStateCallback != null) return
         try {
-            val callback = object : TelephonyCallback(), TelephonyCallback.ServiceStateListener {
-                // 3.1.6 (#49) — Nullable por la misma razón que las celdas: un null se ignora.
-                override fun onServiceStateChanged(serviceState: ServiceState?) {
-                    if (serviceState == null) return
+            // 3.1.6 (#49) — Adaptador en Java, por la misma razón que las celdas: un null se ignora.
+            val callback = NullTolerantTelephonyCallbacks.ServiceStateChanged { serviceState ->
+                if (serviceState != null) {
                     try {
                         serviceStateSink(snapshotOf(serviceState, ServiceStateSource.CALLBACK))
                     } catch (_: Exception) {}
@@ -214,11 +212,9 @@ internal class TelephonyCollectionController(
     private fun registerCellCallback() {
         if (cellCallback != null) return
         try {
-            val callback = object : TelephonyCallback(), TelephonyCallback.CellInfoListener {
-                // 3.1.6 (#49) — Nullable: algunos fabricantes entregan null con la ubicación apagada.
-                override fun onCellInfoChanged(cellInfo: MutableList<CellInfo>?) {
-                    handleCellDelivery(cellInfo, fresh = true, registered = true)
-                }
+            // 3.1.6 (#49) — Adaptador en Java: algunos fabricantes entregan null con la ubicación apagada.
+            val callback = NullTolerantTelephonyCallbacks.CellInfoChanged { cellInfo ->
+                handleCellDelivery(cellInfo, fresh = true, registered = true)
             }
             manager.registerTelephonyCallback(context.mainExecutor, callback)
             cellCallback = callback
@@ -228,15 +224,13 @@ internal class TelephonyCollectionController(
     private fun registerDisplayCallback() {
         if (displayCallback != null) return
         try {
-            val callback = object : TelephonyCallback(), TelephonyCallback.DisplayInfoListener {
-                // 3.1.6 (#49) — Nullable: un null no cuenta como entrega ni borra el último valor.
-                override fun onDisplayInfoChanged(displayInfo: TelephonyDisplayInfo?) {
-                    if (displayInfo != null) {
-                        watchdog.onDelivery()
-                        lastDisplayInfo = displayInfo
-                    }
-                    requestFreshCellInfo()
+            // 3.1.6 (#49) — Adaptador en Java: un null no cuenta como entrega ni borra el último valor.
+            val callback = NullTolerantTelephonyCallbacks.DisplayInfoChanged { displayInfo ->
+                if (displayInfo != null) {
+                    watchdog.onDelivery()
+                    lastDisplayInfo = displayInfo
                 }
+                requestFreshCellInfo()
             }
             manager.registerTelephonyCallback(context.mainExecutor, callback)
             displayCallback = callback
