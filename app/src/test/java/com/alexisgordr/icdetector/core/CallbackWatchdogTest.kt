@@ -57,7 +57,10 @@ class CallbackWatchdogTest {
         val src = listOf(File("src/main/java"), File("app/src/main/java")).first { it.exists() }
             .resolve("com/alexisgordr/icdetector/service/TelephonyCollectionController.kt").readText()
         val onCellInfo = src.substringAfter("override fun onCellInfo(").substringBefore("override fun onError")
-        assertTrue(onCellInfo.contains("if (cellInfo.isNotEmpty()) watchdog.onDelivery()"))
+        // 3.1.6 (#49) — La respuesta pasa por handleCellDelivery, que cuenta solo listas con celdas.
+        assertTrue(onCellInfo.contains("handleCellDelivery(cellInfo, fresh = true, registered = false)"))
+        val handler = src.substringAfter("private fun handleCellDelivery(").substringBefore("\n    }")
+        assertTrue(handler.contains("if (com.alexisgordr.icdetector.core.CellDelivery.countsForWatchdog(raw)) watchdog.onDelivery()"))
         assertTrue(src.contains("log(\"Watchdog: callbacks de telefonía reiniciados;"))
         assertTrue("reloj monotónico", src.contains("CallbackWatchdog { android.os.SystemClock.elapsedRealtime() }"))
         assertFalse(src.contains("lastRegisteredCallbackAt"))

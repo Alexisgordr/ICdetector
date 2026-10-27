@@ -297,6 +297,8 @@ private val replacements = linkedMapOf(
     "fix GPS de más de 60 s o sin edad conocida" to "GPS fix older than 60 s or of unknown age",
     // 3.0 — Reinicio del watchdog de callbacks.
     "Watchdog: callbacks de telefonía reiniciados;" to "Watchdog: telephony callbacks restarted;",
+    // 3.1.6 (#49) — Lista de celdas nula entregada por el sistema (NullCellDeliveryNotice).
+    "El sistema no entrega celdas (lista nula); ¿ubicación apagada?" to "The system delivers no cells (null list); is location turned off?",
     "s sin entregas de celdas." to "s without cell deliveries.",
     // 3.0 (corte de campaña) — Celda CSG: H1/H2/H5/H6/H7 no se evalúan.
     "celda CSG (femtocelda): las reglas de dominancia, proximidad e identidad local no aplican a una celda diseñada para ser aislada" to "CSG cell (femtocell): the dominance, proximity and local-identity rules do not apply to a cell designed to be isolated",

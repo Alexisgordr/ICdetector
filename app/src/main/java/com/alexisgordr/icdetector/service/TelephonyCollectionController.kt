@@ -32,6 +32,8 @@ internal class TelephonyCollectionController(
     private var lastDisplayInfo: TelephonyDisplayInfo? = null
     // 3.0 — Ver CallbackWatchdog: cuenta también las respuestas a requestCellInfoUpdate.
     private val watchdog = com.alexisgordr.icdetector.core.CallbackWatchdog { android.os.SystemClock.elapsedRealtime() }
+    // 3.1.6 (#49) — Aviso único en el terminal cuando el sistema entrega una lista de celdas nula.
+    private val nullCellsNotice = com.alexisgordr.icdetector.core.NullCellDeliveryNotice()
 
     fun start() {
         if (!hasPhonePermission()) return
@@ -48,21 +50,33 @@ internal class TelephonyCollectionController(
             manager.requestCellInfoUpdate(
                 context.mainExecutor,
                 object : TelephonyManager.CellInfoCallback() {
-                    override fun onCellInfo(cellInfo: MutableList<CellInfo>) {
-                        // 3.0 — Una respuesta con celdas demuestra que el módem contesta.
-                        if (cellInfo.isNotEmpty()) watchdog.onDelivery()
-                        deliver(cellInfo, true, false)
+                    // 3.1.6 (#49) — Nullable: algunos fabricantes entregan null (ver CellDelivery).
+                    override fun onCellInfo(cellInfo: MutableList<CellInfo>?) {
+                        handleCellDelivery(cellInfo, fresh = true, registered = false)
                     }
 
                     override fun onError(errorCode: Int, detail: Throwable?) {
                         if (!hasLocationPermission()) return
+                        // 3.1.6 (#49) — allCellInfo puede lanzar algo más que SecurityException
+                        // (IllegalStateException en algunos dispositivos) o devolver null.
                         try {
-                            deliver(manager.allCellInfo, false, false)
-                        } catch (_: SecurityException) {}
+                            handleCellDelivery(manager.allCellInfo, fresh = false, registered = false)
+                        } catch (_: Exception) {}
                     }
                 }
             )
         } catch (_: SecurityException) {}
+    }
+
+    /**
+     * 3.1.6 (#49) — Una entrega de celdas, quizá nula. Null sigue el flujo normal como lista vacía
+     * (sin señal), no cuenta como entrega para el watchdog y deja una línea en el terminal (una sola
+     * vez hasta la siguiente entrega no nula). Una lista con celdas demuestra que el módem contesta.
+     */
+    private fun handleCellDelivery(raw: List<CellInfo>?, fresh: Boolean, registered: Boolean) {
+        if (com.alexisgordr.icdetector.core.CellDelivery.countsForWatchdog(raw)) watchdog.onDelivery()
+        nullCellsNotice.onDelivery(raw == null)?.let(log)
+        deliver(com.alexisgordr.icdetector.core.CellDelivery.orEmpty(raw), fresh, registered)
     }
 
     fun operatorMcc(): String = manager.networkOperator
@@ -121,7 +135,9 @@ internal class TelephonyCollectionController(
         if (serviceStateCallback != null) return
         try {
             val callback = object : TelephonyCallback(), TelephonyCallback.ServiceStateListener {
-                override fun onServiceStateChanged(serviceState: ServiceState) {
+                // 3.1.6 (#49) — Nullable por la misma razón que las celdas: un null se ignora.
+                override fun onServiceStateChanged(serviceState: ServiceState?) {
+                    if (serviceState == null) return
                     try {
                         serviceStateSink(snapshotOf(serviceState, ServiceStateSource.CALLBACK))
                     } catch (_: Exception) {}
@@ -199,9 +215,9 @@ internal class TelephonyCollectionController(
         if (cellCallback != null) return
         try {
             val callback = object : TelephonyCallback(), TelephonyCallback.CellInfoListener {
-                override fun onCellInfoChanged(cellInfo: MutableList<CellInfo>) {
-                    if (cellInfo.isNotEmpty()) watchdog.onDelivery()
-                    deliver(cellInfo, true, true)
+                // 3.1.6 (#49) — Nullable: algunos fabricantes entregan null con la ubicación apagada.
+                override fun onCellInfoChanged(cellInfo: MutableList<CellInfo>?) {
+                    handleCellDelivery(cellInfo, fresh = true, registered = true)
                 }
             }
             manager.registerTelephonyCallback(context.mainExecutor, callback)
@@ -213,9 +229,12 @@ internal class TelephonyCollectionController(
         if (displayCallback != null) return
         try {
             val callback = object : TelephonyCallback(), TelephonyCallback.DisplayInfoListener {
-                override fun onDisplayInfoChanged(displayInfo: TelephonyDisplayInfo) {
-                    watchdog.onDelivery()
-                    lastDisplayInfo = displayInfo
+                // 3.1.6 (#49) — Nullable: un null no cuenta como entrega ni borra el último valor.
+                override fun onDisplayInfoChanged(displayInfo: TelephonyDisplayInfo?) {
+                    if (displayInfo != null) {
+                        watchdog.onDelivery()
+                        lastDisplayInfo = displayInfo
+                    }
                     requestFreshCellInfo()
                 }
             }

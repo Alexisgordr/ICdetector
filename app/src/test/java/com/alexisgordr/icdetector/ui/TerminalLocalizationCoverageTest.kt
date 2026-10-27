@@ -31,6 +31,8 @@ class TerminalLocalizationCoverageTest {
         "[SYS] ⚠️ Poda de histórico omitida: borraría 900 registros (de 1000; más del 25 %); ¿reloj adelantado? No se ha borrado nada.",
         // 3.0 — Watchdog de callbacks.
         "[SYS] Watchdog: callbacks de telefonía reiniciados; 45 s sin entregas de celdas.",
+        // 3.1.6 (#49) — Lista de celdas nula.
+        "[SYS] El sistema no entrega celdas (lista nula); ¿ubicación apagada?",
         // 3.0 (corte de campaña) — Celda CSG.
         "N/A: celda CSG (femtocelda): las reglas de dominancia, proximidad e identidad local no aplican a una celda diseñada para ser aislada.",
         "[HEUR] 1. Celda Aislada: N/A (celda CSG (femtocelda))",

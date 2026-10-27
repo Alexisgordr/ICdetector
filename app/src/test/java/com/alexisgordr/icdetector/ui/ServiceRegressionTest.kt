@@ -15,6 +15,30 @@ class ServiceRegressionTest {
         listOf(File("src/main/java/com/alexisgordr/icdetector/$path"), File("app/src/main/java/com/alexisgordr/icdetector/$path"))
             .first { it.exists() }.readText()
 
+    /**
+     * 3.1.6 (#49) — Con un parámetro no nulo, Kotlin comprueba la nulidad al entrar en el callback y
+     * una lista nula del fabricante cerraba la app en segundo plano antes de llegar al código.
+     */
+    @Test fun `telephony callbacks accept null from the framework`() {
+        val telephony = source("service/TelephonyCollectionController.kt")
+        assertTrue(telephony.contains("override fun onCellInfoChanged(cellInfo: MutableList<CellInfo>?)"))
+        assertTrue(telephony.contains("override fun onCellInfo(cellInfo: MutableList<CellInfo>?)"))
+        assertTrue(telephony.contains("override fun onServiceStateChanged(serviceState: ServiceState?)"))
+        assertTrue(telephony.contains("override fun onDisplayInfoChanged(displayInfo: TelephonyDisplayInfo?)"))
+        assertFalse("ningún callback con la lista no nula", telephony.contains("MutableList<CellInfo>)"))
+        // Las dos vías de celdas pasan por el mismo tratamiento (CellDelivery, probado en la JVM).
+        val handler = telephony.substringAfter("private fun handleCellDelivery(").substringBefore("\n    }")
+        assertTrue(handler.contains("CellDelivery.countsForWatchdog(raw)"))
+        assertTrue(handler.contains("nullCellsNotice.onDelivery(raw == null)"))
+        assertTrue(handler.contains("CellDelivery.orEmpty(raw)"))
+        assertTrue(telephony.contains("handleCellDelivery(cellInfo, fresh = true, registered = true)"))
+        assertTrue(telephony.contains("handleCellDelivery(cellInfo, fresh = true, registered = false)"))
+        // onError: allCellInfo puede lanzar IllegalStateException; se captura cualquier excepción.
+        val onError = telephony.substringAfter("override fun onError(").substringBefore("\n                }")
+        assertTrue(onError.contains("handleCellDelivery(manager.allCellInfo, fresh = false, registered = false)"))
+        assertTrue(onError.contains("} catch (_: Exception) {}"))
+    }
+
     @Test fun `no empty ciphering callback pretends ciphering is monitored`() {
         val telephony = source("service/TelephonyCollectionController.kt")
         assertFalse(telephony.contains("SecurityPlaceholder"))
