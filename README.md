@@ -12,6 +12,8 @@
 [![Release](https://img.shields.io/badge/release-v3.1.3-brightgreen.svg)](https://github.com/Alexisgordr/ICdetector/releases/latest)
 [![Featured in Awesome Telco](https://img.shields.io/badge/Featured%20in-Awesome%20Telco-6f42c1.svg)](https://github.com/ravens/awesome-telco#imsi-catcher-detection)
 
+[<img src="https://fdroid.gitlab.io/artwork/badge/get-it-on.png" alt="Get it on F-Droid" height="80">](https://f-droid.org/packages/com.alexisgordr.icdetector/)
+
 [**Install**](#-getting-started) ·
 [**How it works**](#-detection-engine) ·
 [**Exports**](#-forensic-logging--exports) ·
@@ -50,7 +52,8 @@
 > [!IMPORTANT]
 > **Project status**
 >
-> - **Stable — 3.1.3.** Published on [GitHub Releases](https://github.com/Alexisgordr/ICdetector/releases).
+> - **Stable — 3.1.3.** Published on [GitHub Releases](https://github.com/Alexisgordr/ICdetector/releases)
+>   and [F-Droid](https://f-droid.org/packages/com.alexisgordr.icdetector/).
 >   Adds a text size setting for easier reading; it installs over any 3.1.x and keeps its data.
 > - **3.1.0** is a design update together with a security update that fixes bugs. Coming from 3.0.0,
 >   **it needs a full reinstall** (see below). The field-collection campaign restarts on it from a
@@ -167,12 +170,17 @@ imposed by Android.
 
 ## 🚀 Getting started
 
-1. **Download** 3.1.3 from [GitHub Releases](https://github.com/Alexisgordr/ICdetector/releases).
+1. **Install from [F-Droid](https://f-droid.org/packages/com.alexisgordr.icdetector/)**, which also
+   keeps the app updated. F-Droid builds the app from this source code and checks that it is
+   identical to the signed APK on GitHub (reproducible build), so both are the same app with the same
+   signature and you can switch between them without reinstalling. A new version can take a few days
+   to reach F-Droid.
+2. **Or download** 3.1.3 from [GitHub Releases](https://github.com/Alexisgordr/ICdetector/releases).
    **Coming from 3.0.0 or earlier, 3.1 needs a full reinstall:** export what you want to keep,
    uninstall the app, then install 3.1.3 (see the note above). Every release is the same app
    (`com.alexisgordr.icdetector`), so later versions install over an earlier one and keep its data
    (3.1.3 over any earlier 3.1.x, for example).
-2. **Build it yourself** instead, if you prefer:
+3. **Build it yourself** instead, if you prefer:
 
    ```bash
    git clone -b v3.1.3 https://github.com/Alexisgordr/ICdetector.git

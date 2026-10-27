@@ -8,7 +8,7 @@ The current state of the project in one page. What changed in each release is in
 
 | | Version | Version code | DB schema | Where |
 |---|---|---|---|---|
-| **Stable release** | 3.1.3 | 43 | 26 | GitHub Releases ([docs/3.1.0-progress.md](docs/3.1.0-progress.md)) |
+| **Stable release** | 3.1.3 | 43 | 26 | GitHub Releases and F-Droid ([docs/3.1.0-progress.md](docs/3.1.0-progress.md)) |
 | **Previous stable release** | 3.1.2 | 42 | 26 | GitHub Releases; 3.1.3 installs over it |
 | **Field campaign** | 3.1.x | 40–43 | 26 | Day 1 = a full reinstall of 3.1.x, with a fresh database ([IMPORTANT.md](IMPORTANT.md)) |
 | **Previous campaign stage** | 3.0.0 | 39 | 25 | Closed by 3.1.0 |
@@ -17,6 +17,10 @@ The current state of the project in one page. What changed in each release is in
 
 - **App identity:** `com.alexisgordr.icdetector`, *ICdetection*, for every release, so a newer
   version installs over an older one.
+- **F-Droid:** published from 3.1.1, with a reproducible build: F-Droid compiles the tagged commit
+  and publishes the signed APK from the GitHub release only if both are identical
+  (`Binaries:` in its metadata). New versions are picked up from the tags (`UpdateCheckMode: Tags`);
+  its store listing comes from `fastlane/` at that commit.
 - **3.0 needs a clean install** from v2.10.x (export, uninstall, install), and so does **3.1.0** from
   3.0.0 (below).
 - **Version code 43** is 3.1.3: a text size setting (Normal, Large, Extra large) for easier reading

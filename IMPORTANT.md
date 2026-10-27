@@ -4,7 +4,7 @@
 >
 > | | |
 > |---|---|
-> | **Campaign build** | 3.1.x from GitHub Releases: 3.1.0 (version code 40) up to 3.1.3 (43); each installs over the previous one and changes no rule |
+> | **Campaign build** | 3.1.x from GitHub Releases or F-Droid: 3.1.0 (version code 40) up to 3.1.3 (43); each installs over the previous one and changes no rule |
 > | **Day 1** | A full reinstall of 3.1.x, with a fresh database |
 > | **Database schema** | 26 |
 > | **Duration** | Approximately three months |
@@ -85,7 +85,7 @@ would mix data recorded with both methods in one database.
 > 1. Export anything you want to keep: the history CSV and forensic cases (*History*), and, if you
 >    like, a backup (*Settings → Backup*) as an archive of the 3.0.0 data.
 > 2. Uninstall ICdetection.
-> 3. Install the latest 3.1.x (3.1.3) from GitHub Releases.
+> 3. Install the latest 3.1.x (3.1.3) from GitHub Releases or F-Droid.
 > 4. On the first start, choose **Start from scratch**. Restoring a 3.0.0 backup would bring the old
 >    dataset back.
 

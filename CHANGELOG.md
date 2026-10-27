@@ -20,6 +20,7 @@ continues on it.
 
 ### Documentation
 
+- ICdetection is on F-Droid (from 3.1.1): README badge and install option, Status and IMPORTANT.
 - MANUAL: the text size setting; what happens with the phone's location turned off (monitoring
   keeps running and shows *Searching for signal*, because Android gives no cell information to apps
   while location is off; #49); the route counts on the Topology filters.
