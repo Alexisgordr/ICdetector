@@ -80,19 +80,29 @@ internal class TelephonyCollectionController(
                             // (IllegalStateException en algunos dispositivos) o devolver null.
                             try {
                                 handleCellDelivery(manager.allCellInfo, fresh = false, registered = false)
+                            } catch (_: SecurityException) {
+                                // Permiso retirado entre la comprobación y la lectura (lint: MissingPermission).
                             } catch (_: Exception) {}
                         }
                     }
                 )
             )
             requestFailureReported = false
+        } catch (e: SecurityException) {
+            // Permiso retirado entre la comprobación y la petición (lint: MissingPermission).
+            reportRequestFailure(e)
         } catch (e: Exception) {
             // 3.1.7 (#49) — Antes solo SecurityException: cualquier otro fallo llegaba al callback
             // que había pedido el refresco y cerraba la app.
-            if (!requestFailureReported) {
-                requestFailureReported = true
-                log(TelephonyRecoveryLog.requestFailed(e))
-            }
+            reportRequestFailure(e)
+        }
+    }
+
+    /** 3.1.7 — Un fallo de requestCellInfoUpdate deja una línea, una vez hasta que vuelva a ir bien. */
+    private fun reportRequestFailure(error: Exception) {
+        if (!requestFailureReported) {
+            requestFailureReported = true
+            log(TelephonyRecoveryLog.requestFailed(error))
         }
     }
 

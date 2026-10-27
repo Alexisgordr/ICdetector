@@ -62,8 +62,14 @@ class ServiceRegressionTest {
         }
         val request = telephony.substringAfter("fun requestFreshCellInfo()").substringBefore("\n    }\n")
         assertTrue(request.contains("} catch (e: Exception) {"))
-        assertTrue(request.contains("log(TelephonyRecoveryLog.requestFailed(e))"))
-        assertFalse(request.contains("catch (_: SecurityException) {}"))
+        assertTrue(request.contains("reportRequestFailure(e)"))
+        assertTrue(telephony.substringAfter("private fun reportRequestFailure(").substringBefore("\n    }")
+            .contains("log(TelephonyRecoveryLog.requestFailed(error))"))
+        // 3.1.7 — Lint (MissingPermission) exige ver la SecurityException capturada de forma explícita,
+        // en la petición y en la lectura de reserva; Exception va detrás para lo demás.
+        assertTrue(request.contains("} catch (e: SecurityException) {"))
+        assertTrue(request.indexOf("catch (e: SecurityException)") < request.indexOf("catch (e: Exception)"))
+        assertTrue(request.contains("} catch (_: SecurityException) {"))
         // destroy() deja el controlador cerrado: un reinicio pendiente no vuelve a registrar.
         assertTrue(telephony.contains("if (closed || !hasPhonePermission()) return"))
         assertTrue(telephony.substringAfter("fun destroy()").substringBefore("\n    }").contains("closed = true"))
