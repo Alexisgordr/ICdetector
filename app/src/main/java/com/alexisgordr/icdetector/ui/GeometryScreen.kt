@@ -2,6 +2,7 @@ package com.alexisgordr.icdetector.ui
 
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.detectTransformGestures
@@ -551,10 +552,20 @@ private fun MobilityPanel(snapshot: MobilityGeometrySnapshot, onExport: () -> Un
     val historicalTrips = snapshot.transitions.maxOfOrNull { it.tripCount } ?: 0
     Surface(color = Color(0xFF111A1D), shape = RoundedCornerShape(6.dp)) {
         Column(Modifier.fillMaxWidth().padding(9.dp), verticalArrangement = Arrangement.spacedBy(3.dp)) {
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                Text(stringResource(R.string.mobility_title), color=Color(0xFF80CBC4),fontFamily=FontFamily.Monospace,fontSize=10.sp,fontWeight=FontWeight.Bold)
-                TextButton(onClick=onExport, contentPadding=PaddingValues(horizontal=5.dp,vertical=0.dp)) {
-                    Icon(Icons.Default.Share,null,Modifier.size(13.dp));Spacer(Modifier.width(3.dp));Text(stringResource(R.string.export_geometry),fontSize=8.sp)
+            Text(stringResource(R.string.mobility_title), color=Color(0xFF80CBC4),fontFamily=FontFamily.Monospace,fontSize=10.sp,fontWeight=FontWeight.Bold)
+            // 3.1.4 — «Exportar geometría» en su propia fila, pegado a la derecha y con borde: antes iba
+            // junto al título y quedaba apretado, sobre todo con letra grande.
+            Row(Modifier.fillMaxWidth().padding(top = 4.dp, bottom = 6.dp), horizontalArrangement = Arrangement.End) {
+                OutlinedButton(
+                    onClick = onExport,
+                    shape = RoundedCornerShape(4.dp),
+                    border = BorderStroke(1.dp, Color(0xFF80CBC4).copy(alpha = 0.6f)),
+                    colors = ButtonDefaults.outlinedButtonColors(contentColor = Color(0xFF80CBC4)),
+                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)
+                ) {
+                    Icon(Icons.Default.Share, null, Modifier.size(14.dp))
+                    Spacer(Modifier.width(6.dp))
+                    Text(stringResource(R.string.export_geometry), fontFamily = FontFamily.Monospace, fontSize = 9.sp)
                 }
             }
             GeometryLine(stringResource(R.string.mobility_trip), if(trip==null) stringResource(R.string.mobility_trip_inactive) else stringResource(R.string.mobility_trip_active_format, trip.tripId.take(8)))

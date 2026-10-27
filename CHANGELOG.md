@@ -20,6 +20,11 @@ Version code 44, database schema 26 (unchanged). Screens adapt to large text. It
   RSRP/SINR column always keeps its width, and the metric tiles allow two-line labels with equal
   heights. *Normal* looks as before; the route cards just keep a small gap between their two texts.
 
+### Changed
+
+- **Geometry: *Export geometry* on its own row,** aligned to the right with a border, below the
+  mobility title. It used to sit next to the title and looked cramped, above all with large text.
+
 ### Removed
 
 - **The *Extra large* text size.** At ×1.5 many screens did not fit. The setting now offers
