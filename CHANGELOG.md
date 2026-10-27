@@ -4,6 +4,22 @@ Every notable change to ICdetection, newest first. Releases inside the field-col
 fix bugs; a fix that changes how a rule is evaluated is marked as a **dataset cut** for that rule.
 Version numbers follow the app's `versionName`; the Android `versionCode` is given where it matters.
 
+## 3.1.4
+
+Version code 44, database schema 26 (unchanged). Screens adapt to large text. It installs over any
+3.1.x and keeps its data. No rule changes, so no dataset cut.
+
+### Fixed
+
+- **Layouts with Large and Extra large text (#50).** With the text size from 3.1.3 some rows did
+  not fit: on the main screen *MCC / MNC* was cut (the MNC was missing) and *TAC / LAC* dropped to a
+  lower line; *RSRP* and *SINR* split letter by letter in the security audit; Geometry route cards
+  glued *Transitions* to the distance (*244 mTransitions*). Now, from a final font scale of 1.2
+  (*Large* and *Extra large* with Android's normal font size), the cell identity becomes a 2 × 2
+  grid and the route cards of Geometry and Topology put their counts on a line of their own. The
+  RSRP/SINR column always keeps its width, and the metric tiles allow two-line labels with equal
+  heights. *Normal* looks as before; the route cards just keep a small gap between their two texts.
+
 ## 3.1.3
 
 Version code 43, database schema 26 (unchanged). A display update for easier reading. It installs

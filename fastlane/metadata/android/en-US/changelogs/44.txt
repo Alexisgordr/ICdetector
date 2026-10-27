@@ -1,0 +1,3 @@
+3.1.4 — screens adapt to large text. Installs over any 3.1.x and keeps its data; no rule changes.
+
+- With Large and Extra large text, the main screen, Geometry and Topology no longer cut or misalign values (e.g. MCC/MNC, TAC/LAC, RSRP/SINR).

@@ -86,7 +86,7 @@ is not supported.
 
 **3.1.0 needs a full reinstall as well.** It is a design update together with a security update
 that fixes bugs, and several of the fixes change how rules are evaluated, so data from 3.0 and 3.1.0
-cannot be mixed. Export what you want to keep, uninstall the app, install 3.1.3 and choose **Start
+cannot be mixed. Export what you want to keep, uninstall the app, install 3.1.4 and choose **Start
 from scratch** on the first start (restoring a 3.0 backup would bring the old data back). Set the
 location mode again afterwards.
 
@@ -131,7 +131,9 @@ would receive neither location nor cells.
 **Settings → Text size** makes all the app text larger: *Normal* (default), *Large* (×1.25) or
 *Extra large* (×1.5). It applies straight away, to every screen and dialog, on top of Android's own
 font size (**Settings → Display → Font size**), which the app already follows. It is a display
-setting only and travels in backups.
+setting only and travels in backups. With large text, rows that share the width between several
+values change their layout so nothing is cut: the cell identity on the main screen becomes a 2 × 2
+grid and route cards in Geometry and Topology show their counts on a line of their own.
 
 ### Background monitoring and battery
 
