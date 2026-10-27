@@ -1,0 +1,4 @@
+3.1.7 — real fix for the background crash with the location off (#49). Installs over any 3.1.x and keeps its data; no rule changes.
+
+- The app no longer re-registers its telephony callbacks endlessly when the system gives no cells; on some phones that hit Android's listener limit and crashed it.
+- Also since 3.1.1: Settings → Text size (Normal or Large) with adapted screens (#50) and Topology filter counts.

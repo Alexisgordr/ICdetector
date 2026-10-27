@@ -1,0 +1,4 @@
+3.1.7 — arreglo real del cierre con la ubicación apagada (#49). Se instala encima de cualquier 3.1.x y conserva sus datos; ninguna regla cambia.
+
+- La app ya no vuelve a registrar sin fin sus callbacks de telefonía cuando el sistema no da celdas; en algunos móviles llegaba al límite de Android y se cerraba.
+- Además desde la 3.1.1: Ajustes → Tamaño del texto (Normal o Grande) y filtros de Topología con números.

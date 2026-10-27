@@ -8,9 +8,9 @@ The current state of the project in one page. What changed in each release is in
 
 | | Version | Version code | DB schema | Where |
 |---|---|---|---|---|
-| **Stable release** | 3.1.6 | 46 | 26 | GitHub Releases and F-Droid ([docs/3.1.0-progress.md](docs/3.1.0-progress.md)) |
-| **Previous stable release** | 3.1.5 | 45 | 26 | GitHub Releases and F-Droid; 3.1.6 installs over it |
-| **Field campaign** | 3.1.x | 40–46 | 26 | Day 1 = a full reinstall of 3.1.x, with a fresh database ([IMPORTANT.md](IMPORTANT.md)) |
+| **Stable release** | 3.1.7 | 47 | 26 | GitHub Releases and F-Droid ([docs/3.1.0-progress.md](docs/3.1.0-progress.md)) |
+| **Previous stable release** | 3.1.6 | 46 | 26 | GitHub Releases and F-Droid; 3.1.7 installs over it |
+| **Field campaign** | 3.1.x | 40–47 | 26 | Day 1 = a full reinstall of 3.1.x, with a fresh database ([IMPORTANT.md](IMPORTANT.md)) |
 | **Previous campaign stage** | 3.0.0 | 39 | 25 | Closed by 3.1.0 |
 | **Last v2.10.x release** | v2.10.10 | 38 | 19 | GitHub Releases |
 | **Earlier campaign stage** | v2.10.5 | 33 | 19 | Baseline of the v2.10.x stage, closed |
@@ -23,6 +23,10 @@ The current state of the project in one page. What changed in each release is in
   its store listing comes from `fastlane/` at that commit.
 - **3.0 needs a clean install** from v2.10.x (export, uninstall, install), and so does **3.1.0** from
   3.0.0 (below).
+- **Version code 47** is 3.1.7: the real fix for #49. With the location off the service re-registered
+  the telephony callbacks every ~30 s until Android's per-process listener limit, and the next
+  registration crashed the app in the background. No engine, schema or export changes; no dataset
+  cut ([docs/3.1.7-progress.md](docs/3.1.7-progress.md)).
 - **Version code 46** is 3.1.6: fixes a background crash with the location turned off on phones
   whose system delivers a null cell list (#49). No engine, schema or export changes; no dataset cut.
 - **Version code 45** is 3.1.5: the GEOM panel of the main screen adapts to large text, and the
@@ -166,17 +170,17 @@ Run by CI on pull requests to `main`, on `main` and on release tags:
   is tested with SQLite in the JVM (`SchemaV26MigrationTest`).
 - `tools/check_export.py` regression tests, SQL affinity and query-plan checks, `when` exhaustiveness.
 
-## Publishing 3.1.6
+## Publishing 3.1.7
 
-1. Push `main`, let CI pass, create the GitHub release `v3.1.6` and attach the signed APK
-   (`ICdetection-v3.1.6.apk`). It installs over any 3.1.x; coming from 3.0.0 a full reinstall is
+1. Push `main` (a fast-forward from the `ICdetection-v3.1.7` branch), let CI pass, create the GitHub
+   release `v3.1.7` and attach the signed APK (`ICdetection-v3.1.7.apk`). It installs over any 3.1.x; coming from 3.0.0 a full reinstall is
    still required. F-Droid picks the tag up by itself.
-2. The store notes for 3.1.6 are in `fastlane/metadata/android/*/changelogs/46.txt`. They sum up
-   everything since 3.1.1, because F-Droid jumps from 3.1.1 straight to the newest tag.
+2. The store notes for 3.1.7 are in `fastlane/metadata/android/*/changelogs/47.txt`. They also sum up
+   what came since 3.1.1, because F-Droid may jump from 3.1.1 straight to the newest tag.
 
 3.1.0 (tag `v3.1.0`, commit c8f06a5), 3.1.1 (`v3.1.1`, 8ec6f29), 3.1.2 (`v3.1.2`, 0e8f8fa) and 3.1.3
-(`v3.1.3`, 71dc571), 3.1.4 (`v3.1.4`, ec03766) and 3.1.5 (`v3.1.5`, 68a1a5a) were published the same
-way, with their store notes in `40.txt` to `45.txt`.
+(`v3.1.3`, 71dc571), 3.1.4 (`v3.1.4`, ec03766), 3.1.5 (`v3.1.5`, 68a1a5a) and 3.1.6 (`v3.1.6`,
+2c4a180) were published the same way, with their store notes in `40.txt` to `46.txt`.
 3. Close the issues resolved in 3.1.0 ([docs/3.1.0-progress.md](docs/3.1.0-progress.md) lists them
    with their commits); #44 stays open.
 4. Restart field collection on 3.1.0 and test it on more devices.

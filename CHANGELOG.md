@@ -4,6 +4,36 @@ Every notable change to ICdetection, newest first. Releases inside the field-col
 fix bugs; a fix that changes how a rule is evaluated is marked as a **dataset cut** for that rule.
 Version numbers follow the app's `versionName`; the Android `versionCode` is given where it matters.
 
+## 3.1.7
+
+Version code 47, database schema 26 (unchanged). The real fix for #49. It installs over any 3.1.x
+and keeps its data. The engine, the rules, the database and the export formats are unchanged, so
+there is no dataset cut and the field-collection campaign continues on it.
+
+### Fixed
+
+- **Fix: the service no longer re-registers telephony callbacks endlessly when the system delivers
+  no cells (location off); this hit Android's per-process listener limit and crashed in the
+  background (#49).** The reporter's crash log showed `IllegalStateException: Pid … has exceeded
+  the number of permissible registered listeners` thrown by `registerTelephonyCallback` from inside
+  `onDisplayInfoChanged`. With the location off, Android delivers empty cell lists; the callback
+  watchdog took the callbacks for dead and, every ~30 s, unregistered and registered them again,
+  inside the callback being delivered. On that device the unregistered listeners were not fully
+  released until the limit was reached. (3.1.6 fixed a possible null list, a different case.) Now:
+  - registering a callback never throws: any exception leaves one terminal line and the app goes
+    on without that callback; never more than three callbacks are alive;
+  - the restart is posted to run after the current callback, never inside it, one at a time;
+  - with the system location off or without the precise location permission there is no restart
+    (Android, not the callbacks, withholds the cells); the terminal says so once and the main
+    screen keeps *Searching for signal*;
+  - a ServiceState or DisplayInfo that arrives counts as a sign of life: the callbacks are restarted
+    only when nothing arrives at all;
+  - the wait between restarts doubles (30 s, 60 s, 2 min… up to 30 min) and goes back to 30 s with
+    cells; after five restarts in a row without cells it stops until the location, the permission
+    or the network changes;
+  - a failed `requestCellInfoUpdate` (any exception) leaves one terminal line;
+  - the same `TelephonyManager` is used to register and unregister.
+
 ## 3.1.6
 
 Version code 46, database schema 26 (unchanged). A crash fix. It installs over any 3.1.x and keeps
