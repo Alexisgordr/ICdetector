@@ -8,9 +8,9 @@ The current state of the project in one page. What changed in each release is in
 
 | | Version | Version code | DB schema | Where |
 |---|---|---|---|---|
-| **Stable release** | 3.1.4 | 44 | 26 | GitHub Releases and F-Droid ([docs/3.1.0-progress.md](docs/3.1.0-progress.md)) |
-| **Previous stable release** | 3.1.3 | 43 | 26 | GitHub Releases and F-Droid; 3.1.4 installs over it |
-| **Field campaign** | 3.1.x | 40–44 | 26 | Day 1 = a full reinstall of 3.1.x, with a fresh database ([IMPORTANT.md](IMPORTANT.md)) |
+| **Stable release** | 3.1.5 | 45 | 26 | GitHub Releases and F-Droid ([docs/3.1.0-progress.md](docs/3.1.0-progress.md)) |
+| **Previous stable release** | 3.1.4 | 44 | 26 | GitHub Releases and F-Droid; 3.1.5 installs over it |
+| **Field campaign** | 3.1.x | 40–45 | 26 | Day 1 = a full reinstall of 3.1.x, with a fresh database ([IMPORTANT.md](IMPORTANT.md)) |
 | **Previous campaign stage** | 3.0.0 | 39 | 25 | Closed by 3.1.0 |
 | **Last v2.10.x release** | v2.10.10 | 38 | 19 | GitHub Releases |
 | **Earlier campaign stage** | v2.10.5 | 33 | 19 | Baseline of the v2.10.x stage, closed |
@@ -23,6 +23,8 @@ The current state of the project in one page. What changed in each release is in
   its store listing comes from `fastlane/` at that commit.
 - **3.0 needs a clean install** from v2.10.x (export, uninstall, install), and so does **3.1.0** from
   3.0.0 (below).
+- **Version code 45** is 3.1.5: the GEOM panel of the main screen adapts to large text, and the
+  notice inside its graph follows the app language and text size (#50). Display only.
 - **Version code 44** is 3.1.4: screens adapt to large text (#50) and *Extra large* is removed
   (it did not fit; it becomes *Large*). With Large the
   cell identity row becomes a 2 × 2 grid, route cards stack their two lines, the RSRP/SINR column
@@ -162,15 +164,16 @@ Run by CI on pull requests to `main`, on `main` and on release tags:
   is tested with SQLite in the JVM (`SchemaV26MigrationTest`).
 - `tools/check_export.py` regression tests, SQL affinity and query-plan checks, `when` exhaustiveness.
 
-## Publishing 3.1.4
+## Publishing 3.1.5
 
-1. Push `main`, let CI pass, create the GitHub release `v3.1.4` and attach the signed APK
-   (`ICdetection-v3.1.4.apk`). It installs over any 3.1.x; coming from 3.0.0 a full reinstall is
+1. Push `main`, let CI pass, create the GitHub release `v3.1.5` and attach the signed APK
+   (`ICdetection-v3.1.5.apk`). It installs over any 3.1.x; coming from 3.0.0 a full reinstall is
    still required. F-Droid picks the tag up by itself.
-2. The store notes for 3.1.4 are in `fastlane/metadata/android/*/changelogs/44.txt`.
+2. The store notes for 3.1.5 are in `fastlane/metadata/android/*/changelogs/45.txt`.
 
 3.1.0 (tag `v3.1.0`, commit c8f06a5), 3.1.1 (`v3.1.1`, 8ec6f29), 3.1.2 (`v3.1.2`, 0e8f8fa) and 3.1.3
-(`v3.1.3`, 71dc571) were published the same way, with their store notes in `40.txt` to `43.txt`.
+(`v3.1.3`, 71dc571) and 3.1.4 (`v3.1.4`, ec03766) were published the same way, with their store notes
+in `40.txt` to `44.txt`.
 3. Close the issues resolved in 3.1.0 ([docs/3.1.0-progress.md](docs/3.1.0-progress.md) lists them
    with their commits); #44 stays open.
 4. Restart field collection on 3.1.0 and test it on more devices.

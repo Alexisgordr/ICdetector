@@ -86,7 +86,7 @@ is not supported.
 
 **3.1.0 needs a full reinstall as well.** It is a design update together with a security update
 that fixes bugs, and several of the fixes change how rules are evaluated, so data from 3.0 and 3.1.0
-cannot be mixed. Export what you want to keep, uninstall the app, install 3.1.4 and choose **Start
+cannot be mixed. Export what you want to keep, uninstall the app, install 3.1.5 and choose **Start
 from scratch** on the first start (restoring a 3.0 backup would bring the old data back). Set the
 location mode again afterwards.
 
@@ -134,7 +134,8 @@ moves it to *Large*.) It applies straight away, to every screen and dialog, on t
 font size (**Settings → Display → Font size**), which the app already follows. It is a display
 setting only and travels in backups. With large text, rows that share the width between several
 values change their layout so nothing is cut: the cell identity on the main screen becomes a 2 × 2
-grid and route cards in Geometry and Topology show their counts on a line of their own.
+grid, route cards in Geometry and Topology show their counts on a line of their own, and the
+**GEOM** panel shows the Timing Advance and its distance one under the other.
 
 ### Background monitoring and battery
 

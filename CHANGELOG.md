@@ -4,6 +4,20 @@ Every notable change to ICdetection, newest first. Releases inside the field-col
 fix bugs; a fix that changes how a rule is evaluated is marked as a **dataset cut** for that rule.
 Version numbers follow the app's `versionName`; the Android `versionCode` is given where it matters.
 
+## 3.1.5
+
+Version code 45, database schema 26 (unchanged). The GEOM panel adapts to large text. It installs
+over any 3.1.x and keeps its data. No rule changes, so no dataset cut.
+
+### Fixed
+
+- **Main screen, GEOM panel with *Large* text (#50).** *Timing Advance: …* and the TA distance
+  shared one row and were squeezed; with large text they now go one under the other (as the route
+  cards in 3.1.4). *Normal* looks as before.
+- **The notice inside the TA graph** (*TA sensor blocked by hardware* / *TA without a convertible
+  unit*) was always in Spanish and drawn at a fixed 26 px. It now follows the app language and the
+  text size.
+
 ## 3.1.4
 
 Version code 44, database schema 26 (unchanged). Screens adapt to large text. It installs over any

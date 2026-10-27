@@ -1,0 +1,4 @@
+3.1.5 — the GEOM panel adapts to large text. Installs over any 3.1.x and keeps its data; no rule changes.
+
+- With Large text, the Timing Advance and its distance no longer squeeze each other.
+- The notice inside the TA graph follows the app language and text size.

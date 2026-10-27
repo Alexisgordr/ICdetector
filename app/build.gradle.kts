@@ -57,9 +57,9 @@ android {
         minSdk = 31
         targetSdk = 37
 
-        versionCode = 44
+        versionCode = 45
         buildConfigField("String", "BUILD_COMMIT", "\"$buildCommit\"")
-        versionName = "3.1.4"
+        versionName = "3.1.5"
 
         // 3.0 — Las betas usan el mismo identificador y nombre que la versión final, para poder
         // actualizar de beta a release. La 3.0 requiere instalación limpia (ver README/IMPORTANT);

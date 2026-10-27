@@ -1,0 +1,4 @@
+3.1.5 — el panel GEOM se adapta a la letra grande. Se instala encima de cualquier 3.1.x y conserva sus datos; ninguna regla cambia.
+
+- Con texto Grande, el Timing Advance y su distancia ya no se aprietan.
+- El aviso dentro de la gráfica de TA sigue el idioma y el tamaño del texto de la app.
