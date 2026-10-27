@@ -11,14 +11,19 @@ Version code 44, database schema 26 (unchanged). Screens adapt to large text. It
 
 ### Fixed
 
-- **Layouts with Large and Extra large text (#50).** With the text size from 3.1.3 some rows did
+- **Layouts with large text (#50).** With the text size from 3.1.3 some rows did
   not fit: on the main screen *MCC / MNC* was cut (the MNC was missing) and *TAC / LAC* dropped to a
   lower line; *RSRP* and *SINR* split letter by letter in the security audit; Geometry route cards
   glued *Transitions* to the distance (*244 mTransitions*). Now, from a final font scale of 1.2
-  (*Large* and *Extra large* with Android's normal font size), the cell identity becomes a 2 × 2
+  (*Large* with Android's normal font size), the cell identity becomes a 2 × 2
   grid and the route cards of Geometry and Topology put their counts on a line of their own. The
   RSRP/SINR column always keeps its width, and the metric tiles allow two-line labels with equal
   heights. *Normal* looks as before; the route cards just keep a small gap between their two texts.
+
+### Removed
+
+- **The *Extra large* text size.** At ×1.5 many screens did not fit. The setting now offers
+  *Normal* and *Large*; a phone or a backup with *Extra large* from 3.1.3 gets *Large*.
 
 ## 3.1.3
 

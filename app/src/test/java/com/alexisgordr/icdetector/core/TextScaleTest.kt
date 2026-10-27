@@ -6,7 +6,7 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.io.File
 
-/** 3.1.3 (#50) — Tamaño del texto: Normal (predeterminado), Grande y Muy grande. */
+/** 3.1.3 (#50) — Tamaño del texto: Normal (predeterminado) y Grande. 3.1.4: sin «Muy grande». */
 class TextScaleTest {
     private fun read(path: String) =
         listOf(File(path), File("app/$path"), File("../$path")).first { it.exists() }.readText()
@@ -16,7 +16,9 @@ class TextScaleTest {
         assertEquals(TextScale.NORMAL, TextScale.fromStored(""))
         assertEquals(TextScale.NORMAL, TextScale.fromStored("HUGE"))
         assertEquals(TextScale.LARGE, TextScale.fromStored("LARGE"))
-        assertEquals(TextScale.EXTRA_LARGE, TextScale.fromStored("EXTRA_LARGE"))
+        // 3.1.4 — «Muy grande» de 3.1.3 (preferencias o copia) pasa a Grande, no a Normal.
+        assertEquals(TextScale.LARGE, TextScale.fromStored("EXTRA_LARGE"))
+        assertEquals(listOf(TextScale.NORMAL, TextScale.LARGE), TextScale.entries.toList())
     }
 
     @Test fun `normal leaves the app as it was and the others only grow`() {
@@ -29,16 +31,15 @@ class TextScaleTest {
     @Test fun `the app factor multiplies Android's font size`() {
         assertEquals(1.0f, TextScale.fontScale(1.0f, TextScale.NORMAL))
         assertEquals(1.3f, TextScale.fontScale(1.3f, TextScale.NORMAL))
-        assertEquals(1.5f, TextScale.fontScale(1.0f, TextScale.EXTRA_LARGE))
+        assertEquals(1.25f, TextScale.fontScale(1.0f, TextScale.LARGE))
         assertEquals(1.625f, TextScale.fontScale(1.3f, TextScale.LARGE), 0.0001f)
     }
 
     @Test fun `rows stack only with large text`() {
-        // 3.1.4 — Normal con la letra de Android normal: nada cambia. Grande y Muy grande: se apilan.
+        // 3.1.4 — Normal con la letra de Android normal: nada cambia. Grande: se apilan.
         assertTrue(!TextScale.usesStackedLayout(TextScale.fontScale(1.0f, TextScale.NORMAL)))
         assertTrue(!TextScale.usesStackedLayout(TextScale.fontScale(1.15f, TextScale.NORMAL)))
         assertTrue(TextScale.usesStackedLayout(TextScale.fontScale(1.0f, TextScale.LARGE)))
-        assertTrue(TextScale.usesStackedLayout(TextScale.fontScale(1.0f, TextScale.EXTRA_LARGE)))
         assertTrue(TextScale.usesStackedLayout(TextScale.fontScale(1.3f, TextScale.NORMAL)))
     }
 

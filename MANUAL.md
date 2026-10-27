@@ -128,8 +128,9 @@ would receive neither location nor cells.
 
 ### Text size
 
-**Settings → Text size** makes all the app text larger: *Normal* (default), *Large* (×1.25) or
-*Extra large* (×1.5). It applies straight away, to every screen and dialog, on top of Android's own
+**Settings → Text size** makes all the app text larger: *Normal* (default) or *Large* (×1.25).
+(3.1.3 also had *Extra large*; it did not fit on many screens and was removed in 3.1.4, which
+moves it to *Large*.) It applies straight away, to every screen and dialog, on top of Android's own
 font size (**Settings → Display → Font size**), which the app already follows. It is a display
 setting only and travels in backups. With large text, rows that share the width between several
 values change their layout so nothing is cut: the cell identity on the main screen becomes a 2 × 2

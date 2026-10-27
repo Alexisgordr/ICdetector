@@ -8,7 +8,6 @@
     <string name="settings_text_size">TAMAÑO DEL TEXTO</string>
     <string name="text_size_normal">Normal</string>
     <string name="text_size_large">Grande</string>
-    <string name="text_size_extra_large">Muy grande</string>
     <string name="text_size_description">Agranda todo el texto de la app, sobre el tamaño de letra de Android. Se aplica al momento.</string>
     <string name="save_settings">GUARDAR AJUSTES</string>
     <string name="technical_notice">AVISO TÉCNICO</string>

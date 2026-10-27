@@ -123,7 +123,6 @@ fun SettingsPanel(
                                     when (scale) {
                                         TextScale.NORMAL -> R.string.text_size_normal
                                         TextScale.LARGE -> R.string.text_size_large
-                                        TextScale.EXTRA_LARGE -> R.string.text_size_extra_large
                                     }
                                 ),
                                 fontFamily = FontFamily.Monospace

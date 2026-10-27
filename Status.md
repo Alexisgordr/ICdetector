@@ -23,7 +23,8 @@ The current state of the project in one page. What changed in each release is in
   its store listing comes from `fastlane/` at that commit.
 - **3.0 needs a clean install** from v2.10.x (export, uninstall, install), and so does **3.1.0** from
   3.0.0 (below).
-- **Version code 44** is 3.1.4: screens adapt to large text (#50): with Large and Extra large the
+- **Version code 44** is 3.1.4: screens adapt to large text (#50) and *Extra large* is removed
+  (it did not fit; it becomes *Large*). With Large the
   cell identity row becomes a 2 × 2 grid, route cards stack their two lines, the RSRP/SINR column
   keeps its width and the metric tiles allow two-line labels. Normal looks as before. Display only.
 - **Version code 43** is 3.1.3: a text size setting (Normal, Large, Extra large) for easier reading

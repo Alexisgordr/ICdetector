@@ -6,19 +6,27 @@ package com.alexisgordr.icdetector.core
  * Muchas notas, etiquetas y el terminal usan 7-9 sp: en pantallas densas no se leen bien. El factor
  * se aplica una sola vez a toda la interfaz (MainActivity) y se multiplica por el tamaño de letra de
  * Android, que la app ya respetaba. [NORMAL] deja la app como estaba.
+ *
+ * 3.1.4 — Sin «Muy grande» (×1,5): con él muchas pantallas no cabían. Quien lo tenía pasa a [LARGE].
  */
 enum class TextScale(val storedValue: String, val factor: Float) {
     NORMAL("NORMAL", 1.0f),
-    LARGE("LARGE", 1.25f),
-    EXTRA_LARGE("EXTRA_LARGE", 1.5f);
+    LARGE("LARGE", 1.25f);
 
     companion object {
         /** Clave en las preferencias (miniic_prefs); viaja en la copia de seguridad. */
         const val PREF_KEY = "text_scale"
 
-        /** Lo guardado en preferencias; cualquier valor desconocido o ausente es [NORMAL]. */
+        /** Valor guardado por 3.1.3 para «Muy grande», retirado en 3.1.4. */
+        private const val RETIRED_EXTRA_LARGE = "EXTRA_LARGE"
+
+        /**
+         * Lo guardado en preferencias (o en una copia de seguridad). «Muy grande» de 3.1.3 pasa a
+         * [LARGE], el más parecido; cualquier otro valor desconocido o ausente es [NORMAL].
+         */
         fun fromStored(value: String?): TextScale =
-            entries.firstOrNull { it.storedValue == value } ?: NORMAL
+            if (value == RETIRED_EXTRA_LARGE) LARGE
+            else entries.firstOrNull { it.storedValue == value } ?: NORMAL
 
         /** Escala de letra final: la de Android multiplicada por la elegida en la app. */
         fun fontScale(systemFontScale: Float, scale: TextScale): Float = systemFontScale * scale.factor
@@ -26,7 +34,7 @@ enum class TextScale(val storedValue: String, val factor: Float) {
         /**
          * 3.1.4 (#50) — Desde esta escala de letra final, las filas que reparten el ancho entre
          * varios textos (identidad de la celda, tarjetas de ruta) se apilan en vez de cortarse.
-         * Con la letra de Android en su valor normal, eso es «Grande» y «Muy grande».
+         * Con la letra de Android en su valor normal, eso es «Grande».
          */
         const val STACKED_LAYOUT_FONT_SCALE = 1.2f
 
