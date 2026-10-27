@@ -12,7 +12,7 @@ import java.io.File
  * versión actualiza a la anterior.
  *
  * Las betas de la 3.0 usaron el versionCode 39, el siguiente a la 2.10.10 (38), y la 3.0.0 lo
- * conservó. 3.1.0 es el 40, 3.1.1 el 41 y 3.1.2 el 42. Las notas de la tienda (F-Droid) van por versionCode: la nota del
+ * conservó. 3.1.0 es el 40, 3.1.1 el 41, 3.1.2 el 42 y 3.1.3 el 43. Las notas de la tienda (F-Droid) van por versionCode: la nota del
  * código actual tiene que existir y ninguna puede ir por delante de él.
  */
 class AppIdentityTest {
@@ -46,9 +46,9 @@ class AppIdentityTest {
         assertFalse("sin guardas muertas de API 31", controller.contains("VERSION_CODES.S"))
     }
 
-    @Test fun `3_1_2 follows 3_1_1 and no store note is ahead of it`() {
+    @Test fun `3_1_3 follows 3_1_2 and no store note is ahead of it`() {
         val code = Regex("versionCode = (\\d+)").find(gradle())!!.groupValues[1].toInt()
-        assertEquals(42, code)
+        assertEquals(43, code)
         val fastlane = listOf(File("fastlane"), File("../fastlane")).first { it.isDirectory }
         for (locale in listOf("en-US", "es-ES")) {
             val dir = File(fastlane, "metadata/android/$locale/changelogs")

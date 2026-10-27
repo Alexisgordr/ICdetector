@@ -8,9 +8,9 @@ The current state of the project in one page. What changed in each release is in
 
 | | Version | Version code | DB schema | Where |
 |---|---|---|---|---|
-| **Stable release** | 3.1.2 | 42 | 26 | GitHub Releases ([docs/3.1.0-progress.md](docs/3.1.0-progress.md)) |
-| **Previous stable release** | 3.1.1 | 41 | 26 | GitHub Releases; 3.1.2 installs over it |
-| **Field campaign** | 3.1.x | 40–42 | 26 | Day 1 = a full reinstall of 3.1.x, with a fresh database ([IMPORTANT.md](IMPORTANT.md)) |
+| **Stable release** | 3.1.3 | 43 | 26 | GitHub Releases ([docs/3.1.0-progress.md](docs/3.1.0-progress.md)) |
+| **Previous stable release** | 3.1.2 | 42 | 26 | GitHub Releases; 3.1.3 installs over it |
+| **Field campaign** | 3.1.x | 40–43 | 26 | Day 1 = a full reinstall of 3.1.x, with a fresh database ([IMPORTANT.md](IMPORTANT.md)) |
 | **Previous campaign stage** | 3.0.0 | 39 | 25 | Closed by 3.1.0 |
 | **Last v2.10.x release** | v2.10.10 | 38 | 19 | GitHub Releases |
 | **Earlier campaign stage** | v2.10.5 | 33 | 19 | Baseline of the v2.10.x stage, closed |
@@ -19,6 +19,8 @@ The current state of the project in one page. What changed in each release is in
   version installs over an older one.
 - **3.0 needs a clean install** from v2.10.x (export, uninstall, install), and so does **3.1.0** from
   3.0.0 (below).
+- **Version code 43** is 3.1.3: a text size setting (Normal, Large, Extra large) for easier reading
+  (#50). Display only: no rule changes, no dataset cut.
 - **Version code 42** is 3.1.2: route counts on the Topology filters (ALL, LEARNED, REVIEW) and new
   store screenshots. Interface only: no rule changes, no dataset cut.
 - **Version code 41** is 3.1.1: bug fixes for 3.1.0 (the first-run screen warned about data from
@@ -152,15 +154,15 @@ Run by CI on pull requests to `main`, on `main` and on release tags:
   is tested with SQLite in the JVM (`SchemaV26MigrationTest`).
 - `tools/check_export.py` regression tests, SQL affinity and query-plan checks, `when` exhaustiveness.
 
-## Publishing 3.1.2
+## Publishing 3.1.3
 
-1. Push `main`, let CI pass, create the GitHub release `v3.1.2` and attach the signed APK
-   (`ICdetection-v3.1.2.apk`). It installs over any 3.1.x; coming from 3.0.0 a full reinstall is
+1. Push `main`, let CI pass, create the GitHub release `v3.1.3` and attach the signed APK
+   (`ICdetection-v3.1.3.apk`). It installs over any 3.1.x; coming from 3.0.0 a full reinstall is
    still required.
-2. The store notes for 3.1.2 are in `fastlane/metadata/android/*/changelogs/42.txt`.
+2. The store notes for 3.1.3 are in `fastlane/metadata/android/*/changelogs/43.txt`.
 
-3.1.0 (tag `v3.1.0`, commit c8f06a5) and 3.1.1 (tag `v3.1.1`, commit 8ec6f29) were published the
-same way, with their store notes in `40.txt` and `41.txt`.
+3.1.0 (tag `v3.1.0`, commit c8f06a5), 3.1.1 (tag `v3.1.1`, commit 8ec6f29) and 3.1.2 (tag `v3.1.2`,
+commit 0e8f8fa) were published the same way, with their store notes in `40.txt` to `42.txt`.
 3. Close the issues resolved in 3.1.0 ([docs/3.1.0-progress.md](docs/3.1.0-progress.md) lists them
    with their commits); #44 stays open.
 4. Restart field collection on 3.1.0 and test it on more devices.

@@ -1,0 +1,3 @@
+3.1.3 — easier reading. Installs over any 3.1.x and keeps its data; no rule changes.
+
+- New Settings → Text size: Normal, Large or Extra large, for the whole app, on top of Android's font size.

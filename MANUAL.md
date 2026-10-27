@@ -83,7 +83,7 @@ is not supported.
 
 **3.1.0 needs a full reinstall as well.** It is a design update together with a security update
 that fixes bugs, and several of the fixes change how rules are evaluated, so data from 3.0 and 3.1.0
-cannot be mixed. Export what you want to keep, uninstall the app, install 3.1.2 and choose **Start
+cannot be mixed. Export what you want to keep, uninstall the app, install 3.1.3 and choose **Start
 from scratch** on the first start (restoring a 3.0 backup would bring the old data back). Set the
 location mode again afterwards.
 
@@ -123,6 +123,13 @@ monitoring**. Tapping it opens the app and monitoring resumes from there. Nothin
 background: the app does not request background location, so a monitoring service started at boot
 would receive neither location nor cells.
 
+### Text size
+
+**Settings → Text size** makes all the app text larger: *Normal* (default), *Large* (×1.25) or
+*Extra large* (×1.5). It applies straight away, to every screen and dialog, on top of Android's own
+font size (**Settings → Display → Font size**), which the app already follows. It is a display
+setting only and travels in backups.
+
 ### Background monitoring and battery
 
 For longer sessions:
@@ -144,6 +151,9 @@ loop active, including with the screen off, so H11, H13 and H16 have contemporan
 intentionally uses more battery; the persistent notification says that continuous GPS is active. The
 app does not request the privileged battery-optimization exemption itself.
 
+- **Location turned off:** Android gives no cell information to any app while the phone's location
+  is off. Monitoring keeps running and the main screen shows *Searching for signal*; the terminal may
+  log that the telephony callbacks were restarted. Cells come back once location is on again.
 - **Low battery:** below 5% while unplugged, continuous GPS and the collection wake lock pause, and
   resume automatically when charging starts or the battery recovers.
 - **Missing coordinates:** if a scheduled sample is recorded without coordinates, ICdetection
@@ -749,7 +759,8 @@ routes, total handovers and **learned** routes. A handover is *learned* when it 
 contemporaneous, precise GPS fixes and was added to the local route reference; this is a mobility
 criterion, not proof that either cell is legitimate. Each route keeps its full origin and
 destination identities, observation count, learned count, last H16 state, learned ratio and most
-recent timestamp. Filters separate all routes, learned routes and routes worth reviewing. The screen
+recent timestamp. Filters separate all routes, learned routes and routes worth reviewing, and each
+filter shows how many routes it has (for example *12 ALL*, *3 LEARNED*, *0 REVIEW*). The screen
 is read-only: it cannot change the score, H16 or the transition baseline.
 
 **Last reading versus last evaluated result.** The state shown is the one of the **last observed

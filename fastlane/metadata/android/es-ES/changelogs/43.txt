@@ -1,0 +1,3 @@
+3.1.3 — lectura más fácil. Se instala encima de cualquier 3.1.x y conserva sus datos; ninguna regla cambia.
+
+- Nuevo Ajustes → Tamaño del texto: Normal, Grande o Muy grande, para toda la app, sobre el tamaño de letra de Android.

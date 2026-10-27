@@ -4,6 +4,26 @@ Every notable change to ICdetection, newest first. Releases inside the field-col
 fix bugs; a fix that changes how a rule is evaluated is marked as a **dataset cut** for that rule.
 Version numbers follow the app's `versionName`; the Android `versionCode` is given where it matters.
 
+## 3.1.3
+
+Version code 43, database schema 26 (unchanged). A display update for easier reading. It installs
+over any 3.1.x and keeps its data. No rule changes, so no dataset cut: the field-collection campaign
+continues on it.
+
+### Added
+
+- **Text size setting (#50).** Many notes, labels and the terminal used very small text, hard to
+  read on dense screens. **Settings → Text size** offers *Normal* (default, the app as before),
+  *Large* (×1.25) and *Extra large* (×1.5). It is applied once to the whole interface, on top of
+  Android's font size, takes effect straight away and travels in backups (an older backup restores
+  *Normal*).
+
+### Documentation
+
+- MANUAL: the text size setting; what happens with the phone's location turned off (monitoring
+  keeps running and shows *Searching for signal*, because Android gives no cell information to apps
+  while location is off; #49); the route counts on the Topology filters.
+
 ## 3.1.2
 
 Version code 42, database schema 26 (unchanged). A small interface update. It installs over any
