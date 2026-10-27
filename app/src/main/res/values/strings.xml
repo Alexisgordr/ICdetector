@@ -4,6 +4,12 @@
     <string name="settings_language">LANGUAGE</string>
     <string name="language_spanish">Español</string>
     <string name="language_english">English</string>
+    <!-- 3.1.3 (#50) — Tamaño del texto (TextScale). -->
+    <string name="settings_text_size">TEXT SIZE</string>
+    <string name="text_size_normal">Normal</string>
+    <string name="text_size_large">Large</string>
+    <string name="text_size_extra_large">Extra large</string>
+    <string name="text_size_description">Makes all the app text larger, on top of Android\'s font size. Applied straight away.</string>
     <string name="save_settings">SAVE SETTINGS</string>
     <string name="technical_notice">TECHNICAL NOTICE</string>
     <string name="technical_notice_body">Direct detection of null encryption and IMSI disclosure is not implemented for standard Android installations. It requires privileged APIs or permissions that a non-root app does not receive, so this rule is shown as N/A when the system does not expose the data.</string>

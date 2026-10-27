@@ -1,6 +1,7 @@
 package com.alexisgordr.icdetector.ui
 
 import android.content.Context
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -27,6 +28,7 @@ import com.alexisgordr.icdetector.core.BootStart
 import com.alexisgordr.icdetector.core.LegacyNetworkAlertMode
 import com.alexisgordr.icdetector.core.StableSiteNotices
 import com.alexisgordr.icdetector.core.LocationMode
+import com.alexisgordr.icdetector.core.TextScale
 
 @Composable
 fun SettingsPanel(
@@ -40,6 +42,8 @@ fun SettingsPanel(
     val context = LocalContext.current
     val prefs = remember { context.getSharedPreferences("miniic_prefs", Context.MODE_PRIVATE) }
     var selectedLanguage by remember { mutableStateOf(LocaleController.selectedLanguage(context)) }
+    // 3.1.3 (#50) — Tamaño del texto: como el idioma, se aplica al momento (recrea la actividad).
+    var selectedTextScale by remember { mutableStateOf(TextScale.fromStored(prefs.getString(TextScale.PREF_KEY, null))) }
     var selectedLocationMode by remember {
         mutableStateOf(LocationMode.fromStored(prefs.getString(LocationMode.PREF_KEY, null)))
     }
@@ -97,6 +101,39 @@ fun SettingsPanel(
                     )
                 }
             }
+            HorizontalDivider(color = Color(0xFF1A1A1A), modifier = Modifier.padding(vertical = 4.dp))
+            Text(stringResource(R.string.settings_text_size), color = Color.White, fontSize = 14.sp, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Bold)
+            Row(
+                modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                TextScale.entries.forEach { scale ->
+                    FilterChip(
+                        selected = selectedTextScale == scale,
+                        onClick = {
+                            if (selectedTextScale != scale) {
+                                selectedTextScale = scale
+                                prefs.edit { putString(TextScale.PREF_KEY, scale.storedValue) }
+                                (context as? Activity)?.recreate()
+                            }
+                        },
+                        label = {
+                            Text(
+                                stringResource(
+                                    when (scale) {
+                                        TextScale.NORMAL -> R.string.text_size_normal
+                                        TextScale.LARGE -> R.string.text_size_large
+                                        TextScale.EXTRA_LARGE -> R.string.text_size_extra_large
+                                    }
+                                ),
+                                fontFamily = FontFamily.Monospace
+                            )
+                        }
+                    )
+                }
+            }
+            Text(stringResource(R.string.text_size_description), color = Color(0xFF888888), fontSize = 9.sp,
+                fontFamily = FontFamily.Monospace, lineHeight = 12.sp)
             HorizontalDivider(color = Color(0xFF1A1A1A), modifier = Modifier.padding(vertical = 4.dp))
             Text(stringResource(R.string.location_mode_title), color = Color.White,
                 fontSize = 14.sp, fontFamily = FontFamily.Monospace)

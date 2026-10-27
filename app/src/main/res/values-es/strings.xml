@@ -4,6 +4,12 @@
     <string name="settings_language">IDIOMA</string>
     <string name="language_spanish">Español</string>
     <string name="language_english">English</string>
+    <!-- 3.1.3 (#50) — Tamaño del texto (TextScale). -->
+    <string name="settings_text_size">TAMAÑO DEL TEXTO</string>
+    <string name="text_size_normal">Normal</string>
+    <string name="text_size_large">Grande</string>
+    <string name="text_size_extra_large">Muy grande</string>
+    <string name="text_size_description">Agranda todo el texto de la app, sobre el tamaño de letra de Android. Se aplica al momento.</string>
     <string name="save_settings">GUARDAR AJUSTES</string>
     <string name="technical_notice">AVISO TÉCNICO</string>
     <string name="technical_notice_body">La detección directa de cifrado nulo e IMSI Disclosure no está implementada para instalaciones Android estándar. Requiere APIs o permisos privilegiados que una app no-root no recibe; por eso esta regla se muestra como N/A cuando el sistema no expone el dato.</string>

@@ -16,6 +16,9 @@ import androidx.activity.ComponentActivity
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.unit.Density
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -83,29 +86,43 @@ class MainActivity : ComponentActivity() {
         // No iniciamos el servicio aquí directamente para evitar crasheos por permisos en Android 14+
         // El inicio del servicio se gestionará desde el MainLayout cuando los permisos sean otorgados.
 
+        // 3.1.3 (#50) — Tamaño del texto elegido en Ajustes, sobre el de Android. Se aplica aquí una
+        // sola vez para toda la interfaz (pantallas y diálogos); Ajustes recrea la actividad al cambiarlo.
+        val textScale = com.alexisgordr.icdetector.core.TextScale.fromStored(
+            getSharedPreferences(LocaleController.PREFS, MODE_PRIVATE)
+                .getString(com.alexisgordr.icdetector.core.TextScale.PREF_KEY, null)
+        )
         setContent {
-            MaterialTheme(
-                colorScheme = darkColorScheme(
-                    primary = Color(0xFFE0E0E0),
-                    background = Color(0xFF0A0A0A),
-                    surface = Color(0xFF141414),
-                    error = Color(0xFFCF6679)
+            val systemDensity = LocalDensity.current
+            CompositionLocalProvider(
+                LocalDensity provides Density(
+                    systemDensity.density,
+                    com.alexisgordr.icdetector.core.TextScale.fontScale(systemDensity.fontScale, textScale)
                 )
             ) {
-                val databaseState by com.alexisgordr.icdetector.storage.DatabaseGate.state.collectAsState()
-                val newer = databaseState as? com.alexisgordr.icdetector.storage.DatabaseGate.State.NewerSchema
-                if (newer != null) {
-                    // 3.1.0 (#47) — Bloqueante: ninguna pantalla que lea la base, ningún servicio.
-                    com.alexisgordr.icdetector.ui.DatabaseNewerDialog(newer, onClose = { finish() })
-                } else if (firstRunPending) {
-                    com.alexisgordr.icdetector.ui.FirstRunScreen(onStartedFresh = {
-                        dbHelper.openThroughGate()
-                        firstRunPending = false
-                    })
-                } else {
-                    MainLayout(context = this, dbHelper = dbHelper, service = service)
+                MaterialTheme(
+                    colorScheme = darkColorScheme(
+                        primary = Color(0xFFE0E0E0),
+                        background = Color(0xFF0A0A0A),
+                        surface = Color(0xFF141414),
+                        error = Color(0xFFCF6679)
+                    )
+                ) {
+                    val databaseState by com.alexisgordr.icdetector.storage.DatabaseGate.state.collectAsState()
+                    val newer = databaseState as? com.alexisgordr.icdetector.storage.DatabaseGate.State.NewerSchema
+                    if (newer != null) {
+                        // 3.1.0 (#47) — Bloqueante: ninguna pantalla que lea la base, ningún servicio.
+                        com.alexisgordr.icdetector.ui.DatabaseNewerDialog(newer, onClose = { finish() })
+                    } else if (firstRunPending) {
+                        com.alexisgordr.icdetector.ui.FirstRunScreen(onStartedFresh = {
+                            dbHelper.openThroughGate()
+                            firstRunPending = false
+                        })
+                    } else {
+                        MainLayout(context = this, dbHelper = dbHelper, service = service)
+                    }
+                    com.alexisgordr.icdetector.ui.RestoreResultDialog()
                 }
-                com.alexisgordr.icdetector.ui.RestoreResultDialog()
             }
         }
     }
