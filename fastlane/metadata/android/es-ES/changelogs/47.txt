@@ -1,4 +1,8 @@
-3.1.7 — arreglo real del cierre con la ubicación apagada (#49). Se instala encima de cualquier 3.1.x y conserva sus datos; ninguna regla cambia.
+3.1.7 — incluye también de la 3.1.2 a la 3.1.6 (F-Droid solo muestra la última). Se instala encima de cualquier 3.1.x; ninguna regla cambia.
 
-- La app ya no vuelve a registrar sin fin sus callbacks de telefonía cuando el sistema no da celdas; en algunos móviles llegaba al límite de Android y se cerraba.
-- Además desde la 3.1.1: Ajustes → Tamaño del texto (Normal o Grande) y filtros de Topología con números.
+- 3.1.7: arreglado el cierre con la ubicación apagada (#49).
+- 3.1.6: una lista de celdas nula ya no cierra la app.
+- 3.1.5: el panel GEOM cabe con letra grande.
+- 3.1.4: pantallas adaptadas a la letra grande; Exportar geometría en su fila.
+- 3.1.3: Ajustes → Tamaño del texto (#50).
+- 3.1.2: filtros de Topología con número de rutas; capturas nuevas.

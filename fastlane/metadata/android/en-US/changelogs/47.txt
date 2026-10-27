@@ -1,4 +1,8 @@
-3.1.7 — real fix for the background crash with the location off (#49). Installs over any 3.1.x and keeps its data; no rule changes.
+3.1.7 — also includes 3.1.2 to 3.1.6 (F-Droid only shows the latest). Installs over any 3.1.x; no rule changes.
 
-- The app no longer re-registers its telephony callbacks endlessly when the system gives no cells; on some phones that hit Android's listener limit and crashed it.
-- Also since 3.1.1: Settings → Text size (Normal or Large) with adapted screens (#50) and Topology filter counts.
+- 3.1.7: fixed the background crash with the location off (#49).
+- 3.1.6: a null cell list from the system no longer crashes the app.
+- 3.1.5: GEOM panel fits large text.
+- 3.1.4: screens adapt to large text; Export geometry on its own row.
+- 3.1.3: Settings → Text size (#50).
+- 3.1.2: Topology filters show route counts; new screenshots.
