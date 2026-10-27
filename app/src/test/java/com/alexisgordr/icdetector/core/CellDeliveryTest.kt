@@ -67,7 +67,7 @@ class CellDeliveryTest {
         assertEquals(listOf(NullCellDeliveryNotice.MESSAGE), fake.logs)
         // Sin ninguna entrega con celdas, el watchdog sigue viendo silencio y reinicia los callbacks.
         fake.now = 5_000L
-        assertTrue(fake.watchdog.onRefreshRequested() != null)
+        assertTrue(fake.watchdog.onRefreshRequested() is CallbackWatchdog.Decision.Restart)
     }
 
     @Test fun `a list with cells still works as before`() {
@@ -76,6 +76,6 @@ class CellDeliveryTest {
         assertEquals(listOf(listOf("lte-1")), fake.delivered)
         assertTrue(fake.logs.isEmpty())
         fake.now = 500L
-        assertNull("una entrega reciente con celdas: el watchdog no reinicia", fake.watchdog.onRefreshRequested())
+        assertEquals("una entrega reciente con celdas: el watchdog no reinicia", CallbackWatchdog.Decision.Wait, fake.watchdog.onRefreshRequested())
     }
 }

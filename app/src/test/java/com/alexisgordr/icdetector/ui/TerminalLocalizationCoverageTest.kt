@@ -31,6 +31,13 @@ class TerminalLocalizationCoverageTest {
         "[SYS] ⚠️ Poda de histórico omitida: borraría 900 registros (de 1000; más del 25 %); ¿reloj adelantado? No se ha borrado nada.",
         // 3.0 — Watchdog de callbacks.
         "[SYS] Watchdog: callbacks de telefonía reiniciados; 45 s sin entregas de celdas.",
+        // 3.1.7 (#49) — Recuperación de los callbacks de telefonía.
+        "[SYS] Sin celdas: la ubicación del sistema está apagada; no se reinician los callbacks de telefonía.",
+        "[SYS] Sin celdas: falta el permiso de ubicación precisa; no se reinician los callbacks de telefonía.",
+        "[SYS] Tope de callbacks de telefonía: se desregistran los anteriores antes de registrar.",
+        "[SYS] Watchdog: 5 reinicios seguidos sin celdas; no se reinicia más hasta que cambie la ubicación, el permiso o la red.",
+        "[SYS] No se pudo registrar DisplayInfo (IllegalStateException); se sigue sin ese callback.",
+        "[SYS] No se pudo pedir celdas (IllegalStateException); se reintenta en el siguiente ciclo.",
         // 3.1.6 (#49) — Lista de celdas nula.
         "[SYS] El sistema no entrega celdas (lista nula); ¿ubicación apagada?",
         // 3.0 (corte de campaña) — Celda CSG.

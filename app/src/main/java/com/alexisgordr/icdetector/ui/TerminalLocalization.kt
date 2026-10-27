@@ -297,6 +297,14 @@ private val replacements = linkedMapOf(
     "fix GPS de más de 60 s o sin edad conocida" to "GPS fix older than 60 s or of unknown age",
     // 3.0 — Reinicio del watchdog de callbacks.
     "Watchdog: callbacks de telefonía reiniciados;" to "Watchdog: telephony callbacks restarted;",
+    // 3.1.7 (#49) — Recuperación de los callbacks de telefonía (TelephonyRecoveryLog).
+    "Sin celdas: la ubicación del sistema está apagada; no se reinician los callbacks de telefonía." to "No cells: the system location is off; telephony callbacks are not restarted.",
+    "Sin celdas: falta el permiso de ubicación precisa; no se reinician los callbacks de telefonía." to "No cells: the precise location permission is missing; telephony callbacks are not restarted.",
+    "Tope de callbacks de telefonía: se desregistran los anteriores antes de registrar." to "Telephony callback cap: the previous ones are unregistered before registering.",
+    "reinicios seguidos sin celdas; no se reinicia más hasta que cambie la ubicación, el permiso o la red." to "restarts in a row without cells; no more restarts until location, permission or network changes.",
+    "; se sigue sin ese callback." to "; continuing without that callback.",
+    "No se pudo pedir celdas" to "Could not request cells",
+    "; se reintenta en el siguiente ciclo." to "; retrying on the next cycle.",
     // 3.1.6 (#49) — Lista de celdas nula entregada por el sistema (NullCellDeliveryNotice).
     "El sistema no entrega celdas (lista nula); ¿ubicación apagada?" to "The system delivers no cells (null list); is location turned off?",
     "s sin entregas de celdas." to "s without cell deliveries.",

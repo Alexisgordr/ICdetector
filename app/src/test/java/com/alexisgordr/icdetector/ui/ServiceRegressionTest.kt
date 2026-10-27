@@ -46,6 +46,29 @@ class ServiceRegressionTest {
         assertTrue(telephony.contains("if (displayInfo != null) {"))
     }
 
+    /**
+     * 3.1.7 (#49) — Registrar un callback lanzaba IllegalStateException al pasar el tope de listeners
+     * por proceso y la excepción salía de onDisplayInfoChanged: crash. Ahora todo registro pasa por
+     * CallbackRegistrar (probado en la JVM) y pedir celdas captura cualquier excepción.
+     */
+    @Test fun `registering telephony callbacks never throws`() {
+        val telephony = source("service/TelephonyCollectionController.kt")
+        assertTrue(telephony.contains("register = { manager.registerTelephonyCallback(context.mainExecutor, it) }"))
+        assertTrue(telephony.contains("unregister = { manager.unregisterTelephonyCallback(it) }"))
+        // Ninguna otra llamada directa a registerTelephonyCallback.
+        assertEquals(1, telephony.split("manager.registerTelephonyCallback(").size - 1)
+        listOf("CELL_INFO", "DISPLAY_INFO", "SERVICE_STATE").forEach {
+            assertTrue(it, telephony.contains("callbacks.add($it, NullTolerantTelephonyCallbacks."))
+        }
+        val request = telephony.substringAfter("fun requestFreshCellInfo()").substringBefore("\n    }\n")
+        assertTrue(request.contains("} catch (e: Exception) {"))
+        assertTrue(request.contains("log(TelephonyRecoveryLog.requestFailed(e))"))
+        assertFalse(request.contains("catch (_: SecurityException) {}"))
+        // destroy() deja el controlador cerrado: un reinicio pendiente no vuelve a registrar.
+        assertTrue(telephony.contains("if (closed || !hasPhonePermission()) return"))
+        assertTrue(telephony.substringAfter("fun destroy()").substringBefore("\n    }").contains("closed = true"))
+    }
+
     @Test fun `the Java adapters only forward and accept null`() {
         val adapters = source("service/NullTolerantTelephonyCallbacks.java")
         assertTrue(adapters.contains("void accept(@Nullable T value);"))

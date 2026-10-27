@@ -4,6 +4,7 @@ import android.annotation.SuppressLint
 import android.Manifest
 import android.content.Context
 import android.content.pm.PackageManager
+import android.location.LocationManager
 import android.telephony.AccessNetworkConstants
 import android.telephony.CellInfo
 import android.telephony.NetworkRegistrationInfo
@@ -12,6 +13,10 @@ import android.telephony.TelephonyCallback
 import android.telephony.TelephonyDisplayInfo
 import android.telephony.TelephonyManager
 import androidx.core.content.ContextCompat
+import com.alexisgordr.icdetector.core.CallbackRegistrar
+import com.alexisgordr.icdetector.core.CallbackWatchdog
+import com.alexisgordr.icdetector.core.DeferredRestart
+import com.alexisgordr.icdetector.core.TelephonyRecoveryLog
 import com.alexisgordr.icdetector.models.NetworkTypeNames
 import com.alexisgordr.icdetector.models.ServiceRegistrationState
 import com.alexisgordr.icdetector.models.ServiceStateSnapshot
@@ -25,24 +30,40 @@ internal class TelephonyCollectionController(
     /** v2.10.4 — Recibe cada lectura de ServiceState (callback o sondeo). Solo recolección. */
     private val serviceStateSink: (ServiceStateSnapshot) -> Unit = {}
 ) {
-    private var manager = context.getSystemService(TelephonyManager::class.java)
-    private var cellCallback: TelephonyCallback? = null
-    private var displayCallback: TelephonyCallback? = null
-    private var serviceStateCallback: TelephonyCallback? = null
+    // 3.1.7 (#49) — Siempre la misma instancia para registrar y desregistrar (antes se volvía a
+    // pedir en cada reinicio).
+    private val manager: TelephonyManager = context.getSystemService(TelephonyManager::class.java)
+    private val locationManager: LocationManager? = context.getSystemService(LocationManager::class.java)
+    // 3.1.7 (#49) — Callbacks con nombre: registrar nunca lanza (IllegalStateException al pasar el
+    // tope de listeners por proceso, SecurityException…) y nunca hay más de tres vivos.
+    private val callbacks = CallbackRegistrar<TelephonyCallback>(
+        register = { manager.registerTelephonyCallback(context.mainExecutor, it) },
+        unregister = { manager.unregisterTelephonyCallback(it) },
+        log = log
+    )
+    // 3.1.7 (#49) — El reinicio corre después de la entrega del callback actual, nunca dentro.
+    private val deferredRestart = DeferredRestart { context.mainExecutor.execute(it) }
     private var lastDisplayInfo: TelephonyDisplayInfo? = null
     // 3.0 — Ver CallbackWatchdog: cuenta también las respuestas a requestCellInfoUpdate.
-    private val watchdog = com.alexisgordr.icdetector.core.CallbackWatchdog { android.os.SystemClock.elapsedRealtime() }
+    private val watchdog = CallbackWatchdog { android.os.SystemClock.elapsedRealtime() }
     // 3.1.6 (#49) — Aviso único en el terminal cuando el sistema entrega una lista de celdas nula.
     private val nullCellsNotice = com.alexisgordr.icdetector.core.NullCellDeliveryNotice()
+    // 3.1.7 — Un fallo de requestCellInfoUpdate se escribe una vez hasta que vuelva a funcionar.
+    @Volatile private var requestFailureReported = false
+    // 3.1.7 — Último ServiceState con red: volver a tenerla es un cambio que reactiva el watchdog.
+    @Volatile private var inService: Boolean? = null
+    // 3.1.7 — Tras destroy() (el servicio se detiene) un reinicio pendiente no vuelve a registrar.
+    @Volatile private var closed = false
 
     fun start() {
-        if (!hasPhonePermission()) return
+        if (closed || !hasPhonePermission()) return
         registerCellCallback()
         registerDisplayCallback()
         registerServiceStateCallback()
     }
 
     fun requestFreshCellInfo() {
+        if (closed) return
         recoverCallbacksIfStale()
         start()
         if (!hasLocationPermission()) return
@@ -64,7 +85,15 @@ internal class TelephonyCollectionController(
                     }
                 )
             )
-        } catch (_: SecurityException) {}
+            requestFailureReported = false
+        } catch (e: Exception) {
+            // 3.1.7 (#49) — Antes solo SecurityException: cualquier otro fallo llegaba al callback
+            // que había pedido el refresco y cerraba la app.
+            if (!requestFailureReported) {
+                requestFailureReported = true
+                log(TelephonyRecoveryLog.requestFailed(e))
+            }
+        }
     }
 
     /**
@@ -105,13 +134,10 @@ internal class TelephonyCollectionController(
         }
     }
 
+    /** El servicio se detiene: desregistra todo y no vuelve a registrar (ni un reinicio pendiente). */
     fun destroy() {
-        listOf(cellCallback, displayCallback, serviceStateCallback).forEach { callback ->
-            callback?.let { try { manager.unregisterTelephonyCallback(it) } catch (_: Exception) {} }
-        }
-        cellCallback = null
-        displayCallback = null
-        serviceStateCallback = null
+        closed = true
+        callbacks.removeAll()
     }
 
     /**
@@ -131,20 +157,21 @@ internal class TelephonyCollectionController(
     }
 
     private fun registerServiceStateCallback() {
-        if (serviceStateCallback != null) return
-        try {
-            // 3.1.6 (#49) — Adaptador en Java, por la misma razón que las celdas: un null se ignora.
-            val callback = NullTolerantTelephonyCallbacks.ServiceStateChanged { serviceState ->
-                if (serviceState != null) {
-                    try {
-                        serviceStateSink(snapshotOf(serviceState, ServiceStateSource.CALLBACK))
-                    } catch (_: Exception) {}
-                }
+        if (callbacks.isRegistered(SERVICE_STATE)) return
+        // 3.1.6 (#49) — Adaptador en Java, por la misma razón que las celdas: un null se ignora.
+        callbacks.add(SERVICE_STATE, NullTolerantTelephonyCallbacks.ServiceStateChanged { serviceState ->
+            if (serviceState != null) {
+                // 3.1.7 (#49) — Señal de vida: los callbacks no están muertos. Volver a tener red
+                // es un cambio que reactiva un watchdog parado.
+                watchdog.onSignOfLife()
+                val nowInService = runCatching { serviceState.state == ServiceState.STATE_IN_SERVICE }.getOrDefault(false)
+                if (nowInService && inService == false) watchdog.onStateChanged()
+                inService = nowInService
+                try {
+                    serviceStateSink(snapshotOf(serviceState, ServiceStateSource.CALLBACK))
+                } catch (_: Exception) {}
             }
-            manager.registerTelephonyCallback(context.mainExecutor, callback)
-            serviceStateCallback = callback
-        } catch (_: SecurityException) {
-        } catch (_: Exception) {}
+        })
     }
 
     /**
@@ -210,41 +237,59 @@ internal class TelephonyCollectionController(
     }
 
     private fun registerCellCallback() {
-        if (cellCallback != null) return
-        try {
-            // 3.1.6 (#49) — Adaptador en Java: algunos fabricantes entregan null con la ubicación apagada.
-            val callback = NullTolerantTelephonyCallbacks.CellInfoChanged { cellInfo ->
-                handleCellDelivery(cellInfo, fresh = true, registered = true)
-            }
-            manager.registerTelephonyCallback(context.mainExecutor, callback)
-            cellCallback = callback
-        } catch (_: SecurityException) {}
+        if (callbacks.isRegistered(CELL_INFO)) return
+        // 3.1.6 (#49) — Adaptador en Java: algunos fabricantes entregan null con la ubicación apagada.
+        callbacks.add(CELL_INFO, NullTolerantTelephonyCallbacks.CellInfoChanged { cellInfo ->
+            handleCellDelivery(cellInfo, fresh = true, registered = true)
+        })
     }
 
     private fun registerDisplayCallback() {
-        if (displayCallback != null) return
-        try {
-            // 3.1.6 (#49) — Adaptador en Java: un null no cuenta como entrega ni borra el último valor.
-            val callback = NullTolerantTelephonyCallbacks.DisplayInfoChanged { displayInfo ->
-                if (displayInfo != null) {
-                    watchdog.onDelivery()
-                    lastDisplayInfo = displayInfo
-                }
-                requestFreshCellInfo()
+        if (callbacks.isRegistered(DISPLAY_INFO)) return
+        // 3.1.6 (#49) — Adaptador en Java: un null no cuenta como entrega ni borra el último valor.
+        callbacks.add(DISPLAY_INFO, NullTolerantTelephonyCallbacks.DisplayInfoChanged { displayInfo ->
+            if (displayInfo != null) {
+                // 3.1.7 (#49) — Señal de vida, no entrega de celdas: no reinicia el plazo creciente.
+                watchdog.onSignOfLife()
+                lastDisplayInfo = displayInfo
             }
-            manager.registerTelephonyCallback(context.mainExecutor, callback)
-            displayCallback = callback
-        } catch (_: SecurityException) {}
+            requestFreshCellInfo()
+        })
     }
 
+    /**
+     * 3.1.7 (#49) — Antes reiniciaba aquí mismo (destroy() + start()), a menudo dentro de la entrega
+     * de onDisplayInfoChanged, y cada ~30 s con la ubicación apagada: los listeners se acumulaban hasta
+     * el tope por proceso y registerTelephonyCallback lanzaba. Ahora decide CallbackWatchdog (causa
+     * conocida, señales de vida, plazo creciente, parada) y el reinicio se publica para después.
+     */
     private fun recoverCallbacksIfStale() {
-        val silentMs = watchdog.onRefreshRequested() ?: return
-        // 3.0 — Cada reinicio queda en el terminal: antes no dejaba rastro.
-        log("Watchdog: callbacks de telefonía reiniciados; ${silentMs / 1_000} s sin entregas de celdas.")
-        destroy()
-        manager = context.getSystemService(TelephonyManager::class.java)
-        start()
+        val locationOff = !systemLocationEnabled()
+        val noPreciseLocation = !hasLocationPermission()
+        when (val decision = watchdog.onRefreshRequested(cellsBlockedByKnownCause = locationOff || noPreciseLocation)) {
+            is CallbackWatchdog.Decision.Restart -> {
+                // 3.0 — Cada reinicio queda en el terminal: antes no dejaba rastro.
+                log(TelephonyRecoveryLog.restarted(decision.silentMs))
+                deferredRestart.request {
+                    if (!closed) {
+                        callbacks.removeAll()
+                        start()
+                    }
+                }
+            }
+            is CallbackWatchdog.Decision.KnownCause -> if (decision.announce) {
+                log(if (locationOff) TelephonyRecoveryLog.LOCATION_OFF else TelephonyRecoveryLog.NO_PRECISE_LOCATION)
+            }
+            is CallbackWatchdog.Decision.Paused -> if (decision.announce) {
+                log(TelephonyRecoveryLog.paused(CallbackWatchdog.MAX_CONSECUTIVE_RESTARTS))
+            }
+            CallbackWatchdog.Decision.Wait -> Unit
+        }
     }
+
+    /** 3.1.7 — ¿Está encendida la ubicación del sistema? Si no se puede saber, se supone que sí. */
+    private fun systemLocationEnabled(): Boolean =
+        try { locationManager?.isLocationEnabled ?: true } catch (_: Exception) { true }
 
     private fun hasPhonePermission() = ContextCompat.checkSelfPermission(
         context, Manifest.permission.READ_PHONE_STATE
@@ -253,4 +298,10 @@ internal class TelephonyCollectionController(
     private fun hasLocationPermission() = ContextCompat.checkSelfPermission(
         context, Manifest.permission.ACCESS_FINE_LOCATION
     ) == PackageManager.PERMISSION_GRANTED
+
+    private companion object {
+        const val CELL_INFO = "CellInfo"
+        const val DISPLAY_INFO = "DisplayInfo"
+        const val SERVICE_STATE = "ServiceState"
+    }
 }
