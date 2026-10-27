@@ -33,6 +33,15 @@ class TextScaleTest {
         assertEquals(1.625f, TextScale.fontScale(1.3f, TextScale.LARGE), 0.0001f)
     }
 
+    @Test fun `rows stack only with large text`() {
+        // 3.1.4 — Normal con la letra de Android normal: nada cambia. Grande y Muy grande: se apilan.
+        assertTrue(!TextScale.usesStackedLayout(TextScale.fontScale(1.0f, TextScale.NORMAL)))
+        assertTrue(!TextScale.usesStackedLayout(TextScale.fontScale(1.15f, TextScale.NORMAL)))
+        assertTrue(TextScale.usesStackedLayout(TextScale.fontScale(1.0f, TextScale.LARGE)))
+        assertTrue(TextScale.usesStackedLayout(TextScale.fontScale(1.0f, TextScale.EXTRA_LARGE)))
+        assertTrue(TextScale.usesStackedLayout(TextScale.fontScale(1.3f, TextScale.NORMAL)))
+    }
+
     @Test fun `the setting travels in backups and old backups restore normal`() {
         assertEquals(BackupSettings.Type.STRING, BackupSettings.KEYS[TextScale.PREF_KEY])
         assertEquals(TextScale.NORMAL.storedValue, BackupSettings.DEFAULTS_FOR_MISSING[TextScale.PREF_KEY])

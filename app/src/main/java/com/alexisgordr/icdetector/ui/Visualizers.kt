@@ -277,8 +277,9 @@ fun MiniSinrGraph(sinr: Int?) {
         else -> Color(0xFF4CAF50) // Verde (Señal limpia)
     }
 
+    // 3.1.4 (#50) — Ancho y alto mínimos, no fijos: con letra grande el valor no cabía en 60 × 24 dp.
     Column(
-        modifier = Modifier.width(60.dp),
+        modifier = Modifier.widthIn(min = 60.dp),
         horizontalAlignment = Alignment.End
     ) {
         Text(
@@ -290,7 +291,7 @@ fun MiniSinrGraph(sinr: Int?) {
         )
         Row(
             verticalAlignment = Alignment.Bottom,
-            modifier = Modifier.height(24.dp)
+            modifier = Modifier.heightIn(min = 24.dp).height(IntrinsicSize.Min)
         ) {
             Text(
                 text = "${sinr ?: "--"} dB",

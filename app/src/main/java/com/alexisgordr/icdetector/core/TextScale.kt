@@ -22,5 +22,14 @@ enum class TextScale(val storedValue: String, val factor: Float) {
 
         /** Escala de letra final: la de Android multiplicada por la elegida en la app. */
         fun fontScale(systemFontScale: Float, scale: TextScale): Float = systemFontScale * scale.factor
+
+        /**
+         * 3.1.4 (#50) — Desde esta escala de letra final, las filas que reparten el ancho entre
+         * varios textos (identidad de la celda, tarjetas de ruta) se apilan en vez de cortarse.
+         * Con la letra de Android en su valor normal, eso es «Grande» y «Muy grande».
+         */
+        const val STACKED_LAYOUT_FONT_SCALE = 1.2f
+
+        fun usesStackedLayout(fontScale: Float): Boolean = fontScale >= STACKED_LAYOUT_FONT_SCALE
     }
 }

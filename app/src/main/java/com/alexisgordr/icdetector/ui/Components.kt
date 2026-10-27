@@ -16,6 +16,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringArrayResource
 import androidx.compose.ui.res.stringResource
 import com.alexisgordr.icdetector.R
@@ -141,6 +142,38 @@ fun TransitionCoherenceCard(result: TransitionCoherenceResult) {
                 HeuristicStatus.FAILED -> stringResource(R.string.transition_explanation_failed)
                 HeuristicStatus.NOT_EVALUATED -> stringResource(R.string.transition_explanation_na)
             }, color = Color(0xFF888888), fontSize = 8.sp, fontFamily = FontFamily.Monospace)
+        }
+    }
+}
+
+/**
+ * 3.1.4 (#50) — ¿La letra es tan grande que las filas de varios textos deben apilarse? Usa la escala
+ * final (Android × Ajustes → Tamaño del texto), ver [com.alexisgordr.icdetector.core.TextScale].
+ */
+@Composable
+fun largeTextLayout(): Boolean =
+    com.alexisgordr.icdetector.core.TextScale.usesStackedLayout(LocalDensity.current.fontScale)
+
+/**
+ * 3.1.4 (#50) — Un texto a la izquierda y otro a la derecha. El de la derecha conserva su ancho y el
+ * de la izquierda se ajusta al resto, con separación entre ambos (antes se pegaban: «244 mTransitions»).
+ * Con letra grande van uno debajo del otro.
+ */
+@Composable
+fun AdaptiveSplitRow(
+    modifier: Modifier = Modifier,
+    start: @Composable () -> Unit,
+    end: @Composable () -> Unit
+) {
+    if (largeTextLayout()) {
+        Column(modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            start()
+            end()
+        }
+    } else {
+        Row(modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Box(Modifier.weight(1f)) { start() }
+            end()
         }
     }
 }

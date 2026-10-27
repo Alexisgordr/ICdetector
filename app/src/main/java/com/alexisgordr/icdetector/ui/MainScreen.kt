@@ -479,23 +479,22 @@ fun MainScreenContent(dbHelper: CellDbHelper, service: MiniICService?) {
 
                                 HorizontalDivider(color = Color(0xFF1A1A1A))
 
-                                // Fila 2 — CELL ID, TAC/LAC, MCC/MNC y ARFCN
-                                Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-
-                                    // CELL ID
-                                    Column(
-                                        modifier = Modifier
-                                            .weight(1.1f)
-                                            .padding(horizontal = 12.dp, vertical = 14.dp)
-                                    ) {
-                                        Text(
-                                            "CELL ID",
-                                            color = Color(0xFF555555),
-                                            fontFamily = FontFamily.Monospace,
-                                            fontSize = 9.sp,
-                                            fontWeight = FontWeight.Bold,
-                                            letterSpacing = 1.sp
-                                        )
+                                // Fila 2 — CELL ID, TAC/LAC, MCC/MNC y ARFCN. 3.1.4 (#50) — Con letra grande
+                                // (Ajustes → Tamaño del texto o la de Android) no caben cuatro columnas: el
+                                // MCC/MNC se cortaba y TAC/LAC bajaba de línea. Entonces van en 2 × 2.
+                                val identityLabel: @Composable (String) -> Unit = { label ->
+                                    Text(
+                                        label,
+                                        color = Color(0xFF555555),
+                                        fontFamily = FontFamily.Monospace,
+                                        fontSize = 9.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        letterSpacing = 1.sp
+                                    )
+                                }
+                                val cellIdField: @Composable (Modifier) -> Unit = { modifier ->
+                                    Column(modifier.padding(horizontal = 12.dp, vertical = 14.dp)) {
+                                        identityLabel("CELL ID")
                                         Spacer(Modifier.height(4.dp))
                                         Text(
                                             active?.cellId ?: "N/A",
@@ -505,29 +504,10 @@ fun MainScreenContent(dbHelper: CellDbHelper, service: MiniICService?) {
                                             fontWeight = FontWeight.ExtraBold
                                         )
                                     }
-
-                                    // Divisor vertical
-                                    Box(
-                                        modifier = Modifier
-                                            .width(0.5.dp)
-                                            .height(40.dp)
-                                            .background(Color(0xFF222222))
-                                    )
-
-                                    // TAC / LAC
-                                    Column(
-                                        modifier = Modifier
-                                            .weight(0.8f)
-                                            .padding(horizontal = 12.dp, vertical = 14.dp)
-                                    ) {
-                                        Text(
-                                            "TAC / LAC",
-                                            color = Color(0xFF555555),
-                                            fontFamily = FontFamily.Monospace,
-                                            fontSize = 9.sp,
-                                            fontWeight = FontWeight.Bold,
-                                            letterSpacing = 1.sp
-                                        )
+                                }
+                                val tacField: @Composable (Modifier) -> Unit = { modifier ->
+                                    Column(modifier.padding(horizontal = 12.dp, vertical = 14.dp)) {
+                                        identityLabel("TAC / LAC")
                                         Spacer(Modifier.height(4.dp))
                                         Text(
                                             active?.tac ?: "N/A",
@@ -537,21 +517,10 @@ fun MainScreenContent(dbHelper: CellDbHelper, service: MiniICService?) {
                                             fontWeight = FontWeight.Bold
                                         )
                                     }
-
-                                    // Divisor vertical
-                                    Box(
-                                        modifier = Modifier
-                                            .width(0.5.dp)
-                                            .height(40.dp)
-                                            .background(Color(0xFF222222))
-                                    )
-
-                                    // MCC / MNC: juntos forman el PLMN del operador.
-                                    Column(
-                                        modifier = Modifier
-                                            .weight(0.75f)
-                                            .padding(horizontal = 8.dp, vertical = 14.dp)
-                                    ) {
+                                }
+                                // MCC / MNC: juntos forman el PLMN del operador.
+                                val plmnField: @Composable (Modifier) -> Unit = { modifier ->
+                                    Column(modifier.padding(horizontal = 8.dp, vertical = 14.dp)) {
                                         Text(
                                             "MCC / MNC",
                                             color = Color(0xFF555555),
@@ -571,31 +540,11 @@ fun MainScreenContent(dbHelper: CellDbHelper, service: MiniICService?) {
                                             maxLines = 1
                                         )
                                     }
-
-                                    // Divisor vertical
-                                    Box(
-                                        modifier = Modifier
-                                            .width(0.5.dp)
-                                            .height(40.dp)
-                                            .background(Color(0xFF222222))
-                                    )
-
-                                    // ARFCN (Nueva columna añadida a la derecha)
-                                    Column(
-                                        modifier = Modifier
-                                            .weight(0.7f)
-                                            .padding(horizontal = 12.dp, vertical = 14.dp)
-                                    ) {
-                                        Text(
-                                            "ARFCN",
-                                            color = Color(0xFF555555),
-                                            fontFamily = FontFamily.Monospace,
-                                            fontSize = 9.sp,
-                                            fontWeight = FontWeight.Bold,
-                                            letterSpacing = 1.sp
-                                        )
+                                }
+                                val arfcnField: @Composable (Modifier) -> Unit = { modifier ->
+                                    Column(modifier.padding(horizontal = 12.dp, vertical = 14.dp)) {
+                                        identityLabel("ARFCN")
                                         Spacer(Modifier.height(4.dp))
-                                        
                                         // 3.0 (corte de campaña) — H8 es un aviso de CALIDAD DE DATO, no una sospecha:
                                         // un canal fuera de la tabla 3GPP se muestra en el gris de "dato dudoso"
                                         // (el mismo de Components.kt), con peso normal, nunca en el rojo de alerta.
@@ -611,6 +560,39 @@ fun MainScreenContent(dbHelper: CellDbHelper, service: MiniICService?) {
                                                 Modifier.semantics { contentDescription = arfcnNote }
                                             } else Modifier
                                         )
+                                    }
+                                }
+                                // Divisor vertical
+                                val divider: @Composable () -> Unit = {
+                                    Box(
+                                        modifier = Modifier
+                                            .width(0.5.dp)
+                                            .height(40.dp)
+                                            .background(Color(0xFF222222))
+                                    )
+                                }
+                                if (largeTextLayout()) {
+                                    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                                        cellIdField(Modifier.weight(1f))
+                                        divider()
+                                        tacField(Modifier.weight(1f))
+                                    }
+                                    HorizontalDivider(color = Color(0xFF1A1A1A))
+                                    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                                        plmnField(Modifier.weight(1f))
+                                        divider()
+                                        arfcnField(Modifier.weight(1f))
+                                    }
+                                } else {
+                                    Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                                        cellIdField(Modifier.weight(1.1f))
+                                        divider()
+                                        tacField(Modifier.weight(0.8f))
+                                        divider()
+                                        plmnField(Modifier.weight(0.75f))
+                                        divider()
+                                        // ARFCN (Nueva columna añadida a la derecha)
+                                        arfcnField(Modifier.weight(0.7f))
                                     }
                                 }
                             }
@@ -681,7 +663,9 @@ fun SecurityScorePanel(active: CellData, dbmHistory: List<Int>, geoHistory: List
     Card(modifier = Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = Color(0xFF111111)), border = BorderStroke(0.5.dp, Color(0xFF222222)), shape = RoundedCornerShape(4.dp)) {
         Column(modifier = Modifier.padding(16.dp)) {
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                Column {
+                // 3.1.4 (#50) — El texto ocupa lo que dejen las minigráficas de la derecha. Antes las
+                // gráficas recibían lo que sobrara y, con letra grande, «RSRP» y «SINR» se partían.
+                Column(Modifier.weight(1f)) {
                     Text(stringResource(R.string.security_audit), color = Color(0xFF666666), fontFamily = FontFamily.Monospace, fontSize = 10.sp, fontWeight = FontWeight.Bold)
                     if (auditStatus.isNotEmpty()) {
                         Spacer(Modifier.height(4.dp))
@@ -748,7 +732,7 @@ fun SecurityScorePanel(active: CellData, dbmHistory: List<Int>, geoHistory: List
                 }
 
                 // DERECHA — minigráficas RF en vivo
-                Column(horizontalAlignment = Alignment.End) {
+                Column(Modifier.padding(start = 8.dp), horizontalAlignment = Alignment.End) {
                     MiniRsrpGraph(dbmHistory, active.dbm)
                     Spacer(Modifier.height(4.dp))
                     MiniSinrGraph(active.sinr)

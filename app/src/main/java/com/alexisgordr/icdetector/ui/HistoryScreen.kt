@@ -29,6 +29,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalResources
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -611,7 +612,7 @@ private fun TopologyPanel(
             color = Color(0xFF777777), fontFamily = FontFamily.Monospace, fontSize = 9.sp
         )
         Spacer(Modifier.height(8.dp))
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+        Row(Modifier.fillMaxWidth().height(IntrinsicSize.Min), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
             TopologyMetric(stringResource(R.string.topology_metric_cells), uniqueCells.toString(), Modifier.weight(1f))
             TopologyMetric(stringResource(R.string.routes), transitions.size.toString(), Modifier.weight(1f))
             TopologyMetric(stringResource(R.string.topology_metric_handovers), totalHandovers.toString(), Modifier.weight(1f))
@@ -697,10 +698,12 @@ private fun TopologyPanel(
 
 @Composable
 private fun TopologyMetric(label: String, value: String, modifier: Modifier = Modifier) {
-    Surface(modifier, color = Color(0xFF111111), shape = RoundedCornerShape(3.dp)) {
+    // 3.1.4 (#50) — Como GeometryMetric: etiqueta en dos líneas si no cabe y la misma altura en la fila.
+    Surface(modifier.fillMaxHeight(), color = Color(0xFF111111), shape = RoundedCornerShape(3.dp)) {
         Column(Modifier.padding(horizontal = 6.dp, vertical = 8.dp), horizontalAlignment = Alignment.CenterHorizontally) {
             Text(value, color = Color.White, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Bold, fontSize = 14.sp)
-            Text(label, color = Color(0xFF666666), fontFamily = FontFamily.Monospace, fontSize = 7.sp, maxLines = 1)
+            Text(label, color = Color(0xFF666666), fontFamily = FontFamily.Monospace, fontSize = 7.sp,
+                maxLines = 2, textAlign = TextAlign.Center)
         }
     }
 }
@@ -743,13 +746,15 @@ private fun TopologyRouteCard(route: CellTransitionSummary, onOpen: () -> Unit) 
                 color = Color(0xFF4CAF50),
                 trackColor = Color(0xFF252525)
             )
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                Text(
-                    stringResource(R.string.topology_route_counts_format, route.observations, route.trustedObservations),
-                    color = Color(0xFF999999), fontFamily = FontFamily.Monospace, fontSize = 8.sp
-                )
-                Text(lastSeen, color = Color(0xFF666666), fontFamily = FontFamily.Monospace, fontSize = 8.sp)
-            }
+            AdaptiveSplitRow(
+                start = {
+                    Text(
+                        stringResource(R.string.topology_route_counts_format, route.observations, route.trustedObservations),
+                        color = Color(0xFF999999), fontFamily = FontFamily.Monospace, fontSize = 8.sp
+                    )
+                },
+                end = { Text(lastSeen, color = Color(0xFF666666), fontFamily = FontFamily.Monospace, fontSize = 8.sp) }
+            )
             // 3.0 (UI2) — Motivo del N/A, último evaluado (si no es la lectura actual) y fallos.
             details.forEach { line ->
                 Text(line, color = Color(0xFF888888), fontFamily = FontFamily.Monospace, fontSize = 8.sp)

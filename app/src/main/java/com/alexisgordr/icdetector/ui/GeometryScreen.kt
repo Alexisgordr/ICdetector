@@ -30,6 +30,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import android.annotation.SuppressLint
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -271,7 +272,7 @@ fun GeometryScreen(dbHelper: CellDbHelper, modifier: Modifier = Modifier) {
                     Text(it, color = Color(0xFF80CBC4), fontFamily = FontFamily.Monospace, fontSize = 8.sp)
                 }
                 Spacer(Modifier.height(8.dp))
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                Row(Modifier.fillMaxWidth().height(IntrinsicSize.Min), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     GeometryMetric(stringResource(R.string.profiled), snap.nodes.size.toString(), Modifier.weight(1f))
                     GeometryMetric(stringResource(R.string.sites), snap.sites.size.toString(), Modifier.weight(1f))
                     GeometryMetric(stringResource(R.string.routes), snap.routeChecks.size.toString(), Modifier.weight(1f))
@@ -525,13 +526,16 @@ private fun GeometryMetric(
     modifier: Modifier = Modifier,
     value: Color = Color.White
 ) {
-    Surface(modifier, color = Color(0xFF111111), shape = RoundedCornerShape(3.dp)) {
+    // 3.1.4 (#50) — Con letra grande la etiqueta puede ocupar dos líneas; la fila usa
+    // IntrinsicSize.Min y fillMaxHeight para que los cuatro recuadros tengan la misma altura.
+    Surface(modifier.fillMaxHeight(), color = Color(0xFF111111), shape = RoundedCornerShape(3.dp)) {
         Column(
             Modifier.padding(horizontal = 6.dp, vertical = 8.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             Text(text, color = value, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Bold, fontSize = 14.sp)
-            Text(label, color = Color(0xFF666666), fontFamily = FontFamily.Monospace, fontSize = 7.sp, maxLines = 1)
+            Text(label, color = Color(0xFF666666), fontFamily = FontFamily.Monospace, fontSize = 7.sp,
+                maxLines = 2, textAlign = TextAlign.Center)
         }
     }
 }
@@ -671,16 +675,20 @@ private fun RouteGeometryCard(route: CellGeometry.RouteCheck, summary: CellTrans
                 color = Color.White, fontFamily = FontFamily.Monospace, fontSize = 10.sp,
                 maxLines = 1, overflow = TextOverflow.Ellipsis
             )
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                Text(
-                    stringResource(R.string.route_distance_format, route.centerDistanceM.roundToInt(), route.unexplainedGapM.roundToInt()),
-                    color = Color(0xFF888888), fontFamily = FontFamily.Monospace, fontSize = 9.sp
-                )
-                Text(
-                    stringResource(R.string.geometry_route_counts_format, route.observations, summary?.tripCount ?: 0),
-                    color = color, fontFamily = FontFamily.Monospace, fontSize = 9.sp
-                )
-            }
+            AdaptiveSplitRow(
+                start = {
+                    Text(
+                        stringResource(R.string.route_distance_format, route.centerDistanceM.roundToInt(), route.unexplainedGapM.roundToInt()),
+                        color = Color(0xFF888888), fontFamily = FontFamily.Monospace, fontSize = 9.sp
+                    )
+                },
+                end = {
+                    Text(
+                        stringResource(R.string.geometry_route_counts_format, route.observations, summary?.tripCount ?: 0),
+                        color = color, fontFamily = FontFamily.Monospace, fontSize = 9.sp
+                    )
+                }
+            )
         }
     }
 }
