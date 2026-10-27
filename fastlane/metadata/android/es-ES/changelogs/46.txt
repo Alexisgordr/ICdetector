@@ -1,3 +1,6 @@
-3.1.6 — corrección de un cierre. Se instala encima de cualquier 3.1.x y conserva sus datos; ninguna regla cambia.
+3.1.6 — incluye todo lo hecho desde la 3.1.1. Se instala encima de cualquier 3.1.x y conserva sus datos; ninguna regla cambia.
 
-- Arreglado un cierre en segundo plano al apagar la ubicación, en móviles cuyo sistema no envía la lista de celdas en vez de enviarla vacía.
+- Arreglado un cierre en segundo plano en la telefonía al apagar la ubicación, en móviles que no envían la lista de celdas (#49).
+- Nuevo Ajustes → Tamaño del texto: Normal o Grande, y las pantallas se adaptan a la letra grande (#50).
+- Los filtros de Topología muestran cuántas rutas tiene cada uno.
+- Geometría: el botón Exportar va en su propia fila.

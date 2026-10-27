@@ -1,3 +1,6 @@
-3.1.6 — crash fix. Installs over any 3.1.x and keeps its data; no rule changes.
+3.1.6 — includes everything since 3.1.1. Installs over any 3.1.x and keeps its data; no rule changes.
 
-- Fixed a crash in the background when the phone's location is turned off, on phones whose system sends no cell list instead of an empty one.
+- Fixed a background crash in the telephony code when the location is turned off, on phones that send no cell list (#49).
+- New Settings → Text size: Normal or Large, and the screens adapt to large text (#50).
+- Topology filters show how many routes each one has.
+- Geometry: the Export button has its own row.

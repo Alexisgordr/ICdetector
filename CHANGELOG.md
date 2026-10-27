@@ -25,6 +25,12 @@ dataset cut and the field-collection campaign continues on it.
   catches any exception (`allCellInfo` can throw `IllegalStateException` on some devices) and
   treats a null result as an empty list.
 
+### Store notes
+
+- `changelogs/46.txt` sums up everything since 3.1.1, the last version F-Droid published: F-Droid
+  picks up only the newest tag, so users there jump from 3.1.1 to 3.1.6 and would not see the
+  notes of 3.1.2 to 3.1.5 (#49, #50, the Topology filter counts, the Export geometry button).
+
 ## 3.1.5
 
 Version code 45, database schema 26 (unchanged). The GEOM panel adapts to large text. It installs

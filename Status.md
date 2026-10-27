@@ -171,7 +171,8 @@ Run by CI on pull requests to `main`, on `main` and on release tags:
 1. Push `main`, let CI pass, create the GitHub release `v3.1.6` and attach the signed APK
    (`ICdetection-v3.1.6.apk`). It installs over any 3.1.x; coming from 3.0.0 a full reinstall is
    still required. F-Droid picks the tag up by itself.
-2. The store notes for 3.1.6 are in `fastlane/metadata/android/*/changelogs/46.txt`.
+2. The store notes for 3.1.6 are in `fastlane/metadata/android/*/changelogs/46.txt`. They sum up
+   everything since 3.1.1, because F-Droid jumps from 3.1.1 straight to the newest tag.
 
 3.1.0 (tag `v3.1.0`, commit c8f06a5), 3.1.1 (`v3.1.1`, 8ec6f29), 3.1.2 (`v3.1.2`, 0e8f8fa) and 3.1.3
 (`v3.1.3`, 71dc571), 3.1.4 (`v3.1.4`, ec03766) and 3.1.5 (`v3.1.5`, 68a1a5a) were published the same
